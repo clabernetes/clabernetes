@@ -65,7 +65,7 @@ spec:
             - name: LAUNCHER_IMAGE_PULL_THROUGH_MODE
               value: auto
             - name: LAUNCHER_LOGGER_LEVEL
-              value: debug
+              value: info
             - name: LAUNCHER_TOPOLOGY_NAME
               value: topology-basic
             - name: LAUNCHER_NODE_NAME
@@ -97,18 +97,6 @@ spec:
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
-            - mountPath: /clabernetes/topo.clab.yaml
-              name: topology-basic-config
-              readOnly: true
-              subPath: srl1
-            - mountPath: /clabernetes/files-from-url.yaml
-              name: topology-basic-config
-              readOnly: true
-              subPath: srl1-files-from-url
-            - mountPath: /clabernetes/configured-pull-secrets.yaml
-              name: topology-basic-config
-              readOnly: true
-              subPath: configured-pull-secrets
             - mountPath: /var/lib/docker
               name: docker
             - mountPath: /clabernetes/.node/containerd.sock
@@ -125,10 +113,6 @@ spec:
       serviceAccountName: clabernetes-launcher-service-account
       terminationGracePeriodSeconds: 30
       volumes:
-        - configMap:
-            defaultMode: 493
-            name: topology-basic
-          name: topology-basic-config
         - emptyDir: {}
           name: docker
         - hostPath:

@@ -74,8 +74,11 @@ are the same, etc..
 
 Each Deployment runs a single container in the pod -- that container is a Debian image that
 contains the clabernetes launcher binary, and has docker installed in the container. On startup
-the clabernetes launcher handles any initial setup, then launches "normal" containerlab with a
-topology file representing *one node from the original topology*.
+the clabernetes launcher fetches "its" `Node` custom resource -- the controller renders one Node
+resource per node of the topology holding that node's "sub-topology" -- then handles any initial
+setup, and finally launches "normal" containerlab with a topology file representing *one node
+from the original topology*. Storing each node's config as its own (small) object means even
+very large topologies never bump into the etcd max object size.
 
 **Note:** that this is not "normal" docker-in-docker as we aren't actually mounting the docker sock
 in the container -- this is a full-blown docker installation independent of the CRI of your cluster.
@@ -85,12 +88,13 @@ mess with the host clusters CRI or CNI.
 
 ### Inter-Node Connectivity
 
-After the launcher has taken care of spinning up the node it then checks to see if this node 
-requires any connectivity to other nodes in the topology. The launcher gets this information 
-courtesy of the controllers -- they already broke up the topology into the node per Deployment 
-setup outlined -- the controller also mounted another file to the pod telling it about any 
-required connectivity to other nodes. The launcher takes this info and, once again thanks to 
-containerlab giving a nice helping hand here, handles the connectivity via VXLAN tunnels.
+After the launcher has taken care of spinning up the node it then checks to see if this node
+requires any connectivity to other nodes in the topology. The launcher gets this information
+courtesy of the controllers -- they already broke up the topology into the node per Deployment
+setup outlined -- the controller also creates one `Link` custom resource per point-to-point
+link between launchers. Each launcher lists (and then watches) the Link resources terminating
+on its own node and, once again thanks to containerlab giving a nice helping hand here, handles
+the connectivity via VXLAN tunnels.
 
 
 ### Exposing Nodes

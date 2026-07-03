@@ -1,0 +1,30 @@
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Link
+metadata:
+  labels:
+    clabernetes/app: clabernetes
+    clabernetes/linkEndpointA: srl1
+    clabernetes/linkEndpointB: srl2
+    clabernetes/name: topology-basic
+    clabernetes/topologyKind: containerlab
+    clabernetes/topologyOwner: topology-basic
+  name: topology-basic-srl1-e1-1-srl2-e1-1
+  namespace: NAMESPACE
+  ownerReferences:
+    - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      kind: Topology
+      name: topology-basic
+spec:
+  endpointA:
+    destination: topology-basic-srl1-vx.NAMESPACE.svc.cluster.local
+    interfaceName: e1-1
+    launcherNode: srl1
+    nodeName: srl1
+  endpointB:
+    destination: topology-basic-srl2-vx.NAMESPACE.svc.cluster.local
+    interfaceName: e1-1
+    launcherNode: srl2
+    nodeName: srl2
+  topologyName: topology-basic
+  tunnelID: 1
+status: {}

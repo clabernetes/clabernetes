@@ -1,0 +1,52 @@
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  labels:
+    clabernetes/app: clabernetes
+    clabernetes/name: topology-basic
+    clabernetes/topologyKind: containerlab
+    clabernetes/topologyNode: srl1
+    clabernetes/topologyOwner: topology-basic
+  name: topology-basic-srl1
+  namespace: NAMESPACE
+  ownerReferences:
+    - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      kind: Topology
+      name: topology-basic
+spec:
+  config: |
+    name: clabernetes-srl1
+    prefix: ""
+    topology:
+        defaults:
+            ports:
+                - 60000:21/tcp
+                - 60001:22/tcp
+                - 60002:23/tcp
+                - 60003:80/tcp
+                - 60000:161/udp
+                - 60004:443/tcp
+                - 60005:830/tcp
+                - 60006:5000/tcp
+                - 60007:5900/tcp
+                - 60008:6030/tcp
+                - 60009:9339/tcp
+                - 60010:9340/tcp
+                - 60011:9559/tcp
+                - 60012:57400/tcp
+        nodes:
+            srl1:
+                kind: srl
+                image: ghcr.io/nokia/srlinux
+                ports: []
+        links:
+            - endpoints:
+                - srl1:e1-1
+                - host:srl1-e1-1
+            - endpoints:
+                - srl1:e1-3
+                - host:eth13
+    debug: false
+  nodeName: srl1
+  topologyName: topology-basic
+status: {}

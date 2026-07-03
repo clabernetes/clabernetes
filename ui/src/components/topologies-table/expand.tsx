@@ -1,10 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ReactElement, useState } from "react";
-import type { ClabernetesContainerlabDevTopologyV1Alpha1 } from "@/lib/clabernetes-client";
+import type {
+  ClabernetesContainerlabDevNodeV1Alpha1,
+  ClabernetesContainerlabDevTopologyV1Alpha1,
+} from "@/lib/clabernetes-client";
 import type { Row } from "@tanstack/react-table";
 import { CircleAlert, CircleCheck, CircleHelp } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import { getExpandCollapseIcon } from "@/components/topologies-table/table.tsx";
+import { listTopologyNodes } from "@/lib/kubernetes.ts";
+import { useQuery } from "@tanstack/react-query";
 
 const kindPattern = /kind: (.*)/;
 const imagePattern = /image: (.*)/;
@@ -70,17 +75,17 @@ function getMatchOrUnknown(text: string, pattern: RegExp): string {
 }
 
 function getTopologyNodeCard(
-  nodeName: string,
-  obj: ClabernetesContainerlabDevTopologyV1Alpha1,
+  node: ClabernetesContainerlabDevNodeV1Alpha1,
   expandedTcpPorts: string[],
   setExpandedTcpPorts: (expandedPorts: string[]) => void,
   expandedUdpPorts: string[],
   setExpandedUdpPorts: (expandedPorts: string[]) => void,
 ): ReactElement {
-  const nodeConfig = obj.status?.configs[nodeName] ?? "";
-  const nodeExposedPortData = obj.status?.exposedPorts[nodeName];
+  const nodeName = node.spec?.nodeName ?? "unknown";
+  const nodeConfig = node.spec?.config ?? "";
+  const nodeExposedPortData = node.status?.exposedPorts;
 
-  const nodeReadiness = obj.status?.nodeReadiness[nodeName];
+  const nodeReadiness = node.status?.readiness;
   const kind = getMatchOrUnknown(nodeConfig, kindPattern);
   const image = getMatchOrUnknown(nodeConfig, imagePattern);
   const loadBalancerAddress = nodeExposedPortData?.loadBalancerAddress;
@@ -88,7 +93,7 @@ function getTopologyNodeCard(
   const exposedUdpPorts = nodeExposedPortData?.udpPorts ?? [];
 
   return (
-    <Card>
+    <Card key={nodeName}>
       <CardHeader>
         <CardTitle className="flex items-center justify-center">{nodeName}</CardTitle>
       </CardHeader>
@@ -174,11 +179,28 @@ export function Expand(props: ExpandProps): ReactElement {
   const { row } = props;
 
   const obj = row.original;
-  const objNodes = obj.status?.configs ? Array.from(Object.keys(obj.status?.configs)) : [];
+  const namespace = obj.metadata?.namespace as string;
+  const name = obj.metadata?.name as string;
 
   const [expandedTcpPorts, setExpandedTcpPorts] = useState<string[]>([]);
 
   const [expandedUdpPorts, setExpandedUdpPorts] = useState<string[]>([]);
+
+  const { data: objNodes } = useQuery({
+    enabled: true,
+    queryFn: async (): Promise<ClabernetesContainerlabDevNodeV1Alpha1[]> => {
+      const response = await listTopologyNodes(namespace, name);
+
+      return JSON.parse(response) as ClabernetesContainerlabDevNodeV1Alpha1[];
+    },
+    queryKey: ["topology-nodes", { name: name, namespace: namespace }],
+    retry: true,
+    throwOnError: true,
+  });
+
+  const sortedNodes = [...(objNodes ?? [])].sort((a, b) =>
+    (a.spec?.nodeName ?? "").localeCompare(b.spec?.nodeName ?? ""),
+  );
 
   return (
     <div>
@@ -188,11 +210,11 @@ export function Expand(props: ExpandProps): ReactElement {
             <div className="flex flex-col text-sm font-normal">
               <div className="flex items-center">
                 <span className="w-24 pr-2 text-right font-semibold">Namespace:</span>
-                <span>{obj.metadata?.namespace as string}</span>
+                <span>{namespace}</span>
               </div>
               <div className="flex items-center">
                 <span className="w-24 pr-2 text-right font-semibold">Name:</span>
-                <span>{obj.metadata?.name as string}</span>
+                <span>{name}</span>
               </div>
               <div className="flex items-center">
                 <span className="w-24 pr-2 text-right font-semibold">Ready:</span>
@@ -204,10 +226,9 @@ export function Expand(props: ExpandProps): ReactElement {
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {objNodes.map((nodeName) => {
+          {sortedNodes.map((node) => {
             return getTopologyNodeCard(
-              nodeName,
-              obj,
+              node,
               expandedTcpPorts,
               setExpandedTcpPorts,
               expandedUdpPorts,
