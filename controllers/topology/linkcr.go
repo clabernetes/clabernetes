@@ -22,7 +22,7 @@ import (
 // ~16 million.
 const maxTunnelID = 16_000_000
 
-var linkNameInvalidChars = regexp.MustCompile(`[^a-z0-9-]`) //nolint:gochecknoglobals
+var linkNameInvalidChars = regexp.MustCompile(`[^a-z0-9-]`)
 
 // sanitizeLinkNamePart makes an interface name safe for use *inside* a kubernetes object name --
 // note that this deliberately does not enforce the leading/trailing alpha requirements of a full
@@ -160,57 +160,6 @@ func (r *LinkReconciler) RenderAll(
 	return links
 }
 
-func (r *LinkReconciler) renderLink(
-	owningTopology *clabernetesapisv1alpha1.Topology,
-	halfA,
-	halfB *tunnelHalf,
-) *clabernetesapisv1alpha1.Link {
-	owningTopologyName := owningTopology.GetName()
-
-	// each halfs tunnel destination is the service of the *remote* side, so the "local" service
-	// for an endpoint (the service the other side dials) comes from the mirrored half
-	endpointA := clabernetesapisv1alpha1.LinkEndpointSpec{
-		NodeName:      halfA.tunnel.LocalNode,
-		InterfaceName: halfA.tunnel.LocalInterface,
-		LauncherNode:  halfA.launcherNode,
-		Destination:   halfB.tunnel.Destination,
-	}
-
-	endpointB := clabernetesapisv1alpha1.LinkEndpointSpec{
-		NodeName:      halfB.tunnel.LocalNode,
-		InterfaceName: halfB.tunnel.LocalInterface,
-		LauncherNode:  halfB.launcherNode,
-		Destination:   halfA.tunnel.Destination,
-	}
-
-	annotations, globalLabels := r.configManagerGetter().GetAllMetadata()
-
-	labels := map[string]string{
-		clabernetesconstants.LabelApp:           clabernetesconstants.Clabernetes,
-		clabernetesconstants.LabelName:          owningTopologyName,
-		clabernetesconstants.LabelTopologyOwner: owningTopologyName,
-		clabernetesconstants.LabelTopologyKind:  GetTopologyKind(owningTopology),
-		clabernetesconstants.LabelLinkEndpointA: endpointA.LauncherNode,
-		clabernetesconstants.LabelLinkEndpointB: endpointB.LauncherNode,
-	}
-
-	maps.Copy(labels, globalLabels)
-
-	return &clabernetesapisv1alpha1.Link{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        LinkResourceName(owningTopology, endpointA, endpointB),
-			Namespace:   owningTopology.GetNamespace(),
-			Annotations: annotations,
-			Labels:      labels,
-		},
-		Spec: clabernetesapisv1alpha1.LinkSpec{
-			TopologyName: owningTopologyName,
-			EndpointA:    endpointA,
-			EndpointB:    endpointB,
-		},
-	}
-}
-
 // AllocateTunnelIDs assigns tunnel ids to the rendered links -- links that already exist (by
 // name) keep their previously allocated id, any remaining links get the lowest free id. Because
 // link names are derived from the link endpoints, ids are stable across reconciles.
@@ -310,4 +259,55 @@ func (r *LinkReconciler) Conforms(
 	}
 
 	return true
+}
+
+func (r *LinkReconciler) renderLink(
+	owningTopology *clabernetesapisv1alpha1.Topology,
+	halfA,
+	halfB *tunnelHalf,
+) *clabernetesapisv1alpha1.Link {
+	owningTopologyName := owningTopology.GetName()
+
+	// each halfs tunnel destination is the service of the *remote* side, so the "local" service
+	// for an endpoint (the service the other side dials) comes from the mirrored half
+	endpointA := clabernetesapisv1alpha1.LinkEndpointSpec{
+		NodeName:      halfA.tunnel.LocalNode,
+		InterfaceName: halfA.tunnel.LocalInterface,
+		LauncherNode:  halfA.launcherNode,
+		Destination:   halfB.tunnel.Destination,
+	}
+
+	endpointB := clabernetesapisv1alpha1.LinkEndpointSpec{
+		NodeName:      halfB.tunnel.LocalNode,
+		InterfaceName: halfB.tunnel.LocalInterface,
+		LauncherNode:  halfB.launcherNode,
+		Destination:   halfA.tunnel.Destination,
+	}
+
+	annotations, globalLabels := r.configManagerGetter().GetAllMetadata()
+
+	labels := map[string]string{
+		clabernetesconstants.LabelApp:           clabernetesconstants.Clabernetes,
+		clabernetesconstants.LabelName:          owningTopologyName,
+		clabernetesconstants.LabelTopologyOwner: owningTopologyName,
+		clabernetesconstants.LabelTopologyKind:  GetTopologyKind(owningTopology),
+		clabernetesconstants.LabelLinkEndpointA: endpointA.LauncherNode,
+		clabernetesconstants.LabelLinkEndpointB: endpointB.LauncherNode,
+	}
+
+	maps.Copy(labels, globalLabels)
+
+	return &clabernetesapisv1alpha1.Link{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        LinkResourceName(owningTopology, endpointA, endpointB),
+			Namespace:   owningTopology.GetNamespace(),
+			Annotations: annotations,
+			Labels:      labels,
+		},
+		Spec: clabernetesapisv1alpha1.LinkSpec{
+			TopologyName: owningTopologyName,
+			EndpointA:    endpointA,
+			EndpointB:    endpointB,
+		},
+	}
 }

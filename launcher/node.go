@@ -68,7 +68,7 @@ func (c *clabernetes) getNodeResource() (*clabernetesapisv1alpha1.Node, error) {
 
 	var lastErr error
 
-	for attempt := 0; attempt < fetchNodeMaxAttempts; attempt++ {
+	for attempt := range fetchNodeMaxAttempts {
 		if attempt > 0 {
 			time.Sleep(fetchNodeRetryInterval)
 		}

@@ -180,7 +180,7 @@ func (r *Reconciler) ReconcileRoleBinding(
 // their config from "their" node cr. This also loads the previously rendered configs (from the
 // current node crs) into the reconcile data so restart detection can see what (if anything)
 // changed.
-func (r *Reconciler) ReconcileNodes( //nolint:gocognit
+func (r *Reconciler) ReconcileNodes(
 	ctx context.Context,
 	owningTopology *clabernetesapisv1alpha1.Topology,
 	reconcileData *ReconcileData,
@@ -248,35 +248,7 @@ func (r *Reconciler) ReconcileNodes( //nolint:gocognit
 			continue
 		}
 
-		var renderedNode *clabernetesapisv1alpha1.Node
-
-		renderedNode, err = r.NodeCrReconciler.Render(owningTopology, reconcileData, nodeName)
-		if err != nil {
-			return err
-		}
-
-		err = ctrlruntimeutil.SetOwnerReference(owningTopology, renderedNode, r.Client.Scheme())
-		if err != nil {
-			return err
-		}
-
-		if r.NodeCrReconciler.Conforms(existingNode, renderedNode, owningTopology.GetUID()) {
-			continue
-		}
-
-		if !reflect.DeepEqual(existingNode.Spec.FilesFromURL, renderedNode.Spec.FilesFromURL) {
-			// files from url changed -- the launcher only fetches these at startup, so the node
-			// needs a restart to pick up the new files (config changes are detected separately
-			// via the previous/resolved config comparison)
-			reconcileData.NodesNeedingReboot.Add(nodeName)
-		}
-
-		// keep the status (and set the resource version so the update is accepted) -- the status
-		// is written separately after deployments have been processed
-		renderedNode.Status = existingNode.Status
-		renderedNode.ResourceVersion = existingNode.ResourceVersion
-
-		err = r.updateObj(ctx, renderedNode, clabernetesapis.Node)
+		err = r.reconcileNodesEnforce(ctx, owningTopology, reconcileData, nodeName, existingNode)
 		if err != nil {
 			return err
 		}
@@ -750,7 +722,7 @@ func (r *Reconciler) ReconcilePersistentVolumeClaim(
 }
 
 // ReconcileDeployments reconciles the deployments that make up a clabernetes Topology.
-func (r *Reconciler) ReconcileDeployments( //nolint: gocyclo,gocognit,funlen
+func (r *Reconciler) ReconcileDeployments( //nolint: gocyclo,funlen
 	ctx context.Context,
 	owningTopology *clabernetesapisv1alpha1.Topology,
 	reconcileData *ReconcileData,
@@ -915,6 +887,58 @@ func (r *Reconciler) ReconcileDeployments( //nolint: gocyclo,gocognit,funlen
 		deployments,
 		reconcileData,
 	)
+}
+
+// ReconcileLegacyResources cleans up (pre node/link cr split) resources that clabernetes no
+// longer creates -- that is, the topology-wide configmap holding all sub-topologies, and the
+// topology-wide connectivity cr holding all tunnels. This is a best effort deal -- failures are
+// logged but do not fail the reconcile.
+func (r *Reconciler) ReconcileLegacyResources(
+	ctx context.Context,
+	owningTopology *clabernetesapisv1alpha1.Topology,
+) {
+	legacyConfigMap := &k8scorev1.ConfigMap{}
+
+	err := r.Client.Get(
+		ctx,
+		apimachinerytypes.NamespacedName{
+			Namespace: owningTopology.GetNamespace(),
+			Name:      owningTopology.GetName(),
+		},
+		legacyConfigMap,
+	)
+	if err == nil {
+		for _, ownerReference := range legacyConfigMap.OwnerReferences {
+			if ownerReference.UID != owningTopology.GetUID() {
+				continue
+			}
+
+			err = r.deleteObj(ctx, legacyConfigMap, clabernetesconstants.KubernetesConfigMap)
+			if err != nil {
+				r.Log.Warnf("failed deleting legacy topology configmap, err: %s", err)
+			}
+
+			break
+		}
+	}
+
+	// the connectivity custom resource type no longer exists in our scheme, so clean it up via
+	// the unstructured client -- the crd (and thus the cr) may well not exist, hence best effort
+	legacyConnectivity := &unstructured.Unstructured{}
+	legacyConnectivity.SetGroupVersionKind(apimachineryscheme.GroupVersionKind{
+		Group:   clabernetesapis.Group,
+		Version: clabernetesapisv1alpha1.Version,
+		Kind:    "Connectivity",
+	})
+	legacyConnectivity.SetNamespace(owningTopology.GetNamespace())
+	legacyConnectivity.SetName(owningTopology.GetName())
+
+	err = r.Client.Delete(ctx, legacyConnectivity)
+	if err != nil &&
+		!apimachineryerrors.IsNotFound(err) &&
+		!apimachinerymeta.IsNoMatchError(err) {
+		r.Log.Warnf("failed deleting legacy connectivity cr, err: %s", err)
+	}
 }
 
 func (r *Reconciler) collectNodeProbeStatuses(
@@ -1172,56 +1196,43 @@ func (r *Reconciler) reconcileDeploymentsHandleRestarts(
 	return restartNodeError
 }
 
-// ReconcileLegacyResources cleans up (pre node/link cr split) resources that clabernetes no
-// longer creates -- that is, the topology-wide configmap holding all sub-topologies, and the
-// topology-wide connectivity cr holding all tunnels. This is a best effort deal -- failures are
-// logged but do not fail the reconcile.
-func (r *Reconciler) ReconcileLegacyResources(
+// reconcileNodesEnforce enforces the desired state on a single existing node cr -- updating it
+// (and flagging the node for a reboot where appropriate) if it doesn't conform to the freshly
+// rendered expectation.
+func (r *Reconciler) reconcileNodesEnforce(
 	ctx context.Context,
 	owningTopology *clabernetesapisv1alpha1.Topology,
-) {
-	legacyConfigMap := &k8scorev1.ConfigMap{}
-
-	err := r.Client.Get(
-		ctx,
-		apimachinerytypes.NamespacedName{
-			Namespace: owningTopology.GetNamespace(),
-			Name:      owningTopology.GetName(),
-		},
-		legacyConfigMap,
-	)
-	if err == nil {
-		for _, ownerReference := range legacyConfigMap.OwnerReferences {
-			if ownerReference.UID != owningTopology.GetUID() {
-				continue
-			}
-
-			err = r.deleteObj(ctx, legacyConfigMap, clabernetesconstants.KubernetesConfigMap)
-			if err != nil {
-				r.Log.Warnf("failed deleting legacy topology configmap, err: %s", err)
-			}
-
-			break
-		}
+	reconcileData *ReconcileData,
+	nodeName string,
+	existingNode *clabernetesapisv1alpha1.Node,
+) error {
+	renderedNode, err := r.NodeCrReconciler.Render(owningTopology, reconcileData, nodeName)
+	if err != nil {
+		return err
 	}
 
-	// the connectivity custom resource type no longer exists in our scheme, so clean it up via
-	// the unstructured client -- the crd (and thus the cr) may well not exist, hence best effort
-	legacyConnectivity := &unstructured.Unstructured{}
-	legacyConnectivity.SetGroupVersionKind(apimachineryscheme.GroupVersionKind{
-		Group:   clabernetesapis.Group,
-		Version: clabernetesapisv1alpha1.Version,
-		Kind:    "Connectivity",
-	})
-	legacyConnectivity.SetNamespace(owningTopology.GetNamespace())
-	legacyConnectivity.SetName(owningTopology.GetName())
-
-	err = r.Client.Delete(ctx, legacyConnectivity)
-	if err != nil &&
-		!apimachineryerrors.IsNotFound(err) &&
-		!apimachinerymeta.IsNoMatchError(err) {
-		r.Log.Warnf("failed deleting legacy connectivity cr, err: %s", err)
+	err = ctrlruntimeutil.SetOwnerReference(owningTopology, renderedNode, r.Client.Scheme())
+	if err != nil {
+		return err
 	}
+
+	if r.NodeCrReconciler.Conforms(existingNode, renderedNode, owningTopology.GetUID()) {
+		return nil
+	}
+
+	if !reflect.DeepEqual(existingNode.Spec.FilesFromURL, renderedNode.Spec.FilesFromURL) {
+		// files from url changed -- the launcher only fetches these at startup, so the node
+		// needs a restart to pick up the new files (config changes are detected separately
+		// via the previous/resolved config comparison)
+		reconcileData.NodesNeedingReboot.Add(nodeName)
+	}
+
+	// keep the status (and set the resource version so the update is accepted) -- the status
+	// is written separately after deployments have been processed
+	renderedNode.Status = existingNode.Status
+	renderedNode.ResourceVersion = existingNode.ResourceVersion
+
+	return r.updateObj(ctx, renderedNode, clabernetesapis.Node)
 }
 
 func (r *Reconciler) diffIfDebug(a, b any) {

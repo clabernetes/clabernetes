@@ -8,7 +8,6 @@ import (
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/srl-labs/clabernetes/config"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
 	clabernetesutil "github.com/srl-labs/clabernetes/util"
 	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
@@ -55,45 +54,13 @@ func (r *NodeReconciler) Resolve(
 	clabernetesConfigs map[string]*clabernetesutilcontainerlab.Config,
 	_ *clabernetesapisv1alpha1.Topology,
 ) (*clabernetesutil.ObjectDiffer[*clabernetesapisv1alpha1.Node], error) {
-	nodes := &clabernetesutil.ObjectDiffer[*clabernetesapisv1alpha1.Node]{
-		Current: map[string]*clabernetesapisv1alpha1.Node{},
-	}
+	ownedObjects := make([]*clabernetesapisv1alpha1.Node, len(ownedNodes.Items))
 
 	for i := range ownedNodes.Items {
-		labels := ownedNodes.Items[i].Labels
-
-		if labels == nil {
-			return nil, fmt.Errorf(
-				"%w: labels are nil, but we expect to see topology owner label here",
-				claberneteserrors.ErrInvalidData,
-			)
-		}
-
-		nodeName, ok := labels[clabernetesconstants.LabelTopologyNode]
-		if !ok || nodeName == "" {
-			return nil, fmt.Errorf(
-				"%w: topology node label is missing or empty",
-				claberneteserrors.ErrInvalidData,
-			)
-		}
-
-		nodes.Current[nodeName] = &ownedNodes.Items[i]
+		ownedObjects[i] = &ownedNodes.Items[i]
 	}
 
-	allNodes := make([]string, len(clabernetesConfigs))
-
-	var nodeIdx int
-
-	for nodeName := range clabernetesConfigs {
-		allNodes[nodeIdx] = nodeName
-
-		nodeIdx++
-	}
-
-	nodes.SetMissing(allNodes)
-	nodes.SetExtra(allNodes)
-
-	return nodes, nil
+	return ResolveOwnedObjectsByNodeLabel(ownedObjects, clabernetesConfigs)
 }
 
 // Render accepts the owning topology, the reconcile data, and a node name and renders the final
