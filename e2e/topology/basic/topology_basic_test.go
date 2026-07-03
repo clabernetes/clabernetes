@@ -61,10 +61,12 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 				},
-				"connectivity": {
+				"node.clabernetes.containerlab.dev": {
 					{
-						Name:           testName,
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
+						Name: fmt.Sprintf("%s-srl1", testName),
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeNode,
+						},
 					},
 				},
 			},
@@ -110,11 +112,25 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 				},
-				"connectivity": {
+				"node.clabernetes.containerlab.dev": {
 					{
-						Name: testName,
+						Name: fmt.Sprintf("%s-srl1", testName),
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
-							clabernetestesthelper.NormalizeConnectivity,
+							clabernetestesthelper.NormalizeNode,
+						},
+					},
+					{
+						Name: fmt.Sprintf("%s-srl2", testName),
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeNode,
+						},
+					},
+				},
+				"link.clabernetes.containerlab.dev": {
+					{
+						Name: fmt.Sprintf("%s-srl1-e1-1-srl2-e1-1", testName),
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeLink,
 						},
 					},
 				},

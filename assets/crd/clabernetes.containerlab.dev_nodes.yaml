@@ -1,0 +1,195 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: nodes.clabernetes.containerlab.dev
+spec:
+  group: clabernetes.containerlab.dev
+  names:
+    kind: Node
+    listKind: NodeList
+    plural: nodes
+    shortNames:
+    - c9snode
+    singular: node
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.topologyName
+      name: Topology
+      type: string
+    - jsonPath: .spec.nodeName
+      name: Node
+      type: string
+    - jsonPath: .status.readiness
+      name: Readiness
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Node is an object that represents a single (containerlab) node of a clabernetes Topology. Nodes
+          are created and managed by the clabernetes controller -- one per launcher pod -- and hold the
+          rendered sub-topology (and any related per-node data) for that node, as well as the per-node
+          status information. Storing this data per-node (rather than on the Topology itself) means no
+          single object grows with the size of the topology, which keeps clabernetes clear of the etcd
+          max object size limits for very large topologies.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NodeSpec is the spec for a Node resource.
+            properties:
+              config:
+                description: |-
+                  Config is the rendered containerlab "sub-topology" for this node -- this is the topology
+                  that gets mounted/loaded in the launcher pod for this node.
+                type: string
+              filesFromURL:
+                description: |-
+                  FilesFromURL holds any files that the launcher for this node should fetch from a URL prior
+                  to launching the node.
+                items:
+                  description: |-
+                    FileFromURL represents a file that you would like to mount from a URL in the launcher pod for
+                    a given node.
+                  properties:
+                    filePath:
+                      description: FilePath is the path to mount the file.
+                      type: string
+                    url:
+                      description: |-
+                        URL is the url to fetch and mount at the provided FilePath. This URL must be a url that can
+                        be simply downloaded and dumped to disk -- meaning a normal file server type endpoint or if
+                        using GitHub or similar a "raw" path.
+                      type: string
+                  required:
+                  - filePath
+                  - url
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              imagePullSecrets:
+                description: |-
+                  ImagePullSecrets holds the secret names the launcher may use when pulling images via the
+                  cluster CRI.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
+              nodeName:
+                description: |-
+                  NodeName is the name of the (containerlab) node this resource represents -- for "grouped"
+                  nodes (network-mode: container:<primary>) this is the primary node of the group.
+                type: string
+              topologyName:
+                description: TopologyName is the name of the Topology this Node belongs
+                  to.
+                type: string
+            required:
+            - config
+            - nodeName
+            - topologyName
+            type: object
+          status:
+            description: NodeStatus is the status for a Node resource.
+            properties:
+              exposedPorts:
+                description: |-
+                  ExposedPorts holds the ports (and load balancer address if applicable) exposed for this
+                  node.
+                properties:
+                  loadBalancerAddress:
+                    description: |-
+                      LoadBalancerAddress holds the address assigned to the load balancer exposing ports for a
+                      given node.
+                    type: string
+                  tcpPorts:
+                    description: TCPPorts is a list of TCP ports exposed on the LoadBalancer
+                      service.
+                    items:
+                      type: integer
+                    type: array
+                    x-kubernetes-list-type: set
+                  udpPorts:
+                    description: UDPPorts is a list of UDP ports exposed on the LoadBalancer
+                      service.
+                    items:
+                      type: integer
+                    type: array
+                    x-kubernetes-list-type: set
+                required:
+                - loadBalancerAddress
+                - tcpPorts
+                - udpPorts
+                type: object
+              probeStatuses:
+                description: ProbeStatuses holds the per-probe status information
+                  for this node.
+                properties:
+                  livenessProbe:
+                    description: LivenessProbe is the status of the node's liveness
+                      probe.
+                    enum:
+                    - passing
+                    - failing
+                    - unknown
+                    - disabled
+                    type: string
+                  readinessProbe:
+                    description: ReadinessProbe is the status of the node's readiness
+                      probe.
+                    enum:
+                    - passing
+                    - failing
+                    - unknown
+                    - disabled
+                    type: string
+                  startupProbe:
+                    description: StartupProbe is the status of the node's startup
+                      probe.
+                    enum:
+                    - passing
+                    - failing
+                    - unknown
+                    - disabled
+                    type: string
+                required:
+                - livenessProbe
+                - readinessProbe
+                - startupProbe
+                type: object
+              readiness:
+                description: |-
+                  Readiness is the readiness of this node as reported by its launcher deployment -- one of
+                  "ready", "notready" or "unknown".
+                enum:
+                - ready
+                - notready
+                - unknown
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

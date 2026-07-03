@@ -49,18 +49,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigStatus(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.Connectivity": schema_srl_labs_clabernetes_apis_v1alpha1_Connectivity(
-			ref,
-		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivityList": schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityList(
-			ref,
-		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivitySpec": schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivitySpec(
-			ref,
-		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivityStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityStatus(
-			ref,
-		),
 		"github.com/srl-labs/clabernetes/apis/v1alpha1.Definition": schema_srl_labs_clabernetes_apis_v1alpha1_Definition(
 			ref,
 		),
@@ -94,7 +82,37 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequestStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestStatus(
 			ref,
 		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.Link": schema_srl_labs_clabernetes_apis_v1alpha1_Link(
+			ref,
+		),
 		"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkEndpoint": schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpoint(
+			ref,
+		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkEndpointSpec": schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpointSpec(
+			ref,
+		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkList": schema_srl_labs_clabernetes_apis_v1alpha1_LinkList(
+			ref,
+		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkSpec": schema_srl_labs_clabernetes_apis_v1alpha1_LinkSpec(
+			ref,
+		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkStatus": schema_srl_labs_clabernetes_apis_v1alpha1_LinkStatus(
+			ref,
+		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.Node": schema_srl_labs_clabernetes_apis_v1alpha1_Node(
+			ref,
+		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.NodeList": schema_srl_labs_clabernetes_apis_v1alpha1_NodeList(
+			ref,
+		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.NodeProbeStatuses": schema_srl_labs_clabernetes_apis_v1alpha1_NodeProbeStatuses(
+			ref,
+		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.NodeSpec": schema_srl_labs_clabernetes_apis_v1alpha1_NodeSpec(
+			ref,
+		),
+		"github.com/srl-labs/clabernetes/apis/v1alpha1.NodeStatus": schema_srl_labs_clabernetes_apis_v1alpha1_NodeStatus(
 			ref,
 		),
 		"github.com/srl-labs/clabernetes/apis/v1alpha1.Persistence": schema_srl_labs_clabernetes_apis_v1alpha1_Persistence(
@@ -104,9 +122,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 			ref,
 		),
 		"github.com/srl-labs/clabernetes/apis/v1alpha1.ProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
-			ref,
-		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ReconcileHashes": schema_srl_labs_clabernetes_apis_v1alpha1_ReconcileHashes(
 			ref,
 		),
 		"github.com/srl-labs/clabernetes/apis/v1alpha1.SSHProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
@@ -241,9 +256,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDeployment(
 											Allows: true,
 											Schema: &spec.Schema{
 												SchemaProps: spec.SchemaProps{
-													Default: "",
-													Type:    []string{"string"},
-													Format:  "",
+													Type:   []string{"string"},
+													Format: "",
 												},
 											},
 										},
@@ -318,8 +332,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDeployment(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
+										Ref: ref("k8s.io/api/core/v1.EnvVar"),
 									},
 								},
 							},
@@ -419,7 +432,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigList(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
 										Ref: ref(
 											"github.com/srl-labs/clabernetes/apis/v1alpha1.Config",
 										),
@@ -454,9 +466,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigMetadata(
 								Allows: true,
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Type:   []string{"string"},
+										Format: "",
 									},
 								},
 							},
@@ -470,9 +481,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigMetadata(
 								Allows: true,
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Type:   []string{"string"},
+										Format: "",
 									},
 								},
 							},
@@ -556,166 +566,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Connectivity(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "Connectivity is an object that holds information about a connectivity between launcher pods in a clabernetes Topology.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"apiVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"metadata": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
-						},
-					},
-					"spec": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivitySpec",
-							),
-						},
-					},
-					"status": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivityStatus",
-							),
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivitySpec", "github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivityStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
-	}
-}
-
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityList(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "ConnectivityList is a list of Connectivity objects.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"apiVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"metadata": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
-						},
-					},
-					"items": {
-						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref: ref(
-											"github.com/srl-labs/clabernetes/apis/v1alpha1.Connectivity",
-										),
-									},
-								},
-							},
-						},
-					},
-				},
-				Required: []string{"items"},
-			},
-		},
-		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.Connectivity", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
-	}
-}
-
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivitySpec(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "ConnectivitySpec is the spec for a Connectivity resource.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"pointToPointTunnels": {
-						SchemaProps: spec.SchemaProps{
-							Description: "PointToPointTunnels holds point-to-point connectivity information for a given topology. The mapping is nodeName (i.e. srl1) -> p2p tunnel data. Both sides of the tunnel should be able to use this information to establish connectivity between Topology nodes.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Type: []string{"array"},
-										Items: &spec.SchemaOrArray{
-											Schema: &spec.Schema{
-												SchemaProps: spec.SchemaProps{
-													Ref: ref(
-														"github.com/srl-labs/clabernetes/apis/v1alpha1.PointToPointTunnel",
-													),
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				Required: []string{"pointToPointTunnels"},
-			},
-		},
-		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.PointToPointTunnel"},
-	}
-}
-
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityStatus(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "ConnectivityStatus is the status for a Connectivity resource.",
-				Type:        []string{"object"},
-			},
-		},
-	}
-}
-
 func schema_srl_labs_clabernetes_apis_v1alpha1_Definition(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
@@ -762,8 +612,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 								Allows: true,
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.ResourceRequirements"),
+										Ref: ref("k8s.io/api/core/v1.ResourceRequirements"),
 									},
 								},
 							},
@@ -797,7 +646,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 										Items: &spec.SchemaOrArray{
 											Schema: &spec.Schema{
 												SchemaProps: spec.SchemaProps{
-													Default: map[string]interface{}{},
 													Ref: ref(
 														"github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromConfigMap",
 													),
@@ -821,7 +669,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 										Items: &spec.SchemaOrArray{
 											Schema: &spec.Schema{
 												SchemaProps: spec.SchemaProps{
-													Default: map[string]interface{}{},
 													Ref: ref(
 														"github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromURL",
 													),
@@ -897,8 +744,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.EnvVar"),
+										Ref: ref("k8s.io/api/core/v1.EnvVar"),
 									},
 								},
 							},
@@ -939,7 +785,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Expose(
 					},
 					"exposeType": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ExposeType configures the service type(s) related to exposing the topology. This is an enum that has the following valid values: - None: expose is *not* disabled, but we just don't create any services related to the pods,\n        you may want to do this if you want to tickle the pods by pod name directly for some\n        reason while not having extra services floating around.\n- ClusterIP: a clusterip service is created so you can hit that service name for the pods. - LoadBalancer: (default) creates a load balancer service so you can access your pods from\n        outside the cluster. this is/was the only behavior up to v0.2.4.",
+							Description: "ExposeType configures the service type(s) related to exposing the topology. This is an enum that has the following valid values: - None: expose is *not* disabled, but we just don't create any services related to the pods,\n        you may want to do this if you want to tickle the pods by pod name directly for some\n        reason while not having extra services floating around.\n- ClusterIP: a clusterip service is created so you can hit that service name for the pods. - Headless: a headless service (clusterIP: None) is created. This is useful when you don't\n        need load-balancing or a single service IP but want to directly connect to pods via\n        DNS records that return pod IPs.\n- LoadBalancer: (default) creates a load balancer service so you can access your pods from\n        outside the cluster. this is/was the only behavior up to v0.2.4.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -993,9 +839,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ExposedPorts(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: 0,
-										Type:    []string{"integer"},
-										Format:  "int32",
+										Type:   []string{"integer"},
+										Format: "int32",
 									},
 								},
 							},
@@ -1013,9 +858,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ExposedPorts(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: 0,
-										Type:    []string{"integer"},
-										Format:  "int32",
+										Type:   []string{"integer"},
+										Format: "int32",
 									},
 								},
 							},
@@ -1123,9 +967,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImagePull(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Type:   []string{"string"},
+										Format: "",
 									},
 								},
 							},
@@ -1150,9 +993,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImagePull(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Type:   []string{"string"},
+										Format: "",
 									},
 								},
 							},
@@ -1266,7 +1108,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestList(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
 										Ref: ref(
 											"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequest",
 										),
@@ -1337,9 +1178,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestSpec(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Type:   []string{"string"},
+										Format: "",
 									},
 								},
 							},
@@ -1389,6 +1229,57 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestStatus(
 	}
 }
 
+func schema_srl_labs_clabernetes_apis_v1alpha1_Link(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Link is an object that represents a single point-to-point link between two (containerlab) nodes of a clabernetes Topology. Links are created and managed by the clabernetes controller -- one per inter-launcher link -- and hold everything both launcher pods need to establish the tunnel (vxlan or slurpeeth) for the link. Storing this data per-link (rather than in one big connectivity object) means no single object grows with the size of the topology, which keeps clabernetes clear of the etcd max object size limits for very large topologies.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/srl-labs/clabernetes/apis/v1alpha1.LinkSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref: ref(
+								"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkStatus",
+							),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkSpec", "github.com/srl-labs/clabernetes/apis/v1alpha1.LinkStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
 func schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpoint(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
@@ -1418,6 +1309,435 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpoint(
 				Required: []string{"nodeName", "interfaceName"},
 			},
 		},
+	}
+}
+
+func schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpointSpec(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LinkEndpointSpec holds information about one side of a Link.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"nodeName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeName is the name of the (containerlab) node this side of the link resides on.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"interfaceName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "InterfaceName is the name of the interface on the node this side of the link is on.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"launcherNode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LauncherNode is the name of the (containerlab) node whose launcher pod terminates this side of the link -- for \"grouped\" nodes this is the primary node of the group, otherwise this is simply the same as NodeName.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"destination": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Destination is the qualified kubernetes service name over which this side of the link can be reached (that is, the service the *other* side of the link connects to).",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"nodeName", "interfaceName", "launcherNode", "destination"},
+			},
+		},
+	}
+}
+
+func schema_srl_labs_clabernetes_apis_v1alpha1_LinkList(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LinkList is a list of Link objects.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(
+											"github.com/srl-labs/clabernetes/apis/v1alpha1.Link",
+										),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/srl-labs/clabernetes/apis/v1alpha1.Link", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_srl_labs_clabernetes_apis_v1alpha1_LinkSpec(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LinkSpec is the spec for a Link resource.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"topologyName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologyName is the name of the Topology this Link belongs to.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"endpointA": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EndpointA is the \"a\" side of this link.",
+							Default:     map[string]interface{}{},
+							Ref: ref(
+								"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkEndpointSpec",
+							),
+						},
+					},
+					"endpointB": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EndpointB is the \"b\" side of this link.",
+							Default:     map[string]interface{}{},
+							Ref: ref(
+								"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkEndpointSpec",
+							),
+						},
+					},
+					"tunnelID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TunnelID is the id number of the tunnel (vnid or segment id) for this link -- both sides of the link use the same id.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"topologyName", "endpointA", "endpointB", "tunnelID"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkEndpointSpec"},
+	}
+}
+
+func schema_srl_labs_clabernetes_apis_v1alpha1_LinkStatus(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LinkStatus is the status for a Link resource.",
+				Type:        []string{"object"},
+			},
+		},
+	}
+}
+
+func schema_srl_labs_clabernetes_apis_v1alpha1_Node(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "Node is an object that represents a single (containerlab) node of a clabernetes Topology. Nodes are created and managed by the clabernetes controller -- one per launcher pod -- and hold the rendered sub-topology (and any related per-node data) for that node, as well as the per-node status information. Storing this data per-node (rather than on the Topology itself) means no single object grows with the size of the topology, which keeps clabernetes clear of the etcd max object size limits for very large topologies.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/srl-labs/clabernetes/apis/v1alpha1.NodeSpec"),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref: ref(
+								"github.com/srl-labs/clabernetes/apis/v1alpha1.NodeStatus",
+							),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/srl-labs/clabernetes/apis/v1alpha1.NodeSpec", "github.com/srl-labs/clabernetes/apis/v1alpha1.NodeStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_srl_labs_clabernetes_apis_v1alpha1_NodeList(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeList is a list of Node objects.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(
+											"github.com/srl-labs/clabernetes/apis/v1alpha1.Node",
+										),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/srl-labs/clabernetes/apis/v1alpha1.Node", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_srl_labs_clabernetes_apis_v1alpha1_NodeProbeStatuses(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeProbeStatuses holds the individual probe statuses for a single node.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"startupProbe": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StartupProbe is the status of the node's startup probe.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"readinessProbe": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ReadinessProbe is the status of the node's readiness probe.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"livenessProbe": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LivenessProbe is the status of the node's liveness probe.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"startupProbe", "readinessProbe", "livenessProbe"},
+			},
+		},
+	}
+}
+
+func schema_srl_labs_clabernetes_apis_v1alpha1_NodeSpec(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeSpec is the spec for a Node resource.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"topologyName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologyName is the name of the Topology this Node belongs to.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"nodeName": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NodeName is the name of the (containerlab) node this resource represents -- for \"grouped\" nodes (network-mode: container:<primary>) this is the primary node of the group.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"config": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Config is the rendered containerlab \"sub-topology\" for this node -- this is the topology that gets mounted/loaded in the launcher pod for this node.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"filesFromURL": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "FilesFromURL holds any files that the launcher for this node should fetch from a URL prior to launching the node.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(
+											"github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromURL",
+										),
+									},
+								},
+							},
+						},
+					},
+					"imagePullSecrets": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "ImagePullSecrets holds the secret names the launcher may use when pulling images via the cluster CRI.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"topologyName", "nodeName", "config"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromURL"},
+	}
+}
+
+func schema_srl_labs_clabernetes_apis_v1alpha1_NodeStatus(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeStatus is the status for a Node resource.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"readiness": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Readiness is the readiness of this node as reported by its launcher deployment -- one of \"ready\", \"notready\" or \"unknown\".",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"probeStatuses": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ProbeStatuses holds the per-probe status information for this node.",
+							Ref: ref(
+								"github.com/srl-labs/clabernetes/apis/v1alpha1.NodeProbeStatuses",
+							),
+						},
+					},
+					"exposedPorts": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ExposedPorts holds the ports (and load balancer address if applicable) exposed for this node.",
+							Ref: ref(
+								"github.com/srl-labs/clabernetes/apis/v1alpha1.ExposedPorts",
+							),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/srl-labs/clabernetes/apis/v1alpha1.ExposedPorts", "github.com/srl-labs/clabernetes/apis/v1alpha1.NodeProbeStatuses"},
 	}
 }
 
@@ -1465,7 +1785,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_PointToPointTunnel(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "PointToPointTunnel holds information necessary for creating a tunnel between two interfaces on different nodes of a clabernetes Topology. This connection can be established by using clab tools (vxlan) or the experimental slurpeeth (tcp tunnel magic).",
+				Description: "PointToPointTunnel holds the *local view* of a tunnel between two interfaces on different nodes of a clabernetes Topology -- launchers derive this view from the Link objects relevant to their node. This connection can be established by using clab tools (vxlan) or the experimental slurpeeth (tcp tunnel magic).",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"tunnelID": {
@@ -1571,62 +1891,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ReconcileHashes(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "ReconcileHashes holds hashes of the last recorded reconciliation -- these are used to know if things have changed between the last and current reconciliation.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"config": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Config is the last stored hash of the rendered config(s) -- that is, the map of \"sub topologies\" representing the overall Topology.Spec.Definition.",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"exposedPorts": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ExposedPorts is the last stored hash of the exposed ports mapping for this Topology. Note that while we obviously care about the exposed ports on a *per node basis*, we don't need to track that here -- this is here strictly to track differences in the load balancer service -- the actual sub-topologies (or sub-configs) effectively track the expose port status per node.",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"filesFromURL": {
-						SchemaProps: spec.SchemaProps{
-							Description: "FilesFromURL is the hash of the last stored mapping of files from URL (to node mapping). Note that this is tracked on a *per node basis* because the URL of a file could be updated without any change to the actual config/topology (or sub-config/sub-topology); as such we need to explicitly track this per node to know when a node needs to be restarted such that the new URL is \"picked up\" by the node/launcher.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
-									},
-								},
-							},
-						},
-					},
-					"imagePullSecrets": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ImagePullSecrets is the hash of hte last stored image pull secrets for this Topology.",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-				Required: []string{"config", "exposedPorts", "filesFromURL", "imagePullSecrets"},
-			},
-		},
-	}
-}
-
 func schema_srl_labs_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
@@ -1684,9 +1948,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Scheduling(
 								Allows: true,
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Type:   []string{"string"},
+										Format: "",
 									},
 								},
 							},
@@ -1704,8 +1967,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Scheduling(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref("k8s.io/api/core/v1.Toleration"),
+										Ref: ref("k8s.io/api/core/v1.Toleration"),
 									},
 								},
 							},
@@ -1748,9 +2010,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Type:   []string{"string"},
+										Format: "",
 									},
 								},
 							},
@@ -1764,7 +2025,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
 								Allows: true,
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
 										Ref: ref(
 											"github.com/srl-labs/clabernetes/apis/v1alpha1.ProbeConfiguration",
 										),
@@ -1902,7 +2162,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyList(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
 										Ref: ref(
 											"github.com/srl-labs/clabernetes/apis/v1alpha1.Topology",
 										),
@@ -2004,7 +2263,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "TopologyStatus is the status for a Topology resource.",
+				Description: "TopologyStatus is the status for a Topology resource. Note that all *per node* (and per link) data lives on the Node and Link custom resources rather than here -- this keeps the Topology object size bounded regardless of how big the topology definition is (see also the docstrings on the Node and Link objects).",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -2022,61 +2281,18 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
 							Format:      "",
 						},
 					},
-					"reconcileHashes": {
+					"nodeCount": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ReconcileHashes holds the hashes form the last reconciliation run.",
-							Default:     map[string]interface{}{},
-							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ReconcileHashes",
-							),
+							Description: "NodeCount is the number of nodes (launchers) this Topology represents.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
-					"configs": {
+					"readyNodeCount": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Configs is a map of node name -> containerlab config -- in other words, this is the original Topology.Spec.Definition converted to containerlab \"sub-topologies\" The actual \"sub-topologies\"/\"sub-configs\" are stored as a string -- this is the actual containerlab topology that gets mounted in the launcher pod.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
-									},
-								},
-							},
-						},
-					},
-					"exposedPorts": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ExposedPorts holds a map of (containerlab not k8s!) nodes and their exposed ports (via load balancer).",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref(
-											"github.com/srl-labs/clabernetes/apis/v1alpha1.ExposedPorts",
-										),
-									},
-								},
-							},
-						},
-					},
-					"nodeReadiness": {
-						SchemaProps: spec.SchemaProps{
-							Description: "NodeReadiness is a map of nodename to readiness status. The readiness status is as reported by the k8s startup/readiness probe (which is in turn managed by the status probe configuration of the topology). The possible values are \"notready\" and \"ready\", \"unknown\".",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
-									},
-								},
-							},
+							Description: "ReadyNodeCount is the number of nodes of this Topology that currently report ready.",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"topologyReady": {
@@ -2084,6 +2300,13 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
 							Description: "TopologyReady indicates if all nodes in the topology have reported ready. This is duplicated from the conditions so we can easily snag it for print columns!",
 							Default:     false,
 							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"topologyState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TopologyState is the high-level lifecycle state of the topology.",
+							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
@@ -2099,29 +2322,17 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref: ref(
-											"k8s.io/apimachinery/pkg/apis/meta/v1.Condition",
-										),
+										Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Condition"),
 									},
 								},
 							},
 						},
 					},
 				},
-				Required: []string{
-					"kind",
-					"removeTopologyPrefix",
-					"reconcileHashes",
-					"configs",
-					"exposedPorts",
-					"nodeReadiness",
-					"topologyReady",
-					"conditions",
-				},
+				Required: []string{"kind", "removeTopologyPrefix", "topologyReady", "conditions"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.ExposedPorts", "github.com/srl-labs/clabernetes/apis/v1alpha1.ReconcileHashes", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
 	}
 }

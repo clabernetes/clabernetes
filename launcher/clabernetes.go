@@ -108,6 +108,7 @@ func (c *clabernetes) startup() {
 
 	c.logger.Debugf("clabernetes version %s", clabernetesconstants.Version)
 
+	c.fetchNodeResource()
 	c.containerlabVersion()
 	c.setup()
 	c.image()

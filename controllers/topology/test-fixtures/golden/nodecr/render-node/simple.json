@@ -1,0 +1,19 @@
+{
+    "metadata": {
+        "name": "render-node-test-srl1",
+        "namespace": "clabernetes",
+        "labels": {
+            "clabernetes/app": "clabernetes",
+            "clabernetes/name": "render-node-test",
+            "clabernetes/topologyKind": "containerlab",
+            "clabernetes/topologyNode": "srl1",
+            "clabernetes/topologyOwner": "render-node-test"
+        }
+    },
+    "spec": {
+        "topologyName": "render-node-test",
+        "nodeName": "srl1",
+        "config": "name: clabernetes-srl1\nprefix: \"\"\ntopology:\n    defaults:\n        ports: []\n    nodes:\n        srl1:\n            kind: srl\n            image: ghcr.io/nokia/srlinux\n            ports: []\ndebug: false\n"
+    },
+    "status": {}
+}

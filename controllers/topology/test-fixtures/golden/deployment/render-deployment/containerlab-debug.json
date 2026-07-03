@@ -2,7 +2,6 @@
     "metadata": {
         "name": "render-deployment-test-srl1",
         "namespace": "clabernetes",
-        "creationTimestamp": null,
         "labels": {
             "app.kubernetes.io/name": "render-deployment-test-srl1",
             "clabernetes/app": "clabernetes",
@@ -24,7 +23,6 @@
         },
         "template": {
             "metadata": {
-                "creationTimestamp": null,
                 "labels": {
                     "app.kubernetes.io/name": "render-deployment-test-srl1",
                     "clabernetes/app": "clabernetes",
@@ -35,13 +33,6 @@
             },
             "spec": {
                 "volumes": [
-                    {
-                        "name": "render-deployment-test-config",
-                        "configMap": {
-                            "name": "render-deployment-test",
-                            "defaultMode": 493
-                        }
-                    },
                     {
                         "name": "docker",
                         "emptyDir": {}
@@ -148,24 +139,6 @@
                         ],
                         "resources": {},
                         "volumeMounts": [
-                            {
-                                "name": "render-deployment-test-config",
-                                "readOnly": true,
-                                "mountPath": "/clabernetes/topo.clab.yaml",
-                                "subPath": "srl1"
-                            },
-                            {
-                                "name": "render-deployment-test-config",
-                                "readOnly": true,
-                                "mountPath": "/clabernetes/files-from-url.yaml",
-                                "subPath": "srl1-files-from-url"
-                            },
-                            {
-                                "name": "render-deployment-test-config",
-                                "readOnly": true,
-                                "mountPath": "/clabernetes/configured-pull-secrets.yaml",
-                                "subPath": "configured-pull-secrets"
-                            },
                             {
                                 "name": "docker",
                                 "mountPath": "/var/lib/docker"

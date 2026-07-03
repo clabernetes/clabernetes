@@ -2,9 +2,9 @@ package topology
 
 import (
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	clabernetesutil "github.com/srl-labs/clabernetes/util"
 	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
-	"gopkg.in/yaml.v3"
 )
 
 // ReconcileData is a struct that holds data that is common during a reconciliation process
@@ -12,12 +12,12 @@ import (
 type ReconcileData struct {
 	Kind string
 
-	PreviousHashes clabernetesapisv1alpha1.ReconcileHashes
-	ResolvedHashes clabernetesapisv1alpha1.ReconcileHashes
-
-	PreviousConfigs      map[string]*clabernetesutilcontainerlab.Config
-	ResolvedConfigs      map[string]*clabernetesutilcontainerlab.Config
-	ResolvedConfigsBytes []byte
+	// PreviousConfigs holds the previously rendered sub-topologies -- these are loaded from the
+	// Node objects of the topology (during the node reconciliation phase) and are used to know if
+	// a given node's config changed between the last and current reconciliation (and therefore
+	// needs a restart).
+	PreviousConfigs map[string]*clabernetesutilcontainerlab.Config
+	ResolvedConfigs map[string]*clabernetesutilcontainerlab.Config
 
 	ResolvedTunnels map[string][]*clabernetesapisv1alpha1.PointToPointTunnel
 
@@ -28,7 +28,7 @@ type ReconcileData struct {
 	TopologyReady        bool
 
 	TopologyState     clabernetesapisv1alpha1.TopologyState
-	NodeProbeStatuses map[string]clabernetesapisv1alpha1.NodeProbeStatuses
+	NodeProbeStatuses map[string]*clabernetesapisv1alpha1.NodeProbeStatuses
 
 	NodesNeedingReboot clabernetesutil.StringSet
 
@@ -39,14 +39,7 @@ type ReconcileData struct {
 func NewReconcileData(
 	owningTopology *clabernetesapisv1alpha1.Topology,
 ) (*ReconcileData, error) {
-	status := owningTopology.Status
-
 	rd := &ReconcileData{
-		PreviousHashes: status.ReconcileHashes,
-		ResolvedHashes: clabernetesapisv1alpha1.ReconcileHashes{
-			FilesFromURL: make(map[string]string),
-		},
-
 		PreviousConfigs: make(map[string]*clabernetesutilcontainerlab.Config),
 		ResolvedConfigs: make(map[string]*clabernetesutilcontainerlab.Config),
 
@@ -54,69 +47,41 @@ func NewReconcileData(
 
 		ResolvedExposedPorts: map[string]*clabernetesapisv1alpha1.ExposedPorts{},
 
-		PreviousNodeStatuses: owningTopology.Status.NodeReadiness,
+		PreviousNodeStatuses: make(map[string]string),
 		NodeStatuses:         make(map[string]string),
-		NodeProbeStatuses:    make(map[string]clabernetesapisv1alpha1.NodeProbeStatuses),
+		NodeProbeStatuses:    make(map[string]*clabernetesapisv1alpha1.NodeProbeStatuses),
 		NodesNeedingReboot:   clabernetesutil.NewStringSet(),
-	}
 
-	for nodeName, nodeConfig := range status.Configs {
-		rd.PreviousConfigs[nodeName] = &clabernetesutilcontainerlab.Config{}
-
-		err := yaml.Unmarshal([]byte(nodeConfig), rd.PreviousConfigs[nodeName])
-		if err != nil {
-			return nil, err
-		}
+		TopologyState: owningTopology.Status.TopologyState,
 	}
 
 	return rd, nil
 }
 
 // SetStatus accepts a topology status and updates it with the ReconcileData information. This is
-// called prior to updating a clabernetes topology object so that the hashes and information that
-// we set in ReconcileData makes its way to the CR.
+// called prior to updating a clabernetes topology object so that the aggregated node information
+// that we set in ReconcileData makes its way to the CR. Note that all *per node* information
+// lives on the Node objects for the topology, so the Topology status only ever holds (small)
+// aggregate data.
 func (r *ReconcileData) SetStatus(
 	owningTopologyStatus *clabernetesapisv1alpha1.TopologyStatus,
 ) error {
 	owningTopologyStatus.Kind = r.Kind
-	owningTopologyStatus.ExposedPorts = r.ResolvedExposedPorts
 
-	owningTopologyStatus.ReconcileHashes = r.ResolvedHashes
+	owningTopologyStatus.NodeCount = len(r.ResolvedConfigs)
 
-	owningTopologyStatus.Configs = make(map[string]string)
+	readyCount := 0
 
-	for nodeName, nodeConfig := range r.ResolvedConfigs {
-		configBytes, err := yaml.Marshal(nodeConfig)
-		if err != nil {
-			return err
+	for _, nodeStatus := range r.NodeStatuses {
+		if nodeStatus == clabernetesconstants.NodeStatusReady {
+			readyCount++
 		}
-
-		owningTopologyStatus.Configs[nodeName] = string(configBytes)
 	}
 
-	owningTopologyStatus.NodeReadiness = r.NodeStatuses
+	owningTopologyStatus.ReadyNodeCount = readyCount
+
 	owningTopologyStatus.TopologyReady = r.TopologyReady
 	owningTopologyStatus.TopologyState = r.TopologyState
-	owningTopologyStatus.NodeProbeStatuses = r.NodeProbeStatuses
 
 	return nil
-}
-
-// ConfigMapHasChanges returns true if the data that gets stored in the topology configmap has
-// changed between the last reconcile and the current iteration. This is just a helper to be more
-// verbose/clear what we are checking rather than having a giant conditional in the Reconciler.
-func (r *ReconcileData) ConfigMapHasChanges() bool {
-	if r.PreviousHashes.Config != r.ResolvedHashes.Config {
-		return true
-	}
-
-	if r.PreviousHashes.ImagePullSecrets != r.ResolvedHashes.ImagePullSecrets {
-		return true
-	}
-
-	if r.NodesNeedingReboot.Len() != 0 {
-		return true
-	}
-
-	return false
 }

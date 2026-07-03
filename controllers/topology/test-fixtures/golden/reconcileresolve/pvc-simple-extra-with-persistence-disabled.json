@@ -5,7 +5,6 @@
                 "name": "reconcile-resolve-pvc-test-srl1",
                 "namespace": "clabernetes",
                 "resourceVersion": "999",
-                "creationTimestamp": null,
                 "labels": {
                     "clabernetes/topologyNode": "srl1",
                     "clabernetes/topologyOwner": "reconcile-resolve-pvc-test"
@@ -24,7 +23,6 @@
                 "name": "reconcile-resolve-pvc-test-srl1",
                 "namespace": "clabernetes",
                 "resourceVersion": "999",
-                "creationTimestamp": null,
                 "labels": {
                     "clabernetes/topologyNode": "srl1",
                     "clabernetes/topologyOwner": "reconcile-resolve-pvc-test"

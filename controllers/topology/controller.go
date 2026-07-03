@@ -94,6 +94,24 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 			&k8scorev1.Pod{},
 			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueForPod),
 		).
+		// watch owned node crs so any drift (manual edits, deletions) gets healed
+		Watches(
+			&clabernetesapisv1alpha1.Node{},
+			ctrlruntimehandler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&clabernetesapisv1alpha1.Topology{},
+			),
+		).
+		// watch owned link crs so any drift (manual edits, deletions) gets healed
+		Watches(
+			&clabernetesapisv1alpha1.Link{},
+			ctrlruntimehandler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&clabernetesapisv1alpha1.Topology{},
+			),
+		).
 		// watch our config cr too so we get any config updates handled
 		Watches(
 			&clabernetesapisv1alpha1.Config{},

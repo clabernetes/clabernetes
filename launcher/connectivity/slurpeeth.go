@@ -85,9 +85,9 @@ func (m *slurpeethManager) Run() {
 
 	m.logger.Debug("initial slurpeeth tunnel creation complete")
 
-	m.logger.Debug("start connectivity custom resource watch...")
+	m.logger.Debug("start link custom resource watch...")
 
-	go watchConnectivity(
+	go watchLinks(
 		m.ctx,
 		m.logger,
 		m.clabernetesClient,

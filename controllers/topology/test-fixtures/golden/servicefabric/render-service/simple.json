@@ -2,7 +2,6 @@
     "metadata": {
         "name": "render-service-fabric-test-srl1-vx",
         "namespace": "clabernetes",
-        "creationTimestamp": null,
         "labels": {
             "clabernetes/app": "clabernetes",
             "clabernetes/name": "render-service-fabric-test-srl1",

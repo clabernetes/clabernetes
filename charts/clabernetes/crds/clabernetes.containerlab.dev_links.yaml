@@ -1,0 +1,146 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: links.clabernetes.containerlab.dev
+spec:
+  group: clabernetes.containerlab.dev
+  names:
+    kind: Link
+    listKind: LinkList
+    plural: links
+    shortNames:
+    - c9slink
+    singular: link
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.topologyName
+      name: Topology
+      type: string
+    - jsonPath: .spec.endpointA.nodeName
+      name: Node-A
+      type: string
+    - jsonPath: .spec.endpointA.interfaceName
+      name: Interface-A
+      type: string
+    - jsonPath: .spec.endpointB.nodeName
+      name: Node-B
+      type: string
+    - jsonPath: .spec.endpointB.interfaceName
+      name: Interface-B
+      type: string
+    - jsonPath: .spec.tunnelID
+      name: Tunnel-ID
+      type: integer
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Link is an object that represents a single point-to-point link between two (containerlab) nodes
+          of a clabernetes Topology. Links are created and managed by the clabernetes controller -- one
+          per inter-launcher link -- and hold everything both launcher pods need to establish the tunnel
+          (vxlan or slurpeeth) for the link. Storing this data per-link (rather than in one big
+          connectivity object) means no single object grows with the size of the topology, which keeps
+          clabernetes clear of the etcd max object size limits for very large topologies.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: LinkSpec is the spec for a Link resource.
+            properties:
+              endpointA:
+                description: EndpointA is the "a" side of this link.
+                properties:
+                  destination:
+                    description: |-
+                      Destination is the qualified kubernetes service name over which this side of the link can
+                      be reached (that is, the service the *other* side of the link connects to).
+                    type: string
+                  interfaceName:
+                    description: InterfaceName is the name of the interface on the
+                      node this side of the link is on.
+                    type: string
+                  launcherNode:
+                    description: |-
+                      LauncherNode is the name of the (containerlab) node whose launcher pod terminates this side
+                      of the link -- for "grouped" nodes this is the primary node of the group, otherwise this is
+                      simply the same as NodeName.
+                    type: string
+                  nodeName:
+                    description: NodeName is the name of the (containerlab) node this
+                      side of the link resides on.
+                    type: string
+                required:
+                - destination
+                - interfaceName
+                - launcherNode
+                - nodeName
+                type: object
+              endpointB:
+                description: EndpointB is the "b" side of this link.
+                properties:
+                  destination:
+                    description: |-
+                      Destination is the qualified kubernetes service name over which this side of the link can
+                      be reached (that is, the service the *other* side of the link connects to).
+                    type: string
+                  interfaceName:
+                    description: InterfaceName is the name of the interface on the
+                      node this side of the link is on.
+                    type: string
+                  launcherNode:
+                    description: |-
+                      LauncherNode is the name of the (containerlab) node whose launcher pod terminates this side
+                      of the link -- for "grouped" nodes this is the primary node of the group, otherwise this is
+                      simply the same as NodeName.
+                    type: string
+                  nodeName:
+                    description: NodeName is the name of the (containerlab) node this
+                      side of the link resides on.
+                    type: string
+                required:
+                - destination
+                - interfaceName
+                - launcherNode
+                - nodeName
+                type: object
+              topologyName:
+                description: TopologyName is the name of the Topology this Link belongs
+                  to.
+                type: string
+              tunnelID:
+                description: |-
+                  TunnelID is the id number of the tunnel (vnid or segment id) for this link -- both sides of
+                  the link use the same id.
+                type: integer
+            required:
+            - endpointA
+            - endpointB
+            - topologyName
+            - tunnelID
+            type: object
+          status:
+            description: LinkStatus is the status for a Link resource.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

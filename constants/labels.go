@@ -29,6 +29,16 @@ const (
 	// is -- that is, it is either a "connectivity" service, or an "expose" service; note that
 	// this is strictly a clabernetes concept, obviously not a kubernetes one!
 	LabelTopologyServiceType = "clabernetes/topologyServiceType"
+
+	// LabelLinkEndpointA is the label indicating the launcher node that terminates the "a" side
+	// of a link -- this is set on Link objects so launchers can watch "their" links with a simple
+	// label selector.
+	LabelLinkEndpointA = "clabernetes/linkEndpointA"
+
+	// LabelLinkEndpointB is the label indicating the launcher node that terminates the "b" side
+	// of a link -- this is set on Link objects so launchers can watch "their" links with a simple
+	// label selector.
+	LabelLinkEndpointB = "clabernetes/linkEndpointB"
 )
 
 const (

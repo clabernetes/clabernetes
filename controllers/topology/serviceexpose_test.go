@@ -179,11 +179,10 @@ func TestResolveServiceExpose(t *testing.T) {
 
 func TestRenderServiceExpose(t *testing.T) {
 	cases := []struct {
-		name                 string
-		owningTopology       *clabernetesapisv1alpha1.Topology
-		owningTopologyStatus *clabernetesapisv1alpha1.TopologyStatus
-		clabernetesConfigs   map[string]*clabernetesutilcontainerlab.Config
-		nodeName             string
+		name               string
+		owningTopology     *clabernetesapisv1alpha1.Topology
+		clabernetesConfigs map[string]*clabernetesutilcontainerlab.Config
+		nodeName           string
 	}{
 		{
 			name: "simple",
@@ -204,9 +203,6 @@ func TestRenderServiceExpose(t *testing.T) {
 `,
 					},
 				},
-			},
-			owningTopologyStatus: &clabernetesapisv1alpha1.TopologyStatus{
-				ExposedPorts: map[string]*clabernetesapisv1alpha1.ExposedPorts{},
 			},
 			clabernetesConfigs: map[string]*clabernetesutilcontainerlab.Config{
 				"srl1": {
@@ -269,9 +265,6 @@ func TestRenderServiceExpose(t *testing.T) {
 					// since this is done very early in the rec
 					RemoveTopologyPrefix: clabernetesutil.ToPointer(true),
 				},
-			},
-			owningTopologyStatus: &clabernetesapisv1alpha1.TopologyStatus{
-				ExposedPorts: map[string]*clabernetesapisv1alpha1.ExposedPorts{},
 			},
 			clabernetesConfigs: map[string]*clabernetesutilcontainerlab.Config{
 				"srl1": {
@@ -338,9 +331,6 @@ func TestRenderServiceExpose(t *testing.T) {
 					RemoveTopologyPrefix: clabernetesutil.ToPointer(true),
 				},
 			},
-			owningTopologyStatus: &clabernetesapisv1alpha1.TopologyStatus{
-				ExposedPorts: map[string]*clabernetesapisv1alpha1.ExposedPorts{},
-			},
 			clabernetesConfigs: map[string]*clabernetesutilcontainerlab.Config{
 				"srl1": {
 					Name:   "srl1",
@@ -405,9 +395,6 @@ func TestRenderServiceExpose(t *testing.T) {
 					},
 				},
 			},
-			owningTopologyStatus: &clabernetesapisv1alpha1.TopologyStatus{
-				ExposedPorts: map[string]*clabernetesapisv1alpha1.ExposedPorts{},
-			},
 			clabernetesConfigs: map[string]*clabernetesutilcontainerlab.Config{
 				"node1": {
 					Name:   "node1",
@@ -453,9 +440,6 @@ func TestRenderServiceExpose(t *testing.T) {
 					},
 				},
 			},
-			owningTopologyStatus: &clabernetesapisv1alpha1.TopologyStatus{
-				ExposedPorts: map[string]*clabernetesapisv1alpha1.ExposedPorts{},
-			},
 			clabernetesConfigs: map[string]*clabernetesutilcontainerlab.Config{
 				"node1": {
 					Name:   "node1",
@@ -500,9 +484,6 @@ func TestRenderServiceExpose(t *testing.T) {
 				Status: clabernetesapisv1alpha1.TopologyStatus{
 					RemoveTopologyPrefix: clabernetesutil.ToPointer(true),
 				},
-			},
-			owningTopologyStatus: &clabernetesapisv1alpha1.TopologyStatus{
-				ExposedPorts: map[string]*clabernetesapisv1alpha1.ExposedPorts{},
 			},
 			clabernetesConfigs: map[string]*clabernetesutilcontainerlab.Config{
 				"srl1": {

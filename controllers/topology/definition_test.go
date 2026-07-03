@@ -59,8 +59,7 @@ func TestDefinitionProcess(t *testing.T) {
 				},
 			},
 			reconcileData: &clabernetescontrollerstopology.ReconcileData{
-				Kind:           "containerlab",
-				ResolvedHashes: clabernetesapisv1alpha1.ReconcileHashes{},
+				Kind: "containerlab",
 				ResolvedConfigs: map[string]*clabernetesutilcontainerlab.Config{
 					"srl1": {},
 					"srl2": {
@@ -116,8 +115,7 @@ func TestDefinitionProcess(t *testing.T) {
 				},
 			},
 			reconcileData: &clabernetescontrollerstopology.ReconcileData{
-				Kind:           "containerlab",
-				ResolvedHashes: clabernetesapisv1alpha1.ReconcileHashes{},
+				Kind: "containerlab",
 				ResolvedConfigs: map[string]*clabernetesutilcontainerlab.Config{
 					"srl1": {},
 				},
@@ -151,8 +149,7 @@ func TestDefinitionProcess(t *testing.T) {
 				},
 			},
 			reconcileData: &clabernetescontrollerstopology.ReconcileData{
-				Kind:           "containerlab",
-				ResolvedHashes: clabernetesapisv1alpha1.ReconcileHashes{},
+				Kind: "containerlab",
 				ResolvedConfigs: map[string]*clabernetesutilcontainerlab.Config{
 					"srl1": {},
 					"srl2": {},
@@ -193,8 +190,7 @@ func TestDefinitionProcess(t *testing.T) {
 				},
 			},
 			reconcileData: &clabernetescontrollerstopology.ReconcileData{
-				Kind:           "containerlab",
-				ResolvedHashes: clabernetesapisv1alpha1.ReconcileHashes{},
+				Kind: "containerlab",
 				ResolvedConfigs: map[string]*clabernetesutilcontainerlab.Config{
 					"srl1": {},
 					"srl2": {},
@@ -258,8 +254,7 @@ func TestDefinitionProcess(t *testing.T) {
 				},
 			},
 			reconcileData: &clabernetescontrollerstopology.ReconcileData{
-				Kind:           "kne",
-				ResolvedHashes: clabernetesapisv1alpha1.ReconcileHashes{},
+				Kind: "kne",
 				ResolvedConfigs: map[string]*clabernetesutilcontainerlab.Config{
 					"srl1": {},
 					"srl2": {},
@@ -325,8 +320,7 @@ func TestDefinitionProcess(t *testing.T) {
 				},
 			},
 			reconcileData: &clabernetescontrollerstopology.ReconcileData{
-				Kind:           "kne",
-				ResolvedHashes: clabernetesapisv1alpha1.ReconcileHashes{},
+				Kind: "kne",
 				ResolvedConfigs: map[string]*clabernetesutilcontainerlab.Config{
 					"srl1": {},
 					"srl2": {},
@@ -383,8 +377,7 @@ func TestDefinitionProcess(t *testing.T) {
 				},
 			},
 			reconcileData: &clabernetescontrollerstopology.ReconcileData{
-				Kind:           "containerlab",
-				ResolvedHashes: clabernetesapisv1alpha1.ReconcileHashes{},
+				Kind: "containerlab",
 				ResolvedConfigs: map[string]*clabernetesutilcontainerlab.Config{
 					// Only primary nodes and standalone nodes should have entries
 					// srsim-a is primary (has srsim-b and srsim-iom1 as secondaries)

@@ -117,13 +117,7 @@ func (r *DeploymentReconciler) Render(
 ) *k8sappsv1.Deployment {
 	owningTopologyName := owningTopology.GetName()
 
-	deploymentName := fmt.Sprintf("%s-%s", owningTopologyName, nodeName)
-
-	if ResolveTopologyRemovePrefix(owningTopology) {
-		deploymentName = nodeName
-	}
-
-	configVolumeName := fmt.Sprintf("%s-config", owningTopologyName)
+	deploymentName := NodeResourceName(owningTopology, nodeName)
 
 	deployment := r.renderDeploymentBase(
 		deploymentName,
@@ -140,15 +134,12 @@ func (r *DeploymentReconciler) Render(
 	volumeMountsFromCommonSpec := r.renderDeploymentVolumes(
 		deployment,
 		nodeName,
-		configVolumeName,
-		owningTopologyName,
 		owningTopology,
 	)
 
 	r.renderDeploymentContainer(
 		deployment,
 		nodeName,
-		configVolumeName,
 		volumeMountsFromCommonSpec,
 		owningTopology,
 	)
@@ -408,25 +399,10 @@ func (r *DeploymentReconciler) renderDeploymentScheduling(
 
 func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 	deployment *k8sappsv1.Deployment,
-	nodeName,
-	configVolumeName,
-	owningTopologyName string,
+	nodeName string,
 	owningTopology *clabernetesapisv1alpha1.Topology,
 ) []k8scorev1.VolumeMount {
 	volumes := []k8scorev1.Volume{
-		{
-			Name: configVolumeName,
-			VolumeSource: k8scorev1.VolumeSource{
-				ConfigMap: &k8scorev1.ConfigMapVolumeSource{
-					LocalObjectReference: k8scorev1.LocalObjectReference{
-						Name: owningTopologyName,
-					},
-					DefaultMode: clabernetesutil.ToPointer(
-						int32(clabernetesconstants.PermissionsEveryoneReadWriteOwnerExecute),
-					),
-				},
-			},
-		},
 		{
 			Name: "docker",
 			VolumeSource: k8scorev1.VolumeSource{
@@ -648,8 +624,7 @@ func (r *DeploymentReconciler) renderDeploymentVolumesGetCRISockPath(
 
 func (r *DeploymentReconciler) renderDeploymentContainer(
 	deployment *k8sappsv1.Deployment,
-	nodeName,
-	configVolumeName string,
+	nodeName string,
 	volumeMountsFromCommonSpec []k8scorev1.VolumeMount,
 	owningTopology *clabernetesapisv1alpha1.Topology,
 ) {
@@ -681,24 +656,6 @@ func (r *DeploymentReconciler) renderDeploymentContainer(
 			},
 		},
 		VolumeMounts: []k8scorev1.VolumeMount{
-			{
-				Name:      configVolumeName,
-				ReadOnly:  true,
-				MountPath: "/clabernetes/topo.clab.yaml",
-				SubPath:   nodeName,
-			},
-			{
-				Name:      configVolumeName,
-				ReadOnly:  true,
-				MountPath: "/clabernetes/files-from-url.yaml",
-				SubPath:   fmt.Sprintf("%s-files-from-url", nodeName),
-			},
-			{
-				Name:      configVolumeName,
-				ReadOnly:  true,
-				MountPath: "/clabernetes/configured-pull-secrets.yaml",
-				SubPath:   "configured-pull-secrets",
-			},
 			{
 				Name:      "docker",
 				ReadOnly:  false,

@@ -74,19 +74,6 @@ func NormalizeKubernetesObject(t *testing.T, object []byte) []byte {
 func NormalizeTopology(t *testing.T, objectData []byte) []byte {
 	t.Helper()
 
-	// unfortunately we need to remove the hash bits since any cluster may have no lb or get a
-	// different lb address assigned than what we have stored in golden file(s)
-	objectData = YQCommand(
-		t,
-		objectData,
-		"del(.status.reconcileHashes.exposedPorts)",
-	)
-	objectData = YQCommand(
-		t,
-		objectData,
-		"del(.status.exposedPorts[].loadBalancerAddress)",
-	)
-
 	// we dont want to wait for node statuses/conditions in ci especially since its slooooooow
 	objectData = YQCommand(
 		t,
@@ -96,7 +83,7 @@ func NormalizeTopology(t *testing.T, objectData []byte) []byte {
 	objectData = YQCommand(
 		t,
 		objectData,
-		"del(.status.nodeReadiness)",
+		"del(.status.readyNodeCount)",
 	)
 	objectData = YQCommand(
 		t,
@@ -108,10 +95,20 @@ func NormalizeTopology(t *testing.T, objectData []byte) []byte {
 		objectData,
 		"del(.status.topologyState)",
 	)
+
+	return objectData
+}
+
+// NormalizeNode normalizes a clabernetes node cr by removing fields that may change between ci
+// and local or other folks machines/clusters -- so we can compare results more easily.
+func NormalizeNode(t *testing.T, objectData []byte) []byte {
+	t.Helper()
+
+	// node status is all timing dependent (readiness/probes/lb addresses), so just drop it
 	objectData = YQCommand(
 		t,
 		objectData,
-		"del(.status.nodeProbeStatuses)",
+		".status = {}",
 	)
 
 	return objectData
@@ -178,13 +175,13 @@ func NormalizeDeployment(t *testing.T, objectData []byte) []byte {
 	return objectData
 }
 
-// NormalizeConnectivity normalizes a connectivity cr between ci and local or other folks
-// machines/clusters -- so we can compare results more easily. For now this is just replacing the
-// namespace in the destinations since those will be random(ish) per test run.
-func NormalizeConnectivity(t *testing.T, objectData []byte) []byte {
+// NormalizeLink normalizes a link cr between ci and local or other folks machines/clusters -- so
+// we can compare results more easily. For now this is just replacing the namespace in the
+// destinations since those will be random(ish) per test run.
+func NormalizeLink(t *testing.T, objectData []byte) []byte {
 	t.Helper()
 
-	// replace the namespace in the connectivity destinations
+	// replace the namespace in the link endpoint destinations
 	return regexp.MustCompile(`\..*\.svc.cluster.local`).
 		ReplaceAll(objectData, []byte(".NAMESPACE.svc.cluster.local"))
 }

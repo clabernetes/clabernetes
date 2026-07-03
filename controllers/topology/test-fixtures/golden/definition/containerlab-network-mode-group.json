@@ -1,17 +1,5 @@
 {
     "Kind": "containerlab",
-    "PreviousHashes": {
-        "config": "",
-        "exposedPorts": "",
-        "filesFromURL": null,
-        "imagePullSecrets": ""
-    },
-    "ResolvedHashes": {
-        "config": "",
-        "exposedPorts": "",
-        "filesFromURL": null,
-        "imagePullSecrets": ""
-    },
     "PreviousConfigs": null,
     "ResolvedConfigs": {
         "external-node": {
@@ -392,7 +380,6 @@
             "Debug": false
         }
     },
-    "ResolvedConfigsBytes": null,
     "ResolvedTunnels": {
         "external-node": [
             {
@@ -419,6 +406,8 @@
     "PreviousNodeStatuses": null,
     "NodeStatuses": null,
     "TopologyReady": false,
+    "TopologyState": "",
+    "NodeProbeStatuses": null,
     "NodesNeedingReboot": null,
     "ShouldUpdateResource": false
 }

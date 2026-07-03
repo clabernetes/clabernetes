@@ -43,10 +43,12 @@ func GetAPIs() (apimachineryscheme.GroupVersion, []apimachineryruntime.Object) {
 	return SchemeGroupVersion, []apimachineryruntime.Object{
 		&Config{},
 		&ConfigList{},
-		&Connectivity{},
-		&ConnectivityList{},
 		&ImageRequest{},
 		&ImageRequestList{},
+		&Link{},
+		&LinkList{},
+		&Node{},
+		&NodeList{},
 		&Topology{},
 		&TopologyList{},
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 )
@@ -55,6 +56,10 @@ func (c *Controller) Reconcile(
 		return ctrlruntime.Result{}, err
 	}
 
+	// snapshot the status so we know if we need to push an update at the end of the reconcile --
+	// conditions (and the status itself) get mutated along the way
+	previousStatus := topology.Status.DeepCopy()
+
 	// reconcile the naming -- we *must* do this to ensure that our status field is set!
 	c.TopologyReconciler.ReconcileNaming(topology, reconcileData)
 
@@ -70,21 +75,20 @@ func (c *Controller) Reconcile(
 		return ctrlruntime.Result{}, err
 	}
 
-	if reconcileData.ShouldUpdateResource {
-		// we should update because config hash or something changed, so snag the updated status
-		// data out of the reconcile data, put it in the resource, and push the update
-		err = reconcileData.SetStatus(&topology.Status)
-		if err != nil {
-			c.BaseController.Log.Criticalf(
-				"failed setting object '%s/%s' status, error: %s",
-				topology.Namespace,
-				topology.Name,
-				err,
-			)
+	err = reconcileData.SetStatus(&topology.Status)
+	if err != nil {
+		c.BaseController.Log.Criticalf(
+			"failed setting object '%s/%s' status, error: %s",
+			topology.Namespace,
+			topology.Name,
+			err,
+		)
 
-			return ctrlruntime.Result{}, err
-		}
+		return ctrlruntime.Result{}, err
+	}
 
+	if reconcileData.ShouldUpdateResource ||
+		!apiequality.Semantic.DeepEqual(previousStatus, &topology.Status) {
 		err = c.BaseController.Client.Update(ctx, topology)
 		if err != nil {
 			c.BaseController.Log.Criticalf(
@@ -108,28 +112,28 @@ func (c *Controller) reconcileResources(
 	topology *clabernetesapisv1alpha1.Topology,
 	reconcileData *ReconcileData,
 ) error {
-	err := c.TopologyReconciler.ReconcileConfigMap(
+	err := c.TopologyReconciler.ReconcileNodes(
 		ctx,
 		topology,
 		reconcileData,
 	)
 	if err != nil {
 		c.BaseController.Log.Criticalf(
-			"failed reconciling clabernetes config map, error: %s",
+			"failed reconciling clabernetes node resources, error: %s",
 			err,
 		)
 
 		return err
 	}
 
-	err = c.TopologyReconciler.ReconcileConnectivity(
+	err = c.TopologyReconciler.ReconcileLinks(
 		ctx,
 		topology,
 		reconcileData,
 	)
 	if err != nil {
 		c.BaseController.Log.Criticalf(
-			"failed reconciling clabernetes connectivity resource, error: %s",
+			"failed reconciling clabernetes link resources, error: %s",
 			err,
 		)
 
@@ -167,6 +171,23 @@ func (c *Controller) reconcileResources(
 
 		return err
 	}
+
+	err = c.TopologyReconciler.ReconcileNodeStatuses(
+		ctx,
+		topology,
+		reconcileData,
+	)
+	if err != nil {
+		c.BaseController.Log.Criticalf(
+			"failed reconciling clabernetes node resource statuses, error: %s",
+			err,
+		)
+
+		return err
+	}
+
+	// finally, clean up any legacy (pre node/link cr) resources hanging around
+	c.TopologyReconciler.ReconcileLegacyResources(ctx, topology)
 
 	return nil
 }

@@ -14,11 +14,15 @@ import (
 	claberneteserrors "github.com/srl-labs/clabernetes/errors"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
 	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
+	"gopkg.in/yaml.v3"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	apimachineryscheme "k8s.io/apimachinery/pkg/runtime/schema"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimeutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -34,12 +38,12 @@ type Reconciler struct {
 
 	serviceAccountReconciler *ServiceAccountReconciler
 	roleBindingReconciler    *RoleBindingReconciler
-	configMapReconciler      *ConfigMapReconciler
-	connectivityReconciler   *ConnectivityReconciler
 
 	// these ones are exposed for testing purposes. no reason to not expose them really anyway so
 	// no big deal. not exposing the others at this point since there isnt a reason to (yet, but
 	// testing will probably cause them to be exposed at some point too)
+	NodeCrReconciler                *NodeReconciler
+	LinkCrReconciler                *LinkReconciler
 	ServiceFabricReconciler         *ServiceFabricReconciler
 	ServiceExposeReconciler         *ServiceExposeReconciler
 	PersistentVolumeClaimReconciler *PersistentVolumeClaimReconciler
@@ -69,11 +73,11 @@ func NewReconciler(
 			configManagerGetter,
 			managerAppName,
 		),
-		configMapReconciler: NewConfigMapReconciler(
+		NodeCrReconciler: NewNodeReconciler(
 			log,
 			configManagerGetter,
 		),
-		connectivityReconciler: NewConnectivityReconciler(
+		LinkCrReconciler: NewLinkReconciler(
 			log,
 			configManagerGetter,
 		),
@@ -171,164 +175,264 @@ func (r *Reconciler) ReconcileRoleBinding(
 	return r.roleBindingReconciler.Reconcile(ctx, owningTopology)
 }
 
-// ReconcileConfigMap reconciles the primary configmap containing clabernetes configs, tunnel
-// information, pull secret information, and perhaps more in the future.
-func (r *Reconciler) ReconcileConfigMap(
+// ReconcileNodes reconciles the node crs for the topology -- each node cr holds the rendered
+// sub-topology (and related per-node data) for one node of the topology; the launcher pods fetch
+// their config from "their" node cr. This also loads the previously rendered configs (from the
+// current node crs) into the reconcile data so restart detection can see what (if anything)
+// changed.
+func (r *Reconciler) ReconcileNodes( //nolint:gocognit
 	ctx context.Context,
 	owningTopology *clabernetesapisv1alpha1.Topology,
 	reconcileData *ReconcileData,
 ) error {
-	var err error
-
-	configBytes, configHash, err := clabernetesutil.HashObjectYAML(
+	nodes, err := ReconcileResolve(
+		ctx,
+		r,
+		&clabernetesapisv1alpha1.Node{},
+		&clabernetesapisv1alpha1.NodeList{},
+		clabernetesapis.Node,
+		owningTopology,
 		reconcileData.ResolvedConfigs,
+		r.NodeCrReconciler.Resolve,
 	)
 	if err != nil {
 		return err
 	}
 
-	reconcileData.ResolvedConfigsBytes = configBytes
-	reconcileData.ResolvedHashes.Config = configHash
+	// the node crs hold the previously rendered configs -- load those up so restart detection can
+	// compare previous and current renders
+	for nodeName, existingNode := range nodes.Current {
+		previousConfig := &clabernetesutilcontainerlab.Config{}
 
-	for nodeName, nodeFilesFromURL := range owningTopology.Spec.Deployment.FilesFromURL {
-		var nodeFilesFromURLHash string
-
-		_, nodeFilesFromURLHash, err = clabernetesutil.HashObject(nodeFilesFromURL)
+		err = yaml.Unmarshal([]byte(existingNode.Spec.Config), previousConfig)
 		if err != nil {
 			return err
 		}
 
-		reconcileData.ResolvedHashes.FilesFromURL[nodeName] = nodeFilesFromURLHash
+		reconcileData.PreviousConfigs[nodeName] = previousConfig
+		reconcileData.PreviousNodeStatuses[nodeName] = existingNode.Status.Readiness
+	}
 
-		if reconcileData.PreviousHashes.FilesFromURL[nodeName] != nodeFilesFromURLHash {
-			// files from url hash has changed, need to smack the node so the configmap update
-			// gets realized
+	r.Log.Info("pruning extraneous node crs")
+
+	for _, extraNode := range nodes.Extra {
+		err = r.deleteObj(ctx, extraNode, clabernetesapis.Node)
+		if err != nil {
+			return err
+		}
+	}
+
+	r.Log.Info("creating missing node crs")
+
+	renderedMissingNodes, err := r.NodeCrReconciler.RenderAll(
+		owningTopology,
+		reconcileData,
+		nodes.Missing,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, renderedMissingNode := range renderedMissingNodes {
+		err = r.createObj(ctx, owningTopology, renderedMissingNode, clabernetesapis.Node)
+		if err != nil {
+			return err
+		}
+	}
+
+	r.Log.Info("enforcing desired state on existing node crs")
+
+	for nodeName, existingNode := range nodes.Current {
+		if _, stillDesired := reconcileData.ResolvedConfigs[nodeName]; !stillDesired {
+			// node was extraneous and has been deleted above
+			continue
+		}
+
+		var renderedNode *clabernetesapisv1alpha1.Node
+
+		renderedNode, err = r.NodeCrReconciler.Render(owningTopology, reconcileData, nodeName)
+		if err != nil {
+			return err
+		}
+
+		err = ctrlruntimeutil.SetOwnerReference(owningTopology, renderedNode, r.Client.Scheme())
+		if err != nil {
+			return err
+		}
+
+		if r.NodeCrReconciler.Conforms(existingNode, renderedNode, owningTopology.GetUID()) {
+			continue
+		}
+
+		if !reflect.DeepEqual(existingNode.Spec.FilesFromURL, renderedNode.Spec.FilesFromURL) {
+			// files from url changed -- the launcher only fetches these at startup, so the node
+			// needs a restart to pick up the new files (config changes are detected separately
+			// via the previous/resolved config comparison)
 			reconcileData.NodesNeedingReboot.Add(nodeName)
 		}
-	}
 
-	imagePullSecretsBytes, imagePullSecretsHash, err := clabernetesutil.HashObjectYAML(
-		owningTopology.Spec.ImagePull.PullSecrets,
-	)
-	if err != nil {
-		return err
-	}
+		// keep the status (and set the resource version so the update is accepted) -- the status
+		// is written separately after deployments have been processed
+		renderedNode.Status = existingNode.Status
+		renderedNode.ResourceVersion = existingNode.ResourceVersion
 
-	reconcileData.ResolvedHashes.ImagePullSecrets = imagePullSecretsHash
-
-	if !reconcileData.ConfigMapHasChanges() {
-		return nil
-	}
-
-	// we need to tell the controller to update the originating CR because obviously our hashes
-	// dont match which means we had some changes from the previous reconcile
-	reconcileData.ShouldUpdateResource = true
-
-	namespacedName := apimachinerytypes.NamespacedName{
-		Namespace: owningTopology.GetNamespace(),
-		Name:      owningTopology.GetName(),
-	}
-
-	renderedConfigMap, err := r.configMapReconciler.Render(
-		owningTopology,
-		reconcileData.ResolvedConfigs,
-		owningTopology.Spec.Deployment.FilesFromURL,
-		string(imagePullSecretsBytes),
-	)
-	if err != nil {
-		return err
-	}
-
-	existingConfigMap := &k8scorev1.ConfigMap{}
-
-	err = r.Client.Get(
-		ctx,
-		namespacedName,
-		existingConfigMap,
-	)
-	if err != nil {
-		if apimachineryerrors.IsNotFound(err) {
-			return r.createObj(
-				ctx,
-				owningTopology,
-				renderedConfigMap,
-				clabernetesconstants.KubernetesConfigMap,
-			)
+		err = r.updateObj(ctx, renderedNode, clabernetesapis.Node)
+		if err != nil {
+			return err
 		}
-
-		return err
 	}
 
-	if r.configMapReconciler.Conforms(
-		existingConfigMap,
-		renderedConfigMap,
-		owningTopology.GetUID(),
-	) {
-		return nil
-	}
-
-	return r.updateObj(ctx, renderedConfigMap, clabernetesconstants.KubernetesConfigMap)
+	return nil
 }
 
-// ReconcileConnectivity reconciles the inter-launcher-pod connectivity cr for the topology.
-func (r *Reconciler) ReconcileConnectivity(
+// ReconcileNodeStatuses updates the status of the topology's node crs with the readiness, probe,
+// and exposed port information gathered during the reconcile -- this (per node) status data lives
+// on the node crs (rather than the topology status) so the topology object stays small no matter
+// how many nodes a topology has.
+func (r *Reconciler) ReconcileNodeStatuses(
 	ctx context.Context,
 	owningTopology *clabernetesapisv1alpha1.Topology,
 	reconcileData *ReconcileData,
 ) error {
-	namespacedName := apimachinerytypes.NamespacedName{
-		Namespace: owningTopology.GetNamespace(),
-		Name:      owningTopology.GetName(),
+	for nodeName := range reconcileData.ResolvedConfigs {
+		readiness, ok := reconcileData.NodeStatuses[nodeName]
+		if !ok {
+			// no readiness gathered for this node (deployments may have been skipped), leave the
+			// existing status alone
+			continue
+		}
+
+		desiredStatus := clabernetesapisv1alpha1.NodeStatus{
+			Readiness:     readiness,
+			ProbeStatuses: reconcileData.NodeProbeStatuses[nodeName],
+			ExposedPorts:  reconcileData.ResolvedExposedPorts[nodeName],
+		}
+
+		existingNode := &clabernetesapisv1alpha1.Node{}
+
+		err := r.Client.Get(
+			ctx,
+			apimachinerytypes.NamespacedName{
+				Namespace: owningTopology.GetNamespace(),
+				Name:      NodeResourceName(owningTopology, nodeName),
+			},
+			existingNode,
+		)
+		if err != nil {
+			if apimachineryerrors.IsNotFound(err) {
+				// node cr was just created this reconcile (or someone deleted it), no big deal,
+				// we'll set the status next time around
+				continue
+			}
+
+			return err
+		}
+
+		if reflect.DeepEqual(existingNode.Status, desiredStatus) {
+			continue
+		}
+
+		existingNode.Status = desiredStatus
+
+		err = r.updateObj(ctx, existingNode, clabernetesapis.Node)
+		if err != nil {
+			return err
+		}
 	}
 
-	renderedConnectivity := r.connectivityReconciler.Render(
+	return nil
+}
+
+// ReconcileLinks reconciles the link crs for the topology -- each link cr represents a single
+// point-to-point link (tunnel) between two launcher pods; the launchers watch "their" links to
+// know what tunnels to establish.
+func (r *Reconciler) ReconcileLinks(
+	ctx context.Context,
+	owningTopology *clabernetesapisv1alpha1.Topology,
+	reconcileData *ReconcileData,
+) error {
+	renderedLinks := r.LinkCrReconciler.RenderAll(
 		owningTopology,
 		reconcileData.ResolvedTunnels,
 	)
 
-	existingConnectivity := &clabernetesapisv1alpha1.Connectivity{}
+	ownedLinks := &clabernetesapisv1alpha1.LinkList{}
 
-	err := r.Client.Get(
+	err := r.Client.List(
 		ctx,
-		namespacedName,
-		existingConnectivity,
+		ownedLinks,
+		ctrlruntimeclient.InNamespace(owningTopology.GetNamespace()),
+		ctrlruntimeclient.MatchingLabels{
+			clabernetesconstants.LabelTopologyOwner: owningTopology.GetName(),
+		},
 	)
-	if err != nil && !apimachineryerrors.IsNotFound(err) {
+	if err != nil {
+		r.Log.Criticalf("failed fetching owned links, error: '%s'", err)
+
 		return err
 	}
 
-	AllocateTunnelIDs(
-		// we either have an empty object because we didnt find it, or we have the previous tunnels
-		// either way, we can now allocate tunnel ids
-		existingConnectivity.Spec.PointToPointTunnels,
-		reconcileData.ResolvedTunnels,
-	)
+	links := r.LinkCrReconciler.Resolve(ownedLinks, renderedLinks)
 
-	if err != nil {
-		// get error was not found, we need to create
-		return r.createObj(
+	// links that already exist keep their tunnel ids, new links get the lowest free ids
+	AllocateTunnelIDs(links.Current, renderedLinks)
+
+	renderedLinksByName := make(map[string]*clabernetesapisv1alpha1.Link, len(renderedLinks))
+
+	for _, renderedLink := range renderedLinks {
+		renderedLinksByName[renderedLink.Name] = renderedLink
+	}
+
+	r.Log.Info("pruning extraneous link crs")
+
+	for _, extraLink := range links.Extra {
+		err = r.deleteObj(ctx, extraLink, clabernetesapis.Link)
+		if err != nil {
+			return err
+		}
+	}
+
+	r.Log.Info("creating missing link crs")
+
+	for _, missingLinkName := range links.Missing {
+		err = r.createObj(
 			ctx,
 			owningTopology,
-			renderedConnectivity,
-			clabernetesapis.Connectivity,
+			renderedLinksByName[missingLinkName],
+			clabernetesapis.Link,
 		)
+		if err != nil {
+			return err
+		}
 	}
 
-	// otherwise we continue to check if the connectivity info conforms and if not we update
-	if r.connectivityReconciler.Conforms(
-		existingConnectivity,
-		renderedConnectivity,
-		owningTopology.GetUID(),
-	) {
-		return nil
+	r.Log.Info("enforcing desired state on existing link crs")
+
+	for linkName, existingLink := range links.Current {
+		renderedLink, stillDesired := renderedLinksByName[linkName]
+		if !stillDesired {
+			// link was extraneous and has been deleted above
+			continue
+		}
+
+		err = ctrlruntimeutil.SetOwnerReference(owningTopology, renderedLink, r.Client.Scheme())
+		if err != nil {
+			return err
+		}
+
+		if r.LinkCrReconciler.Conforms(existingLink, renderedLink, owningTopology.GetUID()) {
+			continue
+		}
+
+		renderedLink.ResourceVersion = existingLink.ResourceVersion
+
+		err = r.updateObj(ctx, renderedLink, clabernetesapis.Link)
+		if err != nil {
+			return err
+		}
 	}
 
-	// great explanation of why this:
-	// https://github.com/kubernetes-sigs/controller-runtime/issues/736
-	// tl;dr -- cr doesnt allow unconditional update so we *must* have resource version set
-	renderedConnectivity.ResourceVersion = existingConnectivity.ResourceVersion
-
-	return r.updateObj(ctx, renderedConnectivity, clabernetesapis.Connectivity)
+	return nil
 }
 
 // ReconcileServices reconciles all the services for a clabernetes Topology.
@@ -464,14 +568,6 @@ func (r *Reconciler) ReconcileServicesExpose(
 ) error {
 	serviceTypeName := fmt.Sprintf("expose %s", clabernetesconstants.KubernetesService)
 
-	if owningTopology.Status.ExposedPorts == nil {
-		owningTopology.Status.ExposedPorts = map[string]*clabernetesapisv1alpha1.ExposedPorts{}
-
-		// shouldUpdate is true because we didn't have any previously stored node exposed port
-		// status data
-		reconcileData.ShouldUpdateResource = true
-	}
-
 	services, err := ReconcileResolve(
 		ctx,
 		r,
@@ -559,20 +655,6 @@ func (r *Reconciler) ReconcileServicesExpose(
 				return err
 			}
 		}
-	}
-
-	_, newNodeExposedPortsHash, err := clabernetesutil.HashObject(
-		owningTopology.Status.ExposedPorts,
-	)
-	if err != nil {
-		return err
-	}
-
-	if owningTopology.Status.ReconcileHashes.ExposedPorts != newNodeExposedPortsHash {
-		reconcileData.ResolvedHashes.ExposedPorts = newNodeExposedPortsHash
-
-		// our exposed hash stuff changed, we need to update the cr status
-		reconcileData.ShouldUpdateResource = true
 	}
 
 	return nil
@@ -827,21 +909,6 @@ func (r *Reconciler) ReconcileDeployments( //nolint: gocyclo,gocognit,funlen
 
 	r.resolveTopologyState(owningTopology, reconcileData)
 
-	if !reflect.DeepEqual(reconcileData.NodeStatuses, reconcileData.PreviousNodeStatuses) {
-		reconcileData.ShouldUpdateResource = true
-	}
-
-	if reconcileData.TopologyState != owningTopology.Status.TopologyState {
-		reconcileData.ShouldUpdateResource = true
-	}
-
-	if !reflect.DeepEqual(
-		reconcileData.NodeProbeStatuses,
-		owningTopology.Status.NodeProbeStatuses,
-	) {
-		reconcileData.ShouldUpdateResource = true
-	}
-
 	return r.reconcileDeploymentsHandleRestarts(
 		ctx,
 		owningTopology,
@@ -857,7 +924,7 @@ func (r *Reconciler) collectNodeProbeStatuses(
 	deployments *clabernetesutil.ObjectDiffer[*k8sappsv1.Deployment],
 ) {
 	for nodeName, deployment := range deployments.Current {
-		probeStatuses := clabernetesapisv1alpha1.NodeProbeStatuses{
+		probeStatuses := &clabernetesapisv1alpha1.NodeProbeStatuses{
 			StartupProbe:   clabernetesapisv1alpha1.NodeProbeStatusUnknown,
 			ReadinessProbe: clabernetesapisv1alpha1.NodeProbeStatusUnknown,
 			LivenessProbe:  clabernetesapisv1alpha1.NodeProbeStatusDisabled,
@@ -925,7 +992,7 @@ func (r *Reconciler) collectNodeProbeStatuses(
 	}
 
 	for _, missingName := range deployments.Missing {
-		reconcileData.NodeProbeStatuses[missingName] = clabernetesapisv1alpha1.NodeProbeStatuses{
+		reconcileData.NodeProbeStatuses[missingName] = &clabernetesapisv1alpha1.NodeProbeStatuses{
 			StartupProbe:   clabernetesapisv1alpha1.NodeProbeStatusUnknown,
 			ReadinessProbe: clabernetesapisv1alpha1.NodeProbeStatusUnknown,
 			LivenessProbe:  clabernetesapisv1alpha1.NodeProbeStatusUnknown,
@@ -1043,11 +1110,7 @@ func (r *Reconciler) reconcileDeploymentsHandleRestarts(
 			reconcileData.ResolvedConfigs[nodeName],
 		)
 
-		deploymentName := fmt.Sprintf("%s-%s", owningTopology.GetName(), nodeName)
-
-		if ResolveTopologyRemovePrefix(owningTopology) {
-			deploymentName = nodeName
-		}
+		deploymentName := NodeResourceName(owningTopology, nodeName)
 
 		nodeDeployment := &k8sappsv1.Deployment{}
 
@@ -1107,6 +1170,58 @@ func (r *Reconciler) reconcileDeploymentsHandleRestarts(
 	}
 
 	return restartNodeError
+}
+
+// ReconcileLegacyResources cleans up (pre node/link cr split) resources that clabernetes no
+// longer creates -- that is, the topology-wide configmap holding all sub-topologies, and the
+// topology-wide connectivity cr holding all tunnels. This is a best effort deal -- failures are
+// logged but do not fail the reconcile.
+func (r *Reconciler) ReconcileLegacyResources(
+	ctx context.Context,
+	owningTopology *clabernetesapisv1alpha1.Topology,
+) {
+	legacyConfigMap := &k8scorev1.ConfigMap{}
+
+	err := r.Client.Get(
+		ctx,
+		apimachinerytypes.NamespacedName{
+			Namespace: owningTopology.GetNamespace(),
+			Name:      owningTopology.GetName(),
+		},
+		legacyConfigMap,
+	)
+	if err == nil {
+		for _, ownerReference := range legacyConfigMap.OwnerReferences {
+			if ownerReference.UID != owningTopology.GetUID() {
+				continue
+			}
+
+			err = r.deleteObj(ctx, legacyConfigMap, clabernetesconstants.KubernetesConfigMap)
+			if err != nil {
+				r.Log.Warnf("failed deleting legacy topology configmap, err: %s", err)
+			}
+
+			break
+		}
+	}
+
+	// the connectivity custom resource type no longer exists in our scheme, so clean it up via
+	// the unstructured client -- the crd (and thus the cr) may well not exist, hence best effort
+	legacyConnectivity := &unstructured.Unstructured{}
+	legacyConnectivity.SetGroupVersionKind(apimachineryscheme.GroupVersionKind{
+		Group:   clabernetesapis.Group,
+		Version: clabernetesapisv1alpha1.Version,
+		Kind:    "Connectivity",
+	})
+	legacyConnectivity.SetNamespace(owningTopology.GetNamespace())
+	legacyConnectivity.SetName(owningTopology.GetName())
+
+	err = r.Client.Delete(ctx, legacyConnectivity)
+	if err != nil &&
+		!apimachineryerrors.IsNotFound(err) &&
+		!apimachinerymeta.IsNoMatchError(err) {
+		r.Log.Warnf("failed deleting legacy connectivity cr, err: %s", err)
+	}
 }
 
 func (r *Reconciler) diffIfDebug(a, b any) {

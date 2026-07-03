@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: topologies.clabernetes.containerlab.dev
 spec:
   group: clabernetes.containerlab.dev
@@ -504,9 +504,10 @@ spec:
                             operator:
                               description: |-
                                 Operator represents a key's relationship to the value.
-                                Valid operators are Exists and Equal. Defaults to Equal.
+                                Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                                 Exists is equivalent to wildcard for value, so that a pod can
                                 tolerate all taints of a particular category.
+                                Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                               type: string
                             tolerationSeconds:
                               description: |-
@@ -806,7 +807,11 @@ spec:
             - message: naming is required once set
               rule: '!has(oldSelf.naming) || has(self.naming)'
           status:
-            description: TopologyStatus is the status for a Topology resource.
+            description: |-
+              TopologyStatus is the status for a Topology resource. Note that all *per node* (and per link)
+              data lives on the Node and Link custom resources rather than here -- this keeps the Topology
+              object size bounded regardless of how big the topology definition is (see also the docstrings
+              on the Node and Link objects).
             properties:
               conditions:
                 description: Conditions is a list of conditions for the topology custom
@@ -867,47 +872,6 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
-              configs:
-                additionalProperties:
-                  type: string
-                description: |-
-                  Configs is a map of node name -> containerlab config -- in other words, this is the original
-                  Topology.Spec.Definition converted to containerlab "sub-topologies" The actual
-                  "sub-topologies"/"sub-configs" are stored as a string -- this is the actual containerlab
-                  topology that gets mounted in the launcher pod.
-                type: object
-              exposedPorts:
-                additionalProperties:
-                  description: ExposedPorts holds information about exposed ports.
-                  properties:
-                    loadBalancerAddress:
-                      description: |-
-                        LoadBalancerAddress holds the address assigned to the load balancer exposing ports for a
-                        given node.
-                      type: string
-                    tcpPorts:
-                      description: TCPPorts is a list of TCP ports exposed on the
-                        LoadBalancer service.
-                      items:
-                        type: integer
-                      type: array
-                      x-kubernetes-list-type: set
-                    udpPorts:
-                      description: UDPPorts is a list of UDP ports exposed on the
-                        LoadBalancer service.
-                      items:
-                        type: integer
-                      type: array
-                      x-kubernetes-list-type: set
-                  required:
-                  - loadBalancerAddress
-                  - tcpPorts
-                  - udpPorts
-                  type: object
-                description: |-
-                  ExposedPorts holds a map of (containerlab not k8s!) nodes and their exposed ports
-                  (via load balancer).
-                type: object
               kind:
                 description: Kind is the topology kind this CR represents -- for example
                   "containerlab".
@@ -915,108 +879,14 @@ spec:
                 - containerlab
                 - kne
                 type: string
-              nodeProbeStatuses:
-                additionalProperties:
-                  description: NodeProbeStatuses holds the individual probe statuses
-                    for a single node.
-                  properties:
-                    livenessProbe:
-                      allOf:
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
-                      description: LivenessProbe is the status of the node's liveness
-                        probe.
-                      type: string
-                    readinessProbe:
-                      allOf:
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
-                      description: ReadinessProbe is the status of the node's readiness
-                        probe.
-                      type: string
-                    startupProbe:
-                      allOf:
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
-                      description: StartupProbe is the status of the node's startup
-                        probe.
-                      type: string
-                  required:
-                  - livenessProbe
-                  - readinessProbe
-                  - startupProbe
-                  type: object
-                description: NodeProbeStatuses is a map of node name to per-probe
-                  status information.
-                type: object
-              nodeReadiness:
-                additionalProperties:
-                  type: string
-                description: |-
-                  NodeReadiness is a map of nodename to readiness status. The readiness status is as reported
-                  by the k8s startup/readiness probe (which is in turn managed by the status probe
-                  configuration of the topology). The possible values are "notready" and "ready", "unknown".
-                type: object
-              reconcileHashes:
-                description: ReconcileHashes holds the hashes form the last reconciliation
-                  run.
-                properties:
-                  config:
-                    description: |-
-                      Config is the last stored hash of the rendered config(s) -- that is, the map of "sub
-                      topologies" representing the overall Topology.Spec.Definition.
-                    type: string
-                  exposedPorts:
-                    description: |-
-                      ExposedPorts is the last stored hash of the exposed ports mapping for this Topology. Note
-                      that while we obviously care about the exposed ports on a *per node basis*, we don't need to
-                      track that here -- this is here strictly to track differences in the load balancer service --
-                      the actual sub-topologies (or sub-configs) effectively track the expose port status per node.
-                    type: string
-                  filesFromURL:
-                    additionalProperties:
-                      type: string
-                    description: |-
-                      FilesFromURL is the hash of the last stored mapping of files from URL (to node mapping). Note
-                      that this is tracked on a *per node basis* because the URL of a file could be updated without
-                      any change to the actual config/topology (or sub-config/sub-topology); as such we need to
-                      explicitly track this per node to know when a node needs to be restarted such that the new
-                      URL is "picked up" by the node/launcher.
-                    type: object
-                  imagePullSecrets:
-                    description: ImagePullSecrets is the hash of hte last stored image
-                      pull secrets for this Topology.
-                    type: string
-                required:
-                - config
-                - exposedPorts
-                - filesFromURL
-                - imagePullSecrets
-                type: object
+              nodeCount:
+                description: NodeCount is the number of nodes (launchers) this Topology
+                  represents.
+                type: integer
+              readyNodeCount:
+                description: ReadyNodeCount is the number of nodes of this Topology
+                  that currently report ready.
+                type: integer
               removeTopologyPrefix:
                 description: |-
                   RemoveTopologyPrefix holds the "resolved" value of the RemoveTopologyPrefix field -- that is
@@ -1029,27 +899,17 @@ spec:
                   from the conditions so we can easily snag it for print columns!
                 type: boolean
               topologyState:
-                allOf:
-                - enum:
-                  - deploying
-                  - running
-                  - degraded
-                  - deployfailed
-                - enum:
-                  - deploying
-                  - running
-                  - degraded
-                  - deployfailed
                 description: TopologyState is the high-level lifecycle state of the
                   topology.
+                enum:
+                - deploying
+                - running
+                - degraded
+                - deployfailed
                 type: string
             required:
             - conditions
-            - configs
-            - exposedPorts
             - kind
-            - nodeReadiness
-            - reconcileHashes
             - removeTopologyPrefix
             - topologyReady
             type: object

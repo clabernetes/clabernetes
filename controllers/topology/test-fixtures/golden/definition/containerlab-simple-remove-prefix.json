@@ -1,17 +1,5 @@
 {
     "Kind": "containerlab",
-    "PreviousHashes": {
-        "config": "",
-        "exposedPorts": "",
-        "filesFromURL": null,
-        "imagePullSecrets": ""
-    },
-    "ResolvedHashes": {
-        "config": "",
-        "exposedPorts": "",
-        "filesFromURL": null,
-        "imagePullSecrets": ""
-    },
     "PreviousConfigs": null,
     "ResolvedConfigs": {
         "srl1": {
@@ -72,7 +60,9 @@
                     "WaitFor": null,
                     "DNS": null,
                     "Certificate": null,
-                    "Healthcheck": null
+                    "Healthcheck": null,
+                    "Aliases": null,
+                    "Components": null
                 },
                 "Kinds": null,
                 "Nodes": {
@@ -114,19 +104,21 @@
                         "WaitFor": null,
                         "DNS": null,
                         "Certificate": null,
-                        "Healthcheck": null
+                        "Healthcheck": null,
+                        "Aliases": null,
+                        "Components": null
                     }
                 },
                 "Links": [
                     {
-                        "Type": "",
                         "Endpoints": [
                             "srl1:e1-1",
                             "host:srl1-e1-1"
                         ],
                         "Labels": null,
                         "Vars": null,
-                        "MTU": 0
+                        "MTU": 0,
+                        "Type": ""
                     }
                 ]
             },
@@ -190,7 +182,9 @@
                     "WaitFor": null,
                     "DNS": null,
                     "Certificate": null,
-                    "Healthcheck": null
+                    "Healthcheck": null,
+                    "Aliases": null,
+                    "Components": null
                 },
                 "Kinds": null,
                 "Nodes": {
@@ -232,26 +226,27 @@
                         "WaitFor": null,
                         "DNS": null,
                         "Certificate": null,
-                        "Healthcheck": null
+                        "Healthcheck": null,
+                        "Aliases": null,
+                        "Components": null
                     }
                 },
                 "Links": [
                     {
-                        "Type": "",
                         "Endpoints": [
                             "srl2:e1-1",
                             "host:srl2-e1-1"
                         ],
                         "Labels": null,
                         "Vars": null,
-                        "MTU": 0
+                        "MTU": 0,
+                        "Type": ""
                     }
                 ]
             },
             "Debug": false
         }
     },
-    "ResolvedConfigsBytes": null,
     "ResolvedTunnels": {
         "srl1": [
             {
@@ -278,6 +273,8 @@
     "PreviousNodeStatuses": null,
     "NodeStatuses": null,
     "TopologyReady": false,
+    "TopologyState": "",
+    "NodeProbeStatuses": null,
     "NodesNeedingReboot": null,
     "ShouldUpdateResource": false
 }
