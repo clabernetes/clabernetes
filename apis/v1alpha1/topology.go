@@ -45,13 +45,10 @@ const (
 // NodeProbeStatuses holds the individual probe statuses for a single node.
 type NodeProbeStatuses struct {
 	// StartupProbe is the status of the node's startup probe.
-	// +kubebuilder:validation:Enum=passing;failing;unknown;disabled
 	StartupProbe NodeProbeStatus `json:"startupProbe"`
 	// ReadinessProbe is the status of the node's readiness probe.
-	// +kubebuilder:validation:Enum=passing;failing;unknown;disabled
 	ReadinessProbe NodeProbeStatus `json:"readinessProbe"`
 	// LivenessProbe is the status of the node's liveness probe.
-	// +kubebuilder:validation:Enum=passing;failing;unknown;disabled
 	LivenessProbe NodeProbeStatus `json:"livenessProbe"`
 }
 
@@ -144,7 +141,6 @@ type TopologyStatus struct {
 	// from the conditions so we can easily snag it for print columns!
 	TopologyReady bool `json:"topologyReady"`
 	// TopologyState is the high-level lifecycle state of the topology.
-	// +kubebuilder:validation:Enum=deploying;running;degraded;deployfailed
 	// +optional
 	TopologyState TopologyState `json:"topologyState,omitempty"`
 	// Conditions is a list of conditions for the topology custom resource.
