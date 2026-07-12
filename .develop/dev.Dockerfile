@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 golang:1.24-bookworm
+FROM golang:1.25-bookworm
 
 RUN apt-get update -y && \
     apt-get install -yq --no-install-recommends \

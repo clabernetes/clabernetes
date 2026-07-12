@@ -1,7 +1,12 @@
 version: v2beta1
+name: clabernetes
+vars:
+  NS:
+    source: env
+    default: clabernetes
 commands:
-  dev: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace dev --profile dev --profile debug --profile single-manager --profile single-ui $@"
-  deploy: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace deploy $@"
-  build: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace build $@"
-  purge: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace purge $@"
-  pipeline: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace run-pipeline $@"
+  dev: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace dev -n ${NS} --profile dev --profile debug --profile single-manager --profile single-ui $@"
+  deploy: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace deploy -n ${NS} $@"
+  build: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace build -n ${NS} $@"
+  purge: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace purge -n ${NS} $@"
+  pipeline: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace run-pipeline -n ${NS} $@"

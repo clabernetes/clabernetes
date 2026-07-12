@@ -19,8 +19,22 @@ LAUNCHER_IMAGE ?= $(IMAGE_BASE)/clabernetes-launcher
 UI_IMAGE ?= $(IMAGE_BASE)/clabernetes-ui
 CLABVERTER_IMAGE ?= $(IMAGE_BASE)/clabverter
 
+DEVSPACE_TOOLS_DIR ?= build/dev/bin
+DEVSPACE_BIN ?= $(shell command -v devspace 2>/dev/null)
+DEVSPACE_INSTALL_DEP :=
+ifeq ($(strip $(DEVSPACE_BIN)),)
+DEVSPACE_BIN := $(abspath $(DEVSPACE_TOOLS_DIR))/devspace
+endif
+DEVSPACE_ARGS ?=
+NS ?= clabernetes
+
 help:
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: dev
+dev: TOOLS_BIN_DIR := $(abspath $(DEVSPACE_TOOLS_DIR))
+dev: install-devspace ## Run the manager from local source in the current Kubernetes context
+	"$(DEVSPACE_BIN)" --namespace "$(NS)" --no-warn run dev --profile auto-run-manager $(DEVSPACE_ARGS)
 
 fmt: ## Run formatters
 	gofumpt -w -extra .

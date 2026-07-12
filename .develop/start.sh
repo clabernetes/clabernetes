@@ -8,6 +8,10 @@ RUN_CMD="go run cmd/clabernetes/main.go run"
 
 go mod tidy
 
+if [[ "${1:-}" == "--run" ]]; then
+    exec go run cmd/clabernetes/main.go run
+fi
+
 echo -e "${COLOR_RED}
  _______  ___      _______  _______  _______  ______    __    _  _______  _______  _______  _______
 |       ||   |    |   _   ||  _    ||       ||    _ |  |  |  | ||       ||       ||       ||       |
