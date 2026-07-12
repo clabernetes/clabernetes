@@ -3,11 +3,23 @@ version: v2beta1
 name: clabernetes
 
 vars:
-  DEVSPACE_FLAGS: "-n clabernetes"
-
   REGISTRY:
     source: env
     default: ghcr.io/srl-labs/clabernetes
+
+  # DevSpace runs command-backed variables relative to this config directory. The detector reads
+  # node OS/architecture values from the current kubectl context and fails on mixed platforms.
+  DETECTED_TARGET_PLATFORM:
+    source: command
+    command: bash
+    args:
+      - target-platform.sh
+
+  # TARGET_PLATFORM from the environment overrides detection. Every BuildKit image below receives
+  # this value as --platform=<os>/<architecture>.
+  TARGET_PLATFORM:
+    source: env
+    default: ${DETECTED_TARGET_PLATFORM}
 
   PULL_POLICY: IfNotPresent
 
@@ -41,7 +53,9 @@ images:
     context: ../
     dockerfile: dev.Dockerfile
     rebuildStrategy: ignoreContextChanges
-    buildKit: {}
+    buildKit:
+      args:
+        - "--platform=${TARGET_PLATFORM}"
     tags:
       - ${COMMIT_HASH}
 
@@ -53,7 +67,9 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
-    buildKit: {}
+    buildKit:
+      args:
+        - "--platform=${TARGET_PLATFORM}"
     tags:
       - dev-latest
       - ${COMMIT_HASH}
@@ -66,7 +82,9 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
-    buildKit: {}
+    buildKit:
+      args:
+        - "--platform=${TARGET_PLATFORM}"
     tags:
       - dev-latest
       - ${COMMIT_HASH}
@@ -79,7 +97,9 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
-    buildKit: {}
+    buildKit:
+      args:
+        - "--platform=${TARGET_PLATFORM}"
     tags:
       - dev-latest
       - ${COMMIT_HASH}
@@ -92,7 +112,9 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
-    buildKit: {}
+    buildKit:
+      args:
+        - "--platform=${TARGET_PLATFORM}"
     tags:
       - dev-latest
       - ${COMMIT_HASH}
@@ -168,6 +190,12 @@ profiles:
       - op: add
         path: deployments.clabernetes.helm.values.ui.replicaCount
         value: 1
+
+  - name: auto-run-manager
+    patches:
+      - op: replace
+        path: dev.clabernetes.terminal.command
+        value: .develop/start.sh --run
 
   # for development using devspace on "non-local" clusters (meaning *not* kind/docker-desktop/
   # minikube/maybe others) you will want to have Always for image pull so launcher and clicker pick

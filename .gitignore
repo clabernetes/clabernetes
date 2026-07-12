@@ -48,6 +48,8 @@ cmd/clabverter/build/
 build/try-c9s/*/
 # ignore downloaded e2e tool binaries, but keep build/e2e/kind.yaml committed
 build/e2e/bin/
+# ignore the pinned DevSpace binary downloaded by `make dev`
+build/dev/bin/
 
 # for crd -> openapi gen
 venv
