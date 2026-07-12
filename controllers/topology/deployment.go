@@ -598,6 +598,8 @@ func (r *DeploymentReconciler) renderDeploymentContainer(
 	image := owningTopology.Spec.Deployment.LauncherImage
 	if image == "" {
 		image = r.configManagerGetter().GetLauncherImage()
+	} else {
+		image = clabernetesconfig.ResolveLauncherImage(image)
 	}
 
 	imagePullPolicy := owningTopology.Spec.Deployment.LauncherImagePullPolicy

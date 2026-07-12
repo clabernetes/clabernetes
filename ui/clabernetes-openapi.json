@@ -1866,6 +1866,8 @@
                             },
                             "tunnelID": {
                                 "description": "TunnelID is the id number of the tunnel (vnid or segment id) for this link -- both sides of\nthe link use the same id.",
+                                "maximum": 16000000,
+                                "minimum": 1,
                                 "type": "integer"
                             }
                         },
@@ -1927,7 +1929,7 @@
                 }
             },
             "clabernetes-containerlab-dev.node.v1alpha1": {
-                "description": "Node is an object that represents a single (containerlab) node of a clabernetes Topology. Nodes\nare created and managed by the clabernetes controller -- one per launcher pod -- and hold the\nrendered sub-topology (and any related per-node data) for that node, as well as the per-node\nstatus information. Storing this data per-node (rather than on the Topology itself) means no\nsingle object grows with the size of the topology, which keeps clabernetes clear of the etcd\nmax object size limits for very large topologies.",
+                "description": "Node is an object that represents a single (containerlab) node of a clabernetes Topology. Nodes\nare created and managed by the clabernetes controller -- one per launcher pod -- and hold the\nrendered sub-topology (and any related per-node data) for that node, as well as the per-node\nstatus information. Storing this data per-node avoids topology-wide controller output and its\namplification. A Node still grows with the size and degree of the launcher group it represents,\nbut not with unrelated nodes elsewhere in the topology.",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",

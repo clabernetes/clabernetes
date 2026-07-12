@@ -10,9 +10,9 @@ import (
 // Node is an object that represents a single (containerlab) node of a clabernetes Topology. Nodes
 // are created and managed by the clabernetes controller -- one per launcher pod -- and hold the
 // rendered sub-topology (and any related per-node data) for that node, as well as the per-node
-// status information. Storing this data per-node (rather than on the Topology itself) means no
-// single object grows with the size of the topology, which keeps clabernetes clear of the etcd
-// max object size limits for very large topologies.
+// status information. Storing this data per-node avoids topology-wide controller output and its
+// amplification. A Node still grows with the size and degree of the launcher group it represents,
+// but not with unrelated nodes elsewhere in the topology.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path="nodes",shortName="c9snode"
 // +kubebuilder:printcolumn:JSONPath=".spec.topologyName",name=Topology,type=string

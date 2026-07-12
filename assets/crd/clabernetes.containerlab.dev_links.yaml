@@ -130,6 +130,8 @@ spec:
                 description: |-
                   TunnelID is the id number of the tunnel (vnid or segment id) for this link -- both sides of
                   the link use the same id.
+                maximum: 16000000
+                minimum: 1
                 type: integer
             required:
             - endpointA

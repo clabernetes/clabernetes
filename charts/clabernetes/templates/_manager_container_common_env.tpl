@@ -23,4 +23,10 @@
   {{- else }}
   value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:{{ .Chart.Version }}"
   {{- end }}
+- name: COMPATIBLE_LAUNCHER_IMAGE
+  {{- if eq .Chart.Version "0.0.0" }}
+  value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:dev-latest"
+  {{- else }}
+  value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:{{ .Chart.Version }}"
+  {{- end }}
 {{- end -}}

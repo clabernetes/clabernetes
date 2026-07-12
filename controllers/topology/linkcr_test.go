@@ -131,7 +131,9 @@ func TestAllocateTunnelIDs(t *testing.T) {
 		name          string
 		existingLinks map[string]*clabernetesapisv1alpha1.Link
 		renderedLinks []*clabernetesapisv1alpha1.Link
+		maxID         int
 		expectedIDs   []int
+		expectError   bool
 	}{
 		{
 			name:          "all-new",
@@ -141,6 +143,7 @@ func TestAllocateTunnelIDs(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "link-b"}},
 			},
 			expectedIDs: []int{1, 2},
+			maxID:       10,
 		},
 		{
 			name: "keep-existing-ids",
@@ -156,6 +159,7 @@ func TestAllocateTunnelIDs(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "link-c"}},
 			},
 			expectedIDs: []int{2, 1, 3},
+			maxID:       10,
 		},
 		{
 			name: "stale-existing-links-ignored",
@@ -169,6 +173,54 @@ func TestAllocateTunnelIDs(t *testing.T) {
 				{ObjectMeta: metav1.ObjectMeta{Name: "link-a"}},
 			},
 			expectedIDs: []int{1},
+			maxID:       10,
+		},
+		{
+			name: "duplicate-existing-ids-reallocated",
+			existingLinks: map[string]*clabernetesapisv1alpha1.Link{
+				"link-a": {
+					ObjectMeta: metav1.ObjectMeta{Name: "link-a"},
+					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: 7},
+				},
+				"link-b": {
+					ObjectMeta: metav1.ObjectMeta{Name: "link-b"},
+					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: 7},
+				},
+			},
+			renderedLinks: []*clabernetesapisv1alpha1.Link{
+				{ObjectMeta: metav1.ObjectMeta{Name: "link-a"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "link-b"}},
+			},
+			maxID:       10,
+			expectedIDs: []int{7, 1},
+		},
+		{
+			name: "invalid-existing-ids-reallocated",
+			existingLinks: map[string]*clabernetesapisv1alpha1.Link{
+				"link-a": {
+					ObjectMeta: metav1.ObjectMeta{Name: "link-a"},
+					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: -1},
+				},
+				"link-b": {
+					ObjectMeta: metav1.ObjectMeta{Name: "link-b"},
+					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: 11},
+				},
+			},
+			renderedLinks: []*clabernetesapisv1alpha1.Link{
+				{ObjectMeta: metav1.ObjectMeta{Name: "link-a"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "link-b"}},
+			},
+			maxID:       10,
+			expectedIDs: []int{1, 2},
+		},
+		{
+			name: "id-space-exhausted",
+			renderedLinks: []*clabernetesapisv1alpha1.Link{
+				{ObjectMeta: metav1.ObjectMeta{Name: "link-a"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "link-b"}},
+			},
+			maxID:       1,
+			expectError: true,
 		},
 	}
 
@@ -178,10 +230,22 @@ func TestAllocateTunnelIDs(t *testing.T) {
 			func(t *testing.T) {
 				t.Logf("%s: starting", testCase.name)
 
-				clabernetescontrollerstopology.AllocateTunnelIDs(
+				err := clabernetescontrollerstopology.AllocateTunnelIDs(
 					testCase.existingLinks,
 					testCase.renderedLinks,
+					testCase.maxID,
 				)
+				if testCase.expectError {
+					if err == nil {
+						t.Fatal("expected tunnel allocation to fail")
+					}
+
+					return
+				}
+
+				if err != nil {
+					t.Fatal(err)
+				}
 
 				for idx, renderedLink := range testCase.renderedLinks {
 					if renderedLink.Spec.TunnelID != testCase.expectedIDs[idx] {
@@ -194,5 +258,26 @@ func TestAllocateTunnelIDs(t *testing.T) {
 				}
 			},
 		)
+	}
+}
+
+func TestLinkResourceNamePreservesDistinctInterfaces(t *testing.T) {
+	topology := &clabernetesapisv1alpha1.Topology{
+		ObjectMeta: metav1.ObjectMeta{Name: "collision"},
+	}
+
+	underscoreName := clabernetescontrollerstopology.LinkResourceName(
+		topology,
+		clabernetesapisv1alpha1.LinkEndpointSpec{NodeName: "r1", InterfaceName: "e1_1"},
+		clabernetesapisv1alpha1.LinkEndpointSpec{NodeName: "r2", InterfaceName: "e2_1"},
+	)
+	hyphenName := clabernetescontrollerstopology.LinkResourceName(
+		topology,
+		clabernetesapisv1alpha1.LinkEndpointSpec{NodeName: "r1", InterfaceName: "e1-1"},
+		clabernetesapisv1alpha1.LinkEndpointSpec{NodeName: "r2", InterfaceName: "e2-1"},
+	)
+
+	if underscoreName == hyphenName {
+		t.Fatalf("distinct interfaces collapsed to Link name %q", underscoreName)
 	}
 }

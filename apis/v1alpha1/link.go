@@ -54,6 +54,8 @@ type LinkSpec struct {
 	EndpointB LinkEndpointSpec `json:"endpointB"`
 	// TunnelID is the id number of the tunnel (vnid or segment id) for this link -- both sides of
 	// the link use the same id.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=16000000
 	TunnelID int `json:"tunnelID"`
 }
 

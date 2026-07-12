@@ -107,7 +107,7 @@ func watchLinks(
 	ctx context.Context,
 	logger claberneteslogging.Instance,
 	clabernetesClient *clabernetesgeneratedclientset.Clientset,
-	handleUpdate func(nodeTunnels []*clabernetesapisv1alpha1.PointToPointTunnel),
+	handleUpdate func(nodeTunnels []*clabernetesapisv1alpha1.PointToPointTunnel) error,
 ) {
 	namespace := os.Getenv(clabernetesconstants.PodNamespaceEnv)
 	topologyName := os.Getenv(clabernetesconstants.LauncherTopologyNameEnv)
@@ -117,7 +117,15 @@ func watchLinks(
 	linkEvents := make(chan struct{}, 1)
 
 	for _, selector := range nodeLinkSelectors(topologyName, nodeName) {
-		go watchLinksWithSelector(ctx, logger, clabernetesClient, namespace, selector, linkEvents)
+		go watchLinksWithSelector(
+			ctx,
+			logger,
+			clabernetesClient,
+			namespace,
+			selector,
+			linkEvents,
+			watchLinksReconnectDelay,
+		)
 	}
 
 	for {
@@ -136,12 +144,48 @@ func watchLinks(
 			)
 			if err != nil {
 				logger.Warnf("failed re-listing links after link event, err: %s", err)
+				retryLinkRefresh(ctx, linkEvents, watchLinksReconnectDelay)
 
 				continue
 			}
 
-			handleUpdate(nodeTunnels)
+			err = handleUpdate(nodeTunnels)
+			if err != nil {
+				logger.Warnf("failed reconciling links after link event, err: %s", err)
+				retryLinkRefresh(ctx, linkEvents, watchLinksReconnectDelay)
+			}
 		}
+	}
+}
+
+func signalLinkRefresh(linkEvents chan<- struct{}) {
+	select {
+	case linkEvents <- struct{}{}:
+	default:
+		// a refresh is already pending
+	}
+}
+
+func retryLinkRefresh(ctx context.Context, linkEvents chan<- struct{}, delay time.Duration) {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+		signalLinkRefresh(linkEvents)
+	}
+}
+
+func waitForLinkWatchReconnect(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
@@ -153,44 +197,109 @@ func watchLinksWithSelector(
 	clabernetesClient *clabernetesgeneratedclientset.Clientset,
 	namespace,
 	selector string,
-	linkEvents chan struct{},
+	linkEvents chan<- struct{},
+	reconnectDelay time.Duration,
 ) {
 	for ctx.Err() == nil {
-		watch, err := clabernetesClient.ClabernetesV1alpha1().
-			Links(namespace).
-			Watch(ctx, metav1.ListOptions{LabelSelector: selector, Watch: true})
-		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
+		if !watchLinksSession(
+			ctx,
+			logger,
+			clabernetesClient,
+			namespace,
+			selector,
+			linkEvents,
+			reconnectDelay,
+		) || !waitForLinkWatchReconnect(ctx, reconnectDelay) {
+			return
+		}
+	}
+}
 
-			logger.Warnf(
-				"failed watching clabernetes links, will retry in %s, err: %s",
-				watchLinksReconnectDelay,
-				err,
-			)
-
-			time.Sleep(watchLinksReconnectDelay)
-
-			continue
+// watchLinksSession lists once and consumes the watch rooted at that list's resource version. A
+// true result asks the caller to reconnect; false means the context was canceled.
+func watchLinksSession(
+	ctx context.Context,
+	logger claberneteslogging.Instance,
+	clabernetesClient *clabernetesgeneratedclientset.Clientset,
+	namespace,
+	selector string,
+	linkEvents chan<- struct{},
+	reconnectDelay time.Duration,
+) bool {
+	links, err := clabernetesClient.ClabernetesV1alpha1().
+		Links(namespace).
+		List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		if ctx.Err() != nil {
+			return false
 		}
 
-		for event := range watch.ResultChan() {
+		logger.Warnf(
+			"failed listing clabernetes links before watch, will retry in %s, err: %s",
+			reconnectDelay,
+			err,
+		)
+
+		return true
+	}
+
+	// The worker's list closes the gap with the launcher's earlier startup list. Watching from this
+	// resource version then closes the gap between this list and watch creation.
+	signalLinkRefresh(linkEvents)
+
+	linkWatch, err := clabernetesClient.ClabernetesV1alpha1().
+		Links(namespace).
+		Watch(ctx, metav1.ListOptions{
+			LabelSelector:       selector,
+			ResourceVersion:     links.ResourceVersion,
+			AllowWatchBookmarks: true,
+		})
+	if err != nil {
+		if ctx.Err() != nil {
+			return false
+		}
+
+		logger.Warnf(
+			"failed watching clabernetes links, will retry in %s, err: %s",
+			reconnectDelay,
+			err,
+		)
+
+		return true
+	}
+
+	return consumeLinkWatch(ctx, logger, linkWatch, linkEvents)
+}
+
+func consumeLinkWatch(
+	ctx context.Context,
+	logger claberneteslogging.Instance,
+	linkWatch apimachinerywatch.Interface,
+	linkEvents chan<- struct{},
+) bool {
+	defer linkWatch.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case event, ok := <-linkWatch.ResultChan():
+			if !ok {
+				return true
+			}
+
 			switch event.Type {
 			case apimachinerywatch.Added,
 				apimachinerywatch.Modified,
 				apimachinerywatch.Deleted:
-				select {
-				case linkEvents <- struct{}{}:
-				default:
-					// a refresh is already pending, nothing to do
-				}
-			case apimachinerywatch.Bookmark,
-				apimachinerywatch.Error:
-				logger.Debugf("link watch had %s event occur, ignoring...", event.Type)
+				signalLinkRefresh(linkEvents)
+			case apimachinerywatch.Bookmark:
+				logger.Debug("link watch bookmark received")
+			case apimachinerywatch.Error:
+				logger.Warn("link watch returned an error event; re-listing before reconnect")
+
+				return true
 			}
 		}
-
-		// watch channel closed (api server timeout or similar), loop around and re-watch
 	}
 }

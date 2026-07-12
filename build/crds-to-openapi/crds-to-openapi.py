@@ -8,6 +8,19 @@ from ruamel.yaml import YAML
 
 yaml = YAML(typ='safe')
 
+# Preserve the established schema/path order so regenerating on a different
+# filesystem does not reorder the OpenAPI document and generated UI client.
+CRD_ORDER = {
+    name: index
+    for index, name in enumerate((
+        "clabernetes.containerlab.dev_configs.yaml",
+        "clabernetes.containerlab.dev_imagerequests.yaml",
+        "clabernetes.containerlab.dev_topologies.yaml",
+        "clabernetes.containerlab.dev_links.yaml",
+        "clabernetes.containerlab.dev_nodes.yaml",
+    ))
+}
+
 
 def main():
     try:
@@ -432,7 +445,12 @@ def main():
         "paths": {}
     }
 
-    for f in Path("assets/crd/").glob("*.yaml"):
+    crd_files = sorted(
+        Path("assets/crd/").glob("*.yaml"),
+        key=lambda f: (CRD_ORDER.get(f.name, len(CRD_ORDER)), f.name),
+    )
+
+    for f in crd_files:
         contents = yaml.load(f)
 
         spec = contents.get("spec")

@@ -29,7 +29,10 @@ func (m *slurpeethManager) Run() {
 		"containerlab started, connectivity mode is 'slurpeeth', initializing slurpeeth manager...",
 	)
 
-	m.renderSlurpeethConfig(m.initialTunnels)
+	err := m.renderSlurpeethConfig(m.initialTunnels)
+	if err != nil {
+		m.logger.Fatalf("failed rendering initial slurpeeth config, error: %s", err)
+	}
 
 	sm, err := slurpeeth.GetManager(
 		slurpeeth.WithConfigFile(slurpeethConfigPath),
@@ -99,7 +102,7 @@ func (m *slurpeethManager) Run() {
 
 func (m *slurpeethManager) renderSlurpeethConfig(
 	tunnels []*clabernetesapisv1alpha1.PointToPointTunnel,
-) {
+) error {
 	slurpeethConfig := slurpeeth.Config{}
 
 	for _, tunnel := range tunnels {
@@ -123,10 +126,7 @@ func (m *slurpeethManager) renderSlurpeethConfig(
 
 	slurpeethConfigYAML, err := yaml.Marshal(slurpeethConfig)
 	if err != nil {
-		m.logger.Fatalf(
-			"failed marshalling slurpeeth config, error: %s",
-			err,
-		)
+		return fmt.Errorf("failed marshalling slurpeeth config: %w", err)
 	}
 
 	err = os.WriteFile(
@@ -135,9 +135,8 @@ func (m *slurpeethManager) renderSlurpeethConfig(
 		clabernetesconstants.PermissionsEveryoneReadWriteOwnerExecute,
 	)
 	if err != nil {
-		m.logger.Fatalf(
-			"failed writing slurpeeth config to disk, error: %s",
-			err,
-		)
+		return fmt.Errorf("failed writing slurpeeth config to disk: %w", err)
 	}
+
+	return nil
 }

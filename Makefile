@@ -47,11 +47,14 @@ cov:  ## Produce html coverage report; removes all the generated bits for sanity
 
 install-tools: install-gofumpt install-gci install-golines install-gotestsum ## Install pinned lint/test tools (versions from .github/vars.env)
 
-install-code-generators: ## Install latest code-generator tools
-	go install k8s.io/code-generator/cmd/deepcopy-gen@latest
-	go install k8s.io/kube-openapi/cmd/openapi-gen@latest
-	go install k8s.io/code-generator/cmd/client-gen@latest
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+install-code-generators: ## Install pinned code-generator tools and Python dependencies
+	@set -a; . $(C9S_VARS_ENV); set +a; \
+	go install k8s.io/code-generator/cmd/deepcopy-gen@$$K8S_CODE_GENERATOR_VERSION && \
+	go install k8s.io/kube-openapi/cmd/openapi-gen@$$KUBE_OPENAPI_VERSION && \
+	go install k8s.io/code-generator/cmd/client-gen@$$K8S_CODE_GENERATOR_VERSION && \
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@$$CONTROLLER_TOOLS_VERSION
+	python3 -m venv venv
+	venv/bin/pip install --disable-pip-version-check --requirement build/crds-to-openapi/requirements.txt
 
 run-deepcopy-gen: ## Run deepcopy-gen
 	deepcopy-gen \
@@ -83,6 +86,11 @@ run-generate-crds: ## Run controller-gen for crds
 
 run-generate: install-code-generators run-deepcopy-gen run-openapi-gen run-client-gen run-generate-crds fmt ## Run all code gen tasks
 	cp charts/clabernetes/crds/*.yaml assets/crd/
+	npm --prefix ui ci
+	$(MAKE) --no-print-directory -C ui regenerate-types
+
+verify-generated: run-generate ## Regenerate all API artifacts and fail if the worktree changes
+	git diff --exit-code
 
 delete-generated: ## Deletes all zz_*.go (generated) files, and crds
 	find . -name "zz_*.go" -exec rm {} \;

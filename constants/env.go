@@ -60,6 +60,10 @@ const (
 	// LauncherImageEnv env var that tells the controllers what image to use for clabernetes
 	// (launcher) pods.
 	LauncherImageEnv = "LAUNCHER_IMAGE"
+	// CompatibleLauncherImageEnv is the launcher built for the running manager's API protocol. It
+	// intentionally ignores launcher image overrides so old official release pins cannot create
+	// manager/launcher skew during an upgrade.
+	CompatibleLauncherImageEnv = "COMPATIBLE_LAUNCHER_IMAGE"
 
 	// LauncherPrivilegedEnv is an envar that indicates if the launcher is launched with
 	// privileged mode or our "not so privileged mode".

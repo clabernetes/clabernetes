@@ -206,7 +206,19 @@ func (r *Reconciler) ReconcileNodes(
 
 		err = yaml.Unmarshal([]byte(existingNode.Spec.Config), previousConfig)
 		if err != nil {
-			return err
+			if _, stillDesired := reconcileData.ResolvedConfigs[nodeName]; stillDesired {
+				r.Log.Warnf(
+					"existing node %q has invalid rendered config; replacing it and"+
+						" restarting its launcher: %s",
+					existingNode.GetName(),
+					err,
+				)
+				reconcileData.NodesNeedingReboot.Add(nodeName)
+			}
+
+			reconcileData.PreviousNodeStatuses[nodeName] = existingNode.Status.Readiness
+
+			continue
 		}
 
 		reconcileData.PreviousConfigs[nodeName] = previousConfig
@@ -346,8 +358,16 @@ func (r *Reconciler) ReconcileLinks(
 
 	links := r.LinkCrReconciler.Resolve(ownedLinks, renderedLinks)
 
-	// links that already exist keep their tunnel ids, new links get the lowest free ids
-	AllocateTunnelIDs(links.Current, renderedLinks)
+	maxID := maxTunnelID
+	if owningTopology.Spec.Connectivity == clabernetesconstants.ConnectivitySlurpeeth {
+		maxID = maxSlurpeethTunnelID
+	}
+
+	// links that already exist keep valid unique tunnel ids; all others get the lowest free ids
+	err = AllocateTunnelIDs(links.Current, renderedLinks, maxID)
+	if err != nil {
+		return err
+	}
 
 	renderedLinksByName := make(map[string]*clabernetesapisv1alpha1.Link, len(renderedLinks))
 

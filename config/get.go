@@ -135,7 +135,7 @@ func (m *manager) GetLauncherImage() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.config.Deployment.LauncherImage
+	return ResolveLauncherImage(m.config.Deployment.LauncherImage)
 }
 
 func (m *manager) GetLauncherImagePullPolicy() string {

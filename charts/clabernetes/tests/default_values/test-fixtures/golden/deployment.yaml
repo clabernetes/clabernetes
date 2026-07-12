@@ -83,6 +83,8 @@ spec:
               value: info
             - name: LAUNCHER_IMAGE
               value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:dev-latest"
+            - name: COMPATIBLE_LAUNCHER_IMAGE
+              value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:dev-latest"
           resources:
             requests:
               memory: 128Mi
@@ -110,6 +112,8 @@ spec:
             - name: CONTROLLER_LOGGER_LEVEL
               value: info
             - name: LAUNCHER_IMAGE
+              value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:dev-latest"
+            - name: COMPATIBLE_LAUNCHER_IMAGE
               value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:dev-latest"
           resources:
             requests:

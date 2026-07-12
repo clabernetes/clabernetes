@@ -1,6 +1,7 @@
 package topology
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"maps"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/srl-labs/clabernetes/config"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	claberneteserrors "github.com/srl-labs/clabernetes/errors"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
 	clabernetesutil "github.com/srl-labs/clabernetes/util"
 	clabernetesutilkubernetes "github.com/srl-labs/clabernetes/util/kubernetes"
@@ -18,23 +20,31 @@ import (
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 )
 
-// maxTunnelID is the (very generous) ceiling for tunnel id allocation -- vxlan vnids can go to
-// ~16 million.
-const maxTunnelID = 16_000_000
+const (
+	// maxTunnelID is the (very generous) ceiling for tunnel id allocation -- vxlan vnids can go to
+	// ~16 million.
+	maxTunnelID = 16_000_000
+	// slurpeeth segment ids are uint16 values.
+	maxSlurpeethTunnelID = 65_535
+)
 
 var linkNameInvalidChars = regexp.MustCompile(`[^a-z0-9-]`)
 
-// sanitizeLinkNamePart makes an interface name safe for use *inside* a kubernetes object name --
-// note that this deliberately does not enforce the leading/trailing alpha requirements of a full
-// dns label (a name part may start/end with a digit, i.e. "e1-1") as uniqueness of the resulting
-// name matters more than prettiness here.
+// sanitizeLinkNamePart makes an interface name safe for use inside a kubernetes object name. Any
+// lossy normalization includes a hash of the raw value so distinct interfaces remain distinct.
 func sanitizeLinkNamePart(part string) string {
-	part = linkNameInvalidChars.ReplaceAllString(strings.ToLower(part), "-")
+	rawPart := part
+	part = linkNameInvalidChars.ReplaceAllString(strings.ToLower(rawPart), "-")
 
 	part = strings.Trim(part, "-")
 
 	if part == "" {
 		part = "x"
+	}
+
+	if part != rawPart {
+		digest := sha256.Sum256([]byte(rawPart))
+		part = fmt.Sprintf("%s-%x", part, digest[:4])
 	}
 
 	return part
@@ -160,18 +170,29 @@ func (r *LinkReconciler) RenderAll(
 	return links
 }
 
-// AllocateTunnelIDs assigns tunnel ids to the rendered links -- links that already exist (by
-// name) keep their previously allocated id, any remaining links get the lowest free id. Because
-// link names are derived from the link endpoints, ids are stable across reconciles.
+// AllocateTunnelIDs assigns valid, unique tunnel ids to the rendered links. Existing valid ids are
+// retained in deterministic link-name order; duplicates and invalid values are reallocated.
 func AllocateTunnelIDs(
 	existingLinks map[string]*clabernetesapisv1alpha1.Link,
 	renderedLinks []*clabernetesapisv1alpha1.Link,
-) {
+	maxID int,
+) error {
+	if maxID < 1 {
+		return fmt.Errorf(
+			"%w: maximum tunnel id must be positive, got %d",
+			claberneteserrors.ErrInvalidData,
+			maxID,
+		)
+	}
+
 	allocatedIDs := make(map[int]bool)
 
 	for _, link := range renderedLinks {
 		existingLink, ok := existingLinks[link.Name]
-		if !ok || existingLink.Spec.TunnelID == 0 {
+		if !ok ||
+			existingLink.Spec.TunnelID < 1 ||
+			existingLink.Spec.TunnelID > maxID ||
+			allocatedIDs[existingLink.Spec.TunnelID] {
 			continue
 		}
 
@@ -186,15 +207,25 @@ func AllocateTunnelIDs(
 			continue
 		}
 
-		for ; nextID < maxTunnelID; nextID++ {
+		for ; nextID <= maxID; nextID++ {
 			if !allocatedIDs[nextID] {
 				break
 			}
 		}
 
+		if nextID > maxID {
+			return fmt.Errorf(
+				"%w: no tunnel ids remain in range 1-%d",
+				claberneteserrors.ErrInvalidData,
+				maxID,
+			)
+		}
+
 		link.Spec.TunnelID = nextID
 		allocatedIDs[nextID] = true
 	}
+
+	return nil
 }
 
 // Resolve accepts the rendered links and a list of link crs that are -- by owner reference

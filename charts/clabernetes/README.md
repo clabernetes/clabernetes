@@ -21,6 +21,17 @@ You can select to install a specific version of the chart by adding the `--versi
 find all the versions of the chart stored as a package on the projects GitHub page
 [here](https://github.com/srl-labs/clabernetes/pkgs/container/clabernetes%2Fclabernetes).
 
+## Upgrade and rollback
+
+Manager and launcher images from different released chart versions may use incompatible internal
+APIs. During an upgrade, an old official launcher tag persisted in the global Config or a Topology
+is therefore resolved to the launcher bundled with the running manager. The persisted Config value
+is not rewritten: rolling the chart back lets the older manager select its original launcher and
+recreate its legacy resources.
+
+Nonstandard launcher images are treated as explicit overrides and are not changed automatically.
+Before upgrading, custom launcher images must be rebuilt from the target clabernetes release.
+
 ## Values
 
 As with most helm charts, this chart is configurable via values -- please refer to the charts

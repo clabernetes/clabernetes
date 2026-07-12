@@ -77,8 +77,9 @@ contains the clabernetes launcher binary, and has docker installed in the contai
 the clabernetes launcher fetches "its" `Node` custom resource -- the controller renders one Node
 resource per node of the topology holding that node's "sub-topology" -- then handles any initial
 setup, and finally launches "normal" containerlab with a topology file representing *one node
-from the original topology*. Storing each node's config as its own (small) object means even
-very large topologies never bump into the etcd max object size.
+from the original topology*. This removes the previous topology-wide amplification: a Node only
+contains its launcher group's nodes and links. High-degree or large grouped nodes still produce
+larger Node objects, so scale validation should measure the largest Node as well as the aggregate.
 
 **Note:** that this is not "normal" docker-in-docker as we aren't actually mounting the docker sock
 in the container -- this is a full-blown docker installation independent of the CRI of your cluster.
