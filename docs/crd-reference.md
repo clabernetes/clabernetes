@@ -591,15 +591,16 @@ spec:
   endpointA:
     nodeName: srl1
     interfaceName: e1-1
-    launcherNode: srl1
-    destination: my-topology-srl1-vx.default.svc.cluster.local
   endpointB:
     nodeName: srl2
     interfaceName: e1-1
-    launcherNode: srl2
-    destination: my-topology-srl2-vx.default.svc.cluster.local
   tunnelID: 1
 ```
+
+The `clabernetes/linkEndpointA`/`clabernetes/linkEndpointB` labels hold the launcher node that
+terminates each side of the link (the primary node for grouped nodes) -- launchers derive the
+remote fabric service name (`<topology>-<launcherNode>-vx`) from the label, so no in-cluster DNS
+names need to be persisted on the resource.
 
 ### LinkSpec Fields
 
@@ -617,8 +618,6 @@ spec:
 |-------|------|-------------|
 | `nodeName` | string | Node name this side of the link resides on |
 | `interfaceName` | string | Interface name on the node |
-| `launcherNode` | string | Node whose launcher pod terminates this side (primary node for grouped nodes) |
-| `destination` | string | Service FQDN via which this side can be reached |
 
 ---
 

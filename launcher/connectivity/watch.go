@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesutil "github.com/srl-labs/clabernetes/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerywatch "k8s.io/apimachinery/pkg/watch"
 )
@@ -39,20 +41,49 @@ func nodeLinkSelectors(topologyName, nodeName string) []string {
 	}
 }
 
+// linkDestination returns the qualified service name of the remote launcher's fabric service --
+// this is derived rather than persisted on the link cr: the service name follows directly from
+// the topology name and the remote launcher node, the namespace is the link's own namespace, and
+// the topology prefix / dns suffix knobs come down from the controller via the launcher env.
+func linkDestination(link *clabernetesapisv1alpha1.Link, remoteLauncherNode string) string {
+	serviceName := fmt.Sprintf("%s-%s-vx", link.Spec.TopologyName, remoteLauncherNode)
+
+	if strings.EqualFold(
+		os.Getenv(clabernetesconstants.LauncherTopologyRemovePrefixEnv),
+		clabernetesconstants.True,
+	) {
+		serviceName = fmt.Sprintf("%s-vx", remoteLauncherNode)
+	}
+
+	return fmt.Sprintf(
+		"%s.%s.%s",
+		serviceName,
+		link.GetNamespace(),
+		clabernetesutil.GetEnvStrOrDefault(
+			clabernetesconstants.LauncherInClusterDNSSuffixEnv,
+			clabernetesconstants.KubernetesDefaultInClusterDNSSuffix,
+		),
+	)
+}
+
 // linkToLocalTunnel converts a link cr to the "local view" tunnel for the given (launcher) node.
+// Which side is local (and which launcher node terminates the remote side) comes from the link's
+// endpoint labels.
 func linkToLocalTunnel(
 	nodeName string,
 	link *clabernetesapisv1alpha1.Link,
 ) *clabernetesapisv1alpha1.PointToPointTunnel {
 	local, remote := link.Spec.EndpointA, link.Spec.EndpointB
+	remoteLauncherNode := link.GetLabels()[clabernetesconstants.LabelLinkEndpointB]
 
-	if link.Spec.EndpointB.LauncherNode == nodeName {
+	if link.GetLabels()[clabernetesconstants.LabelLinkEndpointB] == nodeName {
 		local, remote = remote, local
+		remoteLauncherNode = link.GetLabels()[clabernetesconstants.LabelLinkEndpointA]
 	}
 
 	return &clabernetesapisv1alpha1.PointToPointTunnel{
 		TunnelID:        link.Spec.TunnelID,
-		Destination:     remote.Destination,
+		Destination:     linkDestination(link, remoteLauncherNode),
 		LocalNode:       local.NodeName,
 		LocalInterface:  local.InterfaceName,
 		RemoteNode:      remote.NodeName,

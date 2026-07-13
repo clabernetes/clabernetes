@@ -93,6 +93,16 @@ const (
 	// topology that a given launcher is responsible for.
 	LauncherNodeImageEnv = "LAUNCHER_NODE_IMAGE"
 
+	// LauncherTopologyRemovePrefixEnv is the env var that tells the launcher whether the topology
+	// resources are named without the topology name prefix -- the launcher needs this to derive
+	// the fabric service names of remote launchers from its link crs.
+	LauncherTopologyRemovePrefixEnv = "LAUNCHER_TOPOLOGY_REMOVE_PREFIX"
+
+	// LauncherInClusterDNSSuffixEnv is the env var that holds the in cluster dns suffix (from the
+	// global config) -- the launcher needs this to derive the fabric service names of remote
+	// launchers from its link crs.
+	LauncherInClusterDNSSuffixEnv = "LAUNCHER_IN_CLUSTER_DNS_SUFFIX"
+
 	// LauncherConnectivityKind is the env var that holds the flavor cf connectivity the launcher
 	// should run (vxlan/slurpeeth).
 	LauncherConnectivityKind = "LAUNCHER_CONNECTIVITY_KIND"

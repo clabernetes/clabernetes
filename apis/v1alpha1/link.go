@@ -12,7 +12,10 @@ import (
 // per inter-launcher link -- and hold everything both launcher pods need to establish the tunnel
 // (vxlan or slurpeeth) for the link. Storing this data per-link (rather than in one big
 // connectivity object) means no single object grows with the size of the topology, which keeps
-// clabernetes clear of the etcd max object size limits for very large topologies.
+// clabernetes clear of the etcd max object size limits for very large topologies. The
+// "clabernetes/linkEndpointA" and "clabernetes/linkEndpointB" labels hold the launcher nodes
+// that terminate each side (the primary node for grouped nodes) -- launchers select "their"
+// links by those labels and derive the remote fabric service from them.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path="links",shortName="c9slink"
 // +kubebuilder:printcolumn:JSONPath=".spec.topologyName",name=Topology,type=string
@@ -35,13 +38,6 @@ type LinkEndpointSpec struct {
 	NodeName string `json:"nodeName"`
 	// InterfaceName is the name of the interface on the node this side of the link is on.
 	InterfaceName string `json:"interfaceName"`
-	// LauncherNode is the name of the (containerlab) node whose launcher pod terminates this side
-	// of the link -- for "grouped" nodes this is the primary node of the group, otherwise this is
-	// simply the same as NodeName.
-	LauncherNode string `json:"launcherNode"`
-	// Destination is the qualified kubernetes service name over which this side of the link can
-	// be reached (that is, the service the *other* side of the link connects to).
-	Destination string `json:"destination"`
 }
 
 // LinkSpec is the spec for a Link resource.
@@ -74,8 +70,10 @@ type LinkStatus struct{}
 type PointToPointTunnel struct {
 	// TunnelID is the id number of the tunnel (vnid or segment id).
 	TunnelID int `json:"tunnelID"`
-	// Destination is the destination service to connect to (qualified k8s service name).
-	Destination string `json:"destination"`
+	// Destination is the destination service to connect to (qualified k8s service name) --
+	// launchers derive this from the link's topology name and the remote launcher node (which
+	// they read from the link's endpoint labels).
+	Destination string `json:"destination,omitempty"`
 	// LocalNodeName is the name (in the clabernetes topology) of the local node for this side of
 	// the tunnel.
 	LocalNode string `json:"localNode"`

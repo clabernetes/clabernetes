@@ -299,31 +299,27 @@ func (r *LinkReconciler) renderLink(
 ) *clabernetesapisv1alpha1.Link {
 	owningTopologyName := owningTopology.GetName()
 
-	// each halfs tunnel destination is the service of the *remote* side, so the "local" service
-	// for an endpoint (the service the other side dials) comes from the mirrored half
 	endpointA := clabernetesapisv1alpha1.LinkEndpointSpec{
 		NodeName:      halfA.tunnel.LocalNode,
 		InterfaceName: halfA.tunnel.LocalInterface,
-		LauncherNode:  halfA.launcherNode,
-		Destination:   halfB.tunnel.Destination,
 	}
 
 	endpointB := clabernetesapisv1alpha1.LinkEndpointSpec{
 		NodeName:      halfB.tunnel.LocalNode,
 		InterfaceName: halfB.tunnel.LocalInterface,
-		LauncherNode:  halfB.launcherNode,
-		Destination:   halfA.tunnel.Destination,
 	}
 
 	annotations, globalLabels := r.configManagerGetter().GetAllMetadata()
 
+	// the endpoint labels hold the launcher node terminating each side -- launchers watch their
+	// links via these labels and derive the remote fabric service name from them
 	labels := map[string]string{
 		clabernetesconstants.LabelApp:           clabernetesconstants.Clabernetes,
 		clabernetesconstants.LabelName:          owningTopologyName,
 		clabernetesconstants.LabelTopologyOwner: owningTopologyName,
 		clabernetesconstants.LabelTopologyKind:  GetTopologyKind(owningTopology),
-		clabernetesconstants.LabelLinkEndpointA: endpointA.LauncherNode,
-		clabernetesconstants.LabelLinkEndpointB: endpointB.LauncherNode,
+		clabernetesconstants.LabelLinkEndpointA: halfA.launcherNode,
+		clabernetesconstants.LabelLinkEndpointB: halfB.launcherNode,
 	}
 
 	maps.Copy(labels, globalLabels)

@@ -24,18 +24,13 @@ func (p *kneDefinitionProcessor) Process() error {
 		return err
 	}
 
-	// check this here so we only have to check it once
-	removeTopologyPrefix := p.getRemoveTopologyPrefix()
-
-	return p.processKneDefinition(kneTopo, removeTopologyPrefix)
+	return p.processKneDefinition(kneTopo)
 }
 
 func (p *kneDefinitionProcessor) processConfigNodeLinks(
-	topology *clabernetesapisv1alpha1.Topology,
 	nodeName string,
 	link *knetopologyproto.Link,
 	reconcileData *ReconcileData,
-	removeTopologyPrefix bool,
 ) {
 	endpointA := clabernetesapisv1alpha1.LinkEndpoint{
 		NodeName:      link.ANode,
@@ -79,19 +74,13 @@ func (p *kneDefinitionProcessor) processConfigNodeLinks(
 
 	// cross launcher links only become tunnels (and from those, link crs) -- the "node <-> host"
 	// stanza that realizes the local half of such a link is launcher plumbing and is synthesized
-	// by the launcher itself from its link crs
+	// by the launcher itself from its link crs, as is the destination service (derived from the
+	// topology name and the remote launcher node held in the link cr labels)
 	reconcileData.ResolvedTunnels[nodeName] = append(
 		reconcileData.ResolvedTunnels[nodeName],
 		&clabernetesapisv1alpha1.PointToPointTunnel{
-			LocalNode:  nodeName,
-			RemoteNode: uninterestingEndpoint.NodeName,
-			Destination: resolveConnectivityDestination(
-				topology.Name,
-				uninterestingEndpoint.NodeName,
-				topology.Namespace,
-				removeTopologyPrefix,
-				p.configManagerGetter,
-			),
+			LocalNode:       nodeName,
+			RemoteNode:      uninterestingEndpoint.NodeName,
 			LocalInterface:  interestingEndpoint.InterfaceName,
 			RemoteInterface: uninterestingEndpoint.InterfaceName,
 		},
@@ -100,7 +89,6 @@ func (p *kneDefinitionProcessor) processConfigNodeLinks(
 
 func (p *kneDefinitionProcessor) processKneDefinition(
 	kneTopo *knetopologyproto.Topology,
-	removeTopologyPrefix bool,
 ) error {
 	// making many assumptions that things that are pointers are not going to be nil... since
 	// basically everything in the kne topology obj is pointers
@@ -169,11 +157,9 @@ func (p *kneDefinitionProcessor) processKneDefinition(
 
 		for _, link := range kneTopo.Links {
 			p.processConfigNodeLinks(
-				p.topology,
 				nodeName,
 				link,
 				p.reconcileData,
-				removeTopologyPrefix,
 			)
 		}
 	}

@@ -783,6 +783,14 @@ func (r *DeploymentReconciler) renderDeploymentContainerEnv( //nolint: funlen
 			Value: owningTopology.Spec.Connectivity,
 		},
 		{
+			Name:  clabernetesconstants.LauncherTopologyRemovePrefixEnv,
+			Value: strconv.FormatBool(ResolveTopologyRemovePrefix(owningTopology)),
+		},
+		{
+			Name:  clabernetesconstants.LauncherInClusterDNSSuffixEnv,
+			Value: r.configManagerGetter().GetInClusterDNSSuffix(),
+		},
+		{
 			Name:  clabernetesconstants.LauncherContainerlabVersion,
 			Value: containerlabVersion,
 		},

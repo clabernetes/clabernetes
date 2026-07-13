@@ -211,7 +211,6 @@
         "srl1": [
             {
                 "tunnelID": 0,
-                "destination": "srl2-vx.clabernetes.svc.cluster.local",
                 "localNode": "srl1",
                 "localInterface": "e1-1",
                 "remoteNode": "srl2",
@@ -221,7 +220,6 @@
         "srl2": [
             {
                 "tunnelID": 0,
-                "destination": "srl1-vx.clabernetes.svc.cluster.local",
                 "localNode": "srl2",
                 "localInterface": "e1-1",
                 "remoteNode": "srl1",

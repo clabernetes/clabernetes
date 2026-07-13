@@ -88,9 +88,6 @@ func (p *containerlabDefinitionProcessor) Process() error {
 		return err
 	}
 
-	// check this here so we only have to check it once
-	removeTopologyPrefix := p.getRemoveTopologyPrefix()
-
 	// Build node groups for distributed systems (e.g., SR-SIM with network-mode: container:<name>)
 	nodeGroups, secondaryNodes := buildNodeGroups(containerlabConfig.Topology.Nodes)
 
@@ -107,9 +104,7 @@ func (p *containerlabDefinitionProcessor) Process() error {
 			containerlabConfig,
 			nodeName,
 			group,
-			secondaryNodes,
 			defaultsYAML,
-			removeTopologyPrefix,
 		)
 		if err != nil {
 			return err
@@ -543,15 +538,11 @@ func parseLinkEndpoints(link *clabernetesutilcontainerlab.LinkDefinition) (*link
 // For grouped nodes (distributed systems like SR-SIM), it creates a single sub-topology
 // containing all nodes in the group so they can be deployed in the same pod and share
 // the network namespace.
-// The secondaryNodes map is used to resolve tunnel destinations - if a remote node is a
-// secondary, the tunnel should point to its primary's service instead.
 func (p *containerlabDefinitionProcessor) processConfigForNodeGroup(
 	containerlabConfig *clabernetesutilcontainerlab.Config,
 	primaryNodeName string,
 	group *nodeGroup,
-	secondaryNodes map[string]string,
 	defaultsYAML []byte,
-	removeTopologyPrefix bool,
 ) error {
 	deepCopiedDefaults := &clabernetesutilcontainerlab.NodeDefinition{}
 
@@ -594,8 +585,6 @@ func (p *containerlabDefinitionProcessor) processConfigForNodeGroup(
 		containerlabConfig,
 		primaryNodeName,
 		groupNodesSet,
-		secondaryNodes,
-		removeTopologyPrefix,
 	)
 }
 
@@ -604,8 +593,6 @@ func (p *containerlabDefinitionProcessor) processLinksForNodeGroup(
 	containerlabConfig *clabernetesutilcontainerlab.Config,
 	primaryNodeName string,
 	groupNodesSet clabernetesutil.StringSet,
-	secondaryNodes map[string]string,
-	removeTopologyPrefix bool,
 ) error {
 	for _, link := range containerlabConfig.Topology.Links {
 		endpoints, err := parseLinkEndpoints(link)
@@ -620,8 +607,6 @@ func (p *containerlabDefinitionProcessor) processLinksForNodeGroup(
 			endpoints,
 			primaryNodeName,
 			groupNodesSet,
-			secondaryNodes,
-			removeTopologyPrefix,
 		)
 		if err != nil {
 			return err
@@ -637,8 +622,6 @@ func (p *containerlabDefinitionProcessor) processLinkForGroup(
 	endpoints *linkEndpoints,
 	primaryNodeName string,
 	groupNodesSet clabernetesutil.StringSet,
-	secondaryNodes map[string]string,
-	removeTopologyPrefix bool,
 ) error {
 	endpointAInGroup := groupNodesSet.Contains(endpoints.endpointA.NodeName)
 	endpointBInGroup := groupNodesSet.Contains(endpoints.endpointB.NodeName)
@@ -691,24 +674,13 @@ func (p *containerlabDefinitionProcessor) processLinkForGroup(
 
 	// cross launcher links only become tunnels (and from those, link crs) -- the "node <-> host"
 	// stanza that realizes the local half of such a link is launcher plumbing and is synthesized
-	// by the launcher itself from its link crs
-	destinationNodeName := uninterestingEndpoint.NodeName
-	if remotePrimary, isSecondary := secondaryNodes[uninterestingEndpoint.NodeName]; isSecondary {
-		destinationNodeName = remotePrimary
-	}
-
+	// by the launcher itself from its link crs, as is the destination service (derived from the
+	// topology name and the remote launcher node held in the link cr labels)
 	p.reconcileData.ResolvedTunnels[primaryNodeName] = append(
 		p.reconcileData.ResolvedTunnels[primaryNodeName],
 		&clabernetesapisv1alpha1.PointToPointTunnel{
-			LocalNode:  interestingEndpoint.NodeName,
-			RemoteNode: uninterestingEndpoint.NodeName,
-			Destination: resolveConnectivityDestination(
-				p.topology.Name,
-				destinationNodeName,
-				p.topology.Namespace,
-				removeTopologyPrefix,
-				p.configManagerGetter,
-			),
+			LocalNode:       interestingEndpoint.NodeName,
+			RemoteNode:      uninterestingEndpoint.NodeName,
 			LocalInterface:  interestingEndpoint.InterfaceName,
 			RemoteInterface: uninterestingEndpoint.InterfaceName,
 			MTU:             link.MTU,

@@ -362,7 +362,6 @@
         "external-node": [
             {
                 "tunnelID": 0,
-                "destination": "process-containerlab-definition-network-mode-test-srsim-a-vx.clabernetes.svc.cluster.local",
                 "localNode": "external-node",
                 "localInterface": "e1-1",
                 "remoteNode": "srsim-iom1",
@@ -372,7 +371,6 @@
         "srsim-a": [
             {
                 "tunnelID": 0,
-                "destination": "process-containerlab-definition-network-mode-test-external-node-vx.clabernetes.svc.cluster.local",
                 "localNode": "srsim-iom1",
                 "localInterface": "1/1/c1/1",
                 "remoteNode": "external-node",

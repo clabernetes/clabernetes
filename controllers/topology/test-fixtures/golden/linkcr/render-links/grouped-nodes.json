@@ -16,15 +16,11 @@
             "topologyName": "render-links-test",
             "endpointA": {
                 "nodeName": "srl1a",
-                "interfaceName": "e1-1",
-                "launcherNode": "srl1",
-                "destination": "render-links-test-srl1-vx.clabernetes.svc.cluster.local"
+                "interfaceName": "e1-1"
             },
             "endpointB": {
                 "nodeName": "srl2",
-                "interfaceName": "e1-1",
-                "launcherNode": "srl2",
-                "destination": "render-links-test-srl2-vx.clabernetes.svc.cluster.local"
+                "interfaceName": "e1-1"
             },
             "tunnelID": 0
         },

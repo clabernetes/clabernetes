@@ -1,11 +1,8 @@
 package topology
 
 import (
-	"fmt"
-
 	clabernetesapis "github.com/srl-labs/clabernetes/apis"
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconfig "github.com/srl-labs/clabernetes/config"
 )
 
 // GetTopologyKind returns the "kind" of topology this CR represents -- typically this will be
@@ -43,32 +40,4 @@ func ResolveTopologyRemovePrefix(t *clabernetesapisv1alpha1.Topology) bool {
 	}
 
 	return *t.Status.RemoveTopologyPrefix
-}
-
-func resolveConnectivityDestination(
-	topologyName,
-	uninterestingEndpointNodeName,
-	namespace string,
-	removeTopologyPrefix bool,
-	// inject config manager getter so we can easily test this (and things upstream)
-	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) string {
-	destination := fmt.Sprintf(
-		"%s-%s-vx.%s.%s",
-		topologyName,
-		uninterestingEndpointNodeName,
-		namespace,
-		configManagerGetter().GetInClusterDNSSuffix(),
-	)
-
-	if removeTopologyPrefix {
-		destination = fmt.Sprintf(
-			"%s-vx.%s.%s",
-			uninterestingEndpointNodeName,
-			namespace,
-			configManagerGetter().GetInClusterDNSSuffix(),
-		)
-	}
-
-	return destination
 }

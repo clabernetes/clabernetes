@@ -129,6 +129,14 @@
                                 "value": "slurpeeth"
                             },
                             {
+                                "name": "LAUNCHER_TOPOLOGY_REMOVE_PREFIX",
+                                "value": "true"
+                            },
+                            {
+                                "name": "LAUNCHER_IN_CLUSTER_DNS_SUFFIX",
+                                "value": "svc.cluster.local"
+                            },
+                            {
                                 "name": "LAUNCHER_CONTAINERLAB_VERSION"
                             },
                             {

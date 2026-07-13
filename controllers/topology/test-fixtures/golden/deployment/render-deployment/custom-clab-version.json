@@ -128,6 +128,14 @@
                                 "name": "LAUNCHER_CONNECTIVITY_KIND"
                             },
                             {
+                                "name": "LAUNCHER_TOPOLOGY_REMOVE_PREFIX",
+                                "value": "true"
+                            },
+                            {
+                                "name": "LAUNCHER_IN_CLUSTER_DNS_SUFFIX",
+                                "value": "svc.cluster.local"
+                            },
+                            {
                                 "name": "LAUNCHER_CONTAINERLAB_VERSION",
                                 "value": "0.51.1"
                             },

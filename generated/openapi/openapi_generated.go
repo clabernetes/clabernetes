@@ -1235,7 +1235,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Link(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "Link is an object that represents a single point-to-point link between two (containerlab) nodes of a clabernetes Topology. Links are created and managed by the clabernetes controller -- one per inter-launcher link -- and hold everything both launcher pods need to establish the tunnel (vxlan or slurpeeth) for the link. Storing this data per-link (rather than in one big connectivity object) means no single object grows with the size of the topology, which keeps clabernetes clear of the etcd max object size limits for very large topologies.",
+				Description: "Link is an object that represents a single point-to-point link between two (containerlab) nodes of a clabernetes Topology. Links are created and managed by the clabernetes controller -- one per inter-launcher link -- and hold everything both launcher pods need to establish the tunnel (vxlan or slurpeeth) for the link. Storing this data per-link (rather than in one big connectivity object) means no single object grows with the size of the topology, which keeps clabernetes clear of the etcd max object size limits for very large topologies. The \"clabernetes/linkEndpointA\" and \"clabernetes/linkEndpointB\" labels hold the launcher nodes that terminate each side (the primary node for grouped nodes) -- launchers select \"their\" links by those labels and derive the remote fabric service from them.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -1337,24 +1337,8 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpointSpec(
 							Format:      "",
 						},
 					},
-					"launcherNode": {
-						SchemaProps: spec.SchemaProps{
-							Description: "LauncherNode is the name of the (containerlab) node whose launcher pod terminates this side of the link -- for \"grouped\" nodes this is the primary node of the group, otherwise this is simply the same as NodeName.",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"destination": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Destination is the qualified kubernetes service name over which this side of the link can be reached (that is, the service the *other* side of the link connects to).",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 				},
-				Required: []string{"nodeName", "interfaceName", "launcherNode", "destination"},
+				Required: []string{"nodeName", "interfaceName"},
 			},
 		},
 	}
@@ -1805,8 +1789,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_PointToPointTunnel(
 					},
 					"destination": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Destination is the destination service to connect to (qualified k8s service name).",
-							Default:     "",
+							Description: "Destination is the destination service to connect to (qualified k8s service name) -- launchers derive this from the link's topology name and the remote launcher node (which they read from the link's endpoint labels).",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -1853,7 +1836,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_PointToPointTunnel(
 				},
 				Required: []string{
 					"tunnelID",
-					"destination",
 					"localNode",
 					"localInterface",
 					"remoteNode",

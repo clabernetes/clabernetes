@@ -147,9 +147,14 @@ export async function visualizeTopology(namespace: string, name: string): Promis
       continue;
     }
 
-    const aFabricService = `svc/${endpointA.launcherNode}-vx`;
+    // the launcher nodes terminating each side of the link live on the link's endpoint labels
+    const linkLabels = link.metadata?.labels ?? {};
+    const aLauncherNode = linkLabels["clabernetes/linkEndpointA"] ?? endpointA.nodeName;
+    const bLauncherNode = linkLabels["clabernetes/linkEndpointB"] ?? endpointB.nodeName;
+
+    const aFabricService = `svc/${aLauncherNode}-vx`;
     const aInterface = `${endpointA.nodeName}-${endpointA.interfaceName}`;
-    const bFabricService = `svc/${endpointB.launcherNode}-vx`;
+    const bFabricService = `svc/${bLauncherNode}-vx`;
     const bInterface = `${endpointB.nodeName}-${endpointB.interfaceName}`;
 
     nodes.push({

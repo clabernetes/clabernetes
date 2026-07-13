@@ -63,15 +63,6 @@ type definitionProcessor struct {
 	configManagerGetter clabernetesconfig.ManagerGetterFunc
 }
 
-func (p *definitionProcessor) getRemoveTopologyPrefix() bool {
-	var removeTopologyPrefix bool
-	if ResolveTopologyRemovePrefix(p.topology) {
-		removeTopologyPrefix = true
-	}
-
-	return removeTopologyPrefix
-}
-
 func (c *Controller) processDefinition(
 	topology *clabernetesapisv1alpha1.Topology,
 	reconcileData *ReconcileData,
