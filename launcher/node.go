@@ -9,6 +9,7 @@ import (
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	claberneteserrors "github.com/srl-labs/clabernetes/errors"
+	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
 	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -20,11 +21,30 @@ const (
 
 // fetchNodeResource fetches "our" node cr -- the cr the clabernetes controller rendered for this
 // launcher's node -- and dumps its contents (the sub-topology, files from url, and pull secrets)
-// to disk where the rest of the launcher (and containerlab itself) expects them.
+// to disk where the rest of the launcher (and containerlab itself) expects them. The node cr
+// config only holds node things -- the link stanzas for any tunnels terminating on this launcher
+// are synthesized (from this launcher's link crs) into the written topology here.
 func (c *clabernetes) fetchNodeResource() {
 	node, err := c.getNodeResource()
 	if err != nil {
 		c.logger.Fatalf("failed fetching clabernetes node resource, err: %s", err)
+	}
+
+	config, err := clabernetesutilcontainerlab.LoadContainerlabConfig(node.Spec.Config)
+	if err != nil {
+		c.logger.Fatalf("failed parsing node resource sub-topology, err: %s", err)
+	}
+
+	c.initialTunnels, err = c.getTunnels()
+	if err != nil {
+		c.logger.Fatalf("failed listing tunnels for node, err: %s", err)
+	}
+
+	materializeTopologyLinks(config, c.initialTunnels)
+
+	configBytes, err := yaml.Marshal(config)
+	if err != nil {
+		c.logger.Fatalf("failed marshaling materialized sub-topology, err: %s", err)
 	}
 
 	filesFromURLBytes, err := yaml.Marshal(node.Spec.FilesFromURL)
@@ -38,7 +58,7 @@ func (c *clabernetes) fetchNodeResource() {
 	}
 
 	for fileName, contents := range map[string][]byte{
-		"topo.clab.yaml":               []byte(node.Spec.Config),
+		"topo.clab.yaml":               configBytes,
 		"files-from-url.yaml":          filesFromURLBytes,
 		"configured-pull-secrets.yaml": imagePullSecretsBytes,
 	} {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
@@ -101,6 +102,11 @@ type clabernetes struct {
 	// meanwhile nodeContainerID is the container id of hte specific node this launcher represents
 	// -- meaning the single node from the original topology this launcher is representing
 	nodeContainerID string
+
+	// initialTunnels holds the local tunnel view listed while materializing the topology -- the
+	// same snapshot seeds the connectivity manager so the tunnels it establishes line up with the
+	// link stanzas (and therefore host side veths) of the deployed topology.
+	initialTunnels []*clabernetesapisv1alpha1.PointToPointTunnel
 }
 
 func (c *clabernetes) startup() {

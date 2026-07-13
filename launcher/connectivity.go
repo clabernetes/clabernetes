@@ -10,17 +10,15 @@ import (
 )
 
 func (c *clabernetes) connectivity() {
-	tunnels, err := c.getTunnels()
-	if err != nil {
-		c.logger.Fatalf("failed loading tunnels content, err: %s", err)
-	}
-
+	// the initial tunnels were listed during node resource fetch so the deployed topology and the
+	// initial tunnel view are guaranteed to line up; the manager watches link crs for updates
+	// from there on
 	connectivityManager, err := claberneteslauncherconnectivity.NewManager(
 		c.ctx,
 		nil,
 		c.logger,
 		c.kubeClabernetesClient,
-		tunnels,
+		c.initialTunnels,
 		os.Getenv(
 			clabernetesconstants.LauncherConnectivityKind,
 		),
