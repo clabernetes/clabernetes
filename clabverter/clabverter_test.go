@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesclabverter "github.com/srl-labs/clabernetes/clabverter"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
@@ -206,9 +207,67 @@ func normalizeManifest(t *testing.T, b []byte) []byte {
 		return normalizeConfigMapPaths(t, b)
 	case bytes.Contains(b, []byte("kind: Topology")):
 		return normalizeFromFileFilePaths(t, b)
+	case bytes.Contains(b, []byte("kind: NodeProfile")):
+		return normalizeCRManifestPaths(t, b)
 	default:
 		return b
 	}
+}
+
+// normalizeCRManifestPaths normalizes the emit-crs output: per-node NodeProfile manifests carry
+// filesFromConfigMap entries whose file paths (and path derived configmap keys) depend on where
+// the test runs -- same treatment as normalizeFromFileFilePaths, per document.
+func normalizeCRManifestPaths(t *testing.T, b []byte) []byte {
+	t.Helper()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed getting working dir, err: %s", err)
+	}
+
+	docs := strings.Split(string(b), "\n---\n")
+
+	for idx, doc := range docs {
+		if !strings.Contains(doc, "kind: NodeProfile") {
+			continue
+		}
+
+		profile := &clabernetesapisv1alpha1.NodeProfile{}
+
+		err = yaml.Unmarshal([]byte(doc), profile)
+		if err != nil {
+			t.Fatalf("failed unmarshaling node profile cr, err: %s", err)
+		}
+
+		if profile.Spec.Deployment == nil || profile.Spec.Deployment.FilesFromConfigMap == nil {
+			continue
+		}
+
+		files := profile.Spec.Deployment.FilesFromConfigMap
+
+		sort.Slice(files, func(i, j int) bool { return files[i].FilePath < files[j].FilePath })
+
+		for fileIdx := range files {
+			files[fileIdx].FilePath = strings.Replace(
+				files[fileIdx].FilePath,
+				cwd,
+				"/some/dir/clabernetes/clabverter",
+				1,
+			)
+			files[fileIdx].ConfigMapPath = "REPLACED"
+		}
+
+		var profileBytes []byte
+
+		profileBytes, err = yaml.Marshal(profile)
+		if err != nil {
+			t.Fatalf("failed marshaling node profile cr, err: %s", err)
+		}
+
+		docs[idx] = string(profileBytes)
+	}
+
+	return []byte(strings.Join(docs, "\n---\n"))
 }
 
 func normalizeFromFileFilePaths(t *testing.T, b []byte) []byte {

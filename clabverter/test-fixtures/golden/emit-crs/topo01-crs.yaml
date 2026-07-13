@@ -137,11 +137,11 @@ spec:
   deployment:
     filesFromConfigMap:
     - configMapName: topo01-srl1-startup-config
-      configMapPath: startup-config
+      configMapPath: REPLACED
       filePath: srl1.cfg
       mode: read
     - configMapName: topo01-srl1-files
-      configMapPath: taco-srl1.license
+      configMapPath: REPLACED
       filePath: taco/srl1.license
       mode: read
   nodeSelector:
@@ -149,6 +149,8 @@ spec:
       clabernetes/topologyNode: srl1
       clabernetes/topologyOwner: topo01
   priority: 1
+status: {}
+
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
 kind: NodeProfile
@@ -164,26 +166,28 @@ spec:
   deployment:
     filesFromConfigMap:
     - configMapName: topo01-srl2-files
-      configMapPath: home-clab-projects-clab-clabernetes-clabverter-test-fi-13de6b5
-      filePath: /home/clab/projects/clab/clabernetes/clabverter/test-fixtures/clabversiontest/potato.txt
+      configMapPath: REPLACED
+      filePath: /some/dir/clabernetes/clabverter/test-fixtures/clabversiontest/potato.txt
       mode: read
     - configMapName: topo01-srl2-files
-      configMapPath: home-clab-projects-clab-clabernetes-clabverter-test-fi-d352bb3
-      filePath: /home/clab/projects/clab/clabernetes/clabverter/test-fixtures/clabversiontest/srl2/potato.txt
-      mode: read
-    - configMapName: topo01-srl2-files
-      configMapPath: srl2.license
-      filePath: srl2.license
+      configMapPath: REPLACED
+      filePath: /some/dir/clabernetes/clabverter/test-fixtures/clabversiontest/srl2/potato.txt
       mode: read
     - configMapName: topo01-srl2-startup-config
-      configMapPath: startup-config
+      configMapPath: REPLACED
       filePath: srl2.cfg
+      mode: read
+    - configMapName: topo01-srl2-files
+      configMapPath: REPLACED
+      filePath: srl2.license
       mode: read
   nodeSelector:
     matchLabels:
       clabernetes/topologyNode: srl2
       clabernetes/topologyOwner: topo01
   priority: 1
+status: {}
+
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
 kind: NodeProfile
@@ -199,7 +203,7 @@ spec:
   deployment:
     filesFromConfigMap:
     - configMapName: topo01-sros1-files
-      configMapPath: taco-srl1.license
+      configMapPath: REPLACED
       filePath: taco/srl1.license
       mode: read
   nodeSelector:
@@ -207,6 +211,8 @@ spec:
       clabernetes/topologyNode: sros1
       clabernetes/topologyOwner: topo01
   priority: 1
+status: {}
+
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
 kind: NodeProfile
@@ -222,7 +228,7 @@ spec:
   deployment:
     filesFromConfigMap:
     - configMapName: topo01-sros2-files
-      configMapPath: srl2.license
+      configMapPath: REPLACED
       filePath: srl2.license
       mode: read
   nodeSelector:
@@ -230,3 +236,4 @@ spec:
       clabernetes/topologyNode: sros2
       clabernetes/topologyOwner: topo01
   priority: 1
+status: {}

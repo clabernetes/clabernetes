@@ -396,119 +396,6 @@
                 "format": "date-time",
                 "type": "string"
             },
-            "clabernetes-containerlab-dev.imagerequest.v1alpha1": {
-                "description": "ImageRequest is an object that represents a request (from a launcher pod) to pull an image on a\ngiven kubernetes node such that the image can be \"pulled through\" into the launcher docker\ndaemon.",
-                "properties": {
-                    "apiVersion": {
-                        "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-                        "type": "string"
-                    },
-                    "kind": {
-                        "description": "Kind is a string value representing the REST resource this object represents.\nServers may infer this from the endpoint the client submits requests to.\nCannot be updated.\nIn CamelCase.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-                        "type": "string"
-                    },
-                    "metadata": {
-                        "type": "object"
-                    },
-                    "spec": {
-                        "description": "ImageRequestSpec is the spec for a Config resource.",
-                        "properties": {
-                            "kubernetesNode": {
-                                "description": "KubernetesNode is the node where the launcher pod is running and where the image should be\npulled too.",
-                                "type": "string"
-                            },
-                            "requestedImage": {
-                                "description": "RequestedImage is the image that the launcher pod wants the controller to get pulled onto\nthe specified node.",
-                                "type": "string"
-                            },
-                            "requestedImagePullSecrets": {
-                                "description": "RequestedImagePullSecrets is a list of configured pull secrets to set in the pull pod spec.",
-                                "items": {
-                                    "type": "string"
-                                },
-                                "type": "array",
-                                "x-kubernetes-list-type": "set"
-                            },
-                            "topologyName": {
-                                "description": "TopologyName is the name of the topology requesting the image.",
-                                "type": "string"
-                            },
-                            "topologyNodeName": {
-                                "description": "TopologyNodeName is the name of the node in the topology (i.e. the router name in a\ncontainerlab topology) that the image is being requested for.",
-                                "type": "string"
-                            }
-                        },
-                        "required": [
-                            "kubernetesNode",
-                            "requestedImage",
-                            "topologyName",
-                            "topologyNodeName"
-                        ],
-                        "type": "object"
-                    },
-                    "status": {
-                        "description": "ImageRequestStatus is the status for a ImageRequest resource.",
-                        "properties": {
-                            "accepted": {
-                                "description": "Accepted indicates that the ImageRequest controller has seen this image request and is going\nto process it. This can be useful to let the requesting pod know that \"yep, this is in the\nworks, and i can go watch the cri images on this node now\".",
-                                "type": "boolean"
-                            },
-                            "complete": {
-                                "description": "Complete indicates that the ImageRequest controller has seen that the puller pod has done its\njob and that the image has been pulled onto the requested node.",
-                                "type": "boolean"
-                            }
-                        },
-                        "required": [
-                            "accepted",
-                            "complete"
-                        ],
-                        "type": "object"
-                    }
-                },
-                "type": "object",
-                "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
-                    "version": "v1alpha1",
-                    "kind": "imagerequest"
-                }
-            },
-            "clabernetes-containerlab-dev.imagerequestList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.imagerequest.v1alpha1 resources",
-                "properties": {
-                    "apiVersion": {
-                        "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-                        "type": "string"
-                    },
-                    "items": {
-                        "description": "List of imagerequests. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
-                        "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
-                        },
-                        "type": "array"
-                    },
-                    "kind": {
-                        "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-                        "type": "string"
-                    },
-                    "metadata": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.ListMeta"
-                            }
-                        ],
-                        "description": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "items"
-                ],
-                "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
-                    "version": "v1alpha1",
-                    "kind": "imagerequestList"
-                }
-            },
             "clabernetes-containerlab-dev.config.v1alpha1": {
                 "description": "Config is an object that holds global clabernetes config information. Note that this CR is\nexpected to effectively be a global singleton -- that is, there should be only *one* of these,\nand it *must* be named `clabernetes` -- CRD metadata spec will enforce this (via x-validation\nrules).",
                 "properties": {
@@ -991,6 +878,244 @@
                     "group": "clabernetes-containerlab-dev",
                     "version": "v1alpha1",
                     "kind": "configList"
+                }
+            },
+            "clabernetes-containerlab-dev.imagerequest.v1alpha1": {
+                "description": "ImageRequest is an object that represents a request (from a launcher pod) to pull an image on a\ngiven kubernetes node such that the image can be \"pulled through\" into the launcher docker\ndaemon.",
+                "properties": {
+                    "apiVersion": {
+                        "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "description": "Kind is a string value representing the REST resource this object represents.\nServers may infer this from the endpoint the client submits requests to.\nCannot be updated.\nIn CamelCase.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+                        "type": "string"
+                    },
+                    "metadata": {
+                        "type": "object"
+                    },
+                    "spec": {
+                        "description": "ImageRequestSpec is the spec for a Config resource.",
+                        "properties": {
+                            "kubernetesNode": {
+                                "description": "KubernetesNode is the node where the launcher pod is running and where the image should be\npulled too.",
+                                "type": "string"
+                            },
+                            "requestedImage": {
+                                "description": "RequestedImage is the image that the launcher pod wants the controller to get pulled onto\nthe specified node.",
+                                "type": "string"
+                            },
+                            "requestedImagePullSecrets": {
+                                "description": "RequestedImagePullSecrets is a list of configured pull secrets to set in the pull pod spec.",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "type": "array",
+                                "x-kubernetes-list-type": "set"
+                            },
+                            "topologyName": {
+                                "description": "TopologyName is the name of the topology requesting the image.",
+                                "type": "string"
+                            },
+                            "topologyNodeName": {
+                                "description": "TopologyNodeName is the name of the node in the topology (i.e. the router name in a\ncontainerlab topology) that the image is being requested for.",
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "kubernetesNode",
+                            "requestedImage",
+                            "topologyName",
+                            "topologyNodeName"
+                        ],
+                        "type": "object"
+                    },
+                    "status": {
+                        "description": "ImageRequestStatus is the status for a ImageRequest resource.",
+                        "properties": {
+                            "accepted": {
+                                "description": "Accepted indicates that the ImageRequest controller has seen this image request and is going\nto process it. This can be useful to let the requesting pod know that \"yep, this is in the\nworks, and i can go watch the cri images on this node now\".",
+                                "type": "boolean"
+                            },
+                            "complete": {
+                                "description": "Complete indicates that the ImageRequest controller has seen that the puller pod has done its\njob and that the image has been pulled onto the requested node.",
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "accepted",
+                            "complete"
+                        ],
+                        "type": "object"
+                    }
+                },
+                "type": "object",
+                "x-kubernetes-gvk": {
+                    "group": "clabernetes-containerlab-dev",
+                    "version": "v1alpha1",
+                    "kind": "imagerequest"
+                }
+            },
+            "clabernetes-containerlab-dev.imagerequestList.v1alpha1": {
+                "description": "a list of clabernetes-containerlab-dev.imagerequest.v1alpha1 resources",
+                "properties": {
+                    "apiVersion": {
+                        "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+                        "type": "string"
+                    },
+                    "items": {
+                        "description": "List of imagerequests. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
+                        "items": {
+                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                        },
+                        "type": "array"
+                    },
+                    "kind": {
+                        "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+                        "type": "string"
+                    },
+                    "metadata": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.ListMeta"
+                            }
+                        ],
+                        "description": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "items"
+                ],
+                "x-kubernetes-gvk": {
+                    "group": "clabernetes-containerlab-dev",
+                    "version": "v1alpha1",
+                    "kind": "imagerequestList"
+                }
+            },
+            "clabernetes-containerlab-dev.link.v1alpha1": {
+                "description": "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a\nprimary clabernetes API -- like Nodes they can be created by users directly or emitted by the\n(optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints\n(Node object names in the same namespace plus interface names) and an optional mtu. The link\ncontroller allocates a tunnel id into the status for links that cross launcher pods; links\nbetween nodes co-located in one launcher pod and links to the reserved `host` node need no\ntunnel and are materialized directly by the owning launcher. Launchers select the links\nterminating on their nodes with *field selectors* on the endpoint node names (which requires\nkubernetes 1.31+) -- no labels are required, ever, and no launcher watches more than its own\nlinks. Storing one object per wire keeps every persisted object O(1) regardless of topology\nsize.",
+                "properties": {
+                    "apiVersion": {
+                        "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "description": "Kind is a string value representing the REST resource this object represents.\nServers may infer this from the endpoint the client submits requests to.\nCannot be updated.\nIn CamelCase.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+                        "type": "string"
+                    },
+                    "metadata": {
+                        "type": "object"
+                    },
+                    "spec": {
+                        "description": "LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.\nAnything operational (the allocated tunnel id) lives in the status, and anything derivable\n(i.e. the remote launcher's fabric service) is derived by the launchers.",
+                        "properties": {
+                            "endpointA": {
+                                "description": "EndpointA is the \"a\" side of this link.",
+                                "properties": {
+                                    "interfaceName": {
+                                        "description": "InterfaceName is the name of the interface on the node this side of the link is on.",
+                                        "minLength": 1,
+                                        "type": "string"
+                                    },
+                                    "nodeName": {
+                                        "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
+                                        "minLength": 1,
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "interfaceName",
+                                    "nodeName"
+                                ],
+                                "type": "object"
+                            },
+                            "endpointB": {
+                                "description": "EndpointB is the \"b\" side of this link.",
+                                "properties": {
+                                    "interfaceName": {
+                                        "description": "InterfaceName is the name of the interface on the node this side of the link is on.",
+                                        "minLength": 1,
+                                        "type": "string"
+                                    },
+                                    "nodeName": {
+                                        "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
+                                        "minLength": 1,
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "interfaceName",
+                                    "nodeName"
+                                ],
+                                "type": "object"
+                            },
+                            "mtu": {
+                                "description": "MTU is the mtu for the link -- launchers apply this to the (node side of the) link\ntermination they create; zero means \"unset\" (use the containerlab default).",
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "endpointA",
+                            "endpointB"
+                        ],
+                        "type": "object"
+                    },
+                    "status": {
+                        "description": "LinkStatus is the status for a Link resource.",
+                        "properties": {
+                            "tunnelID": {
+                                "description": "TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller\nallocated for this link -- both sides of the link use the same id. This is an allocation\nrather than user intent, hence it living in the status; zero means \"not allocated (yet)\"\n(launchers skip such links until the controller has filled the id in).",
+                                "maximum": 16000000,
+                                "minimum": 0,
+                                "type": "integer"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object",
+                "x-kubernetes-gvk": {
+                    "group": "clabernetes-containerlab-dev",
+                    "version": "v1alpha1",
+                    "kind": "link"
+                }
+            },
+            "clabernetes-containerlab-dev.linkList.v1alpha1": {
+                "description": "a list of clabernetes-containerlab-dev.link.v1alpha1 resources",
+                "properties": {
+                    "apiVersion": {
+                        "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+                        "type": "string"
+                    },
+                    "items": {
+                        "description": "List of links. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
+                        "items": {
+                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                        },
+                        "type": "array"
+                    },
+                    "kind": {
+                        "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+                        "type": "string"
+                    },
+                    "metadata": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.ListMeta"
+                            }
+                        ],
+                        "description": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "items"
+                ],
+                "x-kubernetes-gvk": {
+                    "group": "clabernetes-containerlab-dev",
+                    "version": "v1alpha1",
+                    "kind": "linkList"
                 }
             },
             "clabernetes-containerlab-dev.nodeprofile.v1alpha1": {
@@ -3064,135 +3189,783 @@
                     "version": "v1alpha1",
                     "kind": "topologyList"
                 }
-            },
-            "clabernetes-containerlab-dev.link.v1alpha1": {
-                "description": "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a\nprimary clabernetes API -- like Nodes they can be created by users directly or emitted by the\n(optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints\n(Node object names in the same namespace plus interface names) and an optional mtu. The link\ncontroller allocates a tunnel id into the status for links that cross launcher pods; links\nbetween nodes co-located in one launcher pod and links to the reserved `host` node need no\ntunnel and are materialized directly by the owning launcher. Launchers select the links\nterminating on their nodes with *field selectors* on the endpoint node names (which requires\nkubernetes 1.31+) -- no labels are required, ever, and no launcher watches more than its own\nlinks. Storing one object per wire keeps every persisted object O(1) regardless of topology\nsize.",
-                "properties": {
-                    "apiVersion": {
-                        "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-                        "type": "string"
-                    },
-                    "kind": {
-                        "description": "Kind is a string value representing the REST resource this object represents.\nServers may infer this from the endpoint the client submits requests to.\nCannot be updated.\nIn CamelCase.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-                        "type": "string"
-                    },
-                    "metadata": {
-                        "type": "object"
-                    },
-                    "spec": {
-                        "description": "LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.\nAnything operational (the allocated tunnel id) lives in the status, and anything derivable\n(i.e. the remote launcher's fabric service) is derived by the launchers.",
-                        "properties": {
-                            "endpointA": {
-                                "description": "EndpointA is the \"a\" side of this link.",
-                                "properties": {
-                                    "interfaceName": {
-                                        "description": "InterfaceName is the name of the interface on the node this side of the link is on.",
-                                        "minLength": 1,
-                                        "type": "string"
-                                    },
-                                    "nodeName": {
-                                        "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
-                                        "minLength": 1,
-                                        "type": "string"
-                                    }
-                                },
-                                "required": [
-                                    "interfaceName",
-                                    "nodeName"
-                                ],
-                                "type": "object"
-                            },
-                            "endpointB": {
-                                "description": "EndpointB is the \"b\" side of this link.",
-                                "properties": {
-                                    "interfaceName": {
-                                        "description": "InterfaceName is the name of the interface on the node this side of the link is on.",
-                                        "minLength": 1,
-                                        "type": "string"
-                                    },
-                                    "nodeName": {
-                                        "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
-                                        "minLength": 1,
-                                        "type": "string"
-                                    }
-                                },
-                                "required": [
-                                    "interfaceName",
-                                    "nodeName"
-                                ],
-                                "type": "object"
-                            },
-                            "mtu": {
-                                "description": "MTU is the mtu for the link -- launchers apply this to the (node side of the) link\ntermination they create; zero means \"unset\" (use the containerlab default).",
-                                "type": "integer"
-                            }
-                        },
-                        "required": [
-                            "endpointA",
-                            "endpointB"
-                        ],
-                        "type": "object"
-                    },
-                    "status": {
-                        "description": "LinkStatus is the status for a Link resource.",
-                        "properties": {
-                            "tunnelID": {
-                                "description": "TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller\nallocated for this link -- both sides of the link use the same id. This is an allocation\nrather than user intent, hence it living in the status; zero means \"not allocated (yet)\"\n(launchers skip such links until the controller has filled the id in).",
-                                "maximum": 16000000,
-                                "minimum": 0,
-                                "type": "integer"
-                            }
-                        },
-                        "type": "object"
-                    }
-                },
-                "type": "object",
-                "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
-                    "version": "v1alpha1",
-                    "kind": "link"
-                }
-            },
-            "clabernetes-containerlab-dev.linkList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.link.v1alpha1 resources",
-                "properties": {
-                    "apiVersion": {
-                        "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-                        "type": "string"
-                    },
-                    "items": {
-                        "description": "List of links. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
-                        "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                        },
-                        "type": "array"
-                    },
-                    "kind": {
-                        "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-                        "type": "string"
-                    },
-                    "metadata": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.ListMeta"
-                            }
-                        ],
-                        "description": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "items"
-                ],
-                "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
-                    "version": "v1alpha1",
-                    "kind": "linkList"
-                }
             }
         }
     },
     "paths": {
+        "/apis/clabernetes.containerlab.dev/v1alpha1/configs": {
+            "get": {
+                "description": "list objects of kind Config",
+                "operationId": "listClabernetesContainerlabDevV1Alpha1ConfigForAllNamespaces",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "parameters": [
+                {
+                    "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
+                    "in": "query",
+                    "name": "allowWatchBookmarks",
+                    "schema": {
+                        "type": "boolean",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+                    "in": "query",
+                    "name": "continue",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+                    "in": "query",
+                    "name": "fieldSelector",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+                    "in": "query",
+                    "name": "labelSelector",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+                    "in": "query",
+                    "name": "limit",
+                    "schema": {
+                        "type": "integer",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "If 'true', then the output is pretty printed.",
+                    "in": "query",
+                    "name": "pretty",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                    "in": "query",
+                    "name": "resourceVersion",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                    "in": "query",
+                    "name": "resourceVersionMatch",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+                    "in": "query",
+                    "name": "timeoutSeconds",
+                    "schema": {
+                        "type": "integer",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+                    "in": "query",
+                    "name": "watch",
+                    "schema": {
+                        "type": "boolean",
+                        "uniqueItems": true
+                    }
+                }
+            ]
+        },
+        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs": {
+            "delete": {
+                "description": "delete collection of Config",
+                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfig",
+                "parameters": [
+                    {
+                        "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
+                        "in": "query",
+                        "name": "allowWatchBookmarks",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+                        "in": "query",
+                        "name": "continue",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+                        "in": "query",
+                        "name": "fieldSelector",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+                        "in": "query",
+                        "name": "labelSelector",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersion",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersionMatch",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+                        "in": "query",
+                        "name": "timeoutSeconds",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+                        "in": "query",
+                        "name": "watch",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "get": {
+                "description": "list objects of kind Config",
+                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "parameters": [
+                    {
+                        "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
+                        "in": "query",
+                        "name": "allowWatchBookmarks",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+                        "in": "query",
+                        "name": "continue",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+                        "in": "query",
+                        "name": "fieldSelector",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+                        "in": "query",
+                        "name": "labelSelector",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersion",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersionMatch",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+                        "in": "query",
+                        "name": "timeoutSeconds",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+                        "in": "query",
+                        "name": "watch",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "post": {
+                "description": "create a Config",
+                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "parameters": [
+                    {
+                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+                        "in": "query",
+                        "name": "dryRun",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+                        "in": "query",
+                        "name": "fieldManager",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+                        "in": "query",
+                        "name": "fieldValidation",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                            }
+                        },
+                        "application/yaml": {
+                            "schema": {
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "Created"
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "Accepted"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "parameters": [
+                {
+                    "description": "object name and auth scope, such as for teams and projects",
+                    "in": "path",
+                    "name": "namespace",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "If 'true', then the output is pretty printed.",
+                    "in": "query",
+                    "name": "pretty",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                }
+            ]
+        },
+        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs/{name}": {
+            "delete": {
+                "description": "delete a Config",
+                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "parameters": [
+                    {
+                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+                        "in": "query",
+                        "name": "dryRun",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.",
+                        "in": "query",
+                        "name": "gracePeriodSeconds",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the \"orphan\" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.",
+                        "in": "query",
+                        "name": "orphanDependents",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.",
+                        "in": "query",
+                        "name": "propagationPolicy",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
+                            }
+                        },
+                        "application/yaml": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            }
+                        },
+                        "description": "Accepted"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "get": {
+                "description": "read the specified Config",
+                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "parameters": [
+                    {
+                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersion",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "patch": {
+                "description": "partially update the specified Config",
+                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "parameters": [
+                    {
+                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+                        "in": "query",
+                        "name": "dryRun",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+                        "in": "query",
+                        "name": "fieldManager",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+                        "in": "query",
+                        "name": "fieldValidation",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/apply-patch+yaml": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
+                            }
+                        },
+                        "application/json-patch+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
+                            }
+                        },
+                        "application/merge-patch+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "put": {
+                "description": "replace the specified Config",
+                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "parameters": [
+                    {
+                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+                        "in": "query",
+                        "name": "dryRun",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+                        "in": "query",
+                        "name": "fieldManager",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+                        "in": "query",
+                        "name": "fieldValidation",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                            }
+                        },
+                        "application/yaml": {
+                            "schema": {
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "Created"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "parameters": [
+                {
+                    "description": "name of the Config",
+                    "in": "path",
+                    "name": "name",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "object name and auth scope, such as for teams and projects",
+                    "in": "path",
+                    "name": "namespace",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "If 'true', then the output is pretty printed.",
+                    "in": "query",
+                    "name": "pretty",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                }
+            ]
+        },
         "/apis/clabernetes.containerlab.dev/v1alpha1/imagerequests": {
             "get": {
                 "description": "list objects of kind Imagerequest",
@@ -3966,21 +4739,21 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/configs": {
+        "/apis/clabernetes.containerlab.dev/v1alpha1/links": {
             "get": {
-                "description": "list objects of kind Config",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1ConfigForAllNamespaces",
+                "description": "list objects of kind Link",
+                "operationId": "listClabernetesContainerlabDevV1Alpha1LinkForAllNamespaces",
                 "responses": {
                     "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
                                 }
                             }
                         },
@@ -4085,10 +4858,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs": {
+        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links": {
             "delete": {
-                "description": "delete collection of Config",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfig",
+                "description": "delete collection of Link",
+                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLink",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -4195,8 +4968,8 @@
                 "tags": []
             },
             "get": {
-                "description": "list objects of kind Config",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "description": "list objects of kind Link",
+                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -4285,12 +5058,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
                                 }
                             }
                         },
@@ -4303,8 +5076,8 @@
                 "tags": []
             },
             "post": {
-                "description": "create a Config",
-                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "description": "create a Link",
+                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -4338,12 +5111,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                             }
                         }
                     }
@@ -4353,12 +5126,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             }
                         },
@@ -4368,12 +5141,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             }
                         },
@@ -4383,12 +5156,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             }
                         },
@@ -4422,10 +5195,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs/{name}": {
+        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}": {
             "delete": {
-                "description": "delete a Config",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "description": "delete a Link",
+                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -4516,8 +5289,8 @@
                 "tags": []
             },
             "get": {
-                "description": "read the specified Config",
-                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "description": "read the specified Link",
+                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
@@ -4534,12 +5307,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             }
                         },
@@ -4552,8 +5325,8 @@
                 "tags": []
             },
             "patch": {
-                "description": "partially update the specified Config",
-                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "description": "partially update the specified Link",
+                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -4607,12 +5380,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             }
                         },
@@ -4625,8 +5398,8 @@
                 "tags": []
             },
             "put": {
-                "description": "replace the specified Config",
-                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "description": "replace the specified Link",
+                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -4660,12 +5433,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                             }
                         }
                     }
@@ -4675,12 +5448,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             }
                         },
@@ -4690,12 +5463,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
                                 }
                             }
                         },
@@ -4709,7 +5482,7 @@
             },
             "parameters": [
                 {
-                    "description": "name of the Config",
+                    "description": "name of the Link",
                     "in": "path",
                     "name": "name",
                     "required": true,
@@ -7029,779 +7802,6 @@
             "parameters": [
                 {
                     "description": "name of the Topology",
-                    "in": "path",
-                    "name": "name",
-                    "required": true,
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "object name and auth scope, such as for teams and projects",
-                    "in": "path",
-                    "name": "namespace",
-                    "required": true,
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "If 'true', then the output is pretty printed.",
-                    "in": "query",
-                    "name": "pretty",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                }
-            ]
-        },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/links": {
-            "get": {
-                "description": "list objects of kind Link",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1LinkForAllNamespaces",
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "parameters": [
-                {
-                    "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
-                    "in": "query",
-                    "name": "allowWatchBookmarks",
-                    "schema": {
-                        "type": "boolean",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
-                    "in": "query",
-                    "name": "continue",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
-                    "in": "query",
-                    "name": "fieldSelector",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
-                    "in": "query",
-                    "name": "labelSelector",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
-                    "in": "query",
-                    "name": "limit",
-                    "schema": {
-                        "type": "integer",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "If 'true', then the output is pretty printed.",
-                    "in": "query",
-                    "name": "pretty",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                    "in": "query",
-                    "name": "resourceVersion",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                    "in": "query",
-                    "name": "resourceVersionMatch",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
-                    "in": "query",
-                    "name": "timeoutSeconds",
-                    "schema": {
-                        "type": "integer",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
-                    "in": "query",
-                    "name": "watch",
-                    "schema": {
-                        "type": "boolean",
-                        "uniqueItems": true
-                    }
-                }
-            ]
-        },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links": {
-            "delete": {
-                "description": "delete collection of Link",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLink",
-                "parameters": [
-                    {
-                        "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
-                        "in": "query",
-                        "name": "allowWatchBookmarks",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
-                        "in": "query",
-                        "name": "continue",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
-                        "in": "query",
-                        "name": "fieldSelector",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
-                        "in": "query",
-                        "name": "labelSelector",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
-                        "in": "query",
-                        "name": "limit",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersion",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersionMatch",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
-                        "in": "query",
-                        "name": "timeoutSeconds",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
-                        "in": "query",
-                        "name": "watch",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "get": {
-                "description": "list objects of kind Link",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedLink",
-                "parameters": [
-                    {
-                        "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
-                        "in": "query",
-                        "name": "allowWatchBookmarks",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
-                        "in": "query",
-                        "name": "continue",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
-                        "in": "query",
-                        "name": "fieldSelector",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
-                        "in": "query",
-                        "name": "labelSelector",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
-                        "in": "query",
-                        "name": "limit",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersion",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersionMatch",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
-                        "in": "query",
-                        "name": "timeoutSeconds",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
-                        "in": "query",
-                        "name": "watch",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "post": {
-                "description": "create a Link",
-                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedLink",
-                "parameters": [
-                    {
-                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-                        "in": "query",
-                        "name": "dryRun",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
-                        "in": "query",
-                        "name": "fieldManager",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
-                        "in": "query",
-                        "name": "fieldValidation",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                            }
-                        },
-                        "application/yaml": {
-                            "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "Created"
-                    },
-                    "202": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "Accepted"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "parameters": [
-                {
-                    "description": "object name and auth scope, such as for teams and projects",
-                    "in": "path",
-                    "name": "namespace",
-                    "required": true,
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "If 'true', then the output is pretty printed.",
-                    "in": "query",
-                    "name": "pretty",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                }
-            ]
-        },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}": {
-            "delete": {
-                "description": "delete a Link",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedLink",
-                "parameters": [
-                    {
-                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-                        "in": "query",
-                        "name": "dryRun",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.",
-                        "in": "query",
-                        "name": "gracePeriodSeconds",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the \"orphan\" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.",
-                        "in": "query",
-                        "name": "orphanDependents",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.",
-                        "in": "query",
-                        "name": "propagationPolicy",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
-                            }
-                        },
-                        "application/yaml": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "202": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            }
-                        },
-                        "description": "Accepted"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "get": {
-                "description": "read the specified Link",
-                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedLink",
-                "parameters": [
-                    {
-                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersion",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "patch": {
-                "description": "partially update the specified Link",
-                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedLink",
-                "parameters": [
-                    {
-                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-                        "in": "query",
-                        "name": "dryRun",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
-                        "in": "query",
-                        "name": "fieldManager",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
-                        "in": "query",
-                        "name": "fieldValidation",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/apply-patch+yaml": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
-                            }
-                        },
-                        "application/json-patch+json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
-                            }
-                        },
-                        "application/merge-patch+json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "put": {
-                "description": "replace the specified Link",
-                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedLink",
-                "parameters": [
-                    {
-                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-                        "in": "query",
-                        "name": "dryRun",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
-                        "in": "query",
-                        "name": "fieldManager",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
-                        "in": "query",
-                        "name": "fieldValidation",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                            }
-                        },
-                        "application/yaml": {
-                            "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "Created"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "parameters": [
-                {
-                    "description": "name of the Link",
                     "in": "path",
                     "name": "name",
                     "required": true,
