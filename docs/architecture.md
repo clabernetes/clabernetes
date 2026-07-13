@@ -117,3 +117,8 @@ can be pointed at a containerlab topology (either locally or at a URL). This too
 if any files would be mounted when using this topology file, and if so renders kubernetes
 configmaps containing the file contents and a Topology that appropriately mounts them into
 the pods.
+
+clabverter can also skip the Topology object entirely: `--emit-crs` renders the primitive
+Node/Link/NodeProfile manifests directly, using the very same compile pipeline the in-cluster
+compiler runs -- handy when you want the primary api objects in a git repo rather than an
+in-cluster compiler owning them.

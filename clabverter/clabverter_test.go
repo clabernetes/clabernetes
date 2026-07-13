@@ -26,6 +26,7 @@ func TestClabvert(t *testing.T) {
 		insecureRegistries   string
 		imagePullSecrets     string
 		disableExpose        bool
+		emitCRs              bool
 		naming               string
 		containerlabVersion  string
 	}{
@@ -48,6 +49,17 @@ func TestClabvert(t *testing.T) {
 			disableExpose:       true,
 			naming:              "non-prefixed",
 			containerlabVersion: "0.51.0",
+		},
+		{
+			name:                 "emit-crs",
+			topologyFile:         "test-fixtures/clabversiontest/clab.yaml",
+			topologySpecFile:     "",
+			destinationNamespace: "notclabernetes",
+			insecureRegistries:   "1.2.3.4",
+			imagePullSecrets:     "regcred",
+			emitCRs:              true,
+			naming:               "prefixed",
+			containerlabVersion:  "",
 		},
 		{
 			name:                 "inline-startup-config",
@@ -107,6 +119,7 @@ func TestClabvert(t *testing.T) {
 					testCase.insecureRegistries,
 					testCase.imagePullSecrets,
 					testCase.disableExpose,
+					testCase.emitCRs,
 					false,
 					true,
 					false,

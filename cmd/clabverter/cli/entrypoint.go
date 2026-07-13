@@ -17,6 +17,7 @@ const (
 	naming               = "naming"
 	containerlabVersion  = "containerlabVersion"
 	disableExpose        = "disableExpose"
+	emitCRs              = "emitCRs"
 	debug                = "debug"
 	quiet                = "quiet"
 	stdout               = "stdout"
@@ -75,6 +76,13 @@ func Entrypoint() *cli.App {
 				Required: false,
 				Value:    false,
 			},
+			&cli.BoolFlag{
+				Name: emitCRs,
+				Usage: "emit Node/Link/NodeProfile manifests directly instead of a Topology" +
+					" manifest -- exactly what the in-cluster compiler would emit",
+				Required: false,
+				Value:    false,
+			},
 			&cli.StringFlag{
 				Name:     naming,
 				Usage:    "naming scheme to use for clabernetes resources",
@@ -118,6 +126,7 @@ func Entrypoint() *cli.App {
 				c.String(insecureRegistries),
 				c.String(imagePullSecrets),
 				c.Bool(disableExpose),
+				c.Bool(emitCRs),
 				c.Bool(debug),
 				c.Bool(quiet),
 				c.Bool(stdout),

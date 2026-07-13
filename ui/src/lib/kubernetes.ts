@@ -5,6 +5,7 @@ import { CoreV1Api, KubeConfig } from "@kubernetes/client-node";
 import {
   createClabernetesContainerlabDevV1Alpha1NamespacedTopology,
   deleteClabernetesContainerlabDevV1Alpha1NamespacedTopology,
+  listClabernetesContainerlabDevV1Alpha1NamespacedNode,
   listClabernetesContainerlabDevV1Alpha1NamespacedTopology,
   listClabernetesContainerlabDevV1Alpha1TopologyForAllNamespaces,
   replaceClabernetesContainerlabDevV1Alpha1NamespacedTopology,
@@ -32,6 +33,17 @@ export async function listNamespacedTopologies(namespace: string): Promise<strin
       return namespace.metadata?.name;
     }),
   );
+}
+
+export async function listTopologyNodes(namespace: string, topologyName: string): Promise<string> {
+  const response = await listClabernetesContainerlabDevV1Alpha1NamespacedNode({
+    path: { namespace: namespace },
+    query: { labelSelector: `clabernetes/topologyOwner=${topologyName}` },
+  }).catch((error: unknown) => {
+    throw error;
+  });
+
+  return JSON.stringify(response.data?.items);
 }
 
 export async function deleteTopology(namespace: string, name: string): Promise<string> {
@@ -74,10 +86,7 @@ export async function listNamespaces(): Promise<string> {
   );
 }
 
-export async function createTopology(
-  namespace: string,
-  body: string,
-): Promise<string> {
+export async function createTopology(namespace: string, body: string): Promise<string> {
   const response = await createClabernetesContainerlabDevV1Alpha1NamespacedTopology({
     body: JSON.parse(body),
     path: { namespace: namespace },
@@ -95,8 +104,8 @@ export async function listNamespacedPullSecrets(namespace: string): Promise<stri
     .makeApiClient(CoreV1Api)
     .listNamespacedSecret({
       namespace: namespace,
-      fieldSelector: "type=kubernetes.io/dockerconfigjson",}
-    )
+      fieldSelector: "type=kubernetes.io/dockerconfigjson",
+    })
     .catch((error: unknown) => {
       throw error;
     });
@@ -115,7 +124,7 @@ export async function listNamespacedSecrets(namespace: string): Promise<string> 
 
   const response = await kc
     .makeApiClient(CoreV1Api)
-    .listNamespacedSecret({namespace: namespace, fieldSelector: "type=Opaque"})
+    .listNamespacedSecret({ namespace: namespace, fieldSelector: "type=Opaque" })
     .catch((error: unknown) => {
       throw error;
     });
