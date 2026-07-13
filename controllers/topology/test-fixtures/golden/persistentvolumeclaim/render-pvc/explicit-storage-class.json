@@ -2,7 +2,6 @@
     "metadata": {
         "name": "pvc-test-node1",
         "namespace": "clabernetes",
-        "creationTimestamp": null,
         "labels": {
             "clabernetes/app": "clabernetes",
             "clabernetes/name": "pvc-test-node1",

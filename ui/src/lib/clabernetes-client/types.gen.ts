@@ -959,6 +959,1091 @@ export type ClabernetesContainerlabDevConfigListV1Alpha1 = {
 };
 
 /**
+ * NodeProfile holds *deployment policy* for a set of Nodes -- everything that is fleet policy
+ * rather than per-node payload: expose behavior, image pull configuration, launcher pod
+ * resources, scheduling, privileges/persistence, status probes, management network and
+ * connectivity flavor. Profiles select Nodes with a standard label selector, which keeps
+ * emitters of Nodes (users, the Topology compiler, containerlab tooling) completely decoupled
+ * from deployment policy -- an emitter never needs to know profiles exist to emit a valid Node.
+ * Policy resolution for a Node is deliberately boring: the helm-managed global Config is the
+ * base (lowest precedence), then all matching NodeProfiles merge over it *per field* in
+ * ascending priority order (name breaks ties). There are no per-Node overrides -- if a single
+ * node needs special treatment, give it a label and a profile. The resolved chain is recorded in
+ * each Node's status.appliedProfiles.
+ */
+export type ClabernetesContainerlabDevNodeprofileV1Alpha1 = {
+    /**
+     * APIVersion defines the versioned schema of this representation of an object.
+     * Servers should convert recognized schemas to the latest internal value, and
+     * may reject unrecognized values.
+     * More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+     */
+    apiVersion?: string;
+    /**
+     * Kind is a string value representing the REST resource this object represents.
+     * Servers may infer this from the endpoint the client submits requests to.
+     * Cannot be updated.
+     * In CamelCase.
+     * More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+     */
+    kind?: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+    /**
+     * NodeProfileSpec is the spec for a NodeProfile resource.
+     */
+    spec?: {
+        /**
+         * Connectivity defines the type of connectivity to use between nodes -- "vxlan" (default) or
+         * the experimental "slurpeeth". Both sides of a link must resolve the same flavor for the
+         * tunnel to come up, so this is typically set by an all-nodes profile (or the Topology
+         * compiler).
+         */
+        connectivity?: 'vxlan' | 'slurpeeth';
+        /**
+         * Deployment holds launcher deployment settings (privileges, persistence, launcher
+         * image/log level, containerlab flags, extra env/files) for the selected nodes.
+         */
+        deployment?: {
+            /**
+             * ContainerlabDebug sets the `--debug` flag when invoking containerlab in the launcher pods.
+             */
+            containerlabDebug?: boolean;
+            /**
+             * ContainerlabTimeout sets the `--timeout` flag when invoking containerlab in the launcher
+             * pods.
+             */
+            containerlabTimeout?: string;
+            /**
+             * ContainerlabVersion sets a custom version to use for containerlab in the launcher pods.
+             */
+            containerlabVersion?: string;
+            /**
+             * ExtraEnv is a list of additional environment variables to set on the launcher container.
+             */
+            extraEnv?: Array<{
+                /**
+                 * Name of the environment variable.
+                 * May consist of any printable ASCII characters except '='.
+                 */
+                name: string;
+                /**
+                 * Variable references $(VAR_NAME) are expanded
+                 * using the previously defined environment variables in the container and
+                 * any service environment variables. If a variable cannot be resolved,
+                 * the reference in the input string will be unchanged. Double $$ are reduced
+                 * to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                 * "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                 * Escaped references will never be expanded, regardless of whether the variable
+                 * exists or not.
+                 * Defaults to "".
+                 */
+                value?: string;
+                /**
+                 * Source for the environment variable's value. Cannot be used if value is not empty.
+                 */
+                valueFrom?: {
+                    /**
+                     * Selects a key of a ConfigMap.
+                     */
+                    configMapKeyRef?: {
+                        /**
+                         * The key to select.
+                         */
+                        key: string;
+                        /**
+                         * Name of the referent.
+                         * This field is effectively required, but due to backwards compatibility is
+                         * allowed to be empty. Instances of this type with an empty value here are
+                         * almost certainly wrong.
+                         * More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                         */
+                        name?: string;
+                        /**
+                         * Specify whether the ConfigMap or its key must be defined
+                         */
+                        optional?: boolean;
+                    };
+                    /**
+                     * Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                     * spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                     */
+                    fieldRef?: {
+                        /**
+                         * Version of the schema the FieldPath is written in terms of, defaults to "v1".
+                         */
+                        apiVersion?: string;
+                        /**
+                         * Path of the field to select in the specified API version.
+                         */
+                        fieldPath: string;
+                    };
+                    /**
+                     * FileKeyRef selects a key of the env file.
+                     * Requires the EnvFiles feature gate to be enabled.
+                     */
+                    fileKeyRef?: {
+                        /**
+                         * The key within the env file. An invalid key will prevent the pod from starting.
+                         * The keys defined within a source may consist of any printable ASCII characters except '='.
+                         * During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                         */
+                        key: string;
+                        /**
+                         * Specify whether the file or its key must be defined. If the file or key
+                         * does not exist, then the env var is not published.
+                         * If optional is set to true and the specified key does not exist,
+                         * the environment variable will not be set in the Pod's containers.
+                         *
+                         * If optional is set to false and the specified key does not exist,
+                         * an error will be returned during Pod creation.
+                         */
+                        optional?: boolean;
+                        /**
+                         * The path within the volume from which to select the file.
+                         * Must be relative and may not contain the '..' path or start with '..'.
+                         */
+                        path: string;
+                        /**
+                         * The name of the volume mount containing the env file.
+                         */
+                        volumeName: string;
+                    };
+                    /**
+                     * Selects a resource of the container: only resources limits and requests
+                     * (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                     */
+                    resourceFieldRef?: {
+                        /**
+                         * Container name: required for volumes, optional for env vars
+                         */
+                        containerName?: string;
+                        /**
+                         * Specifies the output format of the exposed resources, defaults to "1"
+                         */
+                        divisor?: number | string;
+                        /**
+                         * Required: resource to select
+                         */
+                        resource: string;
+                    };
+                    /**
+                     * Selects a key of a secret in the pod's namespace
+                     */
+                    secretKeyRef?: {
+                        /**
+                         * The key of the secret to select from.  Must be a valid secret key.
+                         */
+                        key: string;
+                        /**
+                         * Name of the referent.
+                         * This field is effectively required, but due to backwards compatibility is
+                         * allowed to be empty. Instances of this type with an empty value here are
+                         * almost certainly wrong.
+                         * More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                         */
+                        name?: string;
+                        /**
+                         * Specify whether the Secret or its key must be defined
+                         */
+                        optional?: boolean;
+                    };
+                };
+            }>;
+            /**
+             * FilesFromConfigMap is a slice of FileFromConfigMap that define the configmap/path and
+             * path on the launcher pod that the file should be mounted to.
+             */
+            filesFromConfigMap?: Array<{
+                /**
+                 * ConfigMapName is the name of the configmap to mount.
+                 */
+                configMapName: string;
+                /**
+                 * ConfigMapPath is the path/key in the configmap to mount, if not specified the configmap will
+                 * be mounted without a sub-path.
+                 */
+                configMapPath?: string;
+                /**
+                 * FilePath is the path to mount the file.
+                 */
+                filePath: string;
+                /**
+                 * Mode sets the file permissions when mounting the configmap. Since the configmap will be read
+                 * only filesystem anyway, we basically just want to expose if the file should be mounted as
+                 * executable or not. So, default permissions would be 0o444 (read) and execute would be 0o555.
+                 */
+                mode?: 'read' | 'execute';
+            }>;
+            /**
+             * LauncherImage sets the launcher image to use when spawning the launcher deployments.
+             */
+            launcherImage?: string;
+            /**
+             * LauncherImagePullPolicy sets the launcher image pull policy -- one of
+             * IfNotPresent/Always/Never.
+             */
+            launcherImagePullPolicy?: 'IfNotPresent' | 'Always' | 'Never';
+            /**
+             * LauncherLogLevel sets the launcher log level -- one of
+             * disabled/critical/warn/info/debug.
+             */
+            launcherLogLevel?: 'disabled' | 'critical' | 'warn' | 'info' | 'debug';
+            /**
+             * Persistence enables persisting the containerlab working directory of the selected nodes'
+             * launchers in a PVC.
+             */
+            persistence?: {
+                /**
+                 * ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 5Gi.
+                 * If provided, the string value must be a valid kubernetes storage requests style string. Note
+                 * the claim size *cannot be made smaller* once created, but it *can* be expanded. If you need
+                 * to make the claim smaller you must delete the topology (or the node from the topology) and
+                 * re-add it.
+                 */
+                claimSize?: string;
+                /**
+                 * Enabled indicates if persistence of hte containerlab lab/working directory will be placed in
+                 * a mounted PVC.
+                 */
+                enabled: boolean;
+                /**
+                 * StorageClassName is the storage class to set in the PVC -- if not provided this will be left
+                 * empty which will end up using your default storage class. Note that currently we assume you
+                 * have (as default) or provide a dynamically provisionable storage class, hence no selector.
+                 */
+                storageClassName?: string;
+            };
+            /**
+             * PrivilegedLauncher, when true, sets the launcher containers to privileged -- see the
+             * Topology CRD (or docs) for the "not so privileged" mode details.
+             */
+            privilegedLauncher?: boolean;
+        };
+        /**
+         * Expose holds configurations relevant to how the nodes selected by this profile are exposed.
+         */
+        expose?: {
+            /**
+             * DisableAutoExpose disables the automagic exposing of the default port list -- see the
+             * Topology CRD (or docs) for that list; when disabled only ports explicitly listed in the
+             * node definition are exposed.
+             */
+            disableAutoExpose?: boolean;
+            /**
+             * DisableExpose indicates if exposing selected nodes via a service should be disabled -- by
+             * default any ports in a node definition (plus the auto-expose defaults) are exposed.
+             */
+            disableExpose?: boolean;
+            /**
+             * ExposeType configures the service type used for exposing the selected nodes -- one of
+             * "None", "ClusterIP", "Headless" or "LoadBalancer" (default).
+             */
+            exposeType?: 'None' | 'ClusterIP' | 'Headless' | 'LoadBalancer';
+            /**
+             * UseNodeMgmtIpv4Address assigns each selected node's `mgmt-ipv4` address as the
+             * LoadBalancerIP of its expose service (LoadBalancer expose type only).
+             */
+            useNodeMgmtIpv4Address?: boolean;
+            /**
+             * UseNodeMgmtIpv6Address assigns each selected node's `mgmt-ipv6` address as the
+             * LoadBalancerIP of its expose service (LoadBalancer expose type only).
+             */
+            useNodeMgmtIpv6Address?: boolean;
+        };
+        /**
+         * ImagePull holds configurations relevant to how the launcher pods for the selected nodes
+         * handle pulling images.
+         */
+        imagePull?: {
+            /**
+             * DockerConfig sets the secret (in the node's namespace, with a "config.json" key) holding
+             * the docker (root user) config to mount in the launchers.
+             */
+            dockerConfig?: string;
+            /**
+             * DockerDaemonConfig sets the secret (in the node's namespace, with a "daemon.json" key)
+             * holding the docker daemon config to mount in the launchers.
+             */
+            dockerDaemonConfig?: string;
+            /**
+             * InsecureRegistries is a slice of strings of insecure registries to configure in the
+             * launcher pods.
+             */
+            insecureRegistries?: Array<string>;
+            /**
+             * PullSecrets allows for providing secret(s) to use when pulling the image. This is only
+             * applicable *if* image pull through mode is auto or always.
+             */
+            pullSecrets?: Array<string>;
+            /**
+             * PullThroughOverride allows for overriding the image pull through mode for the launcher
+             * pods of the selected nodes.
+             */
+            pullThroughOverride?: 'auto' | 'always' | 'never';
+        };
+        /**
+         * Mgmt holds the containerlab management network settings the launchers of the selected
+         * nodes run their (pod local) management network with.
+         */
+        mgmt?: {
+            /**
+             * ExternalAccess enables (or disables) external access to the management network.
+             */
+            'external-access'?: boolean;
+            /**
+             * IPv4Gw is the IPv4 gateway of the management network.
+             */
+            'ipv4-gw'?: string;
+            /**
+             * IPv4Range is the IPv4 range of the management network.
+             */
+            'ipv4-range'?: string;
+            /**
+             * IPv4Subnet is the IPv4 subnet of the management network.
+             */
+            'ipv4-subnet'?: string;
+            /**
+             * IPv6Gw is the IPv6 gateway of the management network.
+             */
+            'ipv6-gw'?: string;
+            /**
+             * IPv6Range is the IPv6 range of the management network.
+             */
+            'ipv6-range'?: string;
+            /**
+             * IPv6Subnet is the IPv6 subnet of the management network.
+             */
+            'ipv6-subnet'?: string;
+            /**
+             * MTU is the MTU of the management network.
+             */
+            mtu?: number;
+            /**
+             * Network is the name of the docker network to use for the management network.
+             */
+            network?: string;
+        };
+        /**
+         * NodeSelector selects the Nodes (in the profile's namespace) this profile applies to. An
+         * empty (or omitted) selector selects *every* Node in the namespace.
+         */
+        nodeSelector?: {
+            /**
+             * matchExpressions is a list of label selector requirements. The requirements are ANDed.
+             */
+            matchExpressions?: Array<{
+                /**
+                 * key is the label key that the selector applies to.
+                 */
+                key: string;
+                /**
+                 * operator represents a key's relationship to a set of values.
+                 * Valid operators are In, NotIn, Exists and DoesNotExist.
+                 */
+                operator: string;
+                /**
+                 * values is an array of string values. If the operator is In or NotIn,
+                 * the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                 * the values array must be empty. This array is replaced during a strategic
+                 * merge patch.
+                 */
+                values?: Array<string>;
+            }>;
+            /**
+             * matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+             * map is equivalent to an element of matchExpressions, whose key field is "key", the
+             * operator is "In", and the values array contains only "value". The requirements are ANDed.
+             */
+            matchLabels?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * Priority orders profiles when more than one selects a Node -- higher priority wins per
+         * field on overlap, profile name breaks ties.
+         */
+        priority?: number;
+        /**
+         * Resources holds the kubernetes resource requirements for the launcher pods of the selected
+         * nodes.
+         */
+        resources?: {
+            /**
+             * Claims lists the names of resources, defined in spec.resourceClaims,
+             * that are used by this container.
+             *
+             * This field depends on the
+             * DynamicResourceAllocation feature gate.
+             *
+             * This field is immutable. It can only be set for containers.
+             */
+            claims?: Array<{
+                /**
+                 * Name must match the name of one entry in pod.spec.resourceClaims of
+                 * the Pod where this field is used. It makes that resource available
+                 * inside a container.
+                 */
+                name: string;
+                /**
+                 * Request is the name chosen for a request in the referenced claim.
+                 * If empty, everything from the claim is made available, otherwise
+                 * only the result of this request.
+                 */
+                request?: string;
+            }>;
+            /**
+             * Limits describes the maximum amount of compute resources allowed.
+             * More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+             */
+            limits?: {
+                [key: string]: number | string;
+            };
+            /**
+             * Requests describes the minimum amount of compute resources required.
+             * If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+             * otherwise to an implementation-defined value. Requests cannot exceed Limits.
+             * More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+             */
+            requests?: {
+                [key: string]: number | string;
+            };
+        };
+        /**
+         * Scheduling holds information about how the launcher pods of the selected nodes should be
+         * configured with respect to "scheduling" things (node selector/tolerations).
+         */
+        scheduling?: {
+            /**
+             * NodeSelector sets the node selector that will be configured on all launcher pods for this
+             * Topology.
+             */
+            nodeSelector?: {
+                [key: string]: string;
+            };
+            /**
+             * Tolerations is a list of Tolerations that will be set on the launcher pod spec.
+             */
+            tolerations?: Array<{
+                /**
+                 * Effect indicates the taint effect to match. Empty means match all taint effects.
+                 * When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                 */
+                effect?: string;
+                /**
+                 * Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                 * If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                 */
+                key?: string;
+                /**
+                 * Operator represents a key's relationship to the value.
+                 * Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                 * Exists is equivalent to wildcard for value, so that a pod can
+                 * tolerate all taints of a particular category.
+                 * Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                 */
+                operator?: string;
+                /**
+                 * TolerationSeconds represents the period of time the toleration (which must be
+                 * of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                 * it is not set, which means tolerate the taint forever (do not evict). Zero and
+                 * negative values will be treated as 0 (evict immediately) by the system.
+                 */
+                tolerationSeconds?: number;
+                /**
+                 * Value is the taint value the toleration matches to.
+                 * If the operator is Exists, the value should be empty, otherwise just a regular string.
+                 */
+                value?: string;
+            }>;
+        };
+        /**
+         * StatusProbes holds the configurations relevant to how clabernetes and the launcher check
+         * and report the (containerlab) node status for the selected nodes.
+         */
+        statusProbes?: {
+            /**
+             * Enabled sets the status probes to enabled (or obviously disabled). Note that if the probes
+             * are enabled and the health condition fails due to configuring the node the cluster will
+             * restart the node. So, if you plan on being destructive with the node config (probably because
+             * you will have exec'd onto the node) then you may want to disable this!
+             */
+            enabled?: boolean;
+            /**
+             * ExcludedNodes is a set of nodes to be excluded from status probe checking. It may be
+             * desirable to exclude some node(s) from status checking due to them not having an easy way
+             * for clabernetes to check the state of the node. The node names here should match the name of
+             * the nodes in the containerlab sub-topology.
+             */
+            excludedNodes?: Array<string>;
+            /**
+             * NodeProbeConfigurations is a map of node specific probe configurations -- if you only need
+             * a simple ssh or tcp connect style setup that works on all node types in the topology you can
+             * ignore this and just configure ProbeConfiguration.
+             */
+            nodeProbeConfigurations?: {
+                [key: string]: {
+                    /**
+                     * SSHProbeConfiguration defines an SSH probe.
+                     */
+                    sshProbeConfiguration?: {
+                        /**
+                         * Password is the password to use for auth.
+                         */
+                        password: string;
+                        /**
+                         * Port is an optional override (of course default is 22).
+                         */
+                        port?: number;
+                        /**
+                         * Username is the username to use for auth.
+                         */
+                        username: string;
+                    };
+                    /**
+                     * StartupSeconds is the total amount of seconds to allow for the node to start. This defaults
+                     * to ~13 minutes to hopefully account for slow to boot nodes. Note that there is also a 60
+                     * initial delay configured, so technically the default is ~14-15 minutes. Be careful with this
+                     * delay as there must be time for c9s to (via whatever means) pull the image and load it into
+                     * docker on the launcher and this can take a bit! Having this be bigger than you think you need
+                     * is generally better since if the startup probe succeeds ever then the readiness probe takes
+                     * over anyway.
+                     */
+                    startupSeconds?: number;
+                    /**
+                     * TCPProbeConfiguration defines a TCP probe.
+                     */
+                    tcpProbeConfiguration?: {
+                        /**
+                         * Port defines the port to try to open a TCP connection to. When using TCP probe setup this
+                         * connection happens inside the launcher rather than the "normal" k8s style probes. This style
+                         * probe behaves like a k8s style probe though in that it is "successful" whenever a TCP
+                         * connection to this port can be opened successfully.
+                         */
+                        port: number;
+                    };
+                };
+            };
+            /**
+             * ProbeConfiguration is the default probe configuration for the Topology.
+             */
+            probeConfiguration?: {
+                /**
+                 * SSHProbeConfiguration defines an SSH probe.
+                 */
+                sshProbeConfiguration?: {
+                    /**
+                     * Password is the password to use for auth.
+                     */
+                    password: string;
+                    /**
+                     * Port is an optional override (of course default is 22).
+                     */
+                    port?: number;
+                    /**
+                     * Username is the username to use for auth.
+                     */
+                    username: string;
+                };
+                /**
+                 * StartupSeconds is the total amount of seconds to allow for the node to start. This defaults
+                 * to ~13 minutes to hopefully account for slow to boot nodes. Note that there is also a 60
+                 * initial delay configured, so technically the default is ~14-15 minutes. Be careful with this
+                 * delay as there must be time for c9s to (via whatever means) pull the image and load it into
+                 * docker on the launcher and this can take a bit! Having this be bigger than you think you need
+                 * is generally better since if the startup probe succeeds ever then the readiness probe takes
+                 * over anyway.
+                 */
+                startupSeconds?: number;
+                /**
+                 * TCPProbeConfiguration defines a TCP probe.
+                 */
+                tcpProbeConfiguration?: {
+                    /**
+                     * Port defines the port to try to open a TCP connection to. When using TCP probe setup this
+                     * connection happens inside the launcher rather than the "normal" k8s style probes. This style
+                     * probe behaves like a k8s style probe though in that it is "successful" whenever a TCP
+                     * connection to this port can be opened successfully.
+                     */
+                    port: number;
+                };
+            };
+        };
+    };
+    /**
+     * NodeProfileStatus is the status for a NodeProfile resource.
+     */
+    status?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * a list of clabernetes-containerlab-dev.nodeprofile.v1alpha1 resources
+ */
+export type ClabernetesContainerlabDevNodeprofileListV1Alpha1 = {
+    /**
+     * APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+     */
+    apiVersion?: string;
+    /**
+     * List of nodeprofiles. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
+     */
+    items: Array<ClabernetesContainerlabDevNodeprofileV1Alpha1>;
+    /**
+     * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+     */
+    kind?: string;
+    /**
+     * Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+     */
+    metadata?: IoK8sApimachineryPkgApisMetaV1ListMeta;
+};
+
+/**
+ * Node represents a single containerlab node ("device") and is realized as a single launcher
+ * pod. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by
+ * the (optional) Topology compiler, or created by any other machinery (i.e. a containerlab
+ * runtime); the node controller treats all of these identically. The object name *is* the
+ * containerlab node name -- the launcher pod hostname and the node's services (`<name>` for
+ * exposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the
+ * namespace is the topology boundary. The spec is simply what a human would write for the node
+ * in a containerlab topology file (plus filesFromURL); wiring lives exclusively on Link objects
+ * and everything operational (port allocations, readiness, applied profiles) is stamped by the
+ * controller into the status.
+ */
+export type ClabernetesContainerlabDevNodeV1Alpha1 = {
+    /**
+     * APIVersion defines the versioned schema of this representation of an object.
+     * Servers should convert recognized schemas to the latest internal value, and
+     * may reject unrecognized values.
+     * More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+     */
+    apiVersion?: string;
+    /**
+     * Kind is a string value representing the REST resource this object represents.
+     * Servers may infer this from the endpoint the client submits requests to.
+     * Cannot be updated.
+     * In CamelCase.
+     * More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+     */
+    kind?: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+    /**
+     * NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
+     * verbatim containerlab vocabulary, no wrapper -- plus the one clabernetes-side per-node payload
+     * field (filesFromURL). The definition must be self-contained: expanding topology
+     * defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
+     * this for you). Anything that is deployment *policy* rather than node payload -- expose
+     * behavior, image pull config, launcher resources, scheduling, privileges -- lives on
+     * NodeProfile objects which select Nodes by label. Unknown (i.e. newer containerlab vocabulary)
+     * fields are preserved by the api server but are not (yet) interpreted by clabernetes.
+     */
+    spec?: {
+        /**
+         * SANs is the list of subject alternative names to be added to the node's certificate.
+         */
+        SANs?: Array<string>;
+        /**
+         * Aliases is a list of network aliases for the node.
+         */
+        aliases?: Array<string>;
+        /**
+         * AutoRemove enables the auto removal of the node's container when it stops.
+         */
+        'auto-remove'?: boolean;
+        /**
+         * Binds is a list of bind (mount) compatible strings.
+         */
+        binds?: Array<string>;
+        /**
+         * Certificate holds the TLS certificate configuration for the node.
+         */
+        certificate?: {
+            /**
+             * Issue indicates if the node should have a certificate issued -- the default false value
+             * indicates that the node does not use TLS.
+             */
+            issue?: boolean;
+        };
+        /**
+         * Cmd overrides the container command.
+         */
+        cmd?: string;
+        /**
+         * Components holds the hardware component (i.e. SR-OS card/mda) configuration for the node.
+         */
+        components?: Array<{
+            /**
+             * Env holds environment variables for the component.
+             */
+            env?: {
+                [key: string]: string;
+            };
+            /**
+             * MDA holds the mda configuration of the component.
+             */
+            mda?: Array<{
+                /**
+                 * Slot is the slot of the mda.
+                 */
+                slot?: number;
+                /**
+                 * Type is the type of the mda.
+                 */
+                type?: string;
+            }>;
+            /**
+             * SFM is the SFM (switch fabric module) of the component.
+             */
+            sfm?: string;
+            /**
+             * Slot is the slot identifier of the component.
+             */
+            slot?: string;
+            /**
+             * Type is the type of the component.
+             */
+            type?: string;
+            /**
+             * XIOM holds the xiom configuration of the component.
+             */
+            xiom?: Array<{
+                /**
+                 * MDA holds the mda configuration of the xiom.
+                 */
+                mda?: Array<{
+                    /**
+                     * Slot is the slot of the mda.
+                     */
+                    slot?: number;
+                    /**
+                     * Type is the type of the mda.
+                     */
+                    type?: string;
+                }>;
+                /**
+                 * Slot is the slot of the xiom.
+                 */
+                slot?: number;
+                /**
+                 * Type is the type of the xiom.
+                 */
+                type?: string;
+            }>;
+        }>;
+        /**
+         * Config holds containerlab config engine settings for the node.
+         */
+        config?: {
+            /**
+             * Vars holds the variables for the config engine.
+             */
+            vars?: {};
+        };
+        /**
+         * CPU is the node CPU limit (cgroup or hypervisor) -- note that this is the *containerlab*
+         * (docker) cpu setting, launcher pod resources are NodeProfile territory.
+         */
+        cpu?: number;
+        /**
+         * CPUSet is the set of CPUs the node can use.
+         */
+        'cpu-set'?: string;
+        /**
+         * DNS holds the DNS configuration for the node.
+         */
+        dns?: {
+            /**
+             * Options is a list of DNS options.
+             */
+            options?: Array<string>;
+            /**
+             * Search is a list of DNS search domains.
+             */
+            search?: Array<string>;
+            /**
+             * Servers is a list of DNS servers.
+             */
+            servers?: Array<string>;
+        };
+        /**
+         * EnforceStartupConfig enforces the startup config even if the node has a saved config.
+         */
+        'enforce-startup-config'?: boolean;
+        /**
+         * Entrypoint overrides the container entrypoint.
+         */
+        entrypoint?: string;
+        /**
+         * Env holds the environment variables for the node's container.
+         */
+        env?: {
+            [key: string]: string;
+        };
+        /**
+         * EnvFiles is a list of external files containing environment variables for the node.
+         */
+        'env-files'?: Array<string>;
+        /**
+         * Exec is a list of commands to run in the node's container once it is started.
+         */
+        exec?: Array<string>;
+        /**
+         * Extras holds extra, possibly kind specific, node parameters.
+         */
+        extras?: {
+            /**
+             * CeosCopyToFlash is a list of paths to files which are to be copied to the ceos flash dir.
+             */
+            'ceos-copy-to-flash'?: Array<string>;
+            /**
+             * MysocketProxy is the proxy address that mysocketctl will use.
+             */
+            'mysocket-proxy'?: string;
+            /**
+             * SRLAgents is a list of Nokia SR Linux agents (spec files) to install on the node.
+             */
+            'srl-agents'?: Array<string>;
+        };
+        /**
+         * FilesFromURL holds any files that the launcher for this node should fetch from a URL prior
+         * to launching the node. This is the one clabernetes (non containerlab) field in the spec --
+         * it is per-node payload, unlike the policy knobs which live on NodeProfile.
+         */
+        filesFromURL?: Array<{
+            /**
+             * FilePath is the path to mount the file.
+             */
+            filePath: string;
+            /**
+             * URL is the url to fetch and mount at the provided FilePath. This URL must be a url that can
+             * be simply downloaded and dumped to disk -- meaning a normal file server type endpoint or if
+             * using GitHub or similar a "raw" path.
+             */
+            url: string;
+        }>;
+        /**
+         * Group is the (containerlab) group of the node.
+         */
+        group?: string;
+        /**
+         * Healthcheck holds the healthcheck configuration for the node.
+         */
+        healthcheck?: {
+            /**
+             * Interval is the time interval between the health checks in seconds.
+             */
+            interval?: number;
+            /**
+             * Retries is the number of consecutive healthcheck failures needed to report the container
+             * as unhealthy.
+             */
+            retries?: number;
+            /**
+             * StartPeriod is the time in seconds to wait for the container to bootstrap before running
+             * the first health check.
+             */
+            'start-period'?: number;
+            /**
+             * Test is the command to run to check the health of the container.
+             */
+            test?: Array<string>;
+            /**
+             * Timeout is the time in seconds to wait for a single health check operation to complete.
+             */
+            timeout?: number;
+        };
+        /**
+         * Image is the container image for the node.
+         */
+        image?: string;
+        /**
+         * ImagePullPolicy is the (containerlab, so docker) image pull policy for the node.
+         */
+        'image-pull-policy'?: string;
+        /**
+         * Kernel is the ignite kernel image name.
+         */
+        kernel?: string;
+        /**
+         * Kind is the containerlab kind of the node -- i.e. nokia_srlinux.
+         */
+        kind?: string;
+        /**
+         * Labels holds the container labels for the node.
+         */
+        labels?: {
+            [key: string]: string;
+        };
+        /**
+         * License is the path to the license file for the node.
+         */
+        license?: string;
+        /**
+         * Memory is the node memory limit (cgroup or hypervisor) -- as with CPU this is the
+         * *containerlab* (docker) setting, not the launcher pod resources.
+         */
+        memory?: string;
+        /**
+         * MgmtIPv4 is the user-defined IPv4 address of the node in the management network.
+         */
+        'mgmt-ipv4'?: string;
+        /**
+         * MgmtIPv6 is the user-defined IPv6 address of the node in the management network.
+         */
+        'mgmt-ipv6'?: string;
+        /**
+         * NetworkMode is the container networking mode. `container:<name>` expresses that this node
+         * shares the network namespace of another node -- clabernetes derives node "grouping" (nodes
+         * co-located in one launcher pod) from exactly this containerlab-native field.
+         */
+        'network-mode'?: string;
+        /**
+         * Ports is a list of (docker style) port bindings for the node. Ports listed here are also
+         * what feeds the clabernetes expose machinery -- the allocated (load balancer) port set ends
+         * up in the Node status.
+         * note: no yaml omitempty -- historically we always render the (possibly empty) list so that
+         * rendered topology comparisons never see nil vs empty slice differences.
+         */
+        ports?: Array<string>;
+        /**
+         * Position is the position of the node (used by graphing tooling).
+         */
+        position?: string;
+        /**
+         * Publish is a list of ports to publish with mysocketctl.
+         */
+        publish?: Array<string>;
+        /**
+         * Runtime overrides the container runtime for the node.
+         */
+        runtime?: string;
+        /**
+         * Sandbox is the ignite sandbox image name.
+         */
+        sandbox?: string;
+        /**
+         * StartupConfig is the startup configuration for the node -- either a path or an inline
+         * (multiline string) config.
+         */
+        'startup-config'?: string;
+        /**
+         * StartupDelay is the delay (in seconds) to wait before starting the node.
+         */
+        'startup-delay'?: number;
+        /**
+         * Sysctls holds sysctl settings for the node.
+         */
+        sysctls?: {
+            [key: string]: string;
+        };
+        /**
+         * Type is the type of the node -- i.e. ixrd2.
+         */
+        type?: string;
+        /**
+         * User is the linux user to use in the node's container.
+         */
+        user?: string;
+        /**
+         * WaitFor is a list of node names to wait for before starting this particular node.
+         */
+        'wait-for'?: Array<string>;
+    };
+    /**
+     * NodeStatus is the status for a Node resource. Everything in here is an *allocation* or an
+     * *observation* made by the controller -- user intent never lives in the status.
+     */
+    status?: {
+        /**
+         * AppliedProfiles lists the NodeProfiles (in ascending precedence order) that were applied
+         * when rendering this node's deployment -- purely observability so a human can answer "which
+         * profile won".
+         */
+        appliedProfiles?: Array<string>;
+        /**
+         * ExposedPorts holds the expose port *allocations* for this node -- the controller assigns
+         * an expose port for every (spec or auto-expose default) port and programs the node's expose
+         * service from this very field; the launcher reads it to publish the ports on the pod.
+         */
+        exposedPorts?: {
+            /**
+             * LoadBalancerAddress is the address of the load balancer exposing the node's ports (if the
+             * expose service is of the LoadBalancer flavor).
+             */
+            loadBalancerAddress?: string;
+            /**
+             * Ports holds the individual port allocations for the node.
+             */
+            ports?: Array<{
+                /**
+                 * DestinationPort is the port on the (containerlab) node itself -- this is the port the
+                 * expose service listens on.
+                 */
+                destinationPort: number;
+                /**
+                 * ExposePort is the allocated (or user provided) port published on the launcher pod (and
+                 * targeted by the expose service).
+                 */
+                exposePort: number;
+                /**
+                 * Protocol is the protocol of the port -- TCP or UDP.
+                 */
+                protocol: 'TCP' | 'UDP';
+            }>;
+        };
+        /**
+         * ProbeStatuses holds the per-probe status information for this node.
+         */
+        probeStatuses?: {
+            /**
+             * LivenessProbe is the status of the node's liveness probe.
+             */
+            livenessProbe: 'passing' | 'failing' | 'unknown' | 'disabled';
+            /**
+             * ReadinessProbe is the status of the node's readiness probe.
+             */
+            readinessProbe: 'passing' | 'failing' | 'unknown' | 'disabled';
+            /**
+             * StartupProbe is the status of the node's startup probe.
+             */
+            startupProbe: 'passing' | 'failing' | 'unknown' | 'disabled';
+        };
+        /**
+         * Readiness is the readiness of this node as reported by its launcher deployment -- one of
+         * "ready", "notready" or "unknown".
+         */
+        readiness?: 'ready' | 'notready' | 'unknown';
+    };
+};
+
+/**
+ * a list of clabernetes-containerlab-dev.node.v1alpha1 resources
+ */
+export type ClabernetesContainerlabDevNodeListV1Alpha1 = {
+    /**
+     * APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+     */
+    apiVersion?: string;
+    /**
+     * List of nodes. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
+     */
+    items: Array<ClabernetesContainerlabDevNodeV1Alpha1>;
+    /**
+     * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+     */
+    kind?: string;
+    /**
+     * Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+     */
+    metadata?: IoK8sApimachineryPkgApisMetaV1ListMeta;
+};
+
+/**
  * Topology is an object that holds information about a clabernetes Topology -- that is, a valid
  * topology file (ex: containerlab topology), and any associated configurations.
  */
@@ -1775,6 +2860,114 @@ export type ClabernetesContainerlabDevTopologyListV1Alpha1 = {
      * List of topologies. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
      */
     items: Array<ClabernetesContainerlabDevTopologyV1Alpha1>;
+    /**
+     * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+     */
+    kind?: string;
+    /**
+     * Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+     */
+    metadata?: IoK8sApimachineryPkgApisMetaV1ListMeta;
+};
+
+/**
+ * Link represents a single point-to-point "wire" between two (containerlab) nodes. Links are a
+ * primary clabernetes API -- like Nodes they can be created by users directly or emitted by the
+ * (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints
+ * (Node object names in the same namespace plus interface names) and an optional mtu. The link
+ * controller allocates a tunnel id into the status for links that cross launcher pods; links
+ * between nodes co-located in one launcher pod and links to the reserved `host` node need no
+ * tunnel and are materialized directly by the owning launcher. Launchers select the links
+ * terminating on their nodes with *field selectors* on the endpoint node names (which requires
+ * kubernetes 1.31+) -- no labels are required, ever, and no launcher watches more than its own
+ * links. Storing one object per wire keeps every persisted object O(1) regardless of topology
+ * size.
+ */
+export type ClabernetesContainerlabDevLinkV1Alpha1 = {
+    /**
+     * APIVersion defines the versioned schema of this representation of an object.
+     * Servers should convert recognized schemas to the latest internal value, and
+     * may reject unrecognized values.
+     * More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+     */
+    apiVersion?: string;
+    /**
+     * Kind is a string value representing the REST resource this object represents.
+     * Servers may infer this from the endpoint the client submits requests to.
+     * Cannot be updated.
+     * In CamelCase.
+     * More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+     */
+    kind?: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+    /**
+     * LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.
+     * Anything operational (the allocated tunnel id) lives in the status, and anything derivable
+     * (i.e. the remote launcher's fabric service) is derived by the launchers.
+     */
+    spec?: {
+        /**
+         * EndpointA is the "a" side of this link.
+         */
+        endpointA: {
+            /**
+             * InterfaceName is the name of the interface on the node this side of the link is on.
+             */
+            interfaceName: string;
+            /**
+             * NodeName is the name of the Node object (and therefore containerlab node) this side of the
+             * link resides on -- or the reserved name `host` for a (node local) host link.
+             */
+            nodeName: string;
+        };
+        /**
+         * EndpointB is the "b" side of this link.
+         */
+        endpointB: {
+            /**
+             * InterfaceName is the name of the interface on the node this side of the link is on.
+             */
+            interfaceName: string;
+            /**
+             * NodeName is the name of the Node object (and therefore containerlab node) this side of the
+             * link resides on -- or the reserved name `host` for a (node local) host link.
+             */
+            nodeName: string;
+        };
+        /**
+         * MTU is the mtu for the link -- launchers apply this to the (node side of the) link
+         * termination they create; zero means "unset" (use the containerlab default).
+         */
+        mtu?: number;
+    };
+    /**
+     * LinkStatus is the status for a Link resource.
+     */
+    status?: {
+        /**
+         * TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller
+         * allocated for this link -- both sides of the link use the same id. This is an allocation
+         * rather than user intent, hence it living in the status; zero means "not allocated (yet)"
+         * (launchers skip such links until the controller has filled the id in).
+         */
+        tunnelID?: number;
+    };
+};
+
+/**
+ * a list of clabernetes-containerlab-dev.link.v1alpha1 resources
+ */
+export type ClabernetesContainerlabDevLinkListV1Alpha1 = {
+    /**
+     * APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+     */
+    apiVersion?: string;
+    /**
+     * List of links. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
+     */
+    items: Array<ClabernetesContainerlabDevLinkV1Alpha1>;
     /**
      * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
      */
@@ -3228,6 +4421,968 @@ export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses =
 
 export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses];
 
+export type ListClabernetesContainerlabDevV1Alpha1NodeprofileForAllNamespacesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
+         */
+        allowWatchBookmarks?: boolean;
+        /**
+         * The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key".
+         *
+         * This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
+         */
+        continue?: string;
+        /**
+         * A selector to restrict the list of returned objects by their fields. Defaults to everything.
+         */
+        fieldSelector?: string;
+        /**
+         * A selector to restrict the list of returned objects by their labels. Defaults to everything.
+         */
+        labelSelector?: string;
+        /**
+         * limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.
+         *
+         * The server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.
+         */
+        limit?: number;
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+        /**
+         * resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersionMatch?: string;
+        /**
+         * Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.
+         */
+        timeoutSeconds?: number;
+        /**
+         * Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.
+         */
+        watch?: boolean;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/nodeprofiles';
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NodeprofileForAllNamespacesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NodeprofileForAllNamespacesResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeprofileListV1Alpha1;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NodeprofileForAllNamespacesResponse = ListClabernetesContainerlabDevV1Alpha1NodeprofileForAllNamespacesResponses[keyof ListClabernetesContainerlabDevV1Alpha1NodeprofileForAllNamespacesResponses];
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeprofileData = {
+    body?: never;
+    path: {
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
+         */
+        allowWatchBookmarks?: boolean;
+        /**
+         * The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key".
+         *
+         * This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
+         */
+        continue?: string;
+        /**
+         * A selector to restrict the list of returned objects by their fields. Defaults to everything.
+         */
+        fieldSelector?: string;
+        /**
+         * A selector to restrict the list of returned objects by their labels. Defaults to everything.
+         */
+        labelSelector?: string;
+        /**
+         * limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.
+         *
+         * The server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.
+         */
+        limit?: number;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+        /**
+         * resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersionMatch?: string;
+        /**
+         * Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.
+         */
+        timeoutSeconds?: number;
+        /**
+         * Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.
+         */
+        watch?: boolean;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodeprofiles';
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeprofileErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeprofileResponses = {
+    /**
+     * OK
+     */
+    200: IoK8sApimachineryPkgApisMetaV1Status;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeprofileResponse = DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeprofileResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeprofileResponses];
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileData = {
+    body?: never;
+    path: {
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
+         */
+        allowWatchBookmarks?: boolean;
+        /**
+         * The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key".
+         *
+         * This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
+         */
+        continue?: string;
+        /**
+         * A selector to restrict the list of returned objects by their fields. Defaults to everything.
+         */
+        fieldSelector?: string;
+        /**
+         * A selector to restrict the list of returned objects by their labels. Defaults to everything.
+         */
+        labelSelector?: string;
+        /**
+         * limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.
+         *
+         * The server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.
+         */
+        limit?: number;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+        /**
+         * resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersionMatch?: string;
+        /**
+         * Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.
+         */
+        timeoutSeconds?: number;
+        /**
+         * Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.
+         */
+        watch?: boolean;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodeprofiles';
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeprofileListV1Alpha1;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponse = ListClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses[keyof ListClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses];
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileData = {
+    body?: ClabernetesContainerlabDevNodeprofileV1Alpha1;
+    path: {
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodeprofiles';
+};
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeprofileV1Alpha1;
+    /**
+     * Created
+     */
+    201: ClabernetesContainerlabDevNodeprofileV1Alpha1;
+    /**
+     * Accepted
+     */
+    202: ClabernetesContainerlabDevNodeprofileV1Alpha1;
+};
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponse = CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses[keyof CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses];
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileData = {
+    body?: IoK8sApimachineryPkgApisMetaV1DeleteOptions;
+    path: {
+        /**
+         * name of the Nodeprofile
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.
+         */
+        gracePeriodSeconds?: number;
+        /**
+         * Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the "orphan" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.
+         */
+        orphanDependents?: boolean;
+        /**
+         * Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.
+         */
+        propagationPolicy?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodeprofiles/{name}';
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses = {
+    /**
+     * OK
+     */
+    200: IoK8sApimachineryPkgApisMetaV1Status;
+    /**
+     * Accepted
+     */
+    202: IoK8sApimachineryPkgApisMetaV1Status;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponse = DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses];
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileData = {
+    body?: never;
+    path: {
+        /**
+         * name of the Nodeprofile
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodeprofiles/{name}';
+};
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeprofileV1Alpha1;
+};
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponse = ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses[keyof ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses];
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileData = {
+    body?: IoK8sApimachineryPkgApisMetaV1Patch;
+    path: {
+        /**
+         * name of the Nodeprofile
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodeprofiles/{name}';
+};
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeprofileV1Alpha1;
+};
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponse = PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses[keyof PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses];
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileData = {
+    body?: ClabernetesContainerlabDevNodeprofileV1Alpha1;
+    path: {
+        /**
+         * name of the Nodeprofile
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodeprofiles/{name}';
+};
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeprofileV1Alpha1;
+    /**
+     * Created
+     */
+    201: ClabernetesContainerlabDevNodeprofileV1Alpha1;
+};
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeprofileResponses];
+
+export type ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
+         */
+        allowWatchBookmarks?: boolean;
+        /**
+         * The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key".
+         *
+         * This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
+         */
+        continue?: string;
+        /**
+         * A selector to restrict the list of returned objects by their fields. Defaults to everything.
+         */
+        fieldSelector?: string;
+        /**
+         * A selector to restrict the list of returned objects by their labels. Defaults to everything.
+         */
+        labelSelector?: string;
+        /**
+         * limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.
+         *
+         * The server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.
+         */
+        limit?: number;
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+        /**
+         * resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersionMatch?: string;
+        /**
+         * Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.
+         */
+        timeoutSeconds?: number;
+        /**
+         * Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.
+         */
+        watch?: boolean;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/nodes';
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeListV1Alpha1;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesResponse = ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesResponses[keyof ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesResponses];
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeData = {
+    body?: never;
+    path: {
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
+         */
+        allowWatchBookmarks?: boolean;
+        /**
+         * The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key".
+         *
+         * This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
+         */
+        continue?: string;
+        /**
+         * A selector to restrict the list of returned objects by their fields. Defaults to everything.
+         */
+        fieldSelector?: string;
+        /**
+         * A selector to restrict the list of returned objects by their labels. Defaults to everything.
+         */
+        labelSelector?: string;
+        /**
+         * limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.
+         *
+         * The server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.
+         */
+        limit?: number;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+        /**
+         * resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersionMatch?: string;
+        /**
+         * Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.
+         */
+        timeoutSeconds?: number;
+        /**
+         * Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.
+         */
+        watch?: boolean;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes';
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeResponses = {
+    /**
+     * OK
+     */
+    200: IoK8sApimachineryPkgApisMetaV1Status;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeResponse = DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeResponses];
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+    body?: never;
+    path: {
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
+         */
+        allowWatchBookmarks?: boolean;
+        /**
+         * The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key".
+         *
+         * This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
+         */
+        continue?: string;
+        /**
+         * A selector to restrict the list of returned objects by their fields. Defaults to everything.
+         */
+        fieldSelector?: string;
+        /**
+         * A selector to restrict the list of returned objects by their labels. Defaults to everything.
+         */
+        labelSelector?: string;
+        /**
+         * limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.
+         *
+         * The server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.
+         */
+        limit?: number;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+        /**
+         * resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersionMatch?: string;
+        /**
+         * Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.
+         */
+        timeoutSeconds?: number;
+        /**
+         * Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.
+         */
+        watch?: boolean;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes';
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeListV1Alpha1;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = ListClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof ListClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+    body?: ClabernetesContainerlabDevNodeV1Alpha1;
+    path: {
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes';
+};
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeV1Alpha1;
+    /**
+     * Created
+     */
+    201: ClabernetesContainerlabDevNodeV1Alpha1;
+    /**
+     * Accepted
+     */
+    202: ClabernetesContainerlabDevNodeV1Alpha1;
+};
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+    body?: IoK8sApimachineryPkgApisMetaV1DeleteOptions;
+    path: {
+        /**
+         * name of the Node
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.
+         */
+        gracePeriodSeconds?: number;
+        /**
+         * Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the "orphan" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.
+         */
+        orphanDependents?: boolean;
+        /**
+         * Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.
+         */
+        propagationPolicy?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes/{name}';
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+    /**
+     * OK
+     */
+    200: IoK8sApimachineryPkgApisMetaV1Status;
+    /**
+     * Accepted
+     */
+    202: IoK8sApimachineryPkgApisMetaV1Status;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+    body?: never;
+    path: {
+        /**
+         * name of the Node
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes/{name}';
+};
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeV1Alpha1;
+};
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+    body?: IoK8sApimachineryPkgApisMetaV1Patch;
+    path: {
+        /**
+         * name of the Node
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes/{name}';
+};
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeV1Alpha1;
+};
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+    body?: ClabernetesContainerlabDevNodeV1Alpha1;
+    path: {
+        /**
+         * name of the Node
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes/{name}';
+};
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevNodeV1Alpha1;
+    /**
+     * Created
+     */
+    201: ClabernetesContainerlabDevNodeV1Alpha1;
+};
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+
 export type ListClabernetesContainerlabDevV1Alpha1TopologyForAllNamespacesData = {
     body?: never;
     path?: never;
@@ -3708,6 +5863,487 @@ export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses
 };
 
 export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses];
+
+export type ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
+         */
+        allowWatchBookmarks?: boolean;
+        /**
+         * The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key".
+         *
+         * This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
+         */
+        continue?: string;
+        /**
+         * A selector to restrict the list of returned objects by their fields. Defaults to everything.
+         */
+        fieldSelector?: string;
+        /**
+         * A selector to restrict the list of returned objects by their labels. Defaults to everything.
+         */
+        labelSelector?: string;
+        /**
+         * limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.
+         *
+         * The server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.
+         */
+        limit?: number;
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+        /**
+         * resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersionMatch?: string;
+        /**
+         * Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.
+         */
+        timeoutSeconds?: number;
+        /**
+         * Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.
+         */
+        watch?: boolean;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/links';
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevLinkListV1Alpha1;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesResponse = ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesResponses[keyof ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesResponses];
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkData = {
+    body?: never;
+    path: {
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
+         */
+        allowWatchBookmarks?: boolean;
+        /**
+         * The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key".
+         *
+         * This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
+         */
+        continue?: string;
+        /**
+         * A selector to restrict the list of returned objects by their fields. Defaults to everything.
+         */
+        fieldSelector?: string;
+        /**
+         * A selector to restrict the list of returned objects by their labels. Defaults to everything.
+         */
+        labelSelector?: string;
+        /**
+         * limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.
+         *
+         * The server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.
+         */
+        limit?: number;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+        /**
+         * resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersionMatch?: string;
+        /**
+         * Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.
+         */
+        timeoutSeconds?: number;
+        /**
+         * Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.
+         */
+        watch?: boolean;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links';
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkResponses = {
+    /**
+     * OK
+     */
+    200: IoK8sApimachineryPkgApisMetaV1Status;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkResponse = DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkResponses];
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+    body?: never;
+    path: {
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * allowWatchBookmarks requests watch events with type "BOOKMARK". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.
+         */
+        allowWatchBookmarks?: boolean;
+        /**
+         * The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the "next key".
+         *
+         * This field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.
+         */
+        continue?: string;
+        /**
+         * A selector to restrict the list of returned objects by their fields. Defaults to everything.
+         */
+        fieldSelector?: string;
+        /**
+         * A selector to restrict the list of returned objects by their labels. Defaults to everything.
+         */
+        labelSelector?: string;
+        /**
+         * limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.
+         *
+         * The server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.
+         */
+        limit?: number;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+        /**
+         * resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersionMatch?: string;
+        /**
+         * Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.
+         */
+        timeoutSeconds?: number;
+        /**
+         * Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.
+         */
+        watch?: boolean;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links';
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevLinkListV1Alpha1;
+};
+
+export type ListClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = ListClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof ListClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+    body?: ClabernetesContainerlabDevLinkV1Alpha1;
+    path: {
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links';
+};
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevLinkV1Alpha1;
+    /**
+     * Created
+     */
+    201: ClabernetesContainerlabDevLinkV1Alpha1;
+    /**
+     * Accepted
+     */
+    202: ClabernetesContainerlabDevLinkV1Alpha1;
+};
+
+export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+    body?: IoK8sApimachineryPkgApisMetaV1DeleteOptions;
+    path: {
+        /**
+         * name of the Link
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.
+         */
+        gracePeriodSeconds?: number;
+        /**
+         * Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the "orphan" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.
+         */
+        orphanDependents?: boolean;
+        /**
+         * Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.
+         */
+        propagationPolicy?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}';
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+    /**
+     * OK
+     */
+    200: IoK8sApimachineryPkgApisMetaV1Status;
+    /**
+     * Accepted
+     */
+    202: IoK8sApimachineryPkgApisMetaV1Status;
+};
+
+export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+    body?: never;
+    path: {
+        /**
+         * name of the Link
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.
+         *
+         * Defaults to unset
+         */
+        resourceVersion?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}';
+};
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevLinkV1Alpha1;
+};
+
+export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+    body?: IoK8sApimachineryPkgApisMetaV1Patch;
+    path: {
+        /**
+         * name of the Link
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}';
+};
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevLinkV1Alpha1;
+};
+
+export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+    body?: ClabernetesContainerlabDevLinkV1Alpha1;
+    path: {
+        /**
+         * name of the Link
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}';
+};
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+    /**
+     * OK
+     */
+    200: ClabernetesContainerlabDevLinkV1Alpha1;
+    /**
+     * Created
+     */
+    201: ClabernetesContainerlabDevLinkV1Alpha1;
+};
+
+export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
 
 export type ClientOptions = {
     baseUrl: `${string}://clabernetes-openapi.json` | (string & {});

@@ -24,4 +24,10 @@ type ConnectivityExpansion interface{}
 
 type ImageRequestExpansion interface{}
 
+type LinkExpansion interface{}
+
+type NodeExpansion interface{}
+
+type NodeProfileExpansion interface{}
+
 type TopologyExpansion interface{}

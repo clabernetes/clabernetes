@@ -2,7 +2,6 @@
     "metadata": {
         "name": "render-service-expose-test-node1",
         "namespace": "clabernetes",
-        "creationTimestamp": null,
         "labels": {
             "clabernetes/app": "clabernetes",
             "clabernetes/name": "render-service-expose-test-node1",

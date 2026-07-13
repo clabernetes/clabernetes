@@ -20,24 +20,7 @@
             "Mgmt": null,
             "Topology": {
                 "Defaults": {
-                    "Kind": "",
-                    "Group": "",
-                    "Type": "",
-                    "StartupConfig": "",
-                    "StartupDelay": 0,
-                    "EnforceStartupConfig": false,
-                    "AutoRemove": null,
-                    "Config": null,
-                    "Image": "",
-                    "ImagePullPolicy": "",
-                    "License": "",
-                    "Position": "",
-                    "Entrypoint": "",
-                    "Cmd": "",
-                    "SANs": null,
-                    "Exec": null,
-                    "Binds": null,
-                    "Ports": [
+                    "ports": [
                         "60000:21/tcp",
                         "60001:22/tcp",
                         "60002:23/tcp",
@@ -52,81 +35,25 @@
                         "60010:9340/tcp",
                         "60011:9559/tcp",
                         "60012:57400/tcp"
-                    ],
-                    "MgmtIPv4": "",
-                    "MgmtIPv6": "",
-                    "Publish": null,
-                    "Env": null,
-                    "EnvFiles": null,
-                    "User": "",
-                    "Labels": null,
-                    "NetworkMode": "",
-                    "Sandbox": "",
-                    "Kernel": "",
-                    "Runtime": "",
-                    "CPU": 0,
-                    "CPUSet": "",
-                    "Memory": "",
-                    "Sysctls": null,
-                    "Extras": null,
-                    "WaitFor": null,
-                    "DNS": null,
-                    "Certificate": null,
-                    "Healthcheck": null
+                    ]
                 },
                 "Kinds": null,
                 "Nodes": {
                     "srl1": {
-                        "Kind": "srl",
-                        "Group": "",
-                        "Type": "",
-                        "StartupConfig": "",
-                        "StartupDelay": 0,
-                        "EnforceStartupConfig": false,
-                        "AutoRemove": null,
-                        "Config": null,
-                        "Image": "ghcr.io/nokia/srlinux",
-                        "ImagePullPolicy": "",
-                        "License": "",
-                        "Position": "",
-                        "Entrypoint": "",
-                        "Cmd": "",
-                        "SANs": null,
-                        "Exec": null,
-                        "Binds": null,
-                        "Ports": [],
-                        "MgmtIPv4": "",
-                        "MgmtIPv6": "",
-                        "Publish": null,
-                        "Env": null,
-                        "EnvFiles": null,
-                        "User": "",
-                        "Labels": null,
-                        "NetworkMode": "",
-                        "Sandbox": "",
-                        "Kernel": "",
-                        "Runtime": "",
-                        "CPU": 0,
-                        "CPUSet": "",
-                        "Memory": "",
-                        "Sysctls": null,
-                        "Extras": null,
-                        "WaitFor": null,
-                        "DNS": null,
-                        "Certificate": null,
-                        "Healthcheck": null
+                        "kind": "srl",
+                        "image": "ghcr.io/nokia/srlinux"
                     }
                 },
                 "Links": [
                     {
-                        "Type": "",
                         "Endpoints": [
                             "srl1:e1-1",
                             "host:srl1-e1-1"
                         ],
                         "Labels": null,
                         "Vars": null,
-                        "MTU": 0
+                        "MTU": 0,
+                        "Type": ""
                     }
                 ]
             },
@@ -139,6 +66,8 @@
     "PreviousNodeStatuses": null,
     "NodeStatuses": null,
     "TopologyReady": false,
+    "TopologyState": "",
+    "NodeProbeStatuses": null,
     "NodesNeedingReboot": null,
     "ShouldUpdateResource": false
 }

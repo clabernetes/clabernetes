@@ -7,6 +7,9 @@ This document provides a comprehensive reference for all Custom Resource Definit
 - [Topology CRD](#topology-crd)
   - [TopologySpec Fields](#topologyspec-fields)
   - [TopologyStatus Fields](#topologystatus-fields)
+- [Node CRD](#node-crd)
+- [Link CRD](#link-crd)
+- [NodeProfile CRD](#nodeprofile-crd)
 - [Config CRD](#config-crd)
 - [Connectivity CRD](#connectivity-crd)
 - [ImageRequest CRD](#imagerequest-crd)
@@ -367,6 +370,194 @@ List of `metav1.Condition` entries managed by the controller. Currently contains
 | Type | True when | False when |
 |------|-----------|------------|
 | `TopologyReady` | All nodes report ready. | Any node is not ready. |
+
+---
+
+## Node CRD
+
+The `Node` CRD represents a single containerlab node ("device") realized as a single launcher
+pod. Together with `Link`, Nodes are the primary clabernetes API: they can be written by hand,
+emitted by the (optional) [Topology compiler](#topology-crd), or created by any other tooling --
+the node controller treats all of these identically. No Topology object is required.
+
+The object **name is the containerlab node name**: the launcher pod hostname, the expose
+service (`<name>`) and the fabric service (`<name>-vx`) all derive from it. Because of this,
+the **namespace is the topology boundary** -- run one topology per namespace.
+
+### Basic Structure
+
+```yaml
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+  labels:
+    clabernetes/topologyOwner: my-lab   # free-form; NodeProfiles select on labels
+spec:
+  # the spec IS a (self contained) containerlab node definition -- flat, verbatim
+  # containerlab vocabulary, no wrapper. defaults/kinds expansion is the emitter's job.
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+  startup-config: |
+    set / interface ethernet-1/1 admin-state enable
+  ports:
+    - 60000:57400/tcp
+  # the one clabernetes-side field (per-node payload, not policy):
+  filesFromURL: []
+status:
+  readiness: ready
+  exposedPorts:
+    loadBalancerAddress: 172.18.255.1
+    ports:
+      - exposePort: 60000
+        destinationPort: 57400
+        protocol: TCP
+  appliedProfiles: ["my-lab"]
+```
+
+### NodeSpec Fields
+
+The spec is flat containerlab vocabulary (`kind`, `image`, `startup-config`, `ports`, `env`,
+`binds`, `network-mode`, ...) -- see the containerlab
+[node definition documentation](https://containerlab.dev/manual/nodes/) for the full list --
+plus exactly one clabernetes field:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `filesFromURL` | []FileFromURL | Files the launcher fetches from a URL before launching the node (`filePath` + `url`) |
+
+Notable properties:
+
+- **No links/interfaces in the spec.** Wiring lives exclusively on [Link](#link-crd) objects.
+- **No deployment policy in the spec.** Expose behavior, resources, pull secrets, scheduling,
+  privileges and the like live on [NodeProfile](#nodeprofile-crd) objects selected by labels.
+- **Grouped nodes** (several containerlab nodes sharing one pod) need no clabernetes field:
+  `network-mode: container:<primary>` -- the containerlab-native expression -- is what the
+  controller derives grouping from. Secondaries get no own deployment; their services select
+  the primary's pod.
+- `ports` feeds the expose machinery: the controller allocates the load balancer port set into
+  `status.exposedPorts` (allocations are status, never spec). Omitting ports gives you the
+  auto-expose defaults unless a profile disables them.
+- Unknown (newer containerlab vocabulary) fields are preserved by the api server.
+
+### NodeStatus Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `readiness` | string | `ready`, `notready` or `unknown` -- as reported by the launcher deployment |
+| `probeStatuses` | NodeProbeStatuses | Per-probe (startup/readiness/liveness) statuses |
+| `exposedPorts` | NodeExposedPorts | Expose port allocations (`exposePort`/`destinationPort`/`protocol`) and load balancer address |
+| `appliedProfiles` | []string | NodeProfiles applied when rendering this node, in ascending precedence order |
+
+---
+
+## Link CRD
+
+The `Link` CRD represents a single point-to-point wire between two containerlab nodes. One Link
+per wire, for **all** wire flavors:
+
+- **cross-launcher**: endpoints on different launcher pods -- the controller allocates a
+  `status.tunnelID` and the launchers build the tunnel (vxlan or slurpeeth).
+- **same-launcher**: both endpoints in one pod (grouped nodes) -- no tunnel id; the launcher
+  materializes a direct containerlab link.
+- **host**: `nodeName: host` (reserved name) -- node-local; the launcher owning the other
+  endpoint materializes it verbatim.
+
+Launchers select their links with **field selectors** on the endpoint node names
+(`spec.endpointA.nodeName` / `spec.endpointB.nodeName`), which requires **kubernetes 1.31+**.
+No labels are required, and no launcher watches more than its own links.
+
+### Basic Structure
+
+```yaml
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Link
+metadata:
+  name: srl1-e1-1-srl2-e1-1     # any name; deterministic when compiler emitted
+spec:                            # the wire as the user drew it -- nothing else
+  endpointA:
+    nodeName: srl1               # references the Node object name in this namespace
+    interfaceName: e1-1
+  endpointB:
+    nodeName: srl2
+    interfaceName: e1-1
+  mtu: 9212                      # optional
+status:
+  tunnelID: 1                    # controller allocation (0 = not yet allocated)
+```
+
+### LinkSpec Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `endpointA` | LinkEndpointSpec | The "a" side: `nodeName` + `interfaceName` |
+| `endpointB` | LinkEndpointSpec | The "b" side: `nodeName` + `interfaceName` |
+| `mtu` | int | Optional link MTU; zero means containerlab default |
+
+### LinkStatus Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tunnelID` | int | Allocated tunnel id (vxlan vnid / slurpeeth segment id); both sides use the same id; 0 = not allocated (yet) |
+
+There is deliberately no "destination" or launcher metadata on the Link: the remote end of a
+tunnel is a pure function of the spec (`<remote nodeName>-vx.<namespace>.<dns suffix>`),
+because fabric services exist per node. Rewiring a Link (changing a remote endpoint) moves the
+tunnel live without restarting pods; changing the set of interfaces attached to a node rolls
+just that node's pod.
+
+---
+
+## NodeProfile CRD
+
+The `NodeProfile` CRD holds *deployment policy* -- everything that is fleet policy rather than
+per-node payload. Profiles select Nodes with a standard label selector, so emitters of Nodes
+never need to know profiles exist (the kubernetes policy-attachment pattern).
+
+### Basic Structure
+
+```yaml
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: NodeProfile
+metadata:
+  name: my-lab
+spec:
+  nodeSelector:                  # standard label selector; empty = every Node in namespace
+    matchLabels:
+      clabernetes/topologyOwner: my-lab
+  priority: 10                   # higher wins per field on overlap; name breaks ties
+  expose:
+    disableAutoExpose: false
+  imagePull:
+    pullSecrets: [regcred]
+  resources:
+    requests:
+      memory: 2Gi
+  scheduling: {}                 # nodeSelector/tolerations for launcher pods
+  deployment: {}                 # privileged, persistence, launcher image/log level, ...
+  statusProbes: {}               # ssh/tcp status probe configuration
+  connectivity: vxlan            # or slurpeeth
+```
+
+### NodeProfileSpec Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `nodeSelector` | LabelSelector | Which Nodes (in this namespace) the profile applies to; empty selects all |
+| `priority` | int | Ordering when several profiles select a Node -- higher wins per field, name breaks ties |
+| `expose` | NodeProfileExpose | `disableExpose`, `disableAutoExpose`, `exposeType`, `useNodeMgmtIpv4Address`, `useNodeMgmtIpv6Address` |
+| `imagePull` | NodeProfileImagePull | `insecureRegistries`, `pullThroughOverride`, `pullSecrets`, `dockerDaemonConfig`, `dockerConfig` |
+| `resources` | ResourceRequirements | Launcher pod resources |
+| `scheduling` | Scheduling | Launcher pod `nodeSelector` and `tolerations` |
+| `deployment` | NodeProfileDeployment | `privilegedLauncher`, `persistence`, `filesFromConfigMap`, `containerlabDebug/Timeout/Version`, `launcherImage/PullPolicy/LogLevel`, `extraEnv` |
+| `statusProbes` | StatusProbes | Status probe configuration (same shape as on Topology) |
+| `mgmt` | MgmtNet | containerlab management network settings for the launcher pods |
+| `connectivity` | string | `vxlan` (default) or `slurpeeth` |
+
+Resolution, kept deliberately boring: the helm-managed global [Config](#config-crd) is the
+base, then every matching profile merges over it per field in ascending `priority`. There are
+no per-Node overrides -- if a single node needs special treatment, give it a label and a
+profile. The chain applied to a node is recorded in its `status.appliedProfiles`.
 
 ---
 

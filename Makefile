@@ -25,7 +25,7 @@ help:
 fmt: ## Run formatters
 	gofumpt -w -extra .
 	gci write --skip-generated .
-	golines --base-formatter="gofmt" -w .
+	golines --base-formatter="gofmt" --no-reformat-tags -w .
 
 lint: fmt ## Run linters
 	golangci-lint run
@@ -81,8 +81,10 @@ run-client-gen: ## Run client-gen
 	--output-pkg github.com/srl-labs/clabernetes/generated \
 	--clientset-name clientset
 
+# allowDangerousTypes: the Node spec mirrors containerlab vocabulary and containerlab types
+# `cpu` as a float, so the crd has to carry it as a number
 run-generate-crds: ## Run controller-gen for crds
-	controller-gen crd paths=./apis/... output:crd:dir=./charts/clabernetes/crds/
+	controller-gen crd:allowDangerousTypes=true paths=./apis/... output:crd:dir=./charts/clabernetes/crds/
 	cp charts/clabernetes/crds/*.yaml assets/crd/
 
 # note: crds must be generated (and synced into assets/crd/, which is what crds-to-openapi

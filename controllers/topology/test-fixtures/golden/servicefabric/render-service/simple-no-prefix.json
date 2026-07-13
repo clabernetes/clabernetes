@@ -2,7 +2,6 @@
     "metadata": {
         "name": "srl1-vx",
         "namespace": "clabernetes",
-        "creationTimestamp": null,
         "labels": {
             "clabernetes/app": "clabernetes",
             "clabernetes/name": "srl1",

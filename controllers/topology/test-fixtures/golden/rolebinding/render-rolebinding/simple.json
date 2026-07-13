@@ -2,7 +2,6 @@
     "metadata": {
         "name": "clabernetes-launcher-role-binding",
         "namespace": "clabernetes",
-        "creationTimestamp": null,
         "labels": {
             "clabernetes/app": "clabernetes"
         }

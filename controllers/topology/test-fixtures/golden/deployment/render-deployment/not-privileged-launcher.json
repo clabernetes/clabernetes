@@ -2,7 +2,6 @@
     "metadata": {
         "name": "render-deployment-test-srl1",
         "namespace": "clabernetes",
-        "creationTimestamp": null,
         "labels": {
             "app.kubernetes.io/name": "render-deployment-test-srl1",
             "clabernetes/app": "clabernetes",
@@ -27,7 +26,6 @@
         },
         "template": {
             "metadata": {
-                "creationTimestamp": null,
                 "labels": {
                     "app.kubernetes.io/name": "render-deployment-test-srl1",
                     "clabernetes/app": "clabernetes",

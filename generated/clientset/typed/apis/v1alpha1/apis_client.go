@@ -31,6 +31,9 @@ type ClabernetesV1alpha1Interface interface {
 	ConfigsGetter
 	ConnectivitiesGetter
 	ImageRequestsGetter
+	LinksGetter
+	NodesGetter
+	NodeProfilesGetter
 	TopologiesGetter
 }
 
@@ -49,6 +52,18 @@ func (c *ClabernetesV1alpha1Client) Connectivities(namespace string) Connectivit
 
 func (c *ClabernetesV1alpha1Client) ImageRequests(namespace string) ImageRequestInterface {
 	return newImageRequests(c, namespace)
+}
+
+func (c *ClabernetesV1alpha1Client) Links(namespace string) LinkInterface {
+	return newLinks(c, namespace)
+}
+
+func (c *ClabernetesV1alpha1Client) Nodes(namespace string) NodeInterface {
+	return newNodes(c, namespace)
+}
+
+func (c *ClabernetesV1alpha1Client) NodeProfiles(namespace string) NodeProfileInterface {
+	return newNodeProfiles(c, namespace)
 }
 
 func (c *ClabernetesV1alpha1Client) Topologies(namespace string) TopologyInterface {

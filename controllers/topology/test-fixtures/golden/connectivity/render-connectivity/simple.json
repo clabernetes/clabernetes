@@ -2,7 +2,6 @@
     "metadata": {
         "name": "render-rolebinding-test",
         "namespace": "clabernetes",
-        "creationTimestamp": null,
         "labels": {
             "clabernetes/app": "clabernetes",
             "clabernetes/name": "render-rolebinding-test",

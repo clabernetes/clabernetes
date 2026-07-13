@@ -5,7 +5,6 @@
                 "name": "reconcile-resolve-serviceexpose-test-srl1",
                 "namespace": "clabernetes",
                 "resourceVersion": "999",
-                "creationTimestamp": null,
                 "labels": {
                     "clabernetes/topologyNode": "srl1",
                     "clabernetes/topologyOwner": "reconcile-resolve-serviceexpose-test",
@@ -22,7 +21,6 @@
                 "name": "reconcile-resolve-serviceexpose-test-srl2",
                 "namespace": "clabernetes",
                 "resourceVersion": "999",
-                "creationTimestamp": null,
                 "labels": {
                     "clabernetes/topologyNode": "srl2",
                     "clabernetes/topologyOwner": "reconcile-resolve-serviceexpose-test",
@@ -42,7 +40,6 @@
                 "name": "reconcile-resolve-serviceexpose-test-srl2",
                 "namespace": "clabernetes",
                 "resourceVersion": "999",
-                "creationTimestamp": null,
                 "labels": {
                     "clabernetes/topologyNode": "srl2",
                     "clabernetes/topologyOwner": "reconcile-resolve-serviceexpose-test",
