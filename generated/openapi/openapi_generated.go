@@ -1455,6 +1455,13 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkSpec(
 							Format:      "int32",
 						},
 					},
+					"mtu": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MTU is the mtu for the link as set in the original topology definition -- launchers apply this to the (node side of the) link termination they create; zero means \"unset\" (use the containerlab default).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
 				},
 				Required: []string{"topologyName", "endpointA", "endpointB", "tunnelID"},
 			},
@@ -1834,6 +1841,13 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_PointToPointTunnel(
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
+						},
+					},
+					"mtu": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MTU is the mtu for the link this tunnel realizes; zero means \"unset\" (use the containerlab default).",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 				},

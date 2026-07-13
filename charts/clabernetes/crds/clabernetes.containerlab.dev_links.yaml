@@ -122,6 +122,12 @@ spec:
                 - launcherNode
                 - nodeName
                 type: object
+              mtu:
+                description: |-
+                  MTU is the mtu for the link as set in the original topology definition -- launchers apply
+                  this to the (node side of the) link termination they create; zero means "unset" (use the
+                  containerlab default).
+                type: integer
               topologyName:
                 description: TopologyName is the name of the Topology this Link belongs
                   to.

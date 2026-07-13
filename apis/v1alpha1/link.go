@@ -57,6 +57,11 @@ type LinkSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=16000000
 	TunnelID int `json:"tunnelID"`
+	// MTU is the mtu for the link as set in the original topology definition -- launchers apply
+	// this to the (node side of the) link termination they create; zero means "unset" (use the
+	// containerlab default).
+	// +optional
+	MTU int `json:"mtu,omitempty"`
 }
 
 // LinkStatus is the status for a Link resource.
@@ -83,6 +88,9 @@ type PointToPointTunnel struct {
 	// can properly align tunnels (and ids!) between nodes; basically to know which tunnels are
 	// "paired up".
 	RemoteInterface string `json:"remoteInterface"`
+	// MTU is the mtu for the link this tunnel realizes; zero means "unset" (use the containerlab
+	// default).
+	MTU int `json:"mtu,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

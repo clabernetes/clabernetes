@@ -339,6 +339,7 @@ func (r *LinkReconciler) renderLink(
 			TopologyName: owningTopologyName,
 			EndpointA:    endpointA,
 			EndpointB:    endpointB,
+			MTU:          halfA.tunnel.MTU,
 		},
 	}
 }

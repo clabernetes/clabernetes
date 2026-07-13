@@ -57,6 +57,7 @@ func linkToLocalTunnel(
 		LocalInterface:  local.InterfaceName,
 		RemoteNode:      remote.NodeName,
 		RemoteInterface: remote.InterfaceName,
+		MTU:             link.Spec.MTU,
 	}
 }
 
