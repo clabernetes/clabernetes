@@ -34,7 +34,7 @@ help:
 .PHONY: dev
 dev: TOOLS_BIN_DIR := $(abspath $(DEVSPACE_TOOLS_DIR))
 dev: install-devspace ## Run the manager from local source in the current Kubernetes context
-	"$(DEVSPACE_BIN)" --namespace "$(NS)" --no-warn run dev --profile auto-run-manager $(DEVSPACE_ARGS)
+	"$(DEVSPACE_BIN)" --namespace "$(NS)" --no-warn run dev --profile auto-run-manager --force-deploy $(DEVSPACE_ARGS)
 
 fmt: ## Run formatters
 	gofumpt -w -extra .

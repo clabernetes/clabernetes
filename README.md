@@ -90,7 +90,10 @@ make dev
 The target uses the existing DevSpace configuration to build the manager, launcher, and UI images,
 install the local Helm chart in the `clabernetes` namespace, synchronize the source tree into the
 manager pod, and start the manager with debug logging. If `devspace` is not already on `PATH`, the
-pinned version is downloaded to `build/dev/bin`.
+pinned version is downloaded to `build/dev/bin`. Each run forces the local chart to be redeployed
+and replaces the global `Config` CR from the development values. This keeps the manager and launcher
+images from different checkouts from being mixed, but it also means `make dev` overwrites an existing
+global clabernetes configuration in the selected development namespace.
 
 DevSpace invokes [`.develop/target-platform.sh`](.develop/target-platform.sh) through the
 `DETECTED_TARGET_PLATFORM` variable in `.develop/devspace.yaml`. The script reads the operating

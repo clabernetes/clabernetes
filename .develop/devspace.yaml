@@ -133,6 +133,9 @@ deployments:
           image: ${UI_IMAGE}
           imagePullPolicy: ${PULL_POLICY}
         globalConfig:
+          # The development deployment is declarative: it must replace launcher settings left by
+          # an earlier checkout/release so the synced manager never starts an incompatible image.
+          mergeMode: overwrite
           deployment:
             launcherImage: ${LAUNCHER_IMAGE}
             launcherImagePullPolicy: ${PULL_POLICY}
