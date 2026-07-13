@@ -71,8 +71,8 @@ images:
       args:
         - "--platform=${TARGET_PLATFORM}"
     tags:
-      - dev-latest
       - ${COMMIT_HASH}
+      - dev-latest
 
   clabernetes-launcher:
     createPullSecret: false
@@ -86,8 +86,8 @@ images:
       args:
         - "--platform=${TARGET_PLATFORM}"
     tags:
-      - dev-latest
       - ${COMMIT_HASH}
+      - dev-latest
 
   clabernetes-ui:
     createPullSecret: false
