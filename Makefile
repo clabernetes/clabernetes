@@ -98,7 +98,9 @@ run-client-gen: ## Run client-gen
 run-generate-crds: ## Run controller-gen for crds
 	controller-gen crd paths=./apis/... output:crd:dir=./charts/clabernetes/crds/
 
-run-generate: install-code-generators run-deepcopy-gen run-openapi-gen run-client-gen run-generate-crds fmt ## Run all code gen tasks
+# note: crds must be generated *before* openapi-gen -- the openapi json (and from it the ui
+# client types) is derived from the crd yamls, so the old order needed two passes to converge
+run-generate: install-code-generators run-deepcopy-gen run-generate-crds run-openapi-gen run-client-gen fmt ## Run all code gen tasks
 	cp charts/clabernetes/crds/*.yaml assets/crd/
 	npm --prefix ui ci
 	$(MAKE) --no-print-directory -C ui regenerate-types
