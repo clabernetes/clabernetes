@@ -578,7 +578,8 @@ export type ClabernetesContainerlabDevConfigV1Alpha1 = {
              */
             extraEnv?: Array<{
                 /**
-                 * Name of the environment variable. Must be a C_IDENTIFIER.
+                 * Name of the environment variable.
+                 * May consist of any printable ASCII characters except '='.
                  */
                 name: string;
                 /**
@@ -631,6 +632,37 @@ export type ClabernetesContainerlabDevConfigV1Alpha1 = {
                          * Path of the field to select in the specified API version.
                          */
                         fieldPath: string;
+                    };
+                    /**
+                     * FileKeyRef selects a key of the env file.
+                     * Requires the EnvFiles feature gate to be enabled.
+                     */
+                    fileKeyRef?: {
+                        /**
+                         * The key within the env file. An invalid key will prevent the pod from starting.
+                         * The keys defined within a source may consist of any printable ASCII characters except '='.
+                         * During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                         */
+                        key: string;
+                        /**
+                         * Specify whether the file or its key must be defined. If the file or key
+                         * does not exist, then the env var is not published.
+                         * If optional is set to true and the specified key does not exist,
+                         * the environment variable will not be set in the Pod's containers.
+                         *
+                         * If optional is set to false and the specified key does not exist,
+                         * an error will be returned during Pod creation.
+                         */
+                        optional?: boolean;
+                        /**
+                         * The path within the volume from which to select the file.
+                         * Must be relative and may not contain the '..' path or start with '..'.
+                         */
+                        path: string;
+                        /**
+                         * The name of the volume mount containing the env file.
+                         */
+                        volumeName: string;
                     };
                     /**
                      * Selects a resource of the container: only resources limits and requests
@@ -689,6 +721,21 @@ export type ClabernetesContainerlabDevConfigV1Alpha1 = {
              */
             launcherLogLevel?: 'disabled' | 'critical' | 'warn' | 'info' | 'debug';
             /**
+             * NodeSelectorsByImage is a mapping of image glob pattern as key and node selectors (value)
+             * to apply to each deployment. Note that in case of multiple matches, the longest (with
+             * most characters) will take precedence. A config example:
+             * {
+             * "internal.io/nokia_sros*": {"node-flavour": "baremetal"},
+             * "ghcr.io/nokia/srlinux*":  {"node-flavour": "amd64"},
+             * "default":                 {"node-flavour": "cheap"},
+             * }.
+             */
+            nodeSelectorsByImage?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            /**
              * PrivilegedLauncher, when true, sets the launcher containers to privileged. By default, we do
              * our best to *not* need this/set this, and instead set only the capabilities we need, however
              * its possible that some containers launched by the launcher may need/want more capabilities,
@@ -717,7 +764,7 @@ export type ClabernetesContainerlabDevConfigV1Alpha1 = {
                          * Claims lists the names of resources, defined in spec.resourceClaims,
                          * that are used by this container.
                          *
-                         * This is an alpha field and requires enabling the
+                         * This field depends on the
                          * DynamicResourceAllocation feature gate.
                          *
                          * This field is immutable. It can only be set for containers.
@@ -765,7 +812,7 @@ export type ClabernetesContainerlabDevConfigV1Alpha1 = {
                  * Claims lists the names of resources, defined in spec.resourceClaims,
                  * that are used by this container.
                  *
-                 * This is an alpha field and requires enabling the
+                 * This field depends on the
                  * DynamicResourceAllocation feature gate.
                  *
                  * This field is immutable. It can only be set for containers.
@@ -994,7 +1041,8 @@ export type ClabernetesContainerlabDevTopologyV1Alpha1 = {
              */
             extraEnv?: Array<{
                 /**
-                 * Name of the environment variable. Must be a C_IDENTIFIER.
+                 * Name of the environment variable.
+                 * May consist of any printable ASCII characters except '='.
                  */
                 name: string;
                 /**
@@ -1047,6 +1095,37 @@ export type ClabernetesContainerlabDevTopologyV1Alpha1 = {
                          * Path of the field to select in the specified API version.
                          */
                         fieldPath: string;
+                    };
+                    /**
+                     * FileKeyRef selects a key of the env file.
+                     * Requires the EnvFiles feature gate to be enabled.
+                     */
+                    fileKeyRef?: {
+                        /**
+                         * The key within the env file. An invalid key will prevent the pod from starting.
+                         * The keys defined within a source may consist of any printable ASCII characters except '='.
+                         * During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                         */
+                        key: string;
+                        /**
+                         * Specify whether the file or its key must be defined. If the file or key
+                         * does not exist, then the env var is not published.
+                         * If optional is set to true and the specified key does not exist,
+                         * the environment variable will not be set in the Pod's containers.
+                         *
+                         * If optional is set to false and the specified key does not exist,
+                         * an error will be returned during Pod creation.
+                         */
+                        optional?: boolean;
+                        /**
+                         * The path within the volume from which to select the file.
+                         * Must be relative and may not contain the '..' path or start with '..'.
+                         */
+                        path: string;
+                        /**
+                         * The name of the volume mount containing the env file.
+                         */
+                        volumeName: string;
                     };
                     /**
                      * Selects a resource of the container: only resources limits and requests
@@ -1208,7 +1287,7 @@ export type ClabernetesContainerlabDevTopologyV1Alpha1 = {
                      * Claims lists the names of resources, defined in spec.resourceClaims,
                      * that are used by this container.
                      *
-                     * This is an alpha field and requires enabling the
+                     * This field depends on the
                      * DynamicResourceAllocation feature gate.
                      *
                      * This field is immutable. It can only be set for containers.
@@ -1273,9 +1352,10 @@ export type ClabernetesContainerlabDevTopologyV1Alpha1 = {
                     key?: string;
                     /**
                      * Operator represents a key's relationship to the value.
-                     * Valid operators are Exists and Equal. Defaults to Equal.
+                     * Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                      * Exists is equivalent to wildcard for value, so that a pod can
                      * tolerate all taints of a particular category.
+                     * Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                      */
                     operator?: string;
                     /**
@@ -1334,10 +1414,33 @@ export type ClabernetesContainerlabDevTopologyV1Alpha1 = {
              * you may want to do this if you want to tickle the pods by pod name directly for some
              * reason while not having extra services floating around.
              * - ClusterIP: a clusterip service is created so you can hit that service name for the pods.
+             * - Headless: a headless service (clusterIP: None) is created. This is useful when you don't
+             * need load-balancing or a single service IP but want to directly connect to pods via
+             * DNS records that return pod IPs.
              * - LoadBalancer: (default) creates a load balancer service so you can access your pods from
              * outside the cluster. this is/was the only behavior up to v0.2.4.
              */
-            exposeType?: 'None' | 'ClusterIP' | 'LoadBalancer';
+            exposeType?: 'None' | 'ClusterIP' | 'Headless' | 'LoadBalancer';
+            /**
+             * UseNodeMgmtIpv4Address, when set to true, the controller will look up each node’s management
+             * IPv4 address (from the `mgmt-ipv4` field in your containerlab topology) and assign
+             * that address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer
+             * Service.
+             * - Only applies if `spec.expose.exposeType` is `LoadBalancer`.
+             * - If the IP is missing or fails validation, a warning is emitted and Kubernetes
+             * will allocate an IP automatically.
+             */
+            useNodeMgmtIpv4Address?: boolean;
+            /**
+             * UseNodeMgmtIpv6Address, when set to true, the controller will look up each node’s management
+             * IPv6 address (from the `mgmt-ipv6` field in your containerlab topology) and assign
+             * that address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer
+             * Service.
+             * - Only applies if `spec.expose.exposeType` is `LoadBalancer`.
+             * - If the IP is missing or fails validation, a warning is emitted and Kubernetes
+             * will allocate an IP automatically.
+             */
+            useNodeMgmtIpv6Address?: boolean;
         };
         /**
          * ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling
@@ -1585,6 +1688,25 @@ export type ClabernetesContainerlabDevTopologyV1Alpha1 = {
          */
         kind: 'containerlab' | 'kne';
         /**
+         * NodeProbeStatuses is a map of node name to per-probe status information.
+         */
+        nodeProbeStatuses?: {
+            [key: string]: {
+                /**
+                 * LivenessProbe is the status of the node's liveness probe.
+                 */
+                livenessProbe: 'passing' | 'failing' | 'unknown' | 'disabled';
+                /**
+                 * ReadinessProbe is the status of the node's readiness probe.
+                 */
+                readinessProbe: 'passing' | 'failing' | 'unknown' | 'disabled';
+                /**
+                 * StartupProbe is the status of the node's startup probe.
+                 */
+                startupProbe: 'passing' | 'failing' | 'unknown' | 'disabled';
+            };
+        };
+        /**
          * NodeReadiness is a map of nodename to readiness status. The readiness status is as reported
          * by the k8s startup/readiness probe (which is in turn managed by the status probe
          * configuration of the topology). The possible values are "notready" and "ready", "unknown".
@@ -1634,6 +1756,10 @@ export type ClabernetesContainerlabDevTopologyV1Alpha1 = {
          * from the conditions so we can easily snag it for print columns!
          */
         topologyReady: boolean;
+        /**
+         * TopologyState is the high-level lifecycle state of the topology.
+         */
+        topologyState?: 'deploying' | 'running' | 'degraded' | 'deployfailed';
     };
 };
 

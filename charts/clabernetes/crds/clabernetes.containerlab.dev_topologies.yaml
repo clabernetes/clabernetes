@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
   name: topologies.clabernetes.containerlab.dev
 spec:
   group: clabernetes.containerlab.dev
@@ -504,9 +504,10 @@ spec:
                             operator:
                               description: |-
                                 Operator represents a key's relationship to the value.
-                                Valid operators are Exists and Equal. Defaults to Equal.
+                                Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
                                 Exists is equivalent to wildcard for value, so that a pod can
                                 tolerate all taints of a particular category.
+                                Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
                               type: string
                             tolerationSeconds:
                               description: |-
@@ -921,49 +922,31 @@ spec:
                     for a single node.
                   properties:
                     livenessProbe:
-                      allOf:
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
                       description: LivenessProbe is the status of the node's liveness
                         probe.
+                      enum:
+                      - passing
+                      - failing
+                      - unknown
+                      - disabled
                       type: string
                     readinessProbe:
-                      allOf:
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
                       description: ReadinessProbe is the status of the node's readiness
                         probe.
+                      enum:
+                      - passing
+                      - failing
+                      - unknown
+                      - disabled
                       type: string
                     startupProbe:
-                      allOf:
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
-                      - enum:
-                        - passing
-                        - failing
-                        - unknown
-                        - disabled
                       description: StartupProbe is the status of the node's startup
                         probe.
+                      enum:
+                      - passing
+                      - failing
+                      - unknown
+                      - disabled
                       type: string
                   required:
                   - livenessProbe
@@ -1029,19 +1012,13 @@ spec:
                   from the conditions so we can easily snag it for print columns!
                 type: boolean
               topologyState:
-                allOf:
-                - enum:
-                  - deploying
-                  - running
-                  - degraded
-                  - deployfailed
-                - enum:
-                  - deploying
-                  - running
-                  - degraded
-                  - deployfailed
                 description: TopologyState is the high-level lifecycle state of the
                   topology.
+                enum:
+                - deploying
+                - running
+                - degraded
+                - deployfailed
                 type: string
             required:
             - conditions

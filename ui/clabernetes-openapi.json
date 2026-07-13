@@ -664,7 +664,7 @@
                                             "description": "EnvVar represents an environment variable present in a Container.",
                                             "properties": {
                                                 "name": {
-                                                    "description": "Name of the environment variable. Must be a C_IDENTIFIER.",
+                                                    "description": "Name of the environment variable.\nMay consist of any printable ASCII characters except '='.",
                                                     "type": "string"
                                                 },
                                                 "value": {
@@ -711,6 +711,35 @@
                                                             },
                                                             "required": [
                                                                 "fieldPath"
+                                                            ],
+                                                            "type": "object",
+                                                            "x-kubernetes-map-type": "atomic"
+                                                        },
+                                                        "fileKeyRef": {
+                                                            "description": "FileKeyRef selects a key of the env file.\nRequires the EnvFiles feature gate to be enabled.",
+                                                            "properties": {
+                                                                "key": {
+                                                                    "description": "The key within the env file. An invalid key will prevent the pod from starting.\nThe keys defined within a source may consist of any printable ASCII characters except '='.\nDuring Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.",
+                                                                    "type": "string"
+                                                                },
+                                                                "optional": {
+                                                                    "default": false,
+                                                                    "description": "Specify whether the file or its key must be defined. If the file or key\ndoes not exist, then the env var is not published.\nIf optional is set to true and the specified key does not exist,\nthe environment variable will not be set in the Pod's containers.\n\nIf optional is set to false and the specified key does not exist,\nan error will be returned during Pod creation.",
+                                                                    "type": "boolean"
+                                                                },
+                                                                "path": {
+                                                                    "description": "The path within the volume from which to select the file.\nMust be relative and may not contain the '..' path or start with '..'.",
+                                                                    "type": "string"
+                                                                },
+                                                                "volumeName": {
+                                                                    "description": "The name of the volume mount containing the env file.",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "key",
+                                                                "path",
+                                                                "volumeName"
                                                             ],
                                                             "type": "object",
                                                             "x-kubernetes-map-type": "atomic"
@@ -807,6 +836,16 @@
                                         ],
                                         "type": "string"
                                     },
+                                    "nodeSelectorsByImage": {
+                                        "additionalProperties": {
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            },
+                                            "type": "object"
+                                        },
+                                        "description": "NodeSelectorsByImage is a mapping of image glob pattern as key and node selectors (value)\nto apply to each deployment. Note that in case of multiple matches, the longest (with\nmost characters) will take precedence. A config example:\n{\n  \"internal.io/nokia_sros*\": {\"node-flavour\": \"baremetal\"},\n  \"ghcr.io/nokia/srlinux*\":  {\"node-flavour\": \"amd64\"},\n  \"default\":                 {\"node-flavour\": \"cheap\"},\n}.",
+                                        "type": "object"
+                                    },
                                     "privilegedLauncher": {
                                         "description": "PrivilegedLauncher, when true, sets the launcher containers to privileged. By default, we do\nour best to *not* need this/set this, and instead set only the capabilities we need, however\nits possible that some containers launched by the launcher may need/want more capabilities,\nso this flag exists for users to bypass the default settings and enable fully privileged\nlauncher pods.",
                                         "type": "boolean"
@@ -817,7 +856,7 @@
                                                 "description": "ResourceRequirements describes the compute resource requirements.",
                                                 "properties": {
                                                     "claims": {
-                                                        "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis is an alpha field and requires enabling the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                                                        "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
                                                         "items": {
                                                             "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
                                                             "properties": {
@@ -885,7 +924,7 @@
                                         "description": "ResourcesDefault is the default set of resources for clabernetes launcher pods. This is used\nonly as a last option if a Topology does not have resources, and there are no resources for\nthe given containerlab kind/type",
                                         "properties": {
                                             "claims": {
-                                                "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis is an alpha field and requires enabling the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                                                "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
                                                 "items": {
                                                     "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
                                                     "properties": {
@@ -1132,7 +1171,7 @@
                                             "description": "EnvVar represents an environment variable present in a Container.",
                                             "properties": {
                                                 "name": {
-                                                    "description": "Name of the environment variable. Must be a C_IDENTIFIER.",
+                                                    "description": "Name of the environment variable.\nMay consist of any printable ASCII characters except '='.",
                                                     "type": "string"
                                                 },
                                                 "value": {
@@ -1179,6 +1218,35 @@
                                                             },
                                                             "required": [
                                                                 "fieldPath"
+                                                            ],
+                                                            "type": "object",
+                                                            "x-kubernetes-map-type": "atomic"
+                                                        },
+                                                        "fileKeyRef": {
+                                                            "description": "FileKeyRef selects a key of the env file.\nRequires the EnvFiles feature gate to be enabled.",
+                                                            "properties": {
+                                                                "key": {
+                                                                    "description": "The key within the env file. An invalid key will prevent the pod from starting.\nThe keys defined within a source may consist of any printable ASCII characters except '='.\nDuring Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.",
+                                                                    "type": "string"
+                                                                },
+                                                                "optional": {
+                                                                    "default": false,
+                                                                    "description": "Specify whether the file or its key must be defined. If the file or key\ndoes not exist, then the env var is not published.\nIf optional is set to true and the specified key does not exist,\nthe environment variable will not be set in the Pod's containers.\n\nIf optional is set to false and the specified key does not exist,\nan error will be returned during Pod creation.",
+                                                                    "type": "boolean"
+                                                                },
+                                                                "path": {
+                                                                    "description": "The path within the volume from which to select the file.\nMust be relative and may not contain the '..' path or start with '..'.",
+                                                                    "type": "string"
+                                                                },
+                                                                "volumeName": {
+                                                                    "description": "The name of the volume mount containing the env file.",
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "key",
+                                                                "path",
+                                                                "volumeName"
                                                             ],
                                                             "type": "object",
                                                             "x-kubernetes-map-type": "atomic"
@@ -1366,7 +1434,7 @@
                                             "description": "ResourceRequirements describes the compute resource requirements.",
                                             "properties": {
                                                 "claims": {
-                                                    "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis is an alpha field and requires enabling the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                                                    "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
                                                     "items": {
                                                         "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
                                                         "properties": {
@@ -1452,7 +1520,7 @@
                                                             "type": "string"
                                                         },
                                                         "operator": {
-                                                            "description": "Operator represents a key's relationship to the value.\nValid operators are Exists and Equal. Defaults to Equal.\nExists is equivalent to wildcard for value, so that a pod can\ntolerate all taints of a particular category.",
+                                                            "description": "Operator represents a key's relationship to the value.\nValid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.\nExists is equivalent to wildcard for value, so that a pod can\ntolerate all taints of a particular category.\nLt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).",
                                                             "type": "string"
                                                         },
                                                         "tolerationSeconds": {
@@ -1489,10 +1557,11 @@
                                     },
                                     "exposeType": {
                                         "default": "LoadBalancer",
-                                        "description": "ExposeType configures the service type(s) related to exposing the topology. This is an enum\nthat has the following valid values:\n- None: expose is *not* disabled, but we just don't create any services related to the pods,\n        you may want to do this if you want to tickle the pods by pod name directly for some\n        reason while not having extra services floating around.\n- ClusterIP: a clusterip service is created so you can hit that service name for the pods.\n- LoadBalancer: (default) creates a load balancer service so you can access your pods from\n        outside the cluster. this is/was the only behavior up to v0.2.4.",
+                                        "description": "ExposeType configures the service type(s) related to exposing the topology. This is an enum\nthat has the following valid values:\n- None: expose is *not* disabled, but we just don't create any services related to the pods,\n        you may want to do this if you want to tickle the pods by pod name directly for some\n        reason while not having extra services floating around.\n- ClusterIP: a clusterip service is created so you can hit that service name for the pods.\n- Headless: a headless service (clusterIP: None) is created. This is useful when you don't\n        need load-balancing or a single service IP but want to directly connect to pods via\n        DNS records that return pod IPs.\n- LoadBalancer: (default) creates a load balancer service so you can access your pods from\n        outside the cluster. this is/was the only behavior up to v0.2.4.",
                                         "enum": [
                                             "None",
                                             "ClusterIP",
+                                            "Headless",
                                             "LoadBalancer"
                                         ],
                                         "type": "string"
@@ -1797,6 +1866,51 @@
                                 ],
                                 "type": "string"
                             },
+                            "nodeProbeStatuses": {
+                                "additionalProperties": {
+                                    "description": "NodeProbeStatuses holds the individual probe statuses for a single node.",
+                                    "properties": {
+                                        "livenessProbe": {
+                                            "description": "LivenessProbe is the status of the node's liveness probe.",
+                                            "enum": [
+                                                "passing",
+                                                "failing",
+                                                "unknown",
+                                                "disabled"
+                                            ],
+                                            "type": "string"
+                                        },
+                                        "readinessProbe": {
+                                            "description": "ReadinessProbe is the status of the node's readiness probe.",
+                                            "enum": [
+                                                "passing",
+                                                "failing",
+                                                "unknown",
+                                                "disabled"
+                                            ],
+                                            "type": "string"
+                                        },
+                                        "startupProbe": {
+                                            "description": "StartupProbe is the status of the node's startup probe.",
+                                            "enum": [
+                                                "passing",
+                                                "failing",
+                                                "unknown",
+                                                "disabled"
+                                            ],
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "livenessProbe",
+                                        "readinessProbe",
+                                        "startupProbe"
+                                    ],
+                                    "type": "object"
+                                },
+                                "description": "NodeProbeStatuses is a map of node name to per-probe status information.",
+                                "type": "object"
+                            },
                             "nodeReadiness": {
                                 "additionalProperties": {
                                     "type": "string"
@@ -1842,6 +1956,16 @@
                             "topologyReady": {
                                 "description": "TopologyReady indicates if all nodes in the topology have reported ready. This is duplicated\nfrom the conditions so we can easily snag it for print columns!",
                                 "type": "boolean"
+                            },
+                            "topologyState": {
+                                "description": "TopologyState is the high-level lifecycle state of the topology.",
+                                "enum": [
+                                    "deploying",
+                                    "running",
+                                    "degraded",
+                                    "deployfailed"
+                                ],
+                                "type": "string"
                             }
                         },
                         "required": [
