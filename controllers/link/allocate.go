@@ -48,40 +48,6 @@ func IsHostLink(link *clabernetesapisv1alpha1.Link) bool {
 		link.Spec.EndpointB.NodeName == clabernetesapisv1alpha1.LinkHostNodeName
 }
 
-// ResolveLauncherNode resolves the name of the launcher (pod) hosting the given (containerlab)
-// node -- for "grouped" nodes (network-mode: container:<primary>) this walks to the group's
-// primary node; for anything else (including nodes that have no Node object (yet)) the node
-// name itself is returned.
-func ResolveLauncherNode(
-	nodes map[string]*clabernetesapisv1alpha1.Node,
-	nodeName string,
-) string {
-	seen := map[string]bool{}
-
-	current := nodeName
-
-	for {
-		node, ok := nodes[current]
-		if !ok {
-			return current
-		}
-
-		primary := clabernetesutilcontainerlab.ParseNetworkModeContainer(node.Spec.NetworkMode)
-		if primary == "" {
-			return current
-		}
-
-		if seen[primary] {
-			// cycle in network-mode references -- return where we are rather than looping
-			return current
-		}
-
-		seen[current] = true
-
-		current = primary
-	}
-}
-
 // IsSameLauncherLink returns true if both endpoints of the link resolve to the same launcher
 // (pod) -- such links are materialized as direct containerlab links by that launcher and need
 // no tunnel id.
@@ -89,8 +55,8 @@ func IsSameLauncherLink(
 	link *clabernetesapisv1alpha1.Link,
 	nodes map[string]*clabernetesapisv1alpha1.Node,
 ) bool {
-	return ResolveLauncherNode(nodes, link.Spec.EndpointA.NodeName) ==
-		ResolveLauncherNode(nodes, link.Spec.EndpointB.NodeName)
+	return clabernetesutilcontainerlab.ResolveLauncherNode(nodes, link.Spec.EndpointA.NodeName) ==
+		clabernetesutilcontainerlab.ResolveLauncherNode(nodes, link.Spec.EndpointB.NodeName)
 }
 
 // endpointKey returns the identity of a (non host) endpoint for conflict checking.

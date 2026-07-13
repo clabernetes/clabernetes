@@ -112,6 +112,19 @@ const (
 	// LauncherSSHProbePassword is the env var that holds the password to use in the ssh probe (if
 	// configured).
 	LauncherSSHProbePassword = "LAUNCHER_SSH_PROBE_PASSWORD" //nolint:gosec
+
+	// LauncherGroupMembersEnv is the env var that holds the (comma separated, sorted) names of
+	// the *other* (containerlab) nodes hosted by this launcher pod -- that is, the nodes grouped
+	// onto this launcher via `network-mode: container:<this launcher's node>`.
+	LauncherGroupMembersEnv = "LAUNCHER_GROUP_MEMBERS"
+
+	// LauncherMgmtNetworkEnv is the env var that holds the (json encoded) containerlab management
+	// network settings the launcher should render into its topology file (if any).
+	LauncherMgmtNetworkEnv = "LAUNCHER_MGMT_NETWORK"
+
+	// LauncherPullSecretsEnv is the env var that holds the (comma separated) secret names the
+	// launcher may use when pulling images via the cluster CRI.
+	LauncherPullSecretsEnv = "LAUNCHER_PULL_SECRETS" //nolint:gosec
 )
 
 const (

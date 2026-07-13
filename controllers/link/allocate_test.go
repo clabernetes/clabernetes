@@ -99,42 +99,6 @@ func TestValidateLink(t *testing.T) {
 	}
 }
 
-func TestResolveLauncherNode(t *testing.T) {
-	nodes := map[string]*clabernetesapisv1alpha1.Node{}
-
-	for _, node := range []clabernetesapisv1alpha1.Node{
-		testNode("srl1", ""),
-		testNode("sim-a", "container:srl1"),
-		testNode("chain-b", "container:sim-a"),
-		testNode("cycle-x", "container:cycle-y"),
-		testNode("cycle-y", "container:cycle-x"),
-	} {
-		nodes[node.GetName()] = &node
-	}
-
-	cases := []struct {
-		name     string
-		nodeName string
-		expected string
-	}{
-		{name: "standalone", nodeName: "srl1", expected: "srl1"},
-		{name: "no-node-object", nodeName: "ghost", expected: "ghost"},
-		{name: "secondary", nodeName: "sim-a", expected: "srl1"},
-		{name: "chained-secondary", nodeName: "chain-b", expected: "srl1"},
-		{name: "cycle-does-not-hang", nodeName: "cycle-x", expected: "cycle-y"},
-	}
-
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			actual := clabernetescontrollerslink.ResolveLauncherNode(nodes, testCase.nodeName)
-
-			if actual != testCase.expected {
-				t.Fatalf("expected launcher node %q, got %q", testCase.expected, actual)
-			}
-		})
-	}
-}
-
 func TestFindEndpointConflict(t *testing.T) {
 	cases := []struct {
 		name           string
