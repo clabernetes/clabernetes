@@ -1619,7 +1619,10 @@ export type ClabernetesContainerlabDevTopologyListV1Alpha1 = {
  * per inter-launcher link -- and hold everything both launcher pods need to establish the tunnel
  * (vxlan or slurpeeth) for the link. Storing this data per-link (rather than in one big
  * connectivity object) means no single object grows with the size of the topology, which keeps
- * clabernetes clear of the etcd max object size limits for very large topologies.
+ * clabernetes clear of the etcd max object size limits for very large topologies. The
+ * "clabernetes/linkEndpointA" and "clabernetes/linkEndpointB" labels hold the launcher nodes
+ * that terminate each side (the primary node for grouped nodes) -- launchers select "their"
+ * links by those labels and derive the remote fabric service from them.
  */
 export type ClabernetesContainerlabDevLinkV1Alpha1 = {
     /**
@@ -1649,20 +1652,9 @@ export type ClabernetesContainerlabDevLinkV1Alpha1 = {
          */
         endpointA: {
             /**
-             * Destination is the qualified kubernetes service name over which this side of the link can
-             * be reached (that is, the service the *other* side of the link connects to).
-             */
-            destination: string;
-            /**
              * InterfaceName is the name of the interface on the node this side of the link is on.
              */
             interfaceName: string;
-            /**
-             * LauncherNode is the name of the (containerlab) node whose launcher pod terminates this side
-             * of the link -- for "grouped" nodes this is the primary node of the group, otherwise this is
-             * simply the same as NodeName.
-             */
-            launcherNode: string;
             /**
              * NodeName is the name of the (containerlab) node this side of the link resides on.
              */
@@ -1673,20 +1665,9 @@ export type ClabernetesContainerlabDevLinkV1Alpha1 = {
          */
         endpointB: {
             /**
-             * Destination is the qualified kubernetes service name over which this side of the link can
-             * be reached (that is, the service the *other* side of the link connects to).
-             */
-            destination: string;
-            /**
              * InterfaceName is the name of the interface on the node this side of the link is on.
              */
             interfaceName: string;
-            /**
-             * LauncherNode is the name of the (containerlab) node whose launcher pod terminates this side
-             * of the link -- for "grouped" nodes this is the primary node of the group, otherwise this is
-             * simply the same as NodeName.
-             */
-            launcherNode: string;
             /**
              * NodeName is the name of the (containerlab) node this side of the link resides on.
              */
