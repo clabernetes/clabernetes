@@ -41,9 +41,6 @@ spec:
                 ports: []
         links:
             - endpoints:
-                - srl1:e1-1
-                - host:srl1-e1-1
-            - endpoints:
                 - srl1:e1-3
                 - host:eth13
     debug: false

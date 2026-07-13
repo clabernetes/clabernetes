@@ -39,10 +39,6 @@ spec:
                 kind: srl
                 image: ghcr.io/nokia/srlinux
                 ports: []
-        links:
-            - endpoints:
-                - srl2:e1-1
-                - host:srl2-e1-1
     debug: false
   nodeName: srl2
   topologyName: topology-basic

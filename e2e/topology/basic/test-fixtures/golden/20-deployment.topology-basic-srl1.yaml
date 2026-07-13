@@ -1,7 +1,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  annotations: {}
+  annotations:
+    clabernetes/linkAttachmentsDigest: 8d28fb95b7a7ee3167cff74ab454676361868207515c50af5f204f515a7ee93f
   labels:
     app.kubernetes.io/name: topology-basic-srl1
     clabernetes/app: clabernetes
@@ -29,7 +30,8 @@ spec:
     type: Recreate
   template:
     metadata:
-      annotations: {}
+      annotations:
+        clabernetes/linkAttachmentsDigest: 8d28fb95b7a7ee3167cff74ab454676361868207515c50af5f204f515a7ee93f
       labels:
         app.kubernetes.io/name: topology-basic-srl1
         clabernetes/app: clabernetes
