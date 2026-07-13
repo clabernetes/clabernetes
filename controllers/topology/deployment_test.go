@@ -134,6 +134,7 @@ func TestRenderDeployment(t *testing.T) {
 		criKind              string
 		imagePullThroughMode string
 		clabernetesConfigs   map[string]*clabernetesutilcontainerlab.Config
+		resolvedTunnels      map[string][]*clabernetesapisv1alpha1.PointToPointTunnel
 		nodeName             string
 		configManagerGetter  clabernetesconfig.ManagerGetterFunc
 	}{
@@ -191,6 +192,66 @@ func TestRenderDeployment(t *testing.T) {
 						Links: nil,
 					},
 					Debug: false,
+				},
+			},
+			nodeName:            "srl1",
+			configManagerGetter: clabernetesconfig.GetFakeManager,
+		},
+		{
+			name: "with-link-attachments",
+			owningTopology: &clabernetesapisv1alpha1.Topology{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "render-deployment-test",
+					Namespace: "clabernetes",
+				},
+				Spec: clabernetesapisv1alpha1.TopologySpec{
+					Connectivity: clabernetesconstants.ConnectivityVXLAN,
+					Definition: clabernetesapisv1alpha1.Definition{
+						Containerlab: `---
+    name: test
+    topology:
+      nodes:
+        srl1:
+          kind: srl
+          image: ghcr.io/nokia/srlinux
+        srl2:
+          kind: srl
+          image: ghcr.io/nokia/srlinux
+      links:
+        - endpoints: ["srl1:e1-1", "srl2:e1-1"]
+`,
+					},
+				},
+			},
+			clabernetesConfigs: map[string]*clabernetesutilcontainerlab.Config{
+				"srl1": {
+					Name:   "srl1",
+					Prefix: clabernetesutil.ToPointer(""),
+					Topology: &clabernetesutilcontainerlab.Topology{
+						Defaults: &clabernetesutilcontainerlab.NodeDefinition{
+							Ports: []string{},
+						},
+						Kinds: nil,
+						Nodes: map[string]*clabernetesutilcontainerlab.NodeDefinition{
+							"srl1": {
+								Kind:  "srl",
+								Image: "ghcr.io/nokia/srlinux",
+							},
+						},
+						Links: nil,
+					},
+					Debug: false,
+				},
+			},
+			resolvedTunnels: map[string][]*clabernetesapisv1alpha1.PointToPointTunnel{
+				"srl1": {
+					{
+						LocalNode:       "srl1",
+						LocalInterface:  "e1-1",
+						RemoteNode:      "srl2",
+						RemoteInterface: "e1-1",
+						Destination:     "render-deployment-test-srl2-vx.clabernetes.svc.cluster.local",
+					},
 				},
 			},
 			nodeName:            "srl1",
@@ -793,7 +854,10 @@ func TestRenderDeployment(t *testing.T) {
 
 				got := reconciler.Render(
 					testCase.owningTopology,
-					testCase.clabernetesConfigs,
+					&clabernetescontrollerstopology.ReconcileData{
+						ResolvedConfigs: testCase.clabernetesConfigs,
+						ResolvedTunnels: testCase.resolvedTunnels,
+					},
 					testCase.nodeName,
 				)
 

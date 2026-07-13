@@ -112,16 +112,6 @@
                 "Links": [
                     {
                         "Endpoints": [
-                            "srl1:e1-1",
-                            "host:srl1-e1-1"
-                        ],
-                        "Labels": null,
-                        "Vars": null,
-                        "MTU": 0,
-                        "Type": ""
-                    },
-                    {
-                        "Endpoints": [
                             "srl1:e3-3",
                             "host:eth3-3"
                         ],
@@ -250,18 +240,7 @@
                         "Components": null
                     }
                 },
-                "Links": [
-                    {
-                        "Endpoints": [
-                            "srl2:e1-1",
-                            "host:srl2-e1-1"
-                        ],
-                        "Labels": null,
-                        "Vars": null,
-                        "MTU": 0,
-                        "Type": ""
-                    }
-                ]
+                "Links": null
             },
             "Debug": false
         }

@@ -109,18 +109,7 @@
                         "Components": null
                     }
                 },
-                "Links": [
-                    {
-                        "Endpoints": [
-                            "external-node:e1-1",
-                            "host:external-node-e1-1"
-                        ],
-                        "Labels": null,
-                        "Vars": null,
-                        "MTU": 0,
-                        "Type": ""
-                    }
-                ]
+                "Links": null
             },
             "Debug": false
         },
@@ -364,18 +353,7 @@
                         "Components": null
                     }
                 },
-                "Links": [
-                    {
-                        "Endpoints": [
-                            "srsim-iom1:1/1/c1/1",
-                            "host:srsim-iom1-1/1/c1/1"
-                        ],
-                        "Labels": null,
-                        "Vars": null,
-                        "MTU": 0,
-                        "Type": ""
-                    }
-                ]
+                "Links": null
             },
             "Debug": false
         }

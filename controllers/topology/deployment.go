@@ -1,6 +1,7 @@
 package topology
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -58,6 +59,28 @@ func NewDeploymentReconciler(
 	}
 }
 
+// linkAttachmentsDigest returns a digest of the local link attachment points of the given (per
+// launcher node) tunnels -- the local node/interface (plus mtu) pairs the launcher creates host
+// side veths for. The digest is stamped on the launcher pod template so attachment set changes
+// roll the pod, while remote-side-only changes (which the launcher handles live via its link
+// watch) do not.
+func linkAttachmentsDigest(tunnels []*clabernetesapisv1alpha1.PointToPointTunnel) string {
+	attachments := make([]string, len(tunnels))
+
+	for idx, tunnel := range tunnels {
+		attachments[idx] = fmt.Sprintf(
+			"%s:%s:%d",
+			tunnel.LocalNode,
+			tunnel.LocalInterface,
+			tunnel.MTU,
+		)
+	}
+
+	slices.Sort(attachments)
+
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(attachments, ","))))
+}
+
 // Resolve accepts a mapping of clabernetes configs and a list of deployments that are -- by owner
 // reference and/or labels -- associated with the topology. It returns a ObjectDiffer object
 // that contains the missing, extra, and current deployments for the topology.
@@ -75,14 +98,16 @@ func (r *DeploymentReconciler) Resolve(
 	return ResolveOwnedObjectsByNodeLabel(ownedObjects, clabernetesConfigs)
 }
 
-// Render accepts the owning topology a mapping of clabernetes sub-topology configs and a node name
-// and renders the final deployment for this node.
+// Render accepts the owning topology, the reconcile data, and a node name and renders the final
+// deployment for this node.
 func (r *DeploymentReconciler) Render(
 	owningTopology *clabernetesapisv1alpha1.Topology,
-	clabernetesConfigs map[string]*clabernetesutilcontainerlab.Config,
+	reconcileData *ReconcileData,
 	nodeName string,
 ) *k8sappsv1.Deployment {
 	owningTopologyName := owningTopology.GetName()
+
+	clabernetesConfigs := reconcileData.ResolvedConfigs
 
 	deploymentName := NodeResourceName(owningTopology, nodeName)
 
@@ -92,6 +117,11 @@ func (r *DeploymentReconciler) Render(
 		owningTopologyName,
 		nodeName,
 	)
+
+	deployment.Spec.Template.ObjectMeta.Annotations[clabernetesconstants.AnnotationLinkAttachmentsDigest] = //nolint:lll
+		linkAttachmentsDigest(
+			reconcileData.ResolvedTunnels[nodeName],
+		)
 
 	r.renderDeploymentScheduling(
 		deployment,
@@ -160,11 +190,11 @@ func (r *DeploymentReconciler) Render(
 	return deployment
 }
 
-// RenderAll accepts the owning topology a mapping of clabernetes sub-topology configs and a
-// list of node names and renders the final deployments for the given nodes.
+// RenderAll accepts the owning topology, the reconcile data, and a list of node names and renders
+// the final deployments for the given nodes.
 func (r *DeploymentReconciler) RenderAll(
 	owningTopology *clabernetesapisv1alpha1.Topology,
-	clabernetesConfigs map[string]*clabernetesutilcontainerlab.Config,
+	reconcileData *ReconcileData,
 	nodeNames []string,
 ) []*k8sappsv1.Deployment {
 	deployments := make([]*k8sappsv1.Deployment, len(nodeNames))
@@ -172,7 +202,7 @@ func (r *DeploymentReconciler) RenderAll(
 	for idx, nodeName := range nodeNames {
 		deployments[idx] = r.Render(
 			owningTopology,
-			clabernetesConfigs,
+			reconcileData,
 			nodeName,
 		)
 	}
@@ -1221,26 +1251,11 @@ func determineNodeNeedsRestart(
 		return
 	}
 
-	if len(previousConfig.Topology.Links) != len(currentConfig.Topology.Links) {
-		// dont bother checking links since they cant be same/same, node needs rebooted to restart
-		// clab bits
-		reconcileData.NodesNeedingReboot.Add(nodeName)
-
-		return
-	}
-
-	// we know (because we set this) that topology will never be nil and links will always be slices
-	// that are len 2... so we are a little risky here but its probably ok :)
-	for idx := range previousConfig.Topology.Links {
-		previousASide := previousConfig.Topology.Links[idx].Endpoints[0]
-		currentASide := currentConfig.Topology.Links[idx].Endpoints[0]
-
-		if previousASide == currentASide {
-			// as long as "a" side is the same, things will auto update itself since launcher is
-			// watching the connectivity cr
-			continue
-		}
-
+	if !reflect.DeepEqual(previousConfig.Topology.Links, currentConfig.Topology.Links) {
+		// the links remaining in the sub-topology are all node local (user defined host links and
+		// links between grouped nodes) -- nothing watches/repairs those at runtime, so any change
+		// means the node needs a reboot to redeploy the clab bits. cross launcher links live on
+		// link crs and are handled via the link attachments digest on the deployment instead.
 		reconcileData.NodesNeedingReboot.Add(nodeName)
 
 		return

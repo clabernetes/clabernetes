@@ -789,7 +789,7 @@ func (r *Reconciler) ReconcileDeployments( //nolint: gocyclo,funlen
 
 	renderedMissingDeployments := r.DeploymentReconciler.RenderAll(
 		owningTopology,
-		reconcileData.ResolvedConfigs,
+		reconcileData,
 		deployments.Missing,
 	)
 
@@ -810,7 +810,7 @@ func (r *Reconciler) ReconcileDeployments( //nolint: gocyclo,funlen
 	for existingCurrentDeploymentNodeName, existingCurrentDeployment := range deployments.Current {
 		renderedCurrentDeployment := r.DeploymentReconciler.Render(
 			owningTopology,
-			reconcileData.ResolvedConfigs,
+			reconcileData,
 			existingCurrentDeploymentNodeName,
 		)
 

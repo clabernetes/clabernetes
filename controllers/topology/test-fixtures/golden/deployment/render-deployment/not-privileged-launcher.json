@@ -10,6 +10,7 @@
             "clabernetes/topologyOwner": "render-deployment-test"
         },
         "annotations": {
+            "clabernetes/linkAttachmentsDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             "container.apparmor.security.beta.kubernetes.io/srl1": "unconfined"
         }
     },
@@ -34,6 +35,7 @@
                     "clabernetes/topologyOwner": "render-deployment-test"
                 },
                 "annotations": {
+                    "clabernetes/linkAttachmentsDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                     "container.apparmor.security.beta.kubernetes.io/srl1": "unconfined"
                 }
             },

@@ -528,7 +528,7 @@ status:
 |-------|------|-------------|
 | `topologyName` | string | Name of the owning Topology |
 | `nodeName` | string | Node name in the topology (primary node for grouped nodes) |
-| `config` | string | Rendered containerlab sub-topology for this node |
+| `config` | string | Rendered containerlab sub-topology for this node -- node things only (nodes, kinds, defaults, and node-local links); cross-launcher links live on Link resources, launchers synthesize the local plumbing for them |
 | `filesFromURL` | []FileFromURL | Files the launcher fetches before starting the node |
 | `imagePullSecrets` | []string | Pull secrets the launcher may use via the cluster CRI |
 
@@ -609,6 +609,7 @@ spec:
 | `endpointA` | LinkEndpointSpec | The "a" side of the link |
 | `endpointB` | LinkEndpointSpec | The "b" side of the link |
 | `tunnelID` | int | Tunnel ID (VNID or segment ID), shared by both sides |
+| `mtu` | int | MTU from the original topology link definition (0 = containerlab default) |
 
 ##### LinkEndpointSpec
 

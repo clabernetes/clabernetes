@@ -398,28 +398,6 @@ func getKindsForNode(
 	return nil
 }
 
-func getDestinationLinkEndpoint(
-	targetNode string,
-	interestingEndpoint clabernetesapisv1alpha1.LinkEndpoint,
-	uninterestingEndpoint clabernetesapisv1alpha1.LinkEndpoint,
-) string {
-	if targetNode == clabernetesconstants.HostKeyword {
-		// It is a containerlab host entry, so the original provided interface is preserved
-		return fmt.Sprintf(
-			"%s:%s",
-			clabernetesconstants.HostKeyword,
-			uninterestingEndpoint.InterfaceName,
-		)
-	}
-
-	return fmt.Sprintf(
-		"%s:%s-%s",
-		clabernetesconstants.HostKeyword,
-		interestingEndpoint.NodeName,
-		interestingEndpoint.InterfaceName,
-	)
-}
-
 // nodeGroupContext holds the context needed for processing a node group.
 type nodeGroupContext struct {
 	containerlabConfig *clabernetesutilcontainerlab.Config
@@ -683,29 +661,37 @@ func (p *containerlabDefinitionProcessor) processLinkForGroup(
 		interestingEndpoint, uninterestingEndpoint = endpoints.endpointB, endpoints.endpointA
 	}
 
-	p.reconcileData.ResolvedConfigs[primaryNodeName].Topology.Links = append(
-		p.reconcileData.ResolvedConfigs[primaryNodeName].Topology.Links,
-		&clabernetesutilcontainerlab.LinkDefinition{
-			LinkConfig: clabernetesutilcontainerlab.LinkConfig{
-				Endpoints: []string{
-					fmt.Sprintf("%s:%s",
-						interestingEndpoint.NodeName,
-						interestingEndpoint.InterfaceName,
-					),
-					getDestinationLinkEndpoint(
-						uninterestingEndpoint.NodeName,
-						interestingEndpoint,
-						uninterestingEndpoint,
-					),
+	if uninterestingEndpoint.NodeName == clabernetesconstants.HostKeyword {
+		// genuine (user defined) host links are node local -- they stay in the sub-topology,
+		// keeping the original host interface name and link attributes
+		p.reconcileData.ResolvedConfigs[primaryNodeName].Topology.Links = append(
+			p.reconcileData.ResolvedConfigs[primaryNodeName].Topology.Links,
+			&clabernetesutilcontainerlab.LinkDefinition{
+				Type: link.Type,
+				LinkConfig: clabernetesutilcontainerlab.LinkConfig{
+					Endpoints: []string{
+						fmt.Sprintf("%s:%s",
+							interestingEndpoint.NodeName,
+							interestingEndpoint.InterfaceName,
+						),
+						fmt.Sprintf("%s:%s",
+							clabernetesconstants.HostKeyword,
+							uninterestingEndpoint.InterfaceName,
+						),
+					},
+					MTU:    link.MTU,
+					Labels: link.Labels,
+					Vars:   link.Vars,
 				},
 			},
-		},
-	)
+		)
 
-	if uninterestingEndpoint.NodeName == clabernetesconstants.HostKeyword {
 		return nil
 	}
 
+	// cross launcher links only become tunnels (and from those, link crs) -- the "node <-> host"
+	// stanza that realizes the local half of such a link is launcher plumbing and is synthesized
+	// by the launcher itself from its link crs
 	destinationNodeName := uninterestingEndpoint.NodeName
 	if remotePrimary, isSecondary := secondaryNodes[uninterestingEndpoint.NodeName]; isSecondary {
 		destinationNodeName = remotePrimary
@@ -725,6 +711,7 @@ func (p *containerlabDefinitionProcessor) processLinkForGroup(
 			),
 			LocalInterface:  interestingEndpoint.InterfaceName,
 			RemoteInterface: uninterestingEndpoint.InterfaceName,
+			MTU:             link.MTU,
 		},
 	)
 

@@ -77,26 +77,9 @@ func (p *kneDefinitionProcessor) processConfigNodeLinks(
 		uninterestingEndpoint = endpointA
 	}
 
-	reconcileData.ResolvedConfigs[nodeName].Topology.Links = append(
-		reconcileData.ResolvedConfigs[nodeName].Topology.Links,
-		&clabernetesutilcontainerlab.LinkDefinition{
-			LinkConfig: clabernetesutilcontainerlab.LinkConfig{
-				Endpoints: []string{
-					fmt.Sprintf(
-						"%s:%s",
-						interestingEndpoint.NodeName,
-						interestingEndpoint.InterfaceName,
-					),
-					fmt.Sprintf(
-						"host:%s-%s",
-						interestingEndpoint.NodeName,
-						interestingEndpoint.InterfaceName,
-					),
-				},
-			},
-		},
-	)
-
+	// cross launcher links only become tunnels (and from those, link crs) -- the "node <-> host"
+	// stanza that realizes the local half of such a link is launcher plumbing and is synthesized
+	// by the launcher itself from its link crs
 	reconcileData.ResolvedTunnels[nodeName] = append(
 		reconcileData.ResolvedTunnels[nodeName],
 		&clabernetesapisv1alpha1.PointToPointTunnel{

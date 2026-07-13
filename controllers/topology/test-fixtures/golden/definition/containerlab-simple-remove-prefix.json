@@ -109,18 +109,7 @@
                         "Components": null
                     }
                 },
-                "Links": [
-                    {
-                        "Endpoints": [
-                            "srl1:e1-1",
-                            "host:srl1-e1-1"
-                        ],
-                        "Labels": null,
-                        "Vars": null,
-                        "MTU": 0,
-                        "Type": ""
-                    }
-                ]
+                "Links": null
             },
             "Debug": false
         },
@@ -231,18 +220,7 @@
                         "Components": null
                     }
                 },
-                "Links": [
-                    {
-                        "Endpoints": [
-                            "srl2:e1-1",
-                            "host:srl2-e1-1"
-                        ],
-                        "Labels": null,
-                        "Vars": null,
-                        "MTU": 0,
-                        "Type": ""
-                    }
-                ]
+                "Links": null
             },
             "Debug": false
         }

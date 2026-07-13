@@ -10,7 +10,7 @@
             "clabernetes/topologyOwner": "render-deployment-test"
         },
         "annotations": {
-            "clabernetes/linkAttachmentsDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            "clabernetes/linkAttachmentsDigest": "8d28fb95b7a7ee3167cff74ab454676361868207515c50af5f204f515a7ee93f"
         }
     },
     "spec": {
@@ -34,7 +34,7 @@
                     "clabernetes/topologyOwner": "render-deployment-test"
                 },
                 "annotations": {
-                    "clabernetes/linkAttachmentsDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    "clabernetes/linkAttachmentsDigest": "8d28fb95b7a7ee3167cff74ab454676361868207515c50af5f204f515a7ee93f"
                 }
             },
             "spec": {

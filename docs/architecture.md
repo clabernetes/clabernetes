@@ -78,8 +78,11 @@ the clabernetes launcher fetches "its" `Node` custom resource -- the controller 
 resource per node of the topology holding that node's "sub-topology" -- then handles any initial
 setup, and finally launches "normal" containerlab with a topology file representing *one node
 from the original topology*. This removes the previous topology-wide amplification: a Node only
-contains its launcher group's nodes and links. High-degree or large grouped nodes still produce
-larger Node objects, so scale validation should measure the largest Node as well as the aggregate.
+contains its launcher group's nodes and node-local links (user defined host links and links
+between grouped nodes). Links between launchers live on Link resources instead -- the launcher
+synthesizes the local "node <-> host" plumbing stanzas for those into its topology file at
+startup -- so a Node object does not grow with link degree, only with the size of its launcher
+group. Scale validation should still measure the largest Node as well as the aggregate.
 
 **Note:** that this is not "normal" docker-in-docker as we aren't actually mounting the docker sock
 in the container -- this is a full-blown docker installation independent of the CRI of your cluster.
