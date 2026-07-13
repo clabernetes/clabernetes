@@ -1,5 +1,5 @@
 "use server";
-import type {Edge} from "@xyflow/react";
+import { listClabernetesContainerlabDevV1Alpha1NamespacedLink } from "@/lib/clabernetes-client";
 import {
   AppsV1Api,
   CoreV1Api,
@@ -7,9 +7,7 @@ import {
   type V1DeploymentList,
   type V1ServiceList,
 } from "@kubernetes/client-node";
-import {
-  listClabernetesContainerlabDevV1Alpha1NamespacedLink
-} from "@/lib/clabernetes-client";
+import type { Edge } from "@xyflow/react";
 
 async function deploymentsByOwner(
   namespace: string,
@@ -21,11 +19,11 @@ async function deploymentsByOwner(
   kc.loadFromDefault();
 
   return await kc
-      .makeApiClient(AppsV1Api)
-      .listNamespacedDeployment({namespace: namespace, labelSelector: labelSelector})
-      .catch((error: unknown) => {
-        throw error;
-      });
+    .makeApiClient(AppsV1Api)
+    .listNamespacedDeployment({ namespace: namespace, labelSelector: labelSelector })
+    .catch((error: unknown) => {
+      throw error;
+    });
 }
 
 async function servicesByOwner(
@@ -38,11 +36,11 @@ async function servicesByOwner(
   kc.loadFromDefault();
 
   return await kc
-      .makeApiClient(CoreV1Api)
-      .listNamespacedService({namespace: namespace, labelSelector: labelSelector})
-      .catch((error: unknown) => {
-        throw error;
-      });
+    .makeApiClient(CoreV1Api)
+    .listNamespacedService({ namespace: namespace, labelSelector: labelSelector })
+    .catch((error: unknown) => {
+      throw error;
+    });
 }
 
 export interface VisualizeObject {
@@ -148,7 +146,7 @@ export async function visualizeTopology(namespace: string, name: string): Promis
     }
 
     // the launcher nodes terminating each side of the link live on the link's endpoint labels
-    const linkLabels = link.metadata?.labels ?? {};
+    const linkLabels = (link.metadata?.labels ?? {}) as Record<string, string | undefined>;
     const aLauncherNode = linkLabels["clabernetes/linkEndpointA"] ?? endpointA.nodeName;
     const bLauncherNode = linkLabels["clabernetes/linkEndpointB"] ?? endpointB.nodeName;
 
