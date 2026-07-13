@@ -2,12 +2,14 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/srl-labs/clabernetes/config"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	claberneteserrors "github.com/srl-labs/clabernetes/errors"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
 	k8sappsv1 "k8s.io/api/apps/v1"
@@ -273,6 +275,18 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 		return err
 	}
 
+	// pvc -- resolve this before the Deployment so an adopted legacy claim name is mounted
+	persistentVolumeClaimName, err := r.reconcilePersistentVolumeClaim(
+		ctx,
+		node,
+		launcherProfile,
+	)
+	if err != nil {
+		r.Log.Criticalf("failed reconciling persistent volume claim, err: %s", err)
+
+		return err
+	}
+
 	// deployment
 	var currentDeployment *k8sappsv1.Deployment
 
@@ -284,11 +298,12 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 		currentDeployment, err = r.reconcileDeployment(
 			ctx,
 			&RenderInput{
-				Node:                  node,
-				Profile:               launcherProfile,
-				GroupMembers:          groupMembers,
-				LinkAttachmentsDigest: linkAttachmentsDigest,
-				NodeConfigDigest:      nodeConfigDigest,
+				Node:                      node,
+				Profile:                   launcherProfile,
+				GroupMembers:              groupMembers,
+				LinkAttachmentsDigest:     linkAttachmentsDigest,
+				NodeConfigDigest:          nodeConfigDigest,
+				PersistentVolumeClaimName: persistentVolumeClaimName,
 			},
 		)
 		if err != nil {
@@ -296,14 +311,6 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 
 			return err
 		}
-	}
-
-	// pvc
-	err = r.reconcilePersistentVolumeClaim(ctx, node, launcherProfile)
-	if err != nil {
-		r.Log.Criticalf("failed reconciling persistent volume claim, err: %s", err)
-
-		return err
 	}
 
 	// per member services (fabric always, expose from the allocations)
@@ -421,11 +428,63 @@ func (r *Reconciler) reconcilePersistentVolumeClaim(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
 	profile *ResolvedProfile,
-) error {
+) (string, error) {
 	if !profile.Persistence.Enabled {
-		return r.deleteIfOwned(ctx, node, &k8scorev1.PersistentVolumeClaim{}, node.GetName())
+		return "", r.deleteIfOwned(
+			ctx,
+			node,
+			&k8scorev1.PersistentVolumeClaim{},
+			node.GetName(),
+		)
 	}
 
+	existing, err := r.getExistingPersistentVolumeClaim(ctx, node)
+	if err != nil && !apimachineryerrors.IsNotFound(err) {
+		return "", err
+	}
+
+	if apimachineryerrors.IsNotFound(err) {
+		existing = nil
+	}
+
+	if existing == nil {
+		rendered := r.PersistentVolumeClaimReconciler.Render(node, profile, nil)
+
+		err = ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
+		if err != nil {
+			return "", err
+		}
+
+		r.Log.Infof("creating persistent volume claim for node %q", node.GetName())
+
+		return rendered.GetName(), r.Client.Create(ctx, rendered)
+	}
+
+	rendered := r.PersistentVolumeClaimReconciler.Render(node, profile, existing)
+
+	err = ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
+	if err != nil {
+		return "", err
+	}
+
+	if r.PersistentVolumeClaimReconciler.Conforms(existing, rendered, node.GetUID()) {
+		return existing.GetName(), nil
+	}
+
+	r.Log.Infof("updating persistent volume claim for node %q", node.GetName())
+	rendered.SetResourceVersion(existing.GetResourceVersion())
+	rendered.Status = *existing.Status.DeepCopy()
+
+	return rendered.GetName(), r.Client.Update(ctx, rendered)
+}
+
+// getExistingPersistentVolumeClaim first checks the node-native claim name, then the exact naming
+// convention used by the pre node/link controller. A legacy claim is eligible only when it and
+// the emitted Node share the same Topology owner UID and node label.
+func (r *Reconciler) getExistingPersistentVolumeClaim(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+) (*k8scorev1.PersistentVolumeClaim, error) {
 	existing := &k8scorev1.PersistentVolumeClaim{}
 
 	err := r.Client.Get(
@@ -436,37 +495,66 @@ func (r *Reconciler) reconcilePersistentVolumeClaim(
 		},
 		existing,
 	)
+	if err == nil {
+		return existing, nil
+	}
+
+	if !apimachineryerrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	topologyName, topologyUID := topologyOwnerIdentity(node)
+	if topologyName == "" || topologyUID == "" {
+		return nil, apimachineryerrors.NewNotFound(
+			k8scorev1.Resource("persistentvolumeclaims"),
+			node.GetName(),
+		)
+	}
+
+	legacy := &k8scorev1.PersistentVolumeClaim{}
+
+	err = r.Client.Get(
+		ctx,
+		apimachinerytypes.NamespacedName{
+			Namespace: node.GetNamespace(),
+			Name:      fmt.Sprintf("%s-%s", topologyName, node.GetName()),
+		},
+		legacy,
+	)
 	if err != nil {
-		if !apimachineryerrors.IsNotFound(err) {
-			return err
+		if apimachineryerrors.IsNotFound(err) {
+			return nil, err
 		}
 
-		rendered := r.PersistentVolumeClaimReconciler.Render(node, profile, nil)
+		return nil, err
+	}
 
-		err = ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
-		if err != nil {
-			return err
+	if legacy.GetLabels()[clabernetesconstants.LabelTopologyNode] != node.GetName() ||
+		!ownedByUID(legacy, topologyUID) {
+		return nil, apimachineryerrors.NewNotFound(
+			k8scorev1.Resource("persistentvolumeclaims"),
+			node.GetName(),
+		)
+	}
+
+	return legacy, nil
+}
+
+func topologyOwnerIdentity(
+	node *clabernetesapisv1alpha1.Node,
+) (string, apimachinerytypes.UID) {
+	topologyName := node.GetLabels()[clabernetesconstants.LabelTopologyOwner]
+	if topologyName == "" {
+		return "", ""
+	}
+
+	for _, ownerReference := range node.GetOwnerReferences() {
+		if ownerReference.Name == topologyName && ownerReference.Kind == "Topology" {
+			return topologyName, ownerReference.UID
 		}
-
-		r.Log.Infof("creating persistent volume claim for node %q", node.GetName())
-
-		return r.Client.Create(ctx, rendered)
 	}
 
-	rendered := r.PersistentVolumeClaimReconciler.Render(node, profile, existing)
-
-	err = ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
-	if err != nil {
-		return err
-	}
-
-	if r.PersistentVolumeClaimReconciler.Conforms(existing, rendered, node.GetUID()) {
-		return nil
-	}
-
-	r.Log.Infof("updating persistent volume claim for node %q", node.GetName())
-
-	return r.Client.Update(ctx, rendered)
+	return "", ""
 }
 
 func (r *Reconciler) reconcileFabricService(
@@ -507,7 +595,7 @@ func (r *Reconciler) reconcileFabricService(
 
 	r.Log.Infof("updating fabric service for node %q", node.GetName())
 
-	return r.Client.Update(ctx, rendered)
+	return r.updateService(ctx, existing, rendered, node.GetUID())
 }
 
 // reconcileExposeService reconciles (or prunes) the expose service of the given node; it
@@ -564,7 +652,48 @@ func (r *Reconciler) reconcileExposeService(
 
 	r.Log.Infof("updating expose service for node %q", node.GetName())
 
-	return loadBalancerAddress, r.Client.Update(ctx, rendered)
+	return loadBalancerAddress, r.updateService(ctx, existing, rendered, node.GetUID())
+}
+
+func (r *Reconciler) updateService(
+	ctx context.Context,
+	existing,
+	rendered *k8scorev1.Service,
+	expectedOwnerUID apimachinerytypes.UID,
+) error {
+	if serviceNeedsRecreate(existing, rendered) {
+		if !ownedByUID(existing, expectedOwnerUID) {
+			return fmt.Errorf(
+				"%w: refusing to recreate service '%s/%s' not owned by node uid %q",
+				claberneteserrors.ErrInvalidData,
+				existing.GetNamespace(),
+				existing.GetName(),
+				expectedOwnerUID,
+			)
+		}
+
+		r.Log.Infof(
+			"recreating service '%s/%s' for immutable cluster ip mode change",
+			existing.GetNamespace(),
+			existing.GetName(),
+		)
+
+		return r.Client.Delete(ctx, existing)
+	}
+
+	prepareServiceForUpdate(existing, rendered)
+
+	return r.Client.Update(ctx, rendered)
+}
+
+func ownedByUID(obj ctrlruntimeclient.Object, expectedOwnerUID apimachinerytypes.UID) bool {
+	for _, ownerReference := range obj.GetOwnerReferences() {
+		if ownerReference.UID == expectedOwnerUID {
+			return true
+		}
+	}
+
+	return false
 }
 
 // deleteIfOwned deletes the object of the given kind/name in the node's namespace if it exists
@@ -588,17 +717,15 @@ func (r *Reconciler) deleteIfOwned(
 		return err
 	}
 
-	for _, ownerReference := range obj.GetOwnerReferences() {
-		if ownerReference.UID == node.GetUID() {
-			r.Log.Infof(
-				"pruning %T %q owned by node %q",
-				obj,
-				name,
-				node.GetName(),
-			)
+	if ownedByUID(obj, node.GetUID()) {
+		r.Log.Infof(
+			"pruning %T %q owned by node %q",
+			obj,
+			name,
+			node.GetName(),
+		)
 
-			return r.Client.Delete(ctx, obj)
-		}
+		return r.Client.Delete(ctx, obj)
 	}
 
 	return nil

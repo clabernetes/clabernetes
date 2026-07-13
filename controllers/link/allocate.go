@@ -18,28 +18,7 @@ const maxTunnelID = 16_000_000
 // error means the spec is terminally invalid -- there is nothing to retry until the spec
 // changes.
 func ValidateLink(link *clabernetesapisv1alpha1.Link) error {
-	endpointA, endpointB := link.Spec.EndpointA, link.Spec.EndpointB
-
-	if endpointA.NodeName == clabernetesapisv1alpha1.LinkHostNodeName &&
-		endpointB.NodeName == clabernetesapisv1alpha1.LinkHostNodeName {
-		return fmt.Errorf(
-			"%w: both endpoints are %q links, one endpoint must be a node",
-			claberneteserrors.ErrInvalidData,
-			clabernetesapisv1alpha1.LinkHostNodeName,
-		)
-	}
-
-	if endpointA.NodeName == endpointB.NodeName &&
-		endpointA.InterfaceName == endpointB.InterfaceName {
-		return fmt.Errorf(
-			"%w: link connects interface '%s:%s' to itself",
-			claberneteserrors.ErrInvalidData,
-			endpointA.NodeName,
-			endpointA.InterfaceName,
-		)
-	}
-
-	return nil
+	return clabernetesutilcontainerlab.ValidateLink(link)
 }
 
 // IsHostLink returns true if either side of the link is a (reserved node name) host endpoint.
@@ -59,11 +38,6 @@ func IsSameLauncherLink(
 		clabernetesutilcontainerlab.ResolveLauncherNode(nodes, link.Spec.EndpointB.NodeName)
 }
 
-// endpointKey returns the identity of a (non host) endpoint for conflict checking.
-func endpointKey(endpoint clabernetesapisv1alpha1.LinkEndpointSpec) string {
-	return fmt.Sprintf("%s:%s", endpoint.NodeName, endpoint.InterfaceName)
-}
-
 // FindEndpointConflict checks if any *other* link in the namespace claims an endpoint (node +
 // interface) of the given link and has precedence over it (lexically smaller name -- a
 // deterministic, clock-free tie break). It returns the name of the winning conflicting link, or
@@ -72,41 +46,7 @@ func FindEndpointConflict(
 	link *clabernetesapisv1alpha1.Link,
 	namespaceLinks []clabernetesapisv1alpha1.Link,
 ) string {
-	claimed := map[string]bool{}
-
-	for _, endpoint := range []clabernetesapisv1alpha1.LinkEndpointSpec{
-		link.Spec.EndpointA, link.Spec.EndpointB,
-	} {
-		if endpoint.NodeName == clabernetesapisv1alpha1.LinkHostNodeName {
-			// host "endpoints" are not exclusive -- many links may terminate on the host side
-			continue
-		}
-
-		claimed[endpointKey(endpoint)] = true
-	}
-
-	for idx := range namespaceLinks {
-		other := &namespaceLinks[idx]
-
-		if other.GetName() == link.GetName() {
-			continue
-		}
-
-		if other.GetName() > link.GetName() {
-			// the other link loses the tie break, not us
-			continue
-		}
-
-		for _, endpoint := range []clabernetesapisv1alpha1.LinkEndpointSpec{
-			other.Spec.EndpointA, other.Spec.EndpointB,
-		} {
-			if claimed[endpointKey(endpoint)] {
-				return other.GetName()
-			}
-		}
-	}
-
-	return ""
+	return clabernetesutilcontainerlab.FindEndpointConflict(link, namespaceLinks)
 }
 
 // ResolveDesiredTunnelID determines the tunnel id the given link should hold in its status:

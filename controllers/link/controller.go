@@ -62,20 +62,26 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 			},
 		).
 		For(&clabernetesapisv1alpha1.Link{}).
+		// a Link spec change can make another Link gain or lose a deterministic endpoint conflict;
+		// enqueue the namespace so stale rejection state and tunnel allocations always converge
+		Watches(
+			&clabernetesapisv1alpha1.Link{},
+			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueLinksInNamespace),
+			ctrlruntimebuilder.WithPredicates(ctrlruntimepredicate.GenerationChangedPredicate{}),
+		).
 		// watch nodes (spec changes only) since node grouping (network-mode) decides which links
 		// are same-launcher links (and those need no tunnel id)
 		Watches(
 			&clabernetesapisv1alpha1.Node{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueLinksForNode),
+			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueLinksInNamespace),
 			ctrlruntimebuilder.WithPredicates(ctrlruntimepredicate.GenerationChangedPredicate{}),
 		).
 		Complete(c)
 }
 
-// enqueueLinksForNode enqueues all Links in the changed Node's namespace -- node (spec) changes
-// are rare and namespaces are the topology boundary, so this is cheap and always correct (a
-// node's network-mode decides same-launcher-ness for links well beyond the node's own name).
-func (c *Controller) enqueueLinksForNode(
+// enqueueLinksInNamespace enqueues all Links in the changed object's namespace. Node grouping and
+// endpoint-conflict changes can affect links other than the object that triggered the event.
+func (c *Controller) enqueueLinksInNamespace(
 	ctx context.Context,
 	obj ctrlruntimeclient.Object,
 ) []ctrlruntimereconcile.Request {

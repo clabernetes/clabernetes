@@ -9,6 +9,7 @@ import (
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
 )
 
 // Tunnel holds the *local view* of a tunnel between two interfaces on different launcher pods --
@@ -96,13 +97,14 @@ func TunnelsFromLinks(
 	links []clabernetesapisv1alpha1.Link,
 ) []*Tunnel {
 	tunnels := make([]*Tunnel, 0, len(links))
+	activeLinks := clabernetesutilcontainerlab.ActiveLinks(links)
 
-	for idx := range links {
-		if links[idx].Status.TunnelID == 0 {
+	for idx := range activeLinks {
+		if activeLinks[idx].Status.TunnelID == 0 {
 			continue
 		}
 
-		tunnel := LinkToLocalTunnel(localNodes, &links[idx])
+		tunnel := LinkToLocalTunnel(localNodes, &activeLinks[idx])
 		if tunnel == nil {
 			continue
 		}

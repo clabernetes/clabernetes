@@ -119,6 +119,13 @@ spec:
           status:
             description: LinkStatus is the status for a Link resource.
             properties:
+              error:
+                description: |-
+                  Error holds the reason this link cannot currently be realized. An empty value means the
+                  link is eligible for materialization (a cross-launcher link can still be waiting for its
+                  tunnel id); invalid links and deterministic endpoint-conflict losers carry an error and are
+                  ignored by node controllers and launchers until their spec or conflicting links change.
+                type: string
               tunnelID:
                 description: |-
                   TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller

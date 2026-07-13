@@ -1741,6 +1741,13 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkStatus(
 							Format:      "int32",
 						},
 					},
+					"error": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Error holds the reason this link cannot currently be realized. An empty value means the link is eligible for materialization (a cross-launcher link can still be waiting for its tunnel id); invalid links and deterministic endpoint-conflict losers carry an error and are ignored by node controllers and launchers until their spec or conflicting links change.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},

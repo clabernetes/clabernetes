@@ -75,6 +75,12 @@ type LinkStatus struct {
 	// +kubebuilder:validation:Maximum=16000000
 	// +optional
 	TunnelID int `json:"tunnelID,omitempty"`
+	// Error holds the reason this link cannot currently be realized. An empty value means the
+	// link is eligible for materialization (a cross-launcher link can still be waiting for its
+	// tunnel id); invalid links and deterministic endpoint-conflict losers carry an error and are
+	// ignored by node controllers and launchers until their spec or conflicting links change.
+	// +optional
+	Error string `json:"error,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

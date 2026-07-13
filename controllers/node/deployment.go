@@ -70,6 +70,9 @@ type RenderInput struct {
 	LinkAttachmentsDigest string
 	// NodeConfigDigest is the digest of the group's launcher-relevant config (see digest.go).
 	NodeConfigDigest string
+	// PersistentVolumeClaimName is the claim selected by reconciliation. It normally matches the
+	// node name, but retains a legacy `<topology>-<node>` name when adopting an upgrade claim.
+	PersistentVolumeClaimName string
 }
 
 // Render renders the launcher deployment for the given node.
@@ -89,7 +92,12 @@ func (r *DeploymentReconciler) Render(input *RenderInput) *k8sappsv1.Deployment 
 	r.renderDeploymentContainerPrivileges(deployment, nodeName, input.Profile)
 	r.renderDeploymentContainerStatus(deployment, nodeName, input.Profile)
 	r.renderDeploymentDevices(deployment, input.Profile)
-	r.renderDeploymentPersistence(deployment, nodeName, input.Profile)
+	r.renderDeploymentPersistence(
+		deployment,
+		nodeName,
+		input.PersistentVolumeClaimName,
+		input.Profile,
+	)
 
 	return deployment
 }
@@ -985,7 +993,8 @@ func (r *DeploymentReconciler) renderDeploymentDevices(
 
 func (r *DeploymentReconciler) renderDeploymentPersistence(
 	deployment *k8sappsv1.Deployment,
-	nodeName string,
+	nodeName,
+	claimName string,
 	profile *ResolvedProfile,
 ) {
 	if !profile.Persistence.Enabled {
@@ -994,13 +1003,17 @@ func (r *DeploymentReconciler) renderDeploymentPersistence(
 
 	volumeName := "containerlab-directory-persistence"
 
+	if claimName == "" {
+		claimName = nodeName
+	}
+
 	deployment.Spec.Template.Spec.Volumes = append(
 		deployment.Spec.Template.Spec.Volumes,
 		k8scorev1.Volume{
 			Name: volumeName,
 			VolumeSource: k8scorev1.VolumeSource{
 				PersistentVolumeClaim: &k8scorev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: nodeName,
+					ClaimName: claimName,
 					ReadOnly:  false,
 				},
 			},

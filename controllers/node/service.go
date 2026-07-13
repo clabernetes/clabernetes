@@ -158,7 +158,7 @@ func (r *ServiceReconciler) RenderExposeService(
 // Conforms asserts if a given service conforms with a rendered service -- this isn't checking
 // if the services are exactly the same, just checking that the parts clabernetes cares about
 // are the same.
-func (r *ServiceReconciler) Conforms(
+func (r *ServiceReconciler) Conforms( //nolint:gocyclo
 	existingService,
 	renderedService *k8scorev1.Service,
 	expectedOwnerUID apimachinerytypes.UID,
@@ -168,6 +168,14 @@ func (r *ServiceReconciler) Conforms(
 	}
 
 	if existingService.Spec.Type != renderedService.Spec.Type {
+		return false
+	}
+
+	if serviceIsHeadless(existingService) != serviceIsHeadless(renderedService) {
+		return false
+	}
+
+	if existingService.Spec.LoadBalancerIP != renderedService.Spec.LoadBalancerIP {
 		return false
 	}
 
@@ -184,6 +192,10 @@ func (r *ServiceReconciler) Conforms(
 			}
 
 			if expectedPort.Port != actualPort.Port {
+				break
+			}
+
+			if expectedPort.Protocol != actualPort.Protocol {
 				break
 			}
 
@@ -225,6 +237,74 @@ func (r *ServiceReconciler) Conforms(
 	}
 
 	return true
+}
+
+// serviceNeedsRecreate returns true for the ClusterIP allocation-mode transition Kubernetes does
+// not allow through an update. Both ordinary and headless Services have type ClusterIP, so this
+// must be checked separately from Spec.Type.
+func serviceNeedsRecreate(existingService, renderedService *k8scorev1.Service) bool {
+	return serviceIsHeadless(existingService) != serviceIsHeadless(renderedService)
+}
+
+func serviceIsHeadless(service *k8scorev1.Service) bool {
+	return service.Spec.ClusterIP == k8scorev1.ClusterIPNone
+}
+
+// prepareServiceForUpdate carries API-server allocations and immutable/defaulted networking
+// fields into a freshly rendered Service before it is sent through Update.
+func prepareServiceForUpdate(existingService, renderedService *k8scorev1.Service) {
+	renderedService.SetResourceVersion(existingService.GetResourceVersion())
+	renderedService.Spec.ClusterIP = existingService.Spec.ClusterIP
+	renderedService.Spec.ClusterIPs = append([]string(nil), existingService.Spec.ClusterIPs...)
+	renderedService.Spec.IPFamilies = append(
+		[]k8scorev1.IPFamily(nil),
+		existingService.Spec.IPFamilies...,
+	)
+
+	if existingService.Spec.IPFamilyPolicy != nil {
+		policy := *existingService.Spec.IPFamilyPolicy
+		renderedService.Spec.IPFamilyPolicy = &policy
+	}
+
+	preserveNodePorts := (renderedService.Spec.Type == k8scorev1.ServiceTypeLoadBalancer ||
+		renderedService.Spec.Type == k8scorev1.ServiceTypeNodePort) &&
+		(existingService.Spec.Type == k8scorev1.ServiceTypeLoadBalancer ||
+			existingService.Spec.Type == k8scorev1.ServiceTypeNodePort)
+
+	for renderedPortIdx := range renderedService.Spec.Ports {
+		renderedPort := &renderedService.Spec.Ports[renderedPortIdx]
+
+		for existingPortIdx := range existingService.Spec.Ports {
+			existingPort := &existingService.Spec.Ports[existingPortIdx]
+			if renderedPort.Name != existingPort.Name ||
+				renderedPort.Protocol != existingPort.Protocol {
+				continue
+			}
+
+			if preserveNodePorts && renderedPort.NodePort == 0 {
+				renderedPort.NodePort = existingPort.NodePort
+			}
+
+			break
+		}
+	}
+
+	if renderedService.Spec.Type != k8scorev1.ServiceTypeLoadBalancer ||
+		existingService.Spec.Type != k8scorev1.ServiceTypeLoadBalancer {
+		return
+	}
+
+	renderedService.Spec.HealthCheckNodePort = existingService.Spec.HealthCheckNodePort
+
+	if existingService.Spec.AllocateLoadBalancerNodePorts != nil {
+		allocateNodePorts := *existingService.Spec.AllocateLoadBalancerNodePorts
+		renderedService.Spec.AllocateLoadBalancerNodePorts = &allocateNodePorts
+	}
+
+	if existingService.Spec.LoadBalancerClass != nil {
+		loadBalancerClass := *existingService.Spec.LoadBalancerClass
+		renderedService.Spec.LoadBalancerClass = &loadBalancerClass
+	}
 }
 
 func (r *ServiceReconciler) renderServiceBase(

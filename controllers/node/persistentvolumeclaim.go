@@ -42,6 +42,13 @@ func (r *PersistentVolumeClaimReconciler) Render(
 	existingPVC *k8scorev1.PersistentVolumeClaim,
 ) *k8scorev1.PersistentVolumeClaim {
 	nodeName := node.GetName()
+	claimName := nodeName
+
+	if existingPVC != nil {
+		// A pre node/link controller named claims `<topology>-<node>`. Keep that immutable name
+		// while adopting the claim so upgrades continue mounting the existing volume.
+		claimName = existingPVC.GetName()
+	}
 
 	annotations, globalLabels := r.configManagerGetter().GetAllMetadata()
 
@@ -59,7 +66,7 @@ func (r *PersistentVolumeClaimReconciler) Render(
 
 	pvc := &k8scorev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        nodeName,
+			Name:        claimName,
 			Namespace:   node.GetNamespace(),
 			Annotations: annotations,
 			Labels:      labels,

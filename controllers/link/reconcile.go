@@ -2,6 +2,7 @@ package link
 
 import (
 	"context"
+	"fmt"
 
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -42,7 +43,8 @@ func (c *Controller) Reconcile(
 
 	err = ValidateLink(link)
 	if err != nil {
-		// terminally invalid until the spec changes -- log loudly but do not requeue
+		// terminally invalid until the spec changes -- clear any stale allocation and stamp the
+		// rejection so no node controller or launcher can continue realizing it
 		c.BaseController.Log.Criticalf(
 			"link '%s/%s' is invalid and will not be processed: %s",
 			link.GetNamespace(),
@@ -50,7 +52,11 @@ func (c *Controller) Reconcile(
 			err,
 		)
 
-		return ctrlruntime.Result{}, nil
+		return ctrlruntime.Result{}, c.updateLinkStatus(
+			ctx,
+			link,
+			clabernetesapisv1alpha1.LinkStatus{Error: err.Error()},
+		)
 	}
 
 	// the namespace's links are read through the live (uncached) reader -- allocation decisions
@@ -65,6 +71,8 @@ func (c *Controller) Reconcile(
 	}
 
 	if conflictingLink := FindEndpointConflict(link, namespaceLinks.Items); conflictingLink != "" {
+		conflictError := fmt.Sprintf("endpoint already claimed by link %q", conflictingLink)
+
 		c.BaseController.Log.Criticalf(
 			"link '%s/%s' claims an endpoint already wired by link %q, skipping allocation",
 			link.GetNamespace(),
@@ -72,7 +80,11 @@ func (c *Controller) Reconcile(
 			conflictingLink,
 		)
 
-		return ctrlruntime.Result{}, nil
+		return ctrlruntime.Result{}, c.updateLinkStatus(
+			ctx,
+			link,
+			clabernetesapisv1alpha1.LinkStatus{Error: conflictError},
+		)
 	}
 
 	// grouping (which decides same-launcher-ness) comes from the cached node view -- node spec
@@ -101,7 +113,9 @@ func (c *Controller) Reconcile(
 		return ctrlruntime.Result{}, err
 	}
 
-	if desiredTunnelID == link.Status.TunnelID {
+	desiredStatus := clabernetesapisv1alpha1.LinkStatus{TunnelID: desiredTunnelID}
+
+	if desiredStatus == link.Status {
 		c.BaseController.LogReconcileCompleteSuccess(req)
 
 		return ctrlruntime.Result{}, nil
@@ -115,9 +129,7 @@ func (c *Controller) Reconcile(
 		link.Status.TunnelID,
 	)
 
-	link.Status.TunnelID = desiredTunnelID
-
-	err = c.BaseController.Client.Update(ctx, link)
+	err = c.updateLinkStatus(ctx, link, desiredStatus)
 	if err != nil {
 		c.BaseController.Log.Criticalf(
 			"failed updating link '%s/%s' status, err: %s",
@@ -132,4 +144,18 @@ func (c *Controller) Reconcile(
 	c.BaseController.LogReconcileCompleteSuccess(req)
 
 	return ctrlruntime.Result{}, nil
+}
+
+func (c *Controller) updateLinkStatus(
+	ctx context.Context,
+	link *clabernetesapisv1alpha1.Link,
+	desiredStatus clabernetesapisv1alpha1.LinkStatus,
+) error {
+	if link.Status == desiredStatus {
+		return nil
+	}
+
+	link.Status = desiredStatus
+
+	return c.BaseController.Client.Update(ctx, link)
 }

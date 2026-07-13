@@ -940,6 +940,13 @@ export type ClabernetesContainerlabDevLinkV1Alpha1 = {
      */
     status?: {
         /**
+         * Error holds the reason this link cannot currently be realized. An empty value means the
+         * link is eligible for materialization (a cross-launcher link can still be waiting for its
+         * tunnel id); invalid links and deterministic endpoint-conflict losers carry an error and are
+         * ignored by node controllers and launchers until their spec or conflicting links change.
+         */
+        error?: string;
+        /**
          * TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller
          * allocated for this link -- both sides of the link use the same id. This is an allocation
          * rather than user intent, hence it living in the status; zero means "not allocated (yet)"

@@ -43,8 +43,10 @@ func LinkAttachmentsDigest(
 
 	entries := make([]string, 0)
 
-	for idx := range links {
-		link := &links[idx]
+	activeLinks := ActiveLinks(links)
+
+	for idx := range activeLinks {
+		link := &activeLinks[idx]
 
 		endpointAInGroup := members[link.Spec.EndpointA.NodeName]
 		endpointBInGroup := members[link.Spec.EndpointB.NodeName]

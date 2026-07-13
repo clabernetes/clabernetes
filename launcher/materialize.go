@@ -95,8 +95,10 @@ func materializeLinks(
 ) []*clabernetesutilcontainerlab.LinkDefinition {
 	stanzas := make([]*clabernetesutilcontainerlab.LinkDefinition, 0, len(links))
 
-	for idx := range links {
-		link := &links[idx]
+	activeLinks := clabernetesutilcontainerlab.ActiveLinks(links)
+
+	for idx := range activeLinks {
+		link := &activeLinks[idx]
 
 		local, remote := link.Spec.EndpointA, link.Spec.EndpointB
 
