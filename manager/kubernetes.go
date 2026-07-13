@@ -90,14 +90,6 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 							},
 						},
 					},
-					// our tunnel "connectivity" cr
-					&clabernetesapisv1alpha1.Connectivity{}: {
-						Namespaces: map[string]ctrlruntimecache.Config{
-							ctrlruntimecache.AllNamespaces: {
-								LabelSelector: labels.Everything(),
-							},
-						},
-					},
 				}
 
 				return ctrlruntimecache.New(config, opts)

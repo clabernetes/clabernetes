@@ -77,10 +77,6 @@ const (
 	// LauncherCRIKindEnv env var tells the launcher what CRI sock is mounted in it (if configured).
 	LauncherCRIKindEnv = "LAUNCHER_CRI_KIND"
 
-	// LauncherTopologyNameEnv is the env var that holds the name of the topology that a given
-	// launcher is responsible for.
-	LauncherTopologyNameEnv = "LAUNCHER_TOPOLOGY_NAME"
-
 	// LauncherNodeNameEnv is the env var that holds the name of the node in the original topology
 	// that a given launcher is responsible for.
 	LauncherNodeNameEnv = "LAUNCHER_NODE_NAME"

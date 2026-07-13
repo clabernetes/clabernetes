@@ -16,9 +16,6 @@ const (
 	// ImageRequest is the Kind of the ImageRequest custom resource.
 	ImageRequest = "imageRequest"
 
-	// Connectivity is the Kind of the Connectivity custom resource.
-	Connectivity = "connectivity"
-
 	// Node is the Kind of the Node custom resource.
 	Node = "node"
 

@@ -33,6 +33,28 @@ func initializeCrds(c clabernetesmanagertypes.Clabernetes) error {
 		}
 	}
 
+	return removeLegacyCrds(c, extensionsClient)
+}
+
+// removeLegacyCrds deletes crds (and thereby their instances) that clabernetes no longer uses --
+// currently just the pre node/link "connectivity" crd whose job (tunnel data) moved into the
+// per-link statuses.
+func removeLegacyCrds(
+	c clabernetesmanagertypes.Clabernetes,
+	extensionsClient *apiextensionsclient.Clientset,
+) error {
+	ctx, ctxCancel := c.NewContextWithTimeout()
+	defer ctxCancel()
+
+	legacyCrdName := "connectivities.clabernetes.containerlab.dev"
+
+	err := extensionsClient.ApiextensionsV1().
+		CustomResourceDefinitions().
+		Delete(ctx, legacyCrdName, metav1.DeleteOptions{})
+	if err != nil && !apimachineryerrors.IsNotFound(err) {
+		return fmt.Errorf("deleting legacy crd %s: %w", legacyCrdName, err)
+	}
+
 	return nil
 }
 

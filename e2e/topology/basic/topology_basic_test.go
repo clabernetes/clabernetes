@@ -1,7 +1,6 @@
 package basic_test
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -24,10 +23,9 @@ func TestContainerlabBasic(t *testing.T) {
 
 	steps := clabernetestesthelpersuite.Steps{
 		{
-			// this step, while obviously very "basic" does quite a bit of work for us... it ensures
-			// that the default ports are allocated, the config is hashed and subdivided up, and our
-			// defaults are set properly. more than that, this also asserts that the service(s) are
-			// setup as we'd expect.
+			// the topology compiles to node/link/nodeprofile objects and the node controller
+			// realizes those -- so this asserts the whole compile + realize pipeline including
+			// the (unprefixed! the namespace is the topology boundary) deployment and services
 			Index:       10,
 			Description: "Create a simple containerlab topology with just one node",
 			AssertObjects: map[string][]clabernetestesthelpersuite.AssertObject{
@@ -39,15 +37,29 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 				},
+				"node.clabernetes.containerlab.dev": {
+					{
+						Name: "srl1",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeNode,
+						},
+					},
+				},
+				"nodeprofile": {
+					{
+						Name:           testName,
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
+					},
+				},
 				"service": {
 					{
-						Name: fmt.Sprintf("%s-srl1", testName),
+						Name: "srl1",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeExposeService,
 						},
 					},
 					{
-						Name: fmt.Sprintf("%s-srl1-vx", testName),
+						Name: "srl1-vx",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeFabricService,
 						},
@@ -55,16 +67,10 @@ func TestContainerlabBasic(t *testing.T) {
 				},
 				"deployment": {
 					{
-						Name: fmt.Sprintf("%s-srl1", testName),
+						Name: "srl1",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeDeployment,
 						},
-					},
-				},
-				"connectivity": {
-					{
-						Name:           testName,
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
 					},
 				},
 			},
@@ -82,15 +88,45 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 				},
+				"node.clabernetes.containerlab.dev": {
+					{
+						Name: "srl1",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeNode,
+						},
+					},
+					{
+						Name: "srl2",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeNode,
+						},
+					},
+				},
+				"link": {
+					{
+						Name:           "srl1-e1-1-srl2-e1-1",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
+					},
+					{
+						Name:           "srl1-e1-3-host-eth13",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
+					},
+				},
 				"service": {
 					{
-						Name: fmt.Sprintf("%s-srl1", testName),
+						Name: "srl1",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeExposeService,
 						},
 					},
 					{
-						Name: fmt.Sprintf("%s-srl1-vx", testName),
+						Name: "srl1-vx",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeFabricService,
+						},
+					},
+					{
+						Name: "srl2-vx",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeFabricService,
 						},
@@ -98,23 +134,15 @@ func TestContainerlabBasic(t *testing.T) {
 				},
 				"deployment": {
 					{
-						Name: fmt.Sprintf("%s-srl1", testName),
+						Name: "srl1",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeDeployment,
 						},
 					},
 					{
-						Name: fmt.Sprintf("%s-srl2", testName),
+						Name: "srl2",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeDeployment,
-						},
-					},
-				},
-				"connectivity": {
-					{
-						Name: testName,
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
-							clabernetestesthelper.NormalizeConnectivity,
 						},
 					},
 				},

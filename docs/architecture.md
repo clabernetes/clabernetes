@@ -3,99 +3,117 @@ Architecture
 
 # Overview
 
-clabernetes itself is a collection of kubernetes custom resources and controllers that reconcile 
-those resources. The ultimate goal of the controllers is to, based on custom resource 
-definitions, render a network topology in the cluster. This "rendering" includes appropriately 
-stitching network node interfaces together, and exposing the management interfaces of the nodes 
-in the topology.
+clabernetes is a collection of kubernetes custom resources and controllers that reconcile those
+resources. The ultimate goal of the controllers is to render a network topology in the cluster:
+one launcher pod per (containerlab) node, network node interfaces stitched together across pods,
+and the management interfaces of the nodes exposed.
 
-There are currently two custom resource types: "containerlab", and "kne". Each resource type 
-accepts some common arguments and a "native" configuration/topology file from the given project 
-(containerlab/kne).
+The model in one picture:
+
+```
+                     ┌──────────────────────────────────────────────┐
+   OPTIONAL          │  Topology CR  (compiler / convenience layer) │
+                     │  containerlab yaml in → emits Node+Link CRs  │
+                     └──────────────┬───────────────────────────────┘
+                                    │ emits (owns, prunes, aggregates status)
+                                    ▼
+   AUTHORITATIVE     Node CRs (1 per launcher pod)     Link CRs (1 per wire)
+   API               created by: user | tooling | Topology compiler
+                                    │                        │
+                     ┌──────────────┴─────────┐   ┌──────────┴─────────┐
+                     │ Node controller        │   │ Link controller    │
+                     │ deployment, services,  │   │ validates, allocs  │
+                     │ PVC, digests, status   │   │ tunnelID → status  │
+                     └──────────────┬─────────┘   └──────────┬─────────┘
+                                    ▼                        ▼
+                     launcher pod: fetches its Node, field-selector-watches its
+                     Links, materializes topo.clab.yaml, runs clab + tunnels
+```
+
+Everything below the "AUTHORITATIVE API" line works identically whether the custom resources
+were written by a person, by tooling, or by the Topology compiler.
+
+
+## The Primary API: Nodes and Links
+
+A `Node` custom resource represents a single containerlab node -- its spec is simply what a
+human would write for that node in a containerlab topology file (flat, verbatim containerlab
+vocabulary). A `Link` custom resource represents a single wire between two nodes. That's the
+whole authoritative api: apply Node and Link objects and the controllers render a running,
+wired lab -- no Topology object required.
+
+The object name of a Node *is* the containerlab node name: the launcher pod hostname and the
+node's services derive from it, which also means the **namespace is the topology boundary**.
+Everything operational is controller-stamped into the statuses: expose port allocations and
+readiness on Nodes, tunnel id allocations on Links. Deployment *policy* -- expose behavior,
+image pull config, launcher resources, scheduling, privileges -- lives on `NodeProfile`
+objects that select Nodes by label, so whoever (or whatever) emits Nodes never needs to know
+about deployment policy.
+
+A deliberate scale property falls out of this design: no persisted object grows with the size
+of the topology. A Node grows only with its own definition, a Link is O(1), and each launcher
+watches exactly the links terminating on its own nodes (server side field selectors, which is
+why clabernetes requires kubernetes 1.31+).
 
 
 ## Components
 
-### Controller & Custom Resource Definitions
+### Controllers & Custom Resource Definitions
 
-The "brains" of clabernetes is the controller -- the controller is simply a deployment that is 
-installed into your kubernetes cluster. The controller is great, but without the Custom Resource 
-Definitions (CRDs), it has nothing to do! clabernetes CRDs define the topologies you want to 
-create. Once you create a CR from one of the clabernetes CRDs, the controller takes action and 
-begins to reconcile what currently exists in the cluster versus what *should* exist based on 
-your CR.
+The "brains" of clabernetes is the manager deployment which runs three cooperating controllers:
 
-The controller itself is simply a go program built around the controller-runtime project -- this 
-program runs inside a standard kubernetes deployment which must be installed into your cluster.
+- the **node controller** turns every (launcher) Node into a deployment, a per-node "fabric"
+  service (`<name>-vx`, the tunnel termination point), an expose service (`<name>`), and an
+  optional PVC -- and stamps readiness/allocations into the Node status. Grouped nodes
+  (containerlab's `network-mode: container:<primary>`) share their primary's pod.
+- the **link controller** validates Links and allocates tunnel ids into their statuses.
+- the **topology controller** is the optional convenience layer: it *compiles* a Topology
+  (a containerlab or kne file plus knobs) into Node/Link/NodeProfile objects -- expanding
+  topology defaults/kinds into each node so every emitted Node is self contained -- prunes
+  emitted objects that fall out of the definition, protects them from drift, and aggregates
+  node readiness back into the Topology status.
 
+### Launchers
 
-### Clabverter
+Each Node gets a Deployment running a single launcher container -- a Debian image with the
+clabernetes launcher binary and a full docker installation (not docker-in-docker: no docker
+sock mounting, just an independent docker inside the pod, free of the cluster's CRI/CNI).
 
-While the goal of clabernetes is to take a containerlab or kne topology and "directly" translate 
-it into a running clabernetes topology in your cluster, there are a few things that cannot be 
-translated directly. Chief among those is startup configurations or any other type of file that 
-you would like to mount to some path on one of your nodes. Containerlab and kne both solve this 
-problem by letting you run binaries on your local machine and then mounting/copying files 
-relative to where you ran the command into their appropriate location(s).
-
-As clabernetes is not running on your machine, and you only interact with it via the kubernetes 
-api (typically via kubectl, but could be curl or whatever too!), we don't have any way to 
-automagically copy or mount any files from your machine.
-
-To work around this, the "clabverter" tool was created -- this is a very simple cli tool that 
-can be pointed at a (for now only) containerlab topology (either locally or at a URL). This tool 
-then determines if any files would be mounted when using this topology file, if "yes", it will 
-render kubernetes configmaps containing the file contents, and generate a clabernetes 
-Containerlab CR that appropriately mounts the configmaps such that the files will be mounted in 
-the pod once it is running.
-
-
-## Topologies
-
-The whole point of clabernetes is to deploy a containerlab or kne topology into kubernetes (in a 
-"standard" clabernetes way, obviously kne can already do this on its own) -- so, what does that 
-actually look like? Great question! The following sections outline the high level bits...
-
-
- Once this node is up, the 
-launcher then handles connecting the node as defined in the original topology file.
-
-
-
-
-### Nodes
-
-Regardless of the flavor of topology you want to deploy (containerlab/kne), clabernetes will
-deploy a single *Deployment per Node* -- that means a single kubernetes Deployment per
-containerlab/kne node (not kubernetes node!). Why? Simply because this is the easiest way to do
-things really. With a single Deployment representing a single node we can treat every node in
-the same way -- connectivity is the same, exposing the node is the same, deployments (mostly)
-are the same, etc..
-
-Each Deployment runs a single container in the pod -- that container is a Debian image that
-contains the clabernetes launcher binary, and has docker installed in the container. On startup
-the clabernetes launcher handles any initial setup, then launches "normal" containerlab with a
-topology file representing *one node from the original topology*.
-
-**Note:** that this is not "normal" docker-in-docker as we aren't actually mounting the docker sock
-in the container -- this is a full-blown docker installation independent of the CRI of your cluster.
-This is obviously not ideal, *but* means we are free to do whatever we want without having to
-mess with the host clusters CRI or CNI.
-
+On startup the launcher fetches its own Node object (and those of any grouped nodes), lists
+the Links terminating on them via field selectors, and verifies that link view against a
+digest annotation the node controller stamped on the pod. From that it materializes a
+containerlab topology file locally and runs plain containerlab.
 
 ### Inter-Node Connectivity
 
-After the launcher has taken care of spinning up the node it then checks to see if this node 
-requires any connectivity to other nodes in the topology. The launcher gets this information 
-courtesy of the controllers -- they already broke up the topology into the node per Deployment 
-setup outlined -- the controller also mounted another file to the pod telling it about any 
-required connectivity to other nodes. The launcher takes this info and, once again thanks to 
-containerlab giving a nice helping hand here, handles the connectivity via VXLAN tunnels.
-
+Cross-pod wires are realized as vxlan (or, experimentally, slurpeeth) tunnels between the
+per-node fabric services. The tunnel destination is *derived* from the link spec alone
+(`<remote node>-vx.<namespace>...`), and the launcher keeps watching its links: moving a
+wire's far end ("rewiring") re-targets the tunnel live without restarting anything, while
+changing the set of interfaces attached to a node rolls just that node's pod.
 
 ### Exposing Nodes
 
-Lastly, the nodes of course need to be exposed somehow so you can connect to them with SSH or 
-NETCONF or whatever. The controller handles this part by creating kubernetes Service(s) of the 
-LoadBalancer flavor. You can check the status field of your CR to find the IP assigned for each 
-node's LoadBalancer Service, or you can check via normal kubernetes means.
+Ports listed in a node definition (plus a sensible default set unless auto-expose is
+disabled) are allocated into the Node status and exposed through a per-node service --
+LoadBalancer flavored by default. The assigned address is reflected back into the Node
+status.
+
+### Clabverter
+
+While the goal of clabernetes is to take a containerlab topology and "directly" translate it
+into a running clabernetes topology in your cluster, there are a few things that cannot be
+translated directly. Chief among those is startup configurations or any other type of file
+that you would like to mount to some path on one of your nodes. Containerlab solves this
+problem by letting you run binaries on your local machine and then mounting/copying files
+relative to where you ran the command into their appropriate location(s).
+
+As clabernetes is not running on your machine, and you only interact with it via the
+kubernetes api, we don't have any way to automagically copy or mount any files from your
+machine.
+
+To work around this, the "clabverter" tool was created -- this is a very simple cli tool that
+can be pointed at a containerlab topology (either locally or at a URL). This tool determines
+if any files would be mounted when using this topology file, and if so renders kubernetes
+configmaps containing the file contents and a Topology that appropriately mounts them into
+the pods.

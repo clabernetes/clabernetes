@@ -177,14 +177,14 @@ try-c9s-ui-service: try-c9s-apply-topology | $(TRY_C9S_STATE_DIR)
 
 .PHONY: try-c9s-print-access
 try-c9s-print-access:
-	@srl_ip=$$($(KUBECTL) -n default get svc "$(TRY_C9S_TOPOLOGY_NAME)-srl1" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true); \
+	@srl_ip=$$($(KUBECTL) -n default get svc "srl1" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true); \
 	echo "--> TRY-C9S: UI: http://localhost:$(TRY_C9S_UI_PORT)"; \
 	if [ -n "$$srl_ip" ]; then \
 		echo "--> TRY-C9S: SR Linux SSH: ssh admin@$$srl_ip"; \
 		echo "--> TRY-C9S: SR Linux gNMI: $$srl_ip:57400"; \
 		echo "--> TRY-C9S: SR Linux NETCONF: $$srl_ip:830"; \
 	else \
-		echo "--> TRY-C9S: SR Linux service: kubectl -n default get svc $(TRY_C9S_TOPOLOGY_NAME)-srl1"; \
+		echo "--> TRY-C9S: SR Linux service: kubectl -n default get svc srl1"; \
 	fi
 
 .PHONY: try-c9s-expose

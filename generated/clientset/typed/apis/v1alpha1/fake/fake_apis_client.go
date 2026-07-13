@@ -32,10 +32,6 @@ func (c *FakeClabernetesV1alpha1) Configs(namespace string) v1alpha1.ConfigInter
 	return newFakeConfigs(c, namespace)
 }
 
-func (c *FakeClabernetesV1alpha1) Connectivities(namespace string) v1alpha1.ConnectivityInterface {
-	return newFakeConnectivities(c, namespace)
-}
-
 func (c *FakeClabernetesV1alpha1) ImageRequests(namespace string) v1alpha1.ImageRequestInterface {
 	return newFakeImageRequests(c, namespace)
 }

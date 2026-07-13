@@ -11,7 +11,6 @@ This document provides a comprehensive reference for all Custom Resource Definit
 - [Link CRD](#link-crd)
 - [NodeProfile CRD](#nodeprofile-crd)
 - [Config CRD](#config-crd)
-- [Connectivity CRD](#connectivity-crd)
 - [ImageRequest CRD](#imagerequest-crd)
 
 ---
@@ -290,13 +289,9 @@ spec:
 
 #### naming
 
-Controls resource naming convention.
-
-| Value | Description |
-|-------|-------------|
-| `global` | Use global Config setting (default) |
-| `prefixed` | Include topology name as prefix in resources |
-| `non-prefixed` | Don't include topology name prefix |
+Deprecated (accepted for 0.6.x compatibility, ignored). Emitted Node objects are named after
+their containerlab node names -- the **namespace is the topology boundary**, so deploy one
+topology per namespace.
 
 **Note:** This field is immutable after creation. Use `non-prefixed` only when deploying topologies in separate namespaces.
 
@@ -339,29 +334,12 @@ diagram and troubleshooting steps.
 Boolean. `true` when every node in the topology has reported ready. Mirrors the
 `TopologyReady` condition and is surfaced here for `kubectl get` print columns.
 
-#### nodeReadiness
+#### nodeCount / readyNodeCount / linkCount
 
-Map of node name → simplified readiness string. Updated every reconcile cycle.
-
-| Value | Description |
-|-------|-------------|
-| `ready` | Startup and readiness probes both passing. |
-| `notready` | Pod exists but probes have not yet passed. |
-| `unknown` | No deployment found for this node. |
-| `deploymentDisabled` | The topology has the `clabernetes/disableDeployments` label set. |
-
-#### nodeProbeStatuses
-
-Map of node name → per-probe status object. Provides finer-grained observability than
-`nodeReadiness`. Each node entry has three fields:
-
-| Field | Description |
-|-------|-------------|
-| `startupProbe` | Derived from `pod.status.containerStatuses[0].started`. Passing once the lab node writes its status file. |
-| `readinessProbe` | Derived from `pod.status.containerStatuses[0].ready`. Passing when the node is ready to accept traffic. |
-| `livenessProbe` | Inferred from container state: `Running` → passing; `CrashLoopBackOff` → failing; other → unknown. |
-
-Possible values for all probe fields: `passing`, `failing`, `unknown`, `disabled`.
+Aggregated counts over the emitted objects. All *per node* detail (readiness, probe statuses,
+exposed port allocations) lives on the [Node](#node-crd) objects, and per link detail (tunnel
+ids) on the [Link](#link-crd) objects -- the Topology only aggregates, which keeps its size
+bounded regardless of how big the definition is.
 
 #### conditions
 
@@ -689,47 +667,6 @@ Global naming convention for resources.
 |-------|-------------|
 | `prefixed` | Include topology name as prefix (default) |
 | `non-prefixed` | Don't include topology name prefix |
-
----
-
-## Connectivity CRD
-
-The `Connectivity` CRD is automatically managed by clabernetes to track point-to-point tunnels between nodes. Users typically do not create or modify this resource directly.
-
-### Basic Structure
-
-```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: Connectivity
-metadata:
-  name: my-topology
-spec:
-  pointToPointTunnels:
-    srl1:
-      - tunnelID: 1
-        destination: my-topology-srl2.default.svc.cluster.local
-        localNode: srl1
-        localInterface: e1-1
-        remoteNode: srl2
-        remoteInterface: e1-1
-```
-
-### ConnectivitySpec Fields
-
-#### pointToPointTunnels
-
-Map of node names to their tunnel configurations.
-
-##### PointToPointTunnel
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `tunnelID` | int | Tunnel ID (VNID or segment ID) |
-| `destination` | string | Destination service FQDN |
-| `localNode` | string | Local node name |
-| `localInterface` | string | Local interface name |
-| `remoteNode` | string | Remote node name |
-| `remoteInterface` | string | Remote interface name |
 
 ---
 
