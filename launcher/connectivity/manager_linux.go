@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	claberneteserrors "github.com/srl-labs/clabernetes/errors"
 	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
@@ -19,7 +18,7 @@ func NewManager(
 	cancelChan chan bool,
 	logger claberneteslogging.Instance,
 	clabernetesClient *clabernetesgeneratedclientset.Clientset,
-	initialTunnels []*clabernetesapisv1alpha1.PointToPointTunnel,
+	initialTunnels []*Tunnel,
 	connectivityKind string,
 ) (Manager, error) {
 	c := &common{

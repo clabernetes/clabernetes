@@ -125,6 +125,10 @@ const (
 	// LauncherPullSecretsEnv is the env var that holds the (comma separated) secret names the
 	// launcher may use when pulling images via the cluster CRI.
 	LauncherPullSecretsEnv = "LAUNCHER_PULL_SECRETS" //nolint:gosec
+
+	// LauncherInClusterDNSSuffixEnv is the env var that holds the in cluster dns suffix the
+	// launcher uses when deriving tunnel destinations (fabric service names).
+	LauncherInClusterDNSSuffixEnv = "LAUNCHER_IN_CLUSTER_DNS_SUFFIX"
 )
 
 const (

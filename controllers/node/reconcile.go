@@ -256,7 +256,10 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 		return err
 	}
 
-	linkAttachmentsDigest := LinkAttachmentsDigest(groupMembers, namespaceLinks.Items)
+	linkAttachmentsDigest := clabernetesutilcontainerlab.LinkAttachmentsDigest(
+		groupMembers,
+		namespaceLinks.Items,
+	)
 
 	nodeConfigDigest, err := ConfigDigest(
 		groupMembers,

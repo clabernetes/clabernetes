@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/carlmontanari/slurpeeth/slurpeeth"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	"gopkg.in/yaml.v3"
 )
@@ -29,7 +28,10 @@ func (m *slurpeethManager) Run() {
 		"containerlab started, connectivity mode is 'slurpeeth', initializing slurpeeth manager...",
 	)
 
-	m.renderSlurpeethConfig(m.initialTunnels)
+	err := m.renderSlurpeethConfig(m.initialTunnels)
+	if err != nil {
+		m.logger.Fatalf("failed rendering initial slurpeeth config, error: %s", err)
+	}
 
 	sm, err := slurpeeth.GetManager(
 		slurpeeth.WithConfigFile(slurpeethConfigPath),
@@ -85,9 +87,9 @@ func (m *slurpeethManager) Run() {
 
 	m.logger.Debug("initial slurpeeth tunnel creation complete")
 
-	m.logger.Debug("start connectivity custom resource watch...")
+	m.logger.Debug("start link custom resource watch...")
 
-	go watchConnectivity(
+	go watchLinks(
 		m.ctx,
 		m.logger,
 		m.clabernetesClient,
@@ -98,8 +100,8 @@ func (m *slurpeethManager) Run() {
 }
 
 func (m *slurpeethManager) renderSlurpeethConfig(
-	tunnels []*clabernetesapisv1alpha1.PointToPointTunnel,
-) {
+	tunnels []*Tunnel,
+) error {
 	slurpeethConfig := slurpeeth.Config{}
 
 	for _, tunnel := range tunnels {
@@ -123,10 +125,7 @@ func (m *slurpeethManager) renderSlurpeethConfig(
 
 	slurpeethConfigYAML, err := yaml.Marshal(slurpeethConfig)
 	if err != nil {
-		m.logger.Fatalf(
-			"failed marshalling slurpeeth config, error: %s",
-			err,
-		)
+		return fmt.Errorf("failed marshalling slurpeeth config: %w", err)
 	}
 
 	err = os.WriteFile(
@@ -135,9 +134,8 @@ func (m *slurpeethManager) renderSlurpeethConfig(
 		clabernetesconstants.PermissionsEveryoneReadWriteOwnerExecute,
 	)
 	if err != nil {
-		m.logger.Fatalf(
-			"failed writing slurpeeth config to disk, error: %s",
-			err,
-		)
+		return fmt.Errorf("failed writing slurpeeth config to disk: %w", err)
 	}
+
+	return nil
 }

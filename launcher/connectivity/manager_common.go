@@ -3,7 +3,6 @@ package connectivity
 import (
 	"context"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
 )
@@ -26,5 +25,5 @@ type common struct {
 	cancelChan        chan bool
 	logger            claberneteslogging.Instance
 	clabernetesClient *clabernetesgeneratedclientset.Clientset
-	initialTunnels    []*clabernetesapisv1alpha1.PointToPointTunnel
+	initialTunnels    []*Tunnel
 }

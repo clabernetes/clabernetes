@@ -608,6 +608,10 @@ func (r *DeploymentReconciler) renderDeploymentContainerEnv( //nolint: funlen
 			Value: profile.Connectivity,
 		},
 		{
+			Name:  clabernetesconstants.LauncherInClusterDNSSuffixEnv,
+			Value: r.configManagerGetter().GetInClusterDNSSuffix(),
+		},
+		{
 			Name:  clabernetesconstants.LauncherContainerlabVersion,
 			Value: profile.ContainerlabVersion,
 		},

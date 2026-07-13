@@ -2,17 +2,19 @@ package connectivity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os/exec"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	claberneteserrors "github.com/srl-labs/clabernetes/errors"
+	"github.com/vishvananda/netlink"
 )
 
 const (
@@ -32,42 +34,30 @@ func sanitizeInterfaceName(name string) string {
 type vxlanManager struct {
 	*common
 
-	currentTunnels map[string]*clabernetesapisv1alpha1.PointToPointTunnel
+	currentTunnels map[string]*Tunnel
+	createTunnel   func(string, string, string, int) error
+	deleteTunnel   func(context.Context, string, string) error
 }
 
 func (m *vxlanManager) Run() {
-	m.currentTunnels = make(map[string]*clabernetesapisv1alpha1.PointToPointTunnel)
+	m.currentTunnels = make(map[string]*Tunnel)
+	m.createTunnel = m.runContainerlabVxlanToolsCreate
+	m.deleteTunnel = m.runContainerlabVxlanToolsDelete
 
 	m.logger.Info(
 		"connectivity mode is 'vxlan', setting up any required tunnels...",
 	)
 
-	for _, tunnel := range m.initialTunnels {
-		err := m.runContainerlabVxlanToolsCreate(
-			tunnel.LocalNode,
-			tunnel.LocalInterface,
-			tunnel.Destination,
-			tunnel.TunnelID,
-		)
-		if err != nil {
-			m.logger.Fatalf(
-				"failed setting up tunnel to remote node '%s' for local interface '%s', error: %s",
-				tunnel.RemoteNode,
-				tunnel.LocalInterface,
-				err,
-			)
-		}
-
-		// we store them in a nice little map by local interface name so they're easy to
-		// reconcile on connectivity cr updates
-		m.currentTunnels[tunnel.LocalInterface] = tunnel
+	err := m.updateVxlanTunnels(m.initialTunnels)
+	if err != nil {
+		m.logger.Fatalf("failed setting up initial vxlan tunnels, error: %s", err)
 	}
 
 	m.logger.Debug("initial vxlan tunnel creation complete")
 
-	m.logger.Debug("start connectivity custom resource watch...")
+	m.logger.Debug("start link custom resource watch...")
 
-	go watchConnectivity(
+	go watchLinks(
 		m.ctx,
 		m.logger,
 		m.clabernetesClient,
@@ -123,7 +113,8 @@ func (m *vxlanManager) runContainerlabVxlanToolsCreate(
 
 	m.logger.Debugf("resolved remote vxlan tunnel service address as '%s'", resolvedVxlanRemote)
 
-	vxlanInterfaceName := sanitizeInterfaceName(fmt.Sprintf("%s-%s", localNodeName, cntLink))
+	linkInterfaceName := sanitizeInterfaceName(fmt.Sprintf("%s-%s", localNodeName, cntLink))
+	vxlanInterfaceName := "vx-" + linkInterfaceName
 
 	m.logger.Debugf("Attempting to delete existing vxlan interface '%s'", vxlanInterfaceName)
 
@@ -147,8 +138,8 @@ func (m *vxlanManager) runContainerlabVxlanToolsCreate(
 		"--id",
 		strconv.Itoa(vxlanID),
 		"--link",
-		vxlanInterfaceName,
-		"--port",
+		linkInterfaceName,
+		"--dst-port",
 		strconv.Itoa(clabernetesconstants.VXLANServicePort),
 	)
 
@@ -172,117 +163,132 @@ func (m *vxlanManager) runContainerlabVxlanToolsDelete(
 	localNodeName,
 	cntLink string,
 ) error {
-	prefix := sanitizeInterfaceName(fmt.Sprintf("vx-%s-%s", localNodeName, cntLink))
+	vxlanInterfaceName := sanitizeInterfaceName(fmt.Sprintf("vx-%s-%s", localNodeName, cntLink))
 
-	cmd := exec.CommandContext( //nolint:gosec
-		ctx,
-		"containerlab",
-		"tools",
-		"vxlan",
-		"delete",
-		"--prefix",
-		prefix,
-	)
-
-	m.logger.Debugf(
-		"using following args for vxlan tunnel deletion (via containerlab) '%s'", cmd.Args,
-	)
-
-	cmd.Stdout = m.logger
-	cmd.Stderr = m.logger
-
-	err := cmd.Run()
+	links, err := netlink.LinkList()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed listing links while deleting %q: %w", vxlanInterfaceName, err)
+	}
+
+	for _, link := range links {
+		ctxErr := ctx.Err()
+		if ctxErr != nil {
+			return ctxErr
+		}
+
+		if link.Type() != clabernetesconstants.ConnectivityVXLAN ||
+			!vxlanLinkMatchesName(link, vxlanInterfaceName) {
+			continue
+		}
+
+		m.logger.Infof("deleting vxlan link %q", link.Attrs().Name)
+
+		err = netlink.LinkDel(link)
+		if err != nil {
+			return fmt.Errorf("failed deleting vxlan link %q: %w", link.Attrs().Name, err)
+		}
 	}
 
 	return nil
 }
 
+func vxlanLinkMatchesName(link netlink.Link, expectedName string) bool {
+	attributes := link.Attrs()
+
+	return attributes.Name == expectedName || slices.Contains(attributes.AltNames, expectedName)
+}
+
 func (m *vxlanManager) updateVxlanTunnels(
-	tunnels []*clabernetesapisv1alpha1.PointToPointTunnel,
-) {
-	// start with deleting extraneous tunnels...
-	for _, existingTunnel := range m.currentTunnels {
-		var found bool
+	tunnels []*Tunnel,
+) error {
+	desiredTunnels := make(map[string]*Tunnel, len(tunnels))
 
-		for _, tunnel := range tunnels {
-			if tunnel.LocalInterface == existingTunnel.LocalInterface {
-				found = true
-
-				break
-			}
+	for _, tunnel := range tunnels {
+		if _, exists := desiredTunnels[tunnel.LocalInterface]; exists {
+			return fmt.Errorf(
+				"%w: multiple tunnels use local interface %q",
+				claberneteserrors.ErrConnectivity,
+				tunnel.LocalInterface,
+			)
 		}
 
-		if found {
-			// the existing tunnel (or rather its local interface) is represented in the "new"
-			// tunnels, nothing to do here
+		desiredTunnels[tunnel.LocalInterface] = tunnel
+	}
+
+	if m.createTunnel == nil {
+		m.createTunnel = m.runContainerlabVxlanToolsCreate
+	}
+
+	if m.deleteTunnel == nil {
+		m.deleteTunnel = m.runContainerlabVxlanToolsDelete
+	}
+
+	nextTunnels := make(map[string]*Tunnel, len(tunnels))
+	reconcileErrors := make([]error, 0)
+	existingInterfaces := make([]string, 0, len(m.currentTunnels))
+
+	for localInterface := range m.currentTunnels {
+		existingInterfaces = append(existingInterfaces, localInterface)
+	}
+
+	slices.Sort(existingInterfaces)
+
+	for _, localInterface := range existingInterfaces {
+		existingTunnel := m.currentTunnels[localInterface]
+		desiredTunnel, stillDesired := desiredTunnels[localInterface]
+
+		if stillDesired && reflect.DeepEqual(existingTunnel, desiredTunnel) {
+			nextTunnels[localInterface] = existingTunnel
+			delete(desiredTunnels, localInterface)
+
 			continue
 		}
 
-		err := m.runContainerlabVxlanToolsDelete(
-			m.ctx,
-			existingTunnel.LocalNode,
-			existingTunnel.LocalInterface,
-		)
+		err := m.deleteTunnel(m.ctx, existingTunnel.LocalNode, existingTunnel.LocalInterface)
 		if err != nil {
-			m.logger.Fatalf(
-				"failed deleting extraneous tunnel to remote node '%s' for local interface '%s'"+
-					", error: %s",
+			reconcileErrors = append(reconcileErrors, fmt.Errorf(
+				"failed deleting tunnel to remote node %q for local interface %q: %w",
 				existingTunnel.RemoteNode,
 				existingTunnel.LocalInterface,
 				err,
-			)
+			))
+			nextTunnels[localInterface] = existingTunnel
+			delete(desiredTunnels, localInterface)
 		}
 	}
 
-	tunnelsToReCreate := make([]*clabernetesapisv1alpha1.PointToPointTunnel, 0)
+	desiredInterfaces := make([]string, 0, len(desiredTunnels))
 
-	for _, tunnel := range tunnels {
-		existingTunnel, ok := m.currentTunnels[tunnel.LocalInterface]
-		if ok && reflect.DeepEqual(existingTunnel, tunnel) {
-			// we've already got a tunnel setup for this interface, so we gotta check to see if our
-			// previously setup destination is the same -- if "yes" we can skip doing anything to
-			// this one.
-			continue
-		}
-
-		if ok {
-			// tunnel for this interface exists but isnt the same as our desired setup, delete the
-			// old tunnel before we create the new one
-			err := m.runContainerlabVxlanToolsDelete(
-				m.ctx,
-				tunnel.LocalNode,
-				tunnel.LocalInterface,
-			)
-			if err != nil {
-				m.logger.Fatalf(
-					"failed deleting existing tunnel to remote node '%s' for local interface '%s'"+
-						" before re-configuring, error: %s",
-					tunnel.RemoteNode,
-					tunnel.LocalInterface,
-					err,
-				)
-			}
-		}
-
-		tunnelsToReCreate = append(tunnelsToReCreate, tunnel)
+	for localInterface := range desiredTunnels {
+		desiredInterfaces = append(desiredInterfaces, localInterface)
 	}
 
-	for _, tunnel := range tunnelsToReCreate {
-		err := m.runContainerlabVxlanToolsCreate(
+	slices.Sort(desiredInterfaces)
+
+	for _, localInterface := range desiredInterfaces {
+		tunnel := desiredTunnels[localInterface]
+
+		err := m.createTunnel(
 			tunnel.LocalNode,
 			tunnel.LocalInterface,
 			tunnel.Destination,
 			tunnel.TunnelID,
 		)
 		if err != nil {
-			m.logger.Fatalf(
-				"failed setting up tunnel to remote node '%s' for local interface '%s', error: %s",
+			reconcileErrors = append(reconcileErrors, fmt.Errorf(
+				"failed setting up tunnel to remote node %q for local interface %q: %w",
 				tunnel.RemoteNode,
 				tunnel.LocalInterface,
 				err,
-			)
+			))
+
+			continue
 		}
+
+		nextTunnels[localInterface] = tunnel
 	}
+
+	m.currentTunnels = nextTunnels
+
+	return errors.Join(reconcileErrors...)
 }
