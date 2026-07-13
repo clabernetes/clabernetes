@@ -55,6 +55,30 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 							},
 						},
 					},
+					// nodes/links/node profiles are the primary api -- they are created by
+					// users (or tooling) and carry no clabernetes/app label, so they must be
+					// cached unconditionally
+					&clabernetesapisv1alpha1.Node{}: {
+						Namespaces: map[string]ctrlruntimecache.Config{
+							ctrlruntimecache.AllNamespaces: {
+								LabelSelector: labels.Everything(),
+							},
+						},
+					},
+					&clabernetesapisv1alpha1.Link{}: {
+						Namespaces: map[string]ctrlruntimecache.Config{
+							ctrlruntimecache.AllNamespaces: {
+								LabelSelector: labels.Everything(),
+							},
+						},
+					},
+					&clabernetesapisv1alpha1.NodeProfile{}: {
+						Namespaces: map[string]ctrlruntimecache.Config{
+							ctrlruntimecache.AllNamespaces: {
+								LabelSelector: labels.Everything(),
+							},
+						},
+					},
 					// watch our config "singleton" too; while this is sorta/basically a "cluster"
 					// CR -- we dont want to have to force users to have cluster wide perms, *and*
 					// we want to be able to set an owner ref to the manager deployment, so the
