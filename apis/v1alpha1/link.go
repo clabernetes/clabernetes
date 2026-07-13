@@ -23,7 +23,7 @@ import (
 // +kubebuilder:printcolumn:JSONPath=".spec.endpointA.interfaceName",name=Interface-A,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.endpointB.nodeName",name=Node-B,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.endpointB.interfaceName",name=Interface-B,type=string
-// +kubebuilder:printcolumn:JSONPath=".spec.tunnelID",name=Tunnel-ID,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.tunnelID",name=Tunnel-ID,type=integer
 type Link struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -40,7 +40,9 @@ type LinkEndpointSpec struct {
 	InterfaceName string `json:"interfaceName"`
 }
 
-// LinkSpec is the spec for a Link resource.
+// LinkSpec is the spec for a Link resource. It holds only the "wire as the user drew it" --
+// anything operational (like the allocated tunnel id) lives in the status or is derived by the
+// launchers.
 type LinkSpec struct {
 	// TopologyName is the name of the Topology this Link belongs to.
 	TopologyName string `json:"topologyName"`
@@ -48,11 +50,6 @@ type LinkSpec struct {
 	EndpointA LinkEndpointSpec `json:"endpointA"`
 	// EndpointB is the "b" side of this link.
 	EndpointB LinkEndpointSpec `json:"endpointB"`
-	// TunnelID is the id number of the tunnel (vnid or segment id) for this link -- both sides of
-	// the link use the same id.
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=16000000
-	TunnelID int `json:"tunnelID"`
 	// MTU is the mtu for the link as set in the original topology definition -- launchers apply
 	// this to the (node side of the) link termination they create; zero means "unset" (use the
 	// containerlab default).
@@ -61,7 +58,16 @@ type LinkSpec struct {
 }
 
 // LinkStatus is the status for a Link resource.
-type LinkStatus struct{}
+type LinkStatus struct {
+	// TunnelID is the id number of the tunnel (vnid or segment id) the controller allocated for
+	// this link -- both sides of the link use the same id. This is an allocation rather than user
+	// intent, hence it living in the status; zero means "not allocated yet" (launchers skip such
+	// links until the controller has filled the id in).
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=16000000
+	// +optional
+	TunnelID int `json:"tunnelID,omitempty"`
+}
 
 // PointToPointTunnel holds the *local view* of a tunnel between two interfaces on different nodes
 // of a clabernetes Topology -- launchers derive this view from the Link objects relevant to their

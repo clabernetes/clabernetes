@@ -150,7 +150,7 @@ func TestAllocateTunnelIDs(t *testing.T) {
 			existingLinks: map[string]*clabernetesapisv1alpha1.Link{
 				"link-b": {
 					ObjectMeta: metav1.ObjectMeta{Name: "link-b"},
-					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: 1},
+					Status:     clabernetesapisv1alpha1.LinkStatus{TunnelID: 1},
 				},
 			},
 			renderedLinks: []*clabernetesapisv1alpha1.Link{
@@ -166,7 +166,7 @@ func TestAllocateTunnelIDs(t *testing.T) {
 			existingLinks: map[string]*clabernetesapisv1alpha1.Link{
 				"link-gone": {
 					ObjectMeta: metav1.ObjectMeta{Name: "link-gone"},
-					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: 1},
+					Status:     clabernetesapisv1alpha1.LinkStatus{TunnelID: 1},
 				},
 			},
 			renderedLinks: []*clabernetesapisv1alpha1.Link{
@@ -180,11 +180,11 @@ func TestAllocateTunnelIDs(t *testing.T) {
 			existingLinks: map[string]*clabernetesapisv1alpha1.Link{
 				"link-a": {
 					ObjectMeta: metav1.ObjectMeta{Name: "link-a"},
-					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: 7},
+					Status:     clabernetesapisv1alpha1.LinkStatus{TunnelID: 7},
 				},
 				"link-b": {
 					ObjectMeta: metav1.ObjectMeta{Name: "link-b"},
-					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: 7},
+					Status:     clabernetesapisv1alpha1.LinkStatus{TunnelID: 7},
 				},
 			},
 			renderedLinks: []*clabernetesapisv1alpha1.Link{
@@ -199,11 +199,11 @@ func TestAllocateTunnelIDs(t *testing.T) {
 			existingLinks: map[string]*clabernetesapisv1alpha1.Link{
 				"link-a": {
 					ObjectMeta: metav1.ObjectMeta{Name: "link-a"},
-					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: -1},
+					Status:     clabernetesapisv1alpha1.LinkStatus{TunnelID: -1},
 				},
 				"link-b": {
 					ObjectMeta: metav1.ObjectMeta{Name: "link-b"},
-					Spec:       clabernetesapisv1alpha1.LinkSpec{TunnelID: 11},
+					Status:     clabernetesapisv1alpha1.LinkStatus{TunnelID: 11},
 				},
 			},
 			renderedLinks: []*clabernetesapisv1alpha1.Link{
@@ -248,10 +248,10 @@ func TestAllocateTunnelIDs(t *testing.T) {
 				}
 
 				for idx, renderedLink := range testCase.renderedLinks {
-					if renderedLink.Spec.TunnelID != testCase.expectedIDs[idx] {
+					if renderedLink.Status.TunnelID != testCase.expectedIDs[idx] {
 						clabernetestesthelper.FailOutput(
 							t,
-							renderedLink.Spec.TunnelID,
+							renderedLink.Status.TunnelID,
 							testCase.expectedIDs[idx],
 						)
 					}

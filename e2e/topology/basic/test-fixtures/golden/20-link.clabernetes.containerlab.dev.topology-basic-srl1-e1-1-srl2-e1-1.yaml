@@ -22,5 +22,5 @@ spec:
     interfaceName: e1-1
     nodeName: srl2
   topologyName: topology-basic
+status:
   tunnelID: 1
-status: {}

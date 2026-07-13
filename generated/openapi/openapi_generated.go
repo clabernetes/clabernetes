@@ -1402,7 +1402,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkSpec(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "LinkSpec is the spec for a Link resource.",
+				Description: "LinkSpec is the spec for a Link resource. It holds only the \"wire as the user drew it\" -- anything operational (like the allocated tunnel id) lives in the status or is derived by the launchers.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"topologyName": {
@@ -1431,14 +1431,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkSpec(
 							),
 						},
 					},
-					"tunnelID": {
-						SchemaProps: spec.SchemaProps{
-							Description: "TunnelID is the id number of the tunnel (vnid or segment id) for this link -- both sides of the link use the same id.",
-							Default:     0,
-							Type:        []string{"integer"},
-							Format:      "int32",
-						},
-					},
 					"mtu": {
 						SchemaProps: spec.SchemaProps{
 							Description: "MTU is the mtu for the link as set in the original topology definition -- launchers apply this to the (node side of the) link termination they create; zero means \"unset\" (use the containerlab default).",
@@ -1447,7 +1439,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkSpec(
 						},
 					},
 				},
-				Required: []string{"topologyName", "endpointA", "endpointB", "tunnelID"},
+				Required: []string{"topologyName", "endpointA", "endpointB"},
 			},
 		},
 		Dependencies: []string{
@@ -1463,6 +1455,15 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkStatus(
 			SchemaProps: spec.SchemaProps{
 				Description: "LinkStatus is the status for a Link resource.",
 				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"tunnelID": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TunnelID is the id number of the tunnel (vnid or segment id) the controller allocated for this link -- both sides of the link use the same id. This is an allocation rather than user intent, hence it living in the status; zero means \"not allocated yet\" (launchers skip such links until the controller has filled the id in).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
 			},
 		},
 	}

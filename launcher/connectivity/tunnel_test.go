@@ -29,8 +29,10 @@ func testLink() *clabernetesapisv1alpha1.Link {
 				NodeName:      "srl2",
 				InterfaceName: "e1-1",
 			},
+			MTU: 9212,
+		},
+		Status: clabernetesapisv1alpha1.LinkStatus{
 			TunnelID: 101,
-			MTU:      9212,
 		},
 	}
 }

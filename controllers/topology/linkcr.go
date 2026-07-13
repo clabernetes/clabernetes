@@ -170,8 +170,9 @@ func (r *LinkReconciler) RenderAll(
 	return links
 }
 
-// AllocateTunnelIDs assigns valid, unique tunnel ids to the rendered links. Existing valid ids are
-// retained in deterministic link-name order; duplicates and invalid values are reallocated.
+// AllocateTunnelIDs assigns valid, unique tunnel ids to the rendered links. Existing valid ids
+// (held in the link statuses, as tunnel ids are controller allocations rather than user intent)
+// are retained in deterministic link-name order; duplicates and invalid values are reallocated.
 func AllocateTunnelIDs(
 	existingLinks map[string]*clabernetesapisv1alpha1.Link,
 	renderedLinks []*clabernetesapisv1alpha1.Link,
@@ -190,20 +191,20 @@ func AllocateTunnelIDs(
 	for _, link := range renderedLinks {
 		existingLink, ok := existingLinks[link.Name]
 		if !ok ||
-			existingLink.Spec.TunnelID < 1 ||
-			existingLink.Spec.TunnelID > maxID ||
-			allocatedIDs[existingLink.Spec.TunnelID] {
+			existingLink.Status.TunnelID < 1 ||
+			existingLink.Status.TunnelID > maxID ||
+			allocatedIDs[existingLink.Status.TunnelID] {
 			continue
 		}
 
-		link.Spec.TunnelID = existingLink.Spec.TunnelID
-		allocatedIDs[link.Spec.TunnelID] = true
+		link.Status.TunnelID = existingLink.Status.TunnelID
+		allocatedIDs[link.Status.TunnelID] = true
 	}
 
 	nextID := 1
 
 	for _, link := range renderedLinks {
-		if link.Spec.TunnelID != 0 {
+		if link.Status.TunnelID != 0 {
 			continue
 		}
 
@@ -221,7 +222,7 @@ func AllocateTunnelIDs(
 			)
 		}
 
-		link.Spec.TunnelID = nextID
+		link.Status.TunnelID = nextID
 		allocatedIDs[nextID] = true
 	}
 
@@ -262,6 +263,12 @@ func (r *LinkReconciler) Conforms(
 	expectedOwnerUID apimachinerytypes.UID,
 ) bool {
 	if !reflect.DeepEqual(existingLink.Spec, renderedLink.Spec) {
+		return false
+	}
+
+	if existingLink.Status.TunnelID != renderedLink.Status.TunnelID {
+		// the allocated tunnel id lives in the status -- a wiped/drifted id needs to be written
+		// back (the allocator retains valid existing ids, so this only fires on actual drift)
 		return false
 	}
 

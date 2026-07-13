@@ -50,7 +50,7 @@ func (h *initialListWatchGapHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 		resourceVersion = "2"
 
 		if strings.Contains(selector, "linkEndpointA") {
-			items = `{"apiVersion":"clabernetes.containerlab.dev/v1alpha1","kind":"Link","metadata":{"name":"link-1","labels":{"clabernetes/linkEndpointA":"r1","clabernetes/linkEndpointB":"r2"}},"spec":{"topologyName":"topology","endpointA":{"nodeName":"r1","interfaceName":"e1"},"endpointB":{"nodeName":"r2","interfaceName":"e1"},"tunnelID":1}}`
+			items = `{"apiVersion":"clabernetes.containerlab.dev/v1alpha1","kind":"Link","metadata":{"name":"link-1","labels":{"clabernetes/linkEndpointA":"r1","clabernetes/linkEndpointB":"r2"}},"spec":{"topologyName":"topology","endpointA":{"nodeName":"r1","interfaceName":"e1"},"endpointB":{"nodeName":"r2","interfaceName":"e1"}},"status":{"tunnelID":1}}`
 		}
 	}
 

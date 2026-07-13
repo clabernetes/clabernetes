@@ -1644,7 +1644,9 @@ export type ClabernetesContainerlabDevLinkV1Alpha1 = {
         [key: string]: unknown;
     };
     /**
-     * LinkSpec is the spec for a Link resource.
+     * LinkSpec is the spec for a Link resource. It holds only the "wire as the user drew it" --
+     * anything operational (like the allocated tunnel id) lives in the status or is derived by the
+     * launchers.
      */
     spec?: {
         /**
@@ -1683,17 +1685,18 @@ export type ClabernetesContainerlabDevLinkV1Alpha1 = {
          * TopologyName is the name of the Topology this Link belongs to.
          */
         topologyName: string;
-        /**
-         * TunnelID is the id number of the tunnel (vnid or segment id) for this link -- both sides of
-         * the link use the same id.
-         */
-        tunnelID: number;
     };
     /**
      * LinkStatus is the status for a Link resource.
      */
     status?: {
-        [key: string]: unknown;
+        /**
+         * TunnelID is the id number of the tunnel (vnid or segment id) the controller allocated for
+         * this link -- both sides of the link use the same id. This is an allocation rather than user
+         * intent, hence it living in the status; zero means "not allocated yet" (launchers skip such
+         * links until the controller has filled the id in).
+         */
+        tunnelID?: number;
     };
 };
 

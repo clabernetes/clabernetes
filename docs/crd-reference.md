@@ -594,13 +594,16 @@ spec:
   endpointB:
     nodeName: srl2
     interfaceName: e1-1
+status:
   tunnelID: 1
 ```
 
-The `clabernetes/linkEndpointA`/`clabernetes/linkEndpointB` labels hold the launcher node that
-terminates each side of the link (the primary node for grouped nodes) -- launchers derive the
-remote fabric service name (`<topology>-<launcherNode>-vx`) from the label, so no in-cluster DNS
-names need to be persisted on the resource.
+The spec holds only the wire as the user drew it. Everything operational is stamped by the
+controller: the `clabernetes/linkEndpointA`/`clabernetes/linkEndpointB` labels hold the launcher
+node that terminates each side of the link (the primary node for grouped nodes) -- launchers
+derive the remote fabric service name (`<topology>-<launcherNode>-vx`) from the label, so no
+in-cluster DNS names need to be persisted -- and the tunnel id is an allocation the controller
+writes to the status.
 
 ### LinkSpec Fields
 
@@ -609,8 +612,13 @@ names need to be persisted on the resource.
 | `topologyName` | string | Name of the owning Topology |
 | `endpointA` | LinkEndpointSpec | The "a" side of the link |
 | `endpointB` | LinkEndpointSpec | The "b" side of the link |
-| `tunnelID` | int | Tunnel ID (VNID or segment ID), shared by both sides |
 | `mtu` | int | MTU from the original topology link definition (0 = containerlab default) |
+
+### LinkStatus Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tunnelID` | int | Tunnel ID (VNID or segment ID) allocated by the controller, shared by both sides (0 = not allocated yet) |
 
 ##### LinkEndpointSpec
 

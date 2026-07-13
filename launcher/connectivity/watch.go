@@ -82,7 +82,7 @@ func linkToLocalTunnel(
 	}
 
 	return &clabernetesapisv1alpha1.PointToPointTunnel{
-		TunnelID:        link.Spec.TunnelID,
+		TunnelID:        link.Status.TunnelID,
 		Destination:     linkDestination(link, remoteLauncherNode),
 		LocalNode:       local.NodeName,
 		LocalInterface:  local.InterfaceName,
@@ -119,6 +119,12 @@ func ListNodeTunnels(
 			}
 
 			seenLinks[links.Items[i].Name] = true
+
+			if links.Items[i].Status.TunnelID == 0 {
+				// the controller has not allocated a tunnel id for this link (yet) -- skip it,
+				// the watch fires again once the status is filled in
+				continue
+			}
 
 			tunnels = append(tunnels, linkToLocalTunnel(nodeName, &links.Items[i]))
 		}
