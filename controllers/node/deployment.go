@@ -279,6 +279,11 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 			Name: "podinfo",
 			VolumeSource: k8scorev1.VolumeSource{
 				DownwardAPI: &k8scorev1.DownwardAPIVolumeSource{
+					// set explicitly (to the kubernetes default) so the rendered volume matches
+					// the api server defaulted object -- otherwise conforms never settles
+					DefaultMode: clabernetesutil.ToPointer(
+						int32(clabernetesconstants.PermissionsEveryoneRead),
+					),
 					Items: []k8scorev1.DownwardAPIVolumeFile{
 						{
 							Path: "link-attachments-digest",

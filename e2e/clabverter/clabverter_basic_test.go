@@ -1,7 +1,6 @@
 package clabverter_test
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -82,7 +81,7 @@ func TestClabverterBasic(t *testing.T) {
 				},
 				"service": {
 					{
-						Name: fmt.Sprintf("%s-srl1", testName),
+						Name: "srl1",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeExposeService,
 						},

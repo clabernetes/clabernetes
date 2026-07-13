@@ -2,14 +2,13 @@ apiVersion: clabernetes.containerlab.dev/v1alpha1
 kind: Topology
 metadata:
   annotations: {}
-  name: clabverter-basic
+  name: topology-basic
   namespace: NAMESPACE
 spec:
   connectivity: vxlan
   definition:
     containerlab: |-
-      ---
-      name: clabverter-basic
+      name: topology-basic
 
       topology:
         nodes:
@@ -19,7 +18,6 @@ spec:
           srl2:
             kind: srl
             image: ghcr.io/nokia/srlinux
-
         links:
           - endpoints: ["srl1:e1-1", "srl2:e1-1"]
           - endpoints: ["srl1:e1-3", "host:eth13"]
@@ -33,7 +31,7 @@ spec:
     disableExpose: false
     exposeType: LoadBalancer
   imagePull: {}
-  naming: prefixed
+  naming: global
   statusProbes:
     enabled: false
     probeConfiguration:

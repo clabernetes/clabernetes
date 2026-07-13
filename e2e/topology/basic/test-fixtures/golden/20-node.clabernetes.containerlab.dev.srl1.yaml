@@ -1,0 +1,65 @@
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  labels:
+    clabernetes/app: clabernetes
+    clabernetes/name: srl1
+    clabernetes/topologyKind: containerlab
+    clabernetes/topologyNode: srl1
+    clabernetes/topologyOwner: topology-basic
+  name: srl1
+  namespace: NAMESPACE
+  ownerReferences:
+    - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      kind: Topology
+      name: topology-basic
+spec:
+  image: ghcr.io/nokia/srlinux
+  kind: srl
+status:
+  appliedProfiles:
+    - topology-basic
+  exposedPorts:
+    ports:
+      - destinationPort: 21
+        exposePort: 60000
+        protocol: TCP
+      - destinationPort: 22
+        exposePort: 60001
+        protocol: TCP
+      - destinationPort: 23
+        exposePort: 60002
+        protocol: TCP
+      - destinationPort: 80
+        exposePort: 60003
+        protocol: TCP
+      - destinationPort: 443
+        exposePort: 60004
+        protocol: TCP
+      - destinationPort: 830
+        exposePort: 60005
+        protocol: TCP
+      - destinationPort: 5000
+        exposePort: 60006
+        protocol: TCP
+      - destinationPort: 5900
+        exposePort: 60007
+        protocol: TCP
+      - destinationPort: 6030
+        exposePort: 60008
+        protocol: TCP
+      - destinationPort: 9339
+        exposePort: 60009
+        protocol: TCP
+      - destinationPort: 9340
+        exposePort: 60010
+        protocol: TCP
+      - destinationPort: 9559
+        exposePort: 60011
+        protocol: TCP
+      - destinationPort: 57400
+        exposePort: 60012
+        protocol: TCP
+      - destinationPort: 161
+        exposePort: 60000
+        protocol: UDP

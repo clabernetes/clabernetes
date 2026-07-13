@@ -4,17 +4,16 @@ metadata:
   annotations: {}
   labels:
     clabernetes/app: clabernetes
-    clabernetes/name: clabverter-basic-srl1
-    clabernetes/topologyKind: containerlab
+    clabernetes/name: srl1
     clabernetes/topologyNode: srl1
     clabernetes/topologyOwner: clabverter-basic
     clabernetes/topologyServiceType: expose
-  name: clabverter-basic-srl1
+  name: srl1
   namespace: NAMESPACE
   ownerReferences:
     - apiVersion: clabernetes.containerlab.dev/v1alpha1
-      kind: Topology
-      name: clabverter-basic
+      kind: Node
+      name: srl1
 spec:
   allocateLoadBalancerNodePorts: true
   externalTrafficPolicy: Cluster
@@ -23,10 +22,6 @@ spec:
     - IPv4
   ipFamilyPolicy: SingleStack
   ports:
-    - name: port-161-udp
-      port: 161
-      protocol: UDP
-      targetPort: 60000
     - name: port-21-tcp
       port: 21
       protocol: TCP
@@ -79,11 +74,14 @@ spec:
       port: 57400
       protocol: TCP
       targetPort: 60012
+    - name: port-161-udp
+      port: 161
+      protocol: UDP
+      targetPort: 60000
   selector:
     clabernetes/app: clabernetes
-    clabernetes/name: clabverter-basic-srl1
+    clabernetes/name: srl1
     clabernetes/topologyNode: srl1
-    clabernetes/topologyOwner: clabverter-basic
   sessionAffinity: None
   type: LoadBalancer
 status:

@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  labels:
+    app.kubernetes.io/name: srl1
+    clabernetes/app: clabernetes
+    clabernetes/name: srl1
+    clabernetes/topologyNode: srl1
+  name: srl1
+  namespace: NAMESPACE
+  ownerReferences:
+    - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      kind: Node
+      name: srl1
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: srl1
+      clabernetes/app: clabernetes
+      clabernetes/name: srl1
+      clabernetes/topologyNode: srl1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        clabernetes/linkAttachmentsDigest: e1c64ef552ac6d3d076ad6877907c60e090d0274296df0ab1b52918968ae6506
+        clabernetes/nodeConfigDigest: 738aa4aa318fb61ef588ec3785c4699de7c6b6383967a175eb7dcfea5c239c5d
+      labels:
+        app.kubernetes.io/name: srl1
+        clabernetes/app: clabernetes
+        clabernetes/name: srl1
+        clabernetes/topologyNode: srl1
+    spec:
+      containers:
+        - command:
+            - /clabernetes/manager
+            - launch
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: APP_NAME
+              value: clabernetes
+            - name: MANAGER_NAMESPACE
+              value: clabernetes
+            - name: LAUNCHER_CRI_KIND
+              value: containerd
+            - name: LAUNCHER_IMAGE_PULL_THROUGH_MODE
+              value: auto
+            - name: LAUNCHER_LOGGER_LEVEL
+              value: debug
+            - name: LAUNCHER_NODE_NAME
+              value: srl1
+            - name: LAUNCHER_NODE_IMAGE
+              value: ghcr.io/nokia/srlinux
+            - name: LAUNCHER_CONNECTIVITY_KIND
+              value: vxlan
+            - name: LAUNCHER_IN_CLUSTER_DNS_SUFFIX
+              value: svc.cluster.local
+            - name: LAUNCHER_CONTAINERLAB_VERSION
+            - name: LAUNCHER_CONTAINERLAB_TIMEOUT
+            - name: LAUNCHER_PRIVILEGED
+              value: "true"
+          imagePullPolicy: IfNotPresent
+          name: srl1
+          ports:
+            - containerPort: 14789
+              name: vxlan
+              protocol: UDP
+            - containerPort: 4799
+              name: slurpeeth
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/lib/docker
+              name: docker
+            - mountPath: /clabernetes/podinfo
+              name: podinfo
+              readOnly: true
+            - mountPath: /clabernetes/.node/containerd.sock
+              name: cri-sock
+              readOnly: true
+              subPath: containerd.sock
+          workingDir: /clabernetes
+      dnsPolicy: ClusterFirst
+      hostname: srl1
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: clabernetes-launcher-service-account
+      serviceAccountName: clabernetes-launcher-service-account
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - emptyDir: {}
+          name: docker
+        - downwardAPI:
+            defaultMode: 292
+            items:
+              - fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.annotations[clabernetes/linkAttachmentsDigest]
+                path: link-attachments-digest
+          name: podinfo
+        - hostPath:
+            path: /run/containerd
+            type: ""
+          name: cri-sock
+status: {}
