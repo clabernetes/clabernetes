@@ -1693,6 +1693,12 @@ export type ClabernetesContainerlabDevLinkV1Alpha1 = {
             nodeName: string;
         };
         /**
+         * MTU is the mtu for the link as set in the original topology definition -- launchers apply
+         * this to the (node side of the) link termination they create; zero means "unset" (use the
+         * containerlab default).
+         */
+        mtu?: number;
+        /**
          * TopologyName is the name of the Topology this Link belongs to.
          */
         topologyName: string;
