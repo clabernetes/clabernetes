@@ -68,7 +68,7 @@ spec:
             - name: LAUNCHER_IMAGE_PULL_THROUGH_MODE
               value: auto
             - name: LAUNCHER_LOGGER_LEVEL
-              value: debug
+              value: info
             - name: LAUNCHER_TOPOLOGY_NAME
               value: topology-basic
             - name: LAUNCHER_NODE_NAME
@@ -77,6 +77,10 @@ spec:
               value: ghcr.io/nokia/srlinux
             - name: LAUNCHER_CONNECTIVITY_KIND
               value: vxlan
+            - name: LAUNCHER_TOPOLOGY_REMOVE_PREFIX
+              value: "false"
+            - name: LAUNCHER_IN_CLUSTER_DNS_SUFFIX
+              value: svc.cluster.local
             - name: LAUNCHER_CONTAINERLAB_VERSION
             - name: LAUNCHER_CONTAINERLAB_TIMEOUT
             - name: LAUNCHER_PRIVILEGED
