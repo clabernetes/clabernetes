@@ -29,10 +29,10 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: set up python
-        uses: actions/setup-python@v6
+      - name: set up uv
+        uses: astral-sh/setup-uv@v8.3.2
         with:
-          python-version: "3.11"
+          version: ${{ env.UV_VERSION }}
 
       - name: ensure go mod is tidy
         run: |
