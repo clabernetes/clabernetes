@@ -1,5 +1,16 @@
 .DEFAULT_GOAL := help
 
+USE_UV ?= true
+CRDS_TO_OPENAPI_REQUIREMENTS := build/crds-to-openapi/requirements.txt
+
+ifeq ($(USE_UV),true)
+CRDS_TO_OPENAPI_PYTHON := uv run --with-requirements $(CRDS_TO_OPENAPI_REQUIREMENTS)
+else ifeq ($(USE_UV),false)
+CRDS_TO_OPENAPI_PYTHON := venv/bin/python
+else
+$(error USE_UV must be either true or false)
+endif
+
 ifeq (set-chart-versions,$(firstword $(MAKECMDGOALS)))
   # use the rest as arguments for "set-chart-versions" directive
   BUMP_CHART_VERSION_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -67,8 +78,10 @@ install-code-generators: ## Install pinned code-generator tools and Python depen
 	go install k8s.io/kube-openapi/cmd/openapi-gen@$$KUBE_OPENAPI_VERSION && \
 	go install k8s.io/code-generator/cmd/client-gen@$$K8S_CODE_GENERATOR_VERSION && \
 	go install sigs.k8s.io/controller-tools/cmd/controller-gen@$$CONTROLLER_TOOLS_VERSION
+ifeq ($(USE_UV),false)
 	python3 -m venv venv
-	venv/bin/pip install --disable-pip-version-check --requirement build/crds-to-openapi/requirements.txt
+	venv/bin/pip install --disable-pip-version-check --requirement $(CRDS_TO_OPENAPI_REQUIREMENTS)
+endif
 
 run-deepcopy-gen: ## Run deepcopy-gen
 	deepcopy-gen \
@@ -83,7 +96,7 @@ run-openapi-gen: ## Run openapi-gen
 	--output-file openapi_generated.go \
 	--output-pkg github.com/srl-labs/clabernetes/generated/openapi \
 	github.com/srl-labs/clabernetes/apis/...
-	venv/bin/python build/crds-to-openapi/crds-to-openapi.py && \
+	$(CRDS_TO_OPENAPI_PYTHON) build/crds-to-openapi/crds-to-openapi.py && \
 	cp generated/openapi/openapi.json ui/clabernetes-openapi.json
 
 run-client-gen: ## Run client-gen
