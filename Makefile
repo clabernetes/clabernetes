@@ -117,7 +117,7 @@ run-generate-crds: ## Run controller-gen for crds
 # note: crds must be generated (and synced into assets/crd/, which is what crds-to-openapi
 # reads) *before* openapi-gen -- the openapi json (and from it the ui client types) is derived
 # from the crd yamls, so any other order needs two passes to converge
-run-generate: install-code-generators run-deepcopy-gen run-generate-crds run-openapi-gen run-client-gen fmt ## Run all code gen tasks
+run-generate: install-tools install-code-generators run-deepcopy-gen run-generate-crds run-openapi-gen run-client-gen fmt ## Run all code gen tasks
 	npm --prefix ui ci
 	$(MAKE) --no-print-directory -C ui regenerate-types
 
