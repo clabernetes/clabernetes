@@ -187,6 +187,10 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 		return err
 	}
 
+	if r.topologyProfilePending(node, namespaceProfiles.Items) {
+		return nil
+	}
+
 	memberProfiles := make(map[string]*ResolvedProfile, len(groupMembers))
 
 	for _, member := range groupMembers {
@@ -204,48 +208,13 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 
 	launcherProfile := memberProfiles[node.GetName()]
 
-	// expose allocations -- group wide, in sorted member order so allocation is deterministic;
-	// expose ports publish on the shared pod network namespace, hence the group-wide taken set
-	sortedMembers := make([]string, len(groupMembers))
-	copy(sortedMembers, groupMembers)
-	sort.Strings(sortedMembers)
-
-	memberExposedPorts := make(
-		map[string]*clabernetesapisv1alpha1.NodeExposedPorts,
-		len(groupMembers),
+	memberExposedPorts, err := r.resolveGroupExposedPorts(
+		groupMembers,
+		nodesByName,
+		memberProfiles,
 	)
-
-	takenExposePorts := map[string]map[int]bool{}
-
-	for _, member := range sortedMembers {
-		exposedPorts, resolveErr := ResolveExposedPorts(
-			nodesByName[member],
-			memberProfiles[member],
-			takenExposePorts,
-		)
-		if resolveErr != nil {
-			r.Log.Criticalf(
-				"failed resolving exposed ports for node %q, err: %s",
-				member,
-				resolveErr,
-			)
-
-			return resolveErr
-		}
-
-		memberExposedPorts[member] = exposedPorts
-
-		if exposedPorts == nil {
-			continue
-		}
-
-		for _, port := range exposedPorts.Ports {
-			if takenExposePorts[port.Protocol] == nil {
-				takenExposePorts[port.Protocol] = map[int]bool{}
-			}
-
-			takenExposePorts[port.Protocol][port.ExposePort] = true
-		}
+	if err != nil {
+		return err
 	}
 
 	// digests
@@ -363,6 +332,59 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 	}
 
 	return nil
+}
+
+// resolveGroupExposedPorts computes the expose allocations for every member of the launcher
+// group -- in sorted member order so allocation is deterministic; expose ports publish on the
+// shared pod network namespace, hence the group-wide taken set.
+func (r *Reconciler) resolveGroupExposedPorts(
+	groupMembers []string,
+	nodesByName map[string]*clabernetesapisv1alpha1.Node,
+	memberProfiles map[string]*ResolvedProfile,
+) (map[string]*clabernetesapisv1alpha1.NodeExposedPorts, error) {
+	sortedMembers := make([]string, len(groupMembers))
+	copy(sortedMembers, groupMembers)
+	sort.Strings(sortedMembers)
+
+	memberExposedPorts := make(
+		map[string]*clabernetesapisv1alpha1.NodeExposedPorts,
+		len(groupMembers),
+	)
+
+	takenExposePorts := map[string]map[int]bool{}
+
+	for _, member := range sortedMembers {
+		exposedPorts, resolveErr := ResolveExposedPorts(
+			nodesByName[member],
+			memberProfiles[member],
+			takenExposePorts,
+		)
+		if resolveErr != nil {
+			r.Log.Criticalf(
+				"failed resolving exposed ports for node %q, err: %s",
+				member,
+				resolveErr,
+			)
+
+			return nil, resolveErr
+		}
+
+		memberExposedPorts[member] = exposedPorts
+
+		if exposedPorts == nil {
+			continue
+		}
+
+		for _, port := range exposedPorts.Ports {
+			if takenExposePorts[port.Protocol] == nil {
+				takenExposePorts[port.Protocol] = map[int]bool{}
+			}
+
+			takenExposePorts[port.Protocol][port.ExposePort] = true
+		}
+	}
+
+	return memberExposedPorts, nil
 }
 
 func (r *Reconciler) updateNodeStatus(
@@ -686,6 +708,42 @@ func (r *Reconciler) updateService(
 	return r.Client.Update(ctx, rendered)
 }
 
+// topologyProfilePending returns true when the given node was emitted by a Topology whose
+// topology-wide profile is not in the given profile list (yet). Nodes compiled from a Topology
+// always come with a topology-wide profile (named after the topology) carrying the user's
+// deployment/expose policy; rendering before that profile is visible would apply the default
+// policy instead -- i.e. create expose load balancers the user explicitly disabled -- so such
+// nodes hold off until it lands, the NodeProfile watch re-enqueues the namespace's nodes when
+// it does.
+func (r *Reconciler) topologyProfilePending(
+	node *clabernetesapisv1alpha1.Node,
+	profiles []clabernetesapisv1alpha1.NodeProfile,
+) bool {
+	topologyName, _ := topologyOwnerIdentity(node)
+	if topologyName == "" || profileExists(profiles, topologyName) {
+		return false
+	}
+
+	r.Log.Infof(
+		"topology emitted node %q cannot see topology profile %q yet, deferring reconcile",
+		node.GetName(),
+		topologyName,
+	)
+
+	return true
+}
+
+// profileExists returns true when a profile with the given name is in the given profile list.
+func profileExists(profiles []clabernetesapisv1alpha1.NodeProfile, name string) bool {
+	for idx := range profiles {
+		if profiles[idx].GetName() == name {
+			return true
+		}
+	}
+
+	return false
+}
+
 func ownedByUID(obj ctrlruntimeclient.Object, expectedOwnerUID apimachinerytypes.UID) bool {
 	for _, ownerReference := range obj.GetOwnerReferences() {
 		if ownerReference.UID == expectedOwnerUID {
@@ -715,6 +773,12 @@ func (r *Reconciler) deleteIfOwned(
 		}
 
 		return err
+	}
+
+	if obj.GetDeletionTimestamp() != nil {
+		// already terminating (i.e. waiting out a foreign finalizer like a cloud provider's
+		// load balancer cleanup) -- re-deleting would just spam the logs
+		return nil
 	}
 
 	if ownedByUID(obj, node.GetUID()) {

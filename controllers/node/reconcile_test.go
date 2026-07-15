@@ -8,7 +8,10 @@ import (
 	clabernetesconfig "github.com/srl-labs/clabernetes/config"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
+	k8srbacv1 "k8s.io/api/rbac/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -309,6 +312,108 @@ func TestReconcilePersistentVolumeClaimAdoptsLegacyClaim(t *testing.T) {
 	}
 }
 
+func TestReconcileWaitsForTopologyProfile(t *testing.T) {
+	scheme := nodeReconcileTestScheme(t)
+	node := nodeReconcileTestNode()
+	node.Labels[clabernetesconstants.LabelTopologyOwner] = "my-lab"
+	node.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(),
+		Kind:       "Topology",
+		Name:       "my-lab",
+		UID:        "topology-uid",
+	}}
+
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(node).
+		Build()
+	reconciler := NewReconciler(
+		&claberneteslogging.FakeInstance{},
+		client,
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	ctx := context.Background()
+	nodeKey := ctrlruntimeclient.ObjectKeyFromObject(node)
+	projectedKey := apimachinerytypes.NamespacedName{
+		Namespace: node.GetNamespace(),
+		Name:      node.GetName(),
+	}
+
+	// the topology profile is not visible yet -- the reconcile must defer rather than render
+	// the node against default policy (which would create an expose load balancer service)
+	current := &clabernetesapisv1alpha1.Node{}
+
+	err := client.Get(ctx, nodeKey, current)
+	if err != nil {
+		t.Fatalf("failed getting node: %s", err)
+	}
+
+	err = reconciler.Reconcile(ctx, current)
+	if err != nil {
+		t.Fatalf("deferred reconcile failed: %s", err)
+	}
+
+	err = client.Get(ctx, projectedKey, &k8sappsv1.Deployment{})
+	if !apimachineryerrors.IsNotFound(err) {
+		t.Fatalf("expected no deployment before the topology profile is visible, got: %v", err)
+	}
+
+	err = client.Get(ctx, projectedKey, &k8scorev1.Service{})
+	if !apimachineryerrors.IsNotFound(err) {
+		t.Fatalf("expected no expose service before the topology profile is visible, got: %v", err)
+	}
+
+	// the topology profile lands (with expose disabled) -- now the node renders, but still
+	// without any expose service
+	profile := &clabernetesapisv1alpha1.NodeProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-lab",
+			Namespace: node.GetNamespace(),
+		},
+		Spec: clabernetesapisv1alpha1.NodeProfileSpec{
+			NodeSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					clabernetesconstants.LabelTopologyOwner: "my-lab",
+				},
+			},
+			Expose: &clabernetesapisv1alpha1.NodeProfileExpose{
+				DisableExpose: clabernetesutil.ToPointer(true),
+			},
+		},
+	}
+
+	err = client.Create(ctx, profile)
+	if err != nil {
+		t.Fatalf("failed creating topology profile: %s", err)
+	}
+
+	current = &clabernetesapisv1alpha1.Node{}
+
+	err = client.Get(ctx, nodeKey, current)
+	if err != nil {
+		t.Fatalf("failed getting node: %s", err)
+	}
+
+	err = reconciler.Reconcile(ctx, current)
+	if err != nil {
+		t.Fatalf("reconcile with topology profile failed: %s", err)
+	}
+
+	err = client.Get(ctx, projectedKey, &k8sappsv1.Deployment{})
+	if err != nil {
+		t.Fatalf("expected deployment once the topology profile is visible, got: %v", err)
+	}
+
+	err = client.Get(ctx, projectedKey, &k8scorev1.Service{})
+	if !apimachineryerrors.IsNotFound(err) {
+		t.Fatalf("expected no expose service with expose disabled, got: %v", err)
+	}
+}
+
 func nodeReconcileTestScheme(t *testing.T) *apimachineryruntime.Scheme {
 	t.Helper()
 
@@ -317,6 +422,8 @@ func nodeReconcileTestScheme(t *testing.T) *apimachineryruntime.Scheme {
 	for _, addToScheme := range []func(*apimachineryruntime.Scheme) error{
 		clabernetesapisv1alpha1.AddToScheme,
 		k8scorev1.AddToScheme,
+		k8sappsv1.AddToScheme,
+		k8srbacv1.AddToScheme,
 	} {
 		err := addToScheme(scheme)
 		if err != nil {

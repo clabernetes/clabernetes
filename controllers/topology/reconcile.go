@@ -1,7 +1,9 @@
 package topology
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"reflect"
 
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
@@ -100,28 +102,45 @@ func (r *Reconciler) Reconcile(
 		return err
 	}
 
-	err = r.reconcileNodes(ctx, topology, compiled)
+	// profiles carry the deployment/expose policy for the emitted nodes and links wire them --
+	// emit both *before* the nodes so the node controller never renders a node against default
+	// policy (i.e. creating expose load balancers the user explicitly disabled) or a partial
+	// wiring view while the rest of the compilation is still landing
+	err = r.reconcileNodeProfiles(ctx, topology, compiled)
 	if err != nil {
-		r.Log.Criticalf("failed reconciling emitted nodes, err: %s", err)
+		r.logEmittedReconcileFailure("node profiles", err)
 
 		return err
 	}
 
 	err = r.reconcileLinks(ctx, topology, compiled)
 	if err != nil {
-		r.Log.Criticalf("failed reconciling emitted links, err: %s", err)
+		r.logEmittedReconcileFailure("links", err)
 
 		return err
 	}
 
-	err = r.reconcileNodeProfiles(ctx, topology, compiled)
+	err = r.reconcileNodes(ctx, topology, compiled)
 	if err != nil {
-		r.Log.Criticalf("failed reconciling emitted node profiles, err: %s", err)
+		r.logEmittedReconcileFailure("nodes", err)
 
 		return err
 	}
 
 	return r.reconcileStatus(ctx, topology, compiled)
+}
+
+// logEmittedReconcileFailure logs a failed emitted-object reconcile pass -- conflicts are just
+// optimistic concurrency collisions with the node/link controllers' status writes (the requeue
+// resolves them), so they don't deserve the critical treatment real failures get.
+func (r *Reconciler) logEmittedReconcileFailure(kindName string, err error) {
+	if apimachineryerrors.IsConflict(err) {
+		r.Log.Infof("conflict reconciling emitted %s, requeueing, err: %s", kindName, err)
+
+		return
+	}
+
+	r.Log.Criticalf("failed reconciling emitted %s, err: %s", kindName, err)
 }
 
 // ownedBy returns true if the given object has an owner reference to the given topology.
@@ -189,7 +208,7 @@ func emittedObjectConforms[T interface {
 	existingSpec := reflect.ValueOf(existing).Elem().FieldByName("Spec").Interface()
 	renderedSpec := reflect.ValueOf(rendered).Elem().FieldByName("Spec").Interface()
 
-	return reflect.DeepEqual(existingSpec, renderedSpec) &&
+	return specConforms(existingSpec, renderedSpec) &&
 		clabernetesutilkubernetes.ExistingMapStringStringContainsAllExpectedKeyValues(
 			existing.GetLabels(),
 			rendered.GetLabels(),
@@ -198,6 +217,24 @@ func emittedObjectConforms[T interface {
 			existing.GetAnnotations(),
 			rendered.GetAnnotations(),
 		)
+}
+
+// specConforms compares an emitted object's specs through a json round trip -- the api server
+// drops empty omitempty fields on storage, so a compiled empty slice/map (i.e. a node with no
+// ports) reads back as nil; a plain DeepEqual would report (phantom) drift on every reconcile
+// forever, updating (and colliding with status writers on) objects that are already conform.
+func specConforms(existingSpec, renderedSpec any) bool {
+	existingJSON, err := json.Marshal(existingSpec)
+	if err != nil {
+		return false
+	}
+
+	renderedJSON, err := json.Marshal(renderedSpec)
+	if err != nil {
+		return false
+	}
+
+	return bytes.Equal(existingJSON, renderedJSON)
 }
 
 func (r *Reconciler) reconcileLinks( //nolint:dupl
