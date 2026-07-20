@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 )
 
 func TestMain(m *testing.M) {

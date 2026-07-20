@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"path"
 
-	clabernetesassets "github.com/srl-labs/clabernetes/assets"
-	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
+	clabernetesassets "github.com/clabernetes/clabernetes/assets"
+	clabernetesmanagertypes "github.com/clabernetes/clabernetes/manager/types"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/equality"

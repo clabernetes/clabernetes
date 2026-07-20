@@ -33,7 +33,7 @@ spec:
 
           multitool:
             kind: linux
-            image: ghcr.io/srl-labs/network-multitool:latest
+            image: ghcr.io/clabernetes/network-multitool:latest
             exec:
               - ip addr add 192.0.2.1/31 dev eth1
 

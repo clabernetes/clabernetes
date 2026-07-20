@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 )
 
 func TestIsURL(t *testing.T) {
@@ -116,13 +116,13 @@ func TestGitHubNormalLinkToRawLink(t *testing.T) {
 		},
 		{
 			name:     "github-normal-link",
-			in:       "https://github.com/srl-labs/srl-telemetry-lab/blob/main/st.clab.yml",
-			expected: "https://raw.githubusercontent.com/srl-labs/srl-telemetry-lab/main/st.clab.yml",
+			in:       "https://github.com/clabernetes/srl-telemetry-lab/blob/main/st.clab.yml",
+			expected: "https://raw.githubusercontent.com/clabernetes/srl-telemetry-lab/main/st.clab.yml",
 		},
 		{
 			name:     "github-already-raw-link",
-			in:       "https://raw.githubusercontent.com/srl-labs/srl-telemetry-lab/main/st.clab.yml",
-			expected: "https://raw.githubusercontent.com/srl-labs/srl-telemetry-lab/main/st.clab.yml",
+			in:       "https://raw.githubusercontent.com/clabernetes/srl-telemetry-lab/main/st.clab.yml",
+			expected: "https://raw.githubusercontent.com/clabernetes/srl-telemetry-lab/main/st.clab.yml",
 		},
 	}
 
@@ -155,7 +155,7 @@ func TestGitHubGroupAndRepoFromURL(t *testing.T) {
 		},
 		{
 			name:          "clabernetes",
-			in:            "https://github.com/srl-labs/clabernetes",
+			in:            "https://github.com/clabernetes/clabernetes",
 			expectedGroup: "srl-labs",
 			expectedRepo:  "clabernetes",
 		},

@@ -1,7 +1,7 @@
 package manager
 
 import (
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	"k8s.io/apimachinery/pkg/labels"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"

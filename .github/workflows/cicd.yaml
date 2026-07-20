@@ -85,14 +85,14 @@ jobs:
           helm registry login -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }} ghcr.io
 
           helm package charts/clicker --version 0.0.0
-          helm push clicker-0.0.0.tgz oci://ghcr.io/srl-labs/clabernetes
+          helm push clicker-0.0.0.tgz oci://ghcr.io/clabernetes/clabernetes
 
           # patch clicker dep version so its always same as c9s
           sed -i \
             's|    version: (.*)|    version: 0.0.0|g' \
             charts/clabernetes/Chart.yaml
           helm package charts/clabernetes --version 0.0.0
-          helm push clabernetes-0.0.0.tgz oci://ghcr.io/srl-labs/clabernetes
+          helm push clabernetes-0.0.0.tgz oci://ghcr.io/clabernetes/clabernetes
 
   publish-custom-charts:
     if: ${{ github.event_name == 'workflow_dispatch' && needs.prep.outputs.push == 'true' }}
@@ -130,15 +130,15 @@ jobs:
 
           make set-chart-versions "$RELEASE_VERSION"
 
-          export MANAGER_IMAGE="ghcr.io/srl-labs/clabernetes/clabernetes-manager:$RELEASE_VERSION"
-          export LAUNCHER_IMAGE="ghcr.io/srl-labs/clabernetes/clabernetes-launcher:$RELEASE_VERSION"
+          export MANAGER_IMAGE="ghcr.io/clabernetes/clabernetes/clabernetes-manager:$RELEASE_VERSION"
+          export LAUNCHER_IMAGE="ghcr.io/clabernetes/clabernetes/clabernetes-launcher:$RELEASE_VERSION"
           echo "manager image->" $MANAGER_IMAGE
           echo "launcher image->" $LAUNCHER_IMAGE
           yq -i eval '.manager.image = strenv(MANAGER_IMAGE)' charts/clabernetes/values.yaml
           yq -i eval '.globalConfig.deployment.launcherImage = strenv(LAUNCHER_IMAGE)' charts/clabernetes/values.yaml
 
           helm package charts/clicker --version "$RELEASE_VERSION"
-          helm push "clicker-$RELEASE_VERSION.tgz" oci://ghcr.io/srl-labs/clabernetes
+          helm push "clicker-$RELEASE_VERSION.tgz" oci://ghcr.io/clabernetes/clabernetes
 
           helm package charts/clabernetes --version "$RELEASE_VERSION"
-          helm push "clabernetes-$RELEASE_VERSION.tgz" oci://ghcr.io/srl-labs/clabernetes
+          helm push "clabernetes-$RELEASE_VERSION.tgz" oci://ghcr.io/clabernetes/clabernetes

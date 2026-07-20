@@ -1,5 +1,5 @@
 TRY_C9S_CLUSTER_NAME ?= try-c9s
-TRY_C9S_CHART ?= oci://ghcr.io/srl-labs/clabernetes/clabernetes
+TRY_C9S_CHART ?= oci://ghcr.io/clabernetes/clabernetes/clabernetes
 TRY_C9S_CHART_VERSION ?=
 TRY_C9S_TOPOLOGY ?= examples/basic/srl-multitool.yaml
 TRY_C9S_TOPOLOGY_NAME ?= srl-multitool

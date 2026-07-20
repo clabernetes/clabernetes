@@ -293,6 +293,6 @@ Secondary cards (those with `network-mode: container:<primary>`) cannot have the
 ## Related Resources
 
 - [Containerlab SR-SIM Documentation](https://containerlab.dev/manual/kinds/sros/)
-- [SR-SIM Lab Examples](https://github.com/srl-labs/containerlab/tree/main/lab-examples/sr-sim)
+- [SR-SIM Lab Examples](https://github.com/clabernetes/containerlab/tree/main/lab-examples/sr-sim)
 - [File Mounting Guide](./file-mounting.md)
 - [Resource Management Guide](./resource-management.md)

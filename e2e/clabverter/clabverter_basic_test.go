@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	clabernetesclabverter "github.com/srl-labs/clabernetes/clabverter"
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
-	clabernetestesthelpersuite "github.com/srl-labs/clabernetes/testhelper/suite"
+	clabernetesclabverter "github.com/clabernetes/clabernetes/clabverter"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
+	clabernetestesthelpersuite "github.com/clabernetes/clabernetes/testhelper/suite"
 )
 
 func TestMain(m *testing.M) {

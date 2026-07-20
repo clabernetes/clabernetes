@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteslauncherconnectivity "github.com/srl-labs/clabernetes/launcher/connectivity"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteslauncherconnectivity "github.com/clabernetes/clabernetes/launcher/connectivity"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

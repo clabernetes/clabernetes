@@ -2,9 +2,9 @@
 apiVersion: v2
 name: clicker
 description: Cl(abernetes t)ick(l)er! For "clicking" on some nodes to perform clabernetes related cluster wide sysctl commands.
-home: https://github.com/srl-labs/clabernetes
+home: https://github.com/clabernetes/clabernetes
 sources:
-  - https://github.com/srl-labs/clabernetes
+  - https://github.com/clabernetes/clabernetes
 keywords:
   - network
   - containerlab

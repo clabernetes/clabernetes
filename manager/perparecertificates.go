@@ -3,10 +3,10 @@ package manager
 import (
 	"fmt"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
-	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	clabernetesmanagertypes "github.com/clabernetes/clabernetes/manager/types"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	k8scorev1 "k8s.io/api/core/v1"
 )
 

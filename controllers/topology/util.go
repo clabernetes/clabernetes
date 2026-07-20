@@ -3,9 +3,9 @@ package topology
 import (
 	"fmt"
 
-	clabernetesapis "github.com/srl-labs/clabernetes/apis"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconfig "github.com/srl-labs/clabernetes/config"
+	clabernetesapis "github.com/clabernetes/clabernetes/apis"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 )
 
 // GetTopologyKind returns the "kind" of topology this CR represents -- typically this will be

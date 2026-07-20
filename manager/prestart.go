@@ -3,10 +3,10 @@ package manager
 import (
 	"strings"
 
-	clabernetesconfig "github.com/srl-labs/clabernetes/config"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesconfig "github.com/clabernetes/clabernetes/config"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesmanagertypes "github.com/clabernetes/clabernetes/manager/types"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

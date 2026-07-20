@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 )
 
 // ensureKubeAPINotProxied makes sure the in-cluster kubernetes api service address is never sent

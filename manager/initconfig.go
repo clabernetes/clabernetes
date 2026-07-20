@@ -3,11 +3,11 @@ package manager
 import (
 	"fmt"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconfig "github.com/srl-labs/clabernetes/config"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconfig "github.com/clabernetes/clabernetes/config"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesmanagertypes "github.com/clabernetes/clabernetes/manager/types"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

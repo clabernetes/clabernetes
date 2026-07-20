@@ -7,7 +7,7 @@ vars:
 
   REGISTRY:
     source: env
-    default: ghcr.io/srl-labs/clabernetes
+    default: ghcr.io/clabernetes/clabernetes
 
   PULL_POLICY: IfNotPresent
 

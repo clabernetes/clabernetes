@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 )
 
 func TestGetProxiesConfig(t *testing.T) { //nolint:paralleltest // mutates env vars

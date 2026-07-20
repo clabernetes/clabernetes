@@ -3,8 +3,8 @@ package topology_test
 import (
 	"testing"
 
-	clabernetescontrollerstopology "github.com/srl-labs/clabernetes/controllers/topology"
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
+	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"

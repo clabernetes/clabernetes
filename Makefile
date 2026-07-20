@@ -13,7 +13,7 @@ include .mk/e2e.makefile
 ## Image names + tag used by the build-* targets. IMAGE_TAG defaults to "latest"
 ## for one-off local builds; the e2e flow overrides it (IMAGE_TAG=dev-latest).
 IMAGE_TAG ?= latest
-IMAGE_BASE ?= ghcr.io/srl-labs/clabernetes
+IMAGE_BASE ?= ghcr.io/clabernetes/clabernetes
 MANAGER_IMAGE ?= $(IMAGE_BASE)/clabernetes-manager
 LAUNCHER_IMAGE ?= $(IMAGE_BASE)/clabernetes-launcher
 UI_IMAGE ?= $(IMAGE_BASE)/clabernetes-ui
@@ -57,25 +57,25 @@ run-deepcopy-gen: ## Run deepcopy-gen
 	deepcopy-gen \
 	--go-header-file hack/boilerplate.go.txt \
 	--output-file zz_generated.deepcopy.go \
-	github.com/srl-labs/clabernetes/apis/...
+	github.com/clabernetes/clabernetes/apis/...
 
 run-openapi-gen: ## Run openapi-gen
 	openapi-gen \
 	--go-header-file hack/boilerplate.go.txt \
 	--output-dir generated/openapi \
 	--output-file openapi_generated.go \
-	--output-pkg github.com/srl-labs/clabernetes/generated/openapi \
-	github.com/srl-labs/clabernetes/apis/...
+	--output-pkg github.com/clabernetes/clabernetes/generated/openapi \
+	github.com/clabernetes/clabernetes/apis/...
 	venv/bin/python build/crds-to-openapi/crds-to-openapi.py && \
 	cp generated/openapi/openapi.json ui/clabernetes-openapi.json
 
 run-client-gen: ## Run client-gen
 	client-gen \
 	--go-header-file hack/boilerplate.go.txt \
-	--input-base github.com/srl-labs/clabernetes \
+	--input-base github.com/clabernetes/clabernetes \
 	--input apis/v1alpha1 \
 	--output-dir generated \
-	--output-pkg github.com/srl-labs/clabernetes/generated \
+	--output-pkg github.com/clabernetes/clabernetes/generated \
 	--clientset-name clientset
 
 run-generate-crds: ## Run controller-gen for crds

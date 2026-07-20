@@ -28,109 +28,109 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.Config": schema_srl_labs_clabernetes_apis_v1alpha1_Config(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Config": schema_srl_labs_clabernetes_apis_v1alpha1_Config(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigDeployment": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDeployment(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDeployment(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigImagePull": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigImagePull(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigImagePull": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigImagePull(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigList": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigList": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigList(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigMetadata": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigMetadata(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigMetadata(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigSpec": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigSpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigSpec": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigSpec(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigStatus(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.Connectivity": schema_srl_labs_clabernetes_apis_v1alpha1_Connectivity(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Connectivity": schema_srl_labs_clabernetes_apis_v1alpha1_Connectivity(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivityList": schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConnectivityList": schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityList(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivitySpec": schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivitySpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConnectivitySpec": schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivitySpec(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivityStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConnectivityStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityStatus(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.Definition": schema_srl_labs_clabernetes_apis_v1alpha1_Definition(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition": schema_srl_labs_clabernetes_apis_v1alpha1_Definition(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.Deployment": schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Deployment": schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.Expose": schema_srl_labs_clabernetes_apis_v1alpha1_Expose(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Expose": schema_srl_labs_clabernetes_apis_v1alpha1_Expose(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ExposedPorts": schema_srl_labs_clabernetes_apis_v1alpha1_ExposedPorts(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ExposedPorts": schema_srl_labs_clabernetes_apis_v1alpha1_ExposedPorts(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromConfigMap": schema_srl_labs_clabernetes_apis_v1alpha1_FileFromConfigMap(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap": schema_srl_labs_clabernetes_apis_v1alpha1_FileFromConfigMap(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromURL": schema_srl_labs_clabernetes_apis_v1alpha1_FileFromURL(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL": schema_srl_labs_clabernetes_apis_v1alpha1_FileFromURL(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ImagePull": schema_srl_labs_clabernetes_apis_v1alpha1_ImagePull(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull": schema_srl_labs_clabernetes_apis_v1alpha1_ImagePull(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequest": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequest(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequest": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequest(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequestList": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestList": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestList(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequestSpec": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestSpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestSpec": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestSpec(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequestStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestStatus(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.LinkEndpoint": schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpoint(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkEndpoint": schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpoint(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.Persistence": schema_srl_labs_clabernetes_apis_v1alpha1_Persistence(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence": schema_srl_labs_clabernetes_apis_v1alpha1_Persistence(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.PointToPointTunnel": schema_srl_labs_clabernetes_apis_v1alpha1_PointToPointTunnel(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.PointToPointTunnel": schema_srl_labs_clabernetes_apis_v1alpha1_PointToPointTunnel(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.ReconcileHashes": schema_srl_labs_clabernetes_apis_v1alpha1_ReconcileHashes(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ReconcileHashes": schema_srl_labs_clabernetes_apis_v1alpha1_ReconcileHashes(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.SSHProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.SSHProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.Scheduling": schema_srl_labs_clabernetes_apis_v1alpha1_Scheduling(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling": schema_srl_labs_clabernetes_apis_v1alpha1_Scheduling(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.StatusProbes": schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes": schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.TCPProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_TCPProbeConfiguration(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TCPProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_TCPProbeConfiguration(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.Topology": schema_srl_labs_clabernetes_apis_v1alpha1_Topology(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Topology": schema_srl_labs_clabernetes_apis_v1alpha1_Topology(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.TopologyList": schema_srl_labs_clabernetes_apis_v1alpha1_TopologyList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyList": schema_srl_labs_clabernetes_apis_v1alpha1_TopologyList(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.TopologySpec": schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologySpec": schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
 			ref,
 		),
-		"github.com/srl-labs/clabernetes/apis/v1alpha1.TopologyStatus": schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyStatus": schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
 			ref,
 		),
 	}
@@ -169,7 +169,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Config(
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigSpec",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigSpec",
 							),
 						},
 					},
@@ -177,7 +177,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Config(
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigStatus",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigStatus",
 							),
 						},
 					},
@@ -185,7 +185,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Config(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigSpec", "github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigSpec", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -421,7 +421,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigList(
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
 										Ref: ref(
-											"github.com/srl-labs/clabernetes/apis/v1alpha1.Config",
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.Config",
 										),
 									},
 								},
@@ -433,7 +433,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigList(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.Config", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.Config", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
 	}
 }
 
@@ -498,7 +498,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigSpec(
 							Description: "Metadata holds \"global\" metadata -- that is, metadata that is applied to all objects created by the clabernetes controller.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigMetadata",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata",
 							),
 						},
 					},
@@ -514,7 +514,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigSpec(
 							Description: "ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling images.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigImagePull",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigImagePull",
 							),
 						},
 					},
@@ -523,7 +523,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigSpec(
 							Description: "Deployment holds clabernetes deployment related configuration settings.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigDeployment",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment",
 							),
 						},
 					},
@@ -539,7 +539,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigSpec(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigDeployment", "github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigImagePull", "github.com/srl-labs/clabernetes/apis/v1alpha1.ConfigMetadata"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata"},
 	}
 }
 
@@ -589,7 +589,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Connectivity(
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivitySpec",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConnectivitySpec",
 							),
 						},
 					},
@@ -597,7 +597,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Connectivity(
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivityStatus",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConnectivityStatus",
 							),
 						},
 					},
@@ -605,7 +605,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Connectivity(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivitySpec", "github.com/srl-labs/clabernetes/apis/v1alpha1.ConnectivityStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ConnectivitySpec", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConnectivityStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -646,7 +646,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityList(
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
 										Ref: ref(
-											"github.com/srl-labs/clabernetes/apis/v1alpha1.Connectivity",
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.Connectivity",
 										),
 									},
 								},
@@ -658,7 +658,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivityList(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.Connectivity", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.Connectivity", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
 	}
 }
 
@@ -684,7 +684,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivitySpec(
 											Schema: &spec.Schema{
 												SchemaProps: spec.SchemaProps{
 													Ref: ref(
-														"github.com/srl-labs/clabernetes/apis/v1alpha1.PointToPointTunnel",
+														"github.com/clabernetes/clabernetes/apis/v1alpha1.PointToPointTunnel",
 													),
 												},
 											},
@@ -699,7 +699,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConnectivitySpec(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.PointToPointTunnel"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.PointToPointTunnel"},
 	}
 }
 
@@ -774,7 +774,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 							Description: "Scheduling holds information about how the launcher pod(s) should be configured with respect to \"scheduling\" things (affinity/node selector/tolerations).",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.Scheduling",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling",
 							),
 						},
 					},
@@ -799,7 +799,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 												SchemaProps: spec.SchemaProps{
 													Default: map[string]interface{}{},
 													Ref: ref(
-														"github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromConfigMap",
+														"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap",
 													),
 												},
 											},
@@ -823,7 +823,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 												SchemaProps: spec.SchemaProps{
 													Default: map[string]interface{}{},
 													Ref: ref(
-														"github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromURL",
+														"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL",
 													),
 												},
 											},
@@ -838,7 +838,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 							Description: "Persistence holds configurations relating to persisting each nodes working containerlab directory.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.Persistence",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence",
 							),
 						},
 					},
@@ -908,7 +908,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromConfigMap", "github.com/srl-labs/clabernetes/apis/v1alpha1.FileFromURL", "github.com/srl-labs/clabernetes/apis/v1alpha1.Persistence", "github.com/srl-labs/clabernetes/apis/v1alpha1.Scheduling", "k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.ResourceRequirements"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL", "github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence", "github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling", "k8s.io/api/core/v1.EnvVar", "k8s.io/api/core/v1.ResourceRequirements"},
 	}
 }
 
@@ -1211,7 +1211,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequest(
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequestSpec",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestSpec",
 							),
 						},
 					},
@@ -1219,7 +1219,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequest(
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequestStatus",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestStatus",
 							),
 						},
 					},
@@ -1227,7 +1227,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequest(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequestSpec", "github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequestStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestSpec", "github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -1268,7 +1268,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestList(
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
 										Ref: ref(
-											"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequest",
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequest",
 										),
 									},
 								},
@@ -1280,7 +1280,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestList(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.ImageRequest", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequest", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
 	}
 }
 
@@ -1551,7 +1551,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
 						SchemaProps: spec.SchemaProps{
 							Description: "SSHProbeConfiguration defines an SSH probe.",
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.SSHProbeConfiguration",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.SSHProbeConfiguration",
 							),
 						},
 					},
@@ -1559,7 +1559,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
 						SchemaProps: spec.SchemaProps{
 							Description: "TCPProbeConfiguration defines a TCP probe.",
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.TCPProbeConfiguration",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.TCPProbeConfiguration",
 							),
 						},
 					},
@@ -1567,7 +1567,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.SSHProbeConfiguration", "github.com/srl-labs/clabernetes/apis/v1alpha1.TCPProbeConfiguration"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.SSHProbeConfiguration", "github.com/clabernetes/clabernetes/apis/v1alpha1.TCPProbeConfiguration"},
 	}
 }
 
@@ -1766,7 +1766,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
 										Ref: ref(
-											"github.com/srl-labs/clabernetes/apis/v1alpha1.ProbeConfiguration",
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.ProbeConfiguration",
 										),
 									},
 								},
@@ -1778,7 +1778,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
 							Description: "ProbeConfiguration is the default probe configuration for the Topology.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ProbeConfiguration",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ProbeConfiguration",
 							),
 						},
 					},
@@ -1786,7 +1786,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.ProbeConfiguration"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ProbeConfiguration"},
 	}
 }
 
@@ -1847,7 +1847,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Topology(
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.TopologySpec",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologySpec",
 							),
 						},
 					},
@@ -1855,7 +1855,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Topology(
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.TopologyStatus",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyStatus",
 							),
 						},
 					},
@@ -1863,7 +1863,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Topology(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.TopologySpec", "github.com/srl-labs/clabernetes/apis/v1alpha1.TopologyStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologySpec", "github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 
@@ -1904,7 +1904,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyList(
 									SchemaProps: spec.SchemaProps{
 										Default: map[string]interface{}{},
 										Ref: ref(
-											"github.com/srl-labs/clabernetes/apis/v1alpha1.Topology",
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.Topology",
 										),
 									},
 								},
@@ -1916,7 +1916,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyList(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.Topology", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.Topology", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
 	}
 }
 
@@ -1934,7 +1934,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
 							Description: "Definition defines the actual set of nodes (network ones, not k8s ones!) that this Topology CR represents. Historically, and probably most often, this means Topology holds a \"normal\" containerlab topology file that will be \"clabernetsified\", however this could also be a \"kne\" config, or perhaps others in the future.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.Definition",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition",
 							),
 						},
 					},
@@ -1943,7 +1943,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
 							Description: "Expose holds configurations relevant to how clabernetes exposes a topology.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.Expose",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.Expose",
 							),
 						},
 					},
@@ -1952,7 +1952,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
 							Description: "Deployment holds configurations relevant to how clabernetes configures deployments that make up a given topology.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.Deployment",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.Deployment",
 							),
 						},
 					},
@@ -1961,7 +1961,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
 							Description: "StatusProbes holds the configurations relevant to how clabernetes and the launcher handle checking and reporting the containerlab node status",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.StatusProbes",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes",
 							),
 						},
 					},
@@ -1970,7 +1970,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
 							Description: "ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling images.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ImagePull",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull",
 							),
 						},
 					},
@@ -1994,7 +1994,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.Definition", "github.com/srl-labs/clabernetes/apis/v1alpha1.Deployment", "github.com/srl-labs/clabernetes/apis/v1alpha1.Expose", "github.com/srl-labs/clabernetes/apis/v1alpha1.ImagePull", "github.com/srl-labs/clabernetes/apis/v1alpha1.StatusProbes"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition", "github.com/clabernetes/clabernetes/apis/v1alpha1.Deployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.Expose", "github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes"},
 	}
 }
 
@@ -2027,7 +2027,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
 							Description: "ReconcileHashes holds the hashes form the last reconciliation run.",
 							Default:     map[string]interface{}{},
 							Ref: ref(
-								"github.com/srl-labs/clabernetes/apis/v1alpha1.ReconcileHashes",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ReconcileHashes",
 							),
 						},
 					},
@@ -2056,7 +2056,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Ref: ref(
-											"github.com/srl-labs/clabernetes/apis/v1alpha1.ExposedPorts",
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.ExposedPorts",
 										),
 									},
 								},
@@ -2122,6 +2122,6 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
 			},
 		},
 		Dependencies: []string{
-			"github.com/srl-labs/clabernetes/apis/v1alpha1.ExposedPorts", "github.com/srl-labs/clabernetes/apis/v1alpha1.ReconcileHashes", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ExposedPorts", "github.com/clabernetes/clabernetes/apis/v1alpha1.ReconcileHashes", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
 	}
 }

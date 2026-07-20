@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"testing"
 
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 )
 
 func TestRegexStringSubmatchToMap(t *testing.T) {
@@ -20,7 +20,7 @@ func TestRegexStringSubmatchToMap(t *testing.T) {
 			p: regexp.MustCompile(
 				`(?mi)https?:\/\/(?:www\.)?github\.com\/(?P<GroupRepo>.*?\/.*?)\/(?:(blob)|(tree))(?P<Path>.*)`,
 			),
-			in: "https://github.com/srl-labs/containerlab/tree/main/lab-examples/srl02",
+			in: "https://github.com/clabernetes/containerlab/tree/main/lab-examples/srl02",
 			expected: map[string]string{
 				"GroupRepo": "srl-labs/containerlab",
 				"Path":      "/main/lab-examples/srl02",

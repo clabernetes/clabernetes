@@ -4,8 +4,8 @@ import (
 	"testing"
 	"unicode"
 
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 )
 
 const (

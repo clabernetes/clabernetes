@@ -1,4 +1,4 @@
-module github.com/srl-labs/clabernetes
+module github.com/clabernetes/clabernetes
 
 go 1.25.0
 

@@ -3,9 +3,9 @@ package connectivity
 import (
 	"context"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
 // Manager is an interface defining a connectivity manager -- basically a small abstraction around

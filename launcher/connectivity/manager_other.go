@@ -6,11 +6,11 @@ import (
 	"context"
 	"fmt"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
-	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
 // NewManager returns a connectivity Manager for the given connectivity flavor.

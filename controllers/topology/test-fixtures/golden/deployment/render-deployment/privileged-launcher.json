@@ -46,7 +46,7 @@
                 "containers": [
                     {
                         "name": "srl1",
-                        "image": "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:latest",
+                        "image": "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:latest",
                         "command": [
                             "/clabernetes/manager",
                             "launch"

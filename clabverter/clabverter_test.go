@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	clabernetesclabverter "github.com/srl-labs/clabernetes/clabverter"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
+	clabernetesclabverter "github.com/clabernetes/clabernetes/clabverter"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	"sigs.k8s.io/yaml"
 )
 

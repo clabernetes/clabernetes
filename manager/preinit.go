@@ -1,8 +1,8 @@
 package manager
 
 import (
-	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
-	clabernetesutilkubernetes "github.com/srl-labs/clabernetes/util/kubernetes"
+	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
+	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"

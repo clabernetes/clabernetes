@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/carlmontanari/slurpeeth/slurpeeth"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	"gopkg.in/yaml.v3"
 )
 

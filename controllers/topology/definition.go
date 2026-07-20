@@ -3,11 +3,11 @@ package topology
 import (
 	"fmt"
 
-	clabernetesapis "github.com/srl-labs/clabernetes/apis"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconfig "github.com/srl-labs/clabernetes/config"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesapis "github.com/clabernetes/clabernetes/apis"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconfig "github.com/clabernetes/clabernetes/config"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
 // DefinitionProcessor is an interface defining a definition processor -- that is, an object that

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
 // Manager is an interface defining an image manager -- basically a small abstraction around cri

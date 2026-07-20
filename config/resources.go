@@ -1,7 +1,7 @@
 package config
 
 import (
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	k8scorev1 "k8s.io/api/core/v1"
 )
 

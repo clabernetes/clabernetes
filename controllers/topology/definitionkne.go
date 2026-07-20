@@ -3,12 +3,12 @@ package topology
 import (
 	"fmt"
 
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
+	clabernetesutilkne "github.com/clabernetes/clabernetes/util/kne"
 	knetopologyproto "github.com/openconfig/kne/proto/topo"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
-	clabernetesutilkne "github.com/srl-labs/clabernetes/util/kne"
 )
 
 type kneDefinitionProcessor struct {

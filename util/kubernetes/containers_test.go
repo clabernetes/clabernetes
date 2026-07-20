@@ -3,8 +3,8 @@ package kubernetes_test
 import (
 	"testing"
 
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
-	clabernetesutilkubernetes "github.com/srl-labs/clabernetes/util/kubernetes"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
+	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	k8scorev1 "k8s.io/api/core/v1"
 )
 

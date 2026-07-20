@@ -82,7 +82,7 @@ jobs:
           provenance: false
           cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
-          outputs: ${{ inputs.push && format('type=image,name=ghcr.io/srl-labs/clabernetes/{0},push-by-digest=true,name-canonical=true,push=true', matrix.image.name) || 'type=cacheonly' }}
+          outputs: ${{ inputs.push && format('type=image,name=ghcr.io/clabernetes/clabernetes/{0},push-by-digest=true,name-canonical=true,push=true', matrix.image.name) || 'type=cacheonly' }}
 
       - name: export digest
         if: ${{ inputs.push }}
@@ -134,7 +134,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/srl-labs/clabernetes/${{ matrix.image }}
+          images: ghcr.io/clabernetes/clabernetes/${{ matrix.image }}
           flavor: latest=auto
           tags: |
             ${{ inputs.tags }}
@@ -145,9 +145,9 @@ jobs:
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/srl-labs/clabernetes/${{ matrix.image }}@sha256:%s ' *)
+            $(printf 'ghcr.io/clabernetes/clabernetes/${{ matrix.image }}@sha256:%s ' *)
 
       - name: inspect image
         run: |
           docker buildx imagetools inspect \
-            ghcr.io/srl-labs/clabernetes/${{ matrix.image }}:${{ inputs.build-version }}
+            ghcr.io/clabernetes/clabernetes/${{ matrix.image }}:${{ inputs.build-version }}

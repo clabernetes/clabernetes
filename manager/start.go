@@ -3,11 +3,11 @@ package manager
 import (
 	"context"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetescontrollers "github.com/srl-labs/clabernetes/controllers"
-	clabernetescontrollersimagerequest "github.com/srl-labs/clabernetes/controllers/imagerequest"
-	clabernetescontrollerstopology "github.com/srl-labs/clabernetes/controllers/topology"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
+	clabernetescontrollersimagerequest "github.com/clabernetes/clabernetes/controllers/imagerequest"
+	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 )
 
 func (c *clabernetes) startLeading(ctx context.Context) {

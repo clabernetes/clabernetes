@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 )
 
 // ReadTestFixtureFile is a helper to read a test fixture file.

@@ -3,8 +3,8 @@ package types
 import (
 	"context"
 
-	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 )
 
 // AssertObject represents an object that we are looking to assert the state of in a test -- the

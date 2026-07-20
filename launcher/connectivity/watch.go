@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerywatch "k8s.io/apimachinery/pkg/watch"
 )

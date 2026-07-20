@@ -71,7 +71,7 @@ spec:
       serviceAccountName: "clabernetes-plus-clicker-service-account"
       initContainers:
         - name: init
-          image: "ghcr.io/srl-labs/clabernetes/clabernetes-manager:dev-latest"
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
           imagePullPolicy: IfNotPresent
           command: ["/clabernetes/manager", "run", "--initializer"]
           env:
@@ -92,14 +92,14 @@ spec:
             - name: CONTROLLER_LOGGER_LEVEL
               value: info
             - name: LAUNCHER_IMAGE
-              value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:dev-latest"
+              value: "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:dev-latest"
           resources:
             requests:
               memory: 128Mi
               cpu: 50m
       containers:
         - name: manager
-          image: "ghcr.io/srl-labs/clabernetes/clabernetes-manager:dev-latest"
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
           imagePullPolicy: IfNotPresent
           command: ["/clabernetes/manager", "run"]
           env:
@@ -120,14 +120,14 @@ spec:
             - name: CONTROLLER_LOGGER_LEVEL
               value: info
             - name: LAUNCHER_IMAGE
-              value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:dev-latest"
+              value: "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:dev-latest"
           resources:
             requests:
               memory: 128Mi
               cpu: 50m
           ports:
-          - name: http
-            containerPort: 10443
+            - name: http
+              containerPort: 10443
           livenessProbe:
             httpGet:
               path: /alive
@@ -210,7 +210,7 @@ spec:
       serviceAccountName: "clabernetes-plus-clicker-service-account"
       containers:
         - name: ui
-          image: "ghcr.io/srl-labs/clabernetes/clabernetes-ui:dev-latest"
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-ui:dev-latest"
           imagePullPolicy: IfNotPresent
           resources:
             requests:

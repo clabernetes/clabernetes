@@ -3,7 +3,7 @@ package kubernetes
 import (
 	"os"
 
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 )
 
 // CurrentNamespace returns the current kubernetes namespace as read from the KUBE_NAMESPACE env

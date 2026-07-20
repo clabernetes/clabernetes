@@ -3,8 +3,8 @@ package containerlab_test
 import (
 	"testing"
 
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	"github.com/google/go-cmp/cmp"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
 	"gopkg.in/yaml.v3"
 )
 

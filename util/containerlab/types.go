@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"maps"
 
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 )
 
 // Config defines lab configuration as it is provided in the YAML file.

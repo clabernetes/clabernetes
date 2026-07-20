@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 )
 
 // FailOutput is a simple func to nicely print actual vs expected output when a test fails.

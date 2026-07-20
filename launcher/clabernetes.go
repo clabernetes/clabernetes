@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -175,7 +175,7 @@ func (c *clabernetes) setup() {
 			"failed ensuring docker is running, attempting to fallback to legacy ip tables",
 		)
 
-		// see https://github.com/srl-labs/clabernetes/issues/47
+		// see https://github.com/clabernetes/clabernetes/issues/47
 		err = enableLegacyIPTables(c.ctx, c.logger)
 		if err != nil {
 			c.logger.Fatalf("failed enabling legacy ip tables, err: %s", err)

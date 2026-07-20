@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetescontrollerstopology "github.com/srl-labs/clabernetes/controllers/topology"
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 )
 
 const testAllocateTunnelIDsTestName = "tunnels/allocate-tunnel-ids"

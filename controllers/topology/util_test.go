@@ -3,10 +3,10 @@ package topology_test
 import (
 	"testing"
 
-	clabernetesapis "github.com/srl-labs/clabernetes/apis"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetescontrollerstopology "github.com/srl-labs/clabernetes/controllers/topology"
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
+	clabernetesapis "github.com/clabernetes/clabernetes/apis"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 )
 
 func TestGetTopologyKind(t *testing.T) {

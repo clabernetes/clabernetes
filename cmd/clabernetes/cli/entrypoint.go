@@ -1,10 +1,10 @@
 package cli
 
 import (
-	clabernetesclicker "github.com/srl-labs/clabernetes/clicker"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteslauncher "github.com/srl-labs/clabernetes/launcher"
-	clabernetesmanager "github.com/srl-labs/clabernetes/manager"
+	clabernetesclicker "github.com/clabernetes/clabernetes/clicker"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteslauncher "github.com/clabernetes/clabernetes/launcher"
+	clabernetesmanager "github.com/clabernetes/clabernetes/manager"
 	"github.com/urfave/cli/v2"
 )
 

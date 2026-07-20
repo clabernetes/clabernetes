@@ -3,8 +3,8 @@ package imagerequest
 import (
 	"context"
 
-	clabernetesapis "github.com/srl-labs/clabernetes/apis"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
+	clabernetesapis "github.com/clabernetes/clabernetes/apis"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 )
