@@ -51,10 +51,10 @@ TRY_C9S_HELM_WAIT_ARG := $(if $(filter v4%,$(HELM_VERSION)),--wait=legacy,--wait
 ## When the host has HTTP(S)_PROXY set, the launcher pods need those vars too so
 ## their docker daemon (and nerdctl during image pull through) can pull images.
 ## They are passed via the chart's globalConfig.deployment.extraEnv. NO_PROXY is
-## extended with the KinD service/pod subnets and cluster-local names so that
-## in-cluster traffic (kube api, etc.) never hits the proxy. The extraEnv json
-## is rendered with yq from the env vars so no quoting/escaping shenanigans.
-TRY_C9S_NO_PROXY_EXTRA := 10.96.0.0/16,10.244.0.0/16,.svc,.svc.cluster.local,localhost,127.0.0.1
+## extended with the discovered KinD service/pod subnets and cluster-local names
+## so that in-cluster traffic (kube api, etc.) never hits the proxy. The extraEnv
+## json is rendered with yq from the env vars so no quoting/escaping shenanigans.
+TRY_C9S_NO_PROXY_EXTRA := .svc,.svc.cluster.local,localhost,127.0.0.1
 
 # expands to a `--set-json globalConfig.deployment.extraEnv=[...]` helm arg (or
 # nothing when no proxy is set); intended for use inside a recipe shell.
@@ -63,8 +63,17 @@ define try-c9s-proxy-helm-args
 	https_proxy_val="$${HTTPS_PROXY:-$$https_proxy}"; \
 	proxy_helm_args=""; \
 	if [ -n "$$http_proxy_val" ] || [ -n "$$https_proxy_val" ]; then \
+		pod_cidrs=$$($(KUBECTL) get nodes -o json | \
+			$(YQ) -r '[.items[].spec.podCIDRs[]] | join(",")'); \
+		service_cidrs=$$($(KUBECTL) -n kube-system get configmap kubeadm-config \
+			-o jsonpath='{.data.ClusterConfiguration}' | \
+			$(YQ) -r '.networking.serviceSubnet // ""'); \
+		if [ -z "$$pod_cidrs" ] || [ -z "$$service_cidrs" ]; then \
+			echo "--> TRY-C9S: failed to discover KinD pod/service CIDRs"; \
+			exit 1; \
+		fi; \
 		no_proxy_val="$${NO_PROXY:-$$no_proxy}"; \
-		no_proxy_val="$${no_proxy_val:+$$no_proxy_val,}$(TRY_C9S_NO_PROXY_EXTRA)"; \
+		no_proxy_val="$${no_proxy_val:+$$no_proxy_val,}$$service_cidrs,$$pod_cidrs,$(TRY_C9S_NO_PROXY_EXTRA)"; \
 		extra_env_json=$$( \
 			C9S_HTTP_PROXY="$$http_proxy_val" \
 			C9S_HTTPS_PROXY="$$https_proxy_val" \
