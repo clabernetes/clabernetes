@@ -159,6 +159,51 @@ spec:
 
 **Note:** This is ignored if `dockerDaemonConfig` is set (configure in daemon.json instead).
 
+## HTTP(S) Proxy Support
+
+If your cluster reaches the internet through an HTTP(S) proxy, set the standard proxy env vars
+on the launcher pods -- either per topology or globally:
+
+```yaml
+spec:
+  deployment:
+    extraEnv:
+      - name: HTTP_PROXY
+        value: http://proxy.example.com:8080
+      - name: HTTPS_PROXY
+        value: http://proxy.example.com:8080
+      - name: NO_PROXY
+        value: 10.96.0.0/16,10.244.0.0/16,.svc,.svc.cluster.local,localhost,127.0.0.1
+```
+
+Or for all topologies via the Config CRD (or the `globalConfig.deployment.extraEnv` helm value):
+
+```yaml
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Config
+metadata:
+  name: clabernetes
+spec:
+  deployment:
+    extraEnv:
+      - name: HTTPS_PROXY
+        value: http://proxy.example.com:8080
+      # ...
+```
+
+**How it works:**
+- The launcher writes the proxy env vars into its Docker daemon config (`proxies` section), so
+  direct Docker pulls go through the proxy.
+- Pull-through mode also works: the pull pod uses the node CRI (configure your CRI for the proxy
+  as usual, most distributions handle this already), and the launcher-side `nerdctl` operations
+  inherit the env vars.
+- The in-cluster Kubernetes API service address is automatically appended to `NO_PROXY` by the
+  launcher, so it never tries to reach the API through the proxy.
+
+**Note:** `NO_PROXY` should contain your cluster's service and pod CIDRs plus cluster-local DNS
+suffixes (see the example above -- adjust the CIDRs for your cluster). Proxy env vars are ignored
+if `dockerDaemonConfig` is set (configure `proxies` in your daemon.json instead).
+
 ## Global Configuration
 
 Set defaults in the Config CRD:

@@ -46,6 +46,53 @@ YQ_SRC ?= https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(O
 TRY_C9S_CHART_VERSION_ARG := $(if $(TRY_C9S_CHART_VERSION),--version $(TRY_C9S_CHART_VERSION),)
 TRY_C9S_HELM_WAIT_ARG := $(if $(filter v4%,$(HELM_VERSION)),--wait=legacy,--wait)
 
+## Proxy support
+## ----------------------------------------------------------------------------|
+## When the host has HTTP(S)_PROXY set, the launcher pods need those vars too so
+## their docker daemon (and nerdctl during image pull through) can pull images.
+## They are passed via the chart's globalConfig.deployment.extraEnv. NO_PROXY is
+## extended with the discovered KinD service/pod subnets and cluster-local names
+## so that in-cluster traffic (kube api, etc.) never hits the proxy. The extraEnv
+## json is rendered with yq from the env vars so no quoting/escaping shenanigans.
+TRY_C9S_NO_PROXY_EXTRA := .svc,.svc.cluster.local,localhost,127.0.0.1
+
+# expands to a `--set-json globalConfig.deployment.extraEnv=[...]` helm arg (or
+# nothing when no proxy is set); intended for use inside a recipe shell.
+define try-c9s-proxy-helm-args
+	http_proxy_val="$${HTTP_PROXY:-$$http_proxy}"; \
+	https_proxy_val="$${HTTPS_PROXY:-$$https_proxy}"; \
+	proxy_helm_args=""; \
+	if [ -n "$$http_proxy_val" ] || [ -n "$$https_proxy_val" ]; then \
+		pod_cidrs=$$($(KUBECTL) get nodes -o json | \
+			$(YQ) -r '[.items[].spec.podCIDRs[]] | join(",")'); \
+		service_cidrs=$$($(KUBECTL) -n kube-system get configmap kubeadm-config \
+			-o jsonpath='{.data.ClusterConfiguration}' | \
+			$(YQ) -r '.networking.serviceSubnet // ""'); \
+		if [ -z "$$pod_cidrs" ] || [ -z "$$service_cidrs" ]; then \
+			echo "--> TRY-C9S: failed to discover KinD pod/service CIDRs"; \
+			exit 1; \
+		fi; \
+		no_proxy_val="$${NO_PROXY:-$$no_proxy}"; \
+		no_proxy_val="$${no_proxy_val:+$$no_proxy_val,}$$service_cidrs,$$pod_cidrs,$(TRY_C9S_NO_PROXY_EXTRA)"; \
+		extra_env_json=$$( \
+			C9S_HTTP_PROXY="$$http_proxy_val" \
+			C9S_HTTPS_PROXY="$$https_proxy_val" \
+			C9S_NO_PROXY="$$no_proxy_val" \
+			$(YQ) -n -o=json -I=0 \
+				'[ \
+					{"name": "HTTP_PROXY", "value": strenv(C9S_HTTP_PROXY)}, \
+					{"name": "http_proxy", "value": strenv(C9S_HTTP_PROXY)}, \
+					{"name": "HTTPS_PROXY", "value": strenv(C9S_HTTPS_PROXY)}, \
+					{"name": "https_proxy", "value": strenv(C9S_HTTPS_PROXY)}, \
+					{"name": "NO_PROXY", "value": strenv(C9S_NO_PROXY)}, \
+					{"name": "no_proxy", "value": strenv(C9S_NO_PROXY)} \
+				] | map(select(.value != ""))' \
+		); \
+		proxy_helm_args="--set-json globalConfig.deployment.extraEnv=$$extra_env_json"; \
+		echo "--> TRY-C9S: proxy env detected, passing proxy config to launcher pods"; \
+	fi
+endef
+
 .PHONY: try-c9s
 try-c9s: try-c9s-expose ## Launch published clabernetes in KinD and apply a sample topology
 	@echo "--> TRY-C9S: clabernetes is ready to try"
@@ -141,14 +188,16 @@ try-c9s-metallb: try-c9s-cluster | $(TRY_C9S_STATE_DIR)
 .PHONY: try-c9s-install
 try-c9s-install: try-c9s-metallb
 	@echo "--> TRY-C9S: installing published clabernetes chart"
-	@$(HELM) upgrade --install clabernetes $(TRY_C9S_CHART) $(TRY_C9S_CHART_VERSION_ARG) \
+	@$(call try-c9s-proxy-helm-args); \
+	$(HELM) upgrade --install clabernetes $(TRY_C9S_CHART) $(TRY_C9S_CHART_VERSION_ARG) \
 		--namespace $(TRY_C9S_NAMESPACE) \
 		--create-namespace \
 		$(TRY_C9S_HELM_WAIT_ARG) \
 		--timeout $(TRY_C9S_TIMEOUT) \
 		--set ui.ingress.enabled=false \
 		--set manager.replicaCount=1 \
-		--set ui.replicaCount=1
+		--set ui.replicaCount=1 \
+		$$proxy_helm_args
 	@$(KUBECTL) -n $(TRY_C9S_NAMESPACE) rollout status deploy/clabernetes-manager --timeout=$(TRY_C9S_TIMEOUT)
 	@$(KUBECTL) -n $(TRY_C9S_NAMESPACE) rollout status deploy/clabernetes-ui --timeout=$(TRY_C9S_TIMEOUT)
 

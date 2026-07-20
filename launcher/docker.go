@@ -1,19 +1,19 @@
 package launcher
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
-	"text/template"
 	"time"
 
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	claberneteserrors "github.com/srl-labs/clabernetes/errors"
 	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesutil "github.com/srl-labs/clabernetes/util"
 )
 
 const (
@@ -28,27 +28,57 @@ func daemonConfigExists() bool {
 	return err == nil
 }
 
-func handleInsecureRegistries() error {
-	insecureRegistries := os.Getenv(clabernetesconstants.LauncherInsecureRegistries)
+type daemonConfig struct {
+	StorageDriver      string               `json:"storage-driver"`
+	InsecureRegistries []string             `json:"insecure-registries,omitempty"`
+	Proxies            *daemonProxiesConfig `json:"proxies,omitempty"`
+}
 
-	if insecureRegistries == "" {
+type daemonProxiesConfig struct {
+	HTTPProxy  string `json:"http-proxy,omitempty"`
+	HTTPSProxy string `json:"https-proxy,omitempty"`
+	NoProxy    string `json:"no-proxy,omitempty"`
+}
+
+func getProxiesConfig() *daemonProxiesConfig {
+	httpProxy := clabernetesutil.GetEnvStrOrDefault(
+		clabernetesconstants.HTTPProxyEnv,
+		os.Getenv(clabernetesconstants.HTTPProxyEnvLower),
+	)
+	httpsProxy := clabernetesutil.GetEnvStrOrDefault(
+		clabernetesconstants.HTTPSProxyEnv,
+		os.Getenv(clabernetesconstants.HTTPSProxyEnvLower),
+	)
+	noProxy := clabernetesutil.GetEnvStrOrDefault(
+		clabernetesconstants.NoProxyEnv,
+		os.Getenv(clabernetesconstants.NoProxyEnvLower),
+	)
+
+	if httpProxy == "" && httpsProxy == "" {
 		return nil
 	}
 
-	splitRegistries := strings.Split(insecureRegistries, ",")
+	return &daemonProxiesConfig{
+		HTTPProxy:  httpProxy,
+		HTTPSProxy: httpsProxy,
+		NoProxy:    noProxy,
+	}
+}
 
-	quotedRegistries := make([]string, len(splitRegistries))
-
-	for idx, elem := range splitRegistries {
-		quotedRegistries[idx] = fmt.Sprintf("%q", elem)
+func handleDockerDaemonConfig() error {
+	config := daemonConfig{
+		StorageDriver: vfsStorageDriver,
+		Proxies:       getProxiesConfig(),
 	}
 
-	templateVars := struct {
-		StorageDriver      string
-		InsecureRegistries string
-	}{
-		StorageDriver:      vfsStorageDriver,
-		InsecureRegistries: strings.Join(quotedRegistries, ","),
+	insecureRegistries := os.Getenv(clabernetesconstants.LauncherInsecureRegistries)
+	if insecureRegistries != "" {
+		config.InsecureRegistries = strings.Split(insecureRegistries, ",")
+	}
+
+	if config.Proxies == nil && config.InsecureRegistries == nil {
+		// nothing to configure, leave the daemon config alone (unset)
+		return nil
 	}
 
 	// if the pod is privileged we can run w/ overlayfs instead of vfs which should
@@ -59,24 +89,17 @@ func handleInsecureRegistries() error {
 		os.Getenv(clabernetesconstants.LauncherPrivilegedEnv),
 		clabernetesconstants.True,
 	) {
-		templateVars.StorageDriver = overlayStorageDriver
+		config.StorageDriver = overlayStorageDriver
 	}
 
-	t, err := template.ParseFS(Assets, "assets/docker-daemon.json.template")
-	if err != nil {
-		return err
-	}
-
-	var rendered bytes.Buffer
-
-	err = t.Execute(&rendered, templateVars)
+	rendered, err := json.MarshalIndent(config, "", "    ")
 	if err != nil {
 		return err
 	}
 
 	err = os.WriteFile(
 		dockerDaemonConfig,
-		rendered.Bytes(),
+		rendered,
 		clabernetesconstants.PermissionsEveryoneReadWriteOwnerExecute,
 	)
 	if err != nil {

@@ -162,6 +162,8 @@ globalConfig:
 
     # extraEnv is a list of k8scorev1.EnvVar that will be set on any launcher pods. Note that any
     # configured global config env vars will be ignored if a Topology has an extraEnv config.
+    # This is also the place to set HTTP_PROXY/HTTPS_PROXY/NO_PROXY if your cluster needs a proxy
+    # to pull images -- see docs/guides/image-pull.md for details.
     extraEnv: []
 
   # name is the global setting that governs a Topology's "naming" field when set to "global".

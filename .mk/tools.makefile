@@ -28,7 +28,8 @@ endif
 
 ## curl wrapper used by the download helpers
 ## ----------------------------------------------------------------------------|
-CURL_OPTS ?= --location --silent --fail --show-error
+# retries paper over transient network hiccups (flaky corporate proxies etc.)
+CURL_OPTS ?= --location --silent --fail --show-error --retry 3 --retry-delay 1 --retry-all-errors
 CURL := curl $(CURL_OPTS)
 
 ## Download helpers

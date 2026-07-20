@@ -1,6 +1,0 @@
-{
-    "storage-driver": "{{ .StorageDriver }}",
-	"insecure-registries": [
-        {{ .InsecureRegistries }}
-	]
-}

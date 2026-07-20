@@ -58,6 +58,8 @@ func StartClabernetes() {
 
 	ctx, cancel := clabernetesutil.SignalHandledContext(clabernetesLogger.Criticalf)
 
+	ensureKubeAPINotProxied()
+
 	clabernetesInstance = &clabernetes{
 		ctx:                   ctx,
 		cancel:                cancel,
@@ -155,13 +157,13 @@ func (c *clabernetes) setup() {
 	}
 
 	if daemonConfigExists() {
-		c.logger.Infof("%q exists, skipping insecure registries", dockerDaemonConfig)
+		c.logger.Infof("%q exists, skipping docker daemon config", dockerDaemonConfig)
 	} else {
-		c.logger.Debug("configure insecure registries if requested...")
+		c.logger.Debug("configure docker daemon (insecure registries/proxies) if requested...")
 
-		err := handleInsecureRegistries()
+		err := handleDockerDaemonConfig()
 		if err != nil {
-			c.logger.Fatalf("failed configuring insecure docker registries, err: %s", err)
+			c.logger.Fatalf("failed configuring docker daemon, err: %s", err)
 		}
 	}
 

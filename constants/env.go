@@ -20,6 +20,29 @@ const (
 )
 
 const (
+	// HTTPProxyEnv is the standard env var for proxying http traffic. If set on a launcher pod
+	// (i.e. via the topology or global config extra env vars) it is passed to the launcher's
+	// docker daemon so images can be pulled through the proxy.
+	HTTPProxyEnv = "HTTP_PROXY"
+
+	// HTTPProxyEnvLower is the lowercase variant of HTTPProxyEnv.
+	HTTPProxyEnvLower = "http_proxy"
+
+	// HTTPSProxyEnv is the standard env var for proxying https traffic, see also HTTPProxyEnv.
+	HTTPSProxyEnv = "HTTPS_PROXY"
+
+	// HTTPSProxyEnvLower is the lowercase variant of HTTPSProxyEnv.
+	HTTPSProxyEnvLower = "https_proxy"
+
+	// NoProxyEnv is the standard env var holding hosts/cidrs/domains that should *not* be
+	// proxied, see also HTTPProxyEnv.
+	NoProxyEnv = "NO_PROXY"
+
+	// NoProxyEnvLower is the lowercase variant of NoProxyEnv.
+	NoProxyEnvLower = "no_proxy"
+)
+
+const (
 	// GitHubTokenEnv is the env var that holds (optionally of course) a GitHub token -- this is
 	// useful for the clabverter tool as well as the launcher where we *may* need to use the
 	// GitHub api to list contents of a directory (this is specifically for dealing with large files
