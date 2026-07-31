@@ -123,7 +123,8 @@ func TestResolveDeployment(t *testing.T) {
 				}
 
 				clabernetestesthelper.MarshaledEqual(t, got.Extra, testCase.expectedExtra)
-			})
+			},
+		)
 	}
 }
 
@@ -611,6 +612,95 @@ func TestRenderDeployment(t *testing.T) {
 			configManagerGetter: clabernetesconfig.GetFakeManager,
 		},
 		{
+			name: "scheduling-with-affinity",
+			owningTopology: &clabernetesapisv1alpha1.Topology{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "render-deployment-test",
+					Namespace: "clabernetes",
+				},
+				Spec: clabernetesapisv1alpha1.TopologySpec{
+					Connectivity: clabernetesconstants.ConnectivityVXLAN,
+					Deployment: clabernetesapisv1alpha1.Deployment{
+						Scheduling: clabernetesapisv1alpha1.Scheduling{
+							NodeSelector: map[string]string{
+								"somelabel": "somevalue",
+							},
+							Tolerations: []k8scorev1.Toleration{
+								{
+									Key:      "sometaintkey",
+									Operator: "Equal",
+									Value:    "sometaintvalue",
+									Effect:   "NoSchedule",
+								},
+							},
+							Affinity: &k8scorev1.Affinity{
+								NodeAffinity: &k8scorev1.NodeAffinity{
+									RequiredDuringSchedulingIgnoredDuringExecution: &k8scorev1.NodeSelector{
+										NodeSelectorTerms: []k8scorev1.NodeSelectorTerm{
+											{
+												MatchExpressions: []k8scorev1.NodeSelectorRequirement{
+													{
+														Key:      "topology.kubernetes.io/zone",
+														Operator: k8scorev1.NodeSelectorOpIn,
+														Values:   []string{"zone-a", "zone-b"},
+													},
+												},
+											},
+										},
+									},
+								},
+								PodAntiAffinity: &k8scorev1.PodAntiAffinity{
+									PreferredDuringSchedulingIgnoredDuringExecution: []k8scorev1.WeightedPodAffinityTerm{
+										{
+											Weight: 100,
+											PodAffinityTerm: k8scorev1.PodAffinityTerm{
+												LabelSelector: &metav1.LabelSelector{
+													MatchLabels: map[string]string{
+														"clabernetes/topology": "render-deployment-test",
+													},
+												},
+												TopologyKey: "kubernetes.io/hostname",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					Definition: clabernetesapisv1alpha1.Definition{
+						Containerlab: `---
+   name: test
+   topology:
+     nodes:
+       srl1:
+         kind: srl
+         image: ghcr.io/nokia/srlinux
+`,
+					},
+				},
+			},
+			clabernetesConfigs: map[string]*clabernetesutilcontainerlab.Config{
+				"srl1": {
+					Name:   "srl1",
+					Prefix: clabernetesutil.ToPointer(""),
+					Topology: &clabernetesutilcontainerlab.Topology{
+						Defaults: &clabernetesutilcontainerlab.NodeDefinition{},
+						Kinds:    nil,
+						Nodes: map[string]*clabernetesutilcontainerlab.NodeDefinition{
+							"srl1": {
+								Kind:  "srl",
+								Image: "ghcr.io/nokia/srlinux",
+							},
+						},
+						Links: nil,
+					},
+					Debug: false,
+				},
+			},
+			nodeName:            "srl1",
+			configManagerGetter: clabernetesconfig.GetFakeManager,
+		},
+		{
 			name: "remove-prefix",
 			owningTopology: &clabernetesapisv1alpha1.Topology{
 				ObjectMeta: metav1.ObjectMeta{
@@ -819,7 +909,8 @@ func TestRenderDeployment(t *testing.T) {
 				}
 
 				clabernetestesthelper.MarshaledEqual(t, got, want)
-			})
+			},
+		)
 	}
 }
 
@@ -1496,6 +1587,123 @@ func TestDeploymentConforms(t *testing.T) {
 			ownerUID: apimachinerytypes.UID("clabernetes-testing"),
 			conforms: false,
 		},
+		{
+			name:     "mismatched-affinity-existing-has-none",
+			existing: &k8sappsv1.Deployment{},
+			rendered: &k8sappsv1.Deployment{
+				Spec: k8sappsv1.DeploymentSpec{
+					Template: k8scorev1.PodTemplateSpec{
+						Spec: k8scorev1.PodSpec{
+							Affinity: &k8scorev1.Affinity{
+								NodeAffinity: &k8scorev1.NodeAffinity{
+									RequiredDuringSchedulingIgnoredDuringExecution: &k8scorev1.NodeSelector{
+										NodeSelectorTerms: []k8scorev1.NodeSelectorTerm{
+											{
+												MatchExpressions: []k8scorev1.NodeSelectorRequirement{
+													{
+														Key:      "topology.kubernetes.io/zone",
+														Operator: k8scorev1.NodeSelectorOpIn,
+														Values:   []string{"zone-a"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			ownerUID: apimachinerytypes.UID("clabernetes-testing"),
+			conforms: false,
+		},
+		{
+			name: "mismatched-affinity-rendered-has-none",
+			existing: &k8sappsv1.Deployment{
+				Spec: k8sappsv1.DeploymentSpec{
+					Template: k8scorev1.PodTemplateSpec{
+						Spec: k8scorev1.PodSpec{
+							Affinity: &k8scorev1.Affinity{
+								NodeAffinity: &k8scorev1.NodeAffinity{
+									RequiredDuringSchedulingIgnoredDuringExecution: &k8scorev1.NodeSelector{
+										NodeSelectorTerms: []k8scorev1.NodeSelectorTerm{
+											{
+												MatchExpressions: []k8scorev1.NodeSelectorRequirement{
+													{
+														Key:      "topology.kubernetes.io/zone",
+														Operator: k8scorev1.NodeSelectorOpIn,
+														Values:   []string{"zone-a"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			rendered: &k8sappsv1.Deployment{},
+			ownerUID: apimachinerytypes.UID("clabernetes-testing"),
+			conforms: false,
+		},
+		{
+			name: "mismatched-affinity-different-zones",
+			existing: &k8sappsv1.Deployment{
+				Spec: k8sappsv1.DeploymentSpec{
+					Template: k8scorev1.PodTemplateSpec{
+						Spec: k8scorev1.PodSpec{
+							Affinity: &k8scorev1.Affinity{
+								NodeAffinity: &k8scorev1.NodeAffinity{
+									RequiredDuringSchedulingIgnoredDuringExecution: &k8scorev1.NodeSelector{
+										NodeSelectorTerms: []k8scorev1.NodeSelectorTerm{
+											{
+												MatchExpressions: []k8scorev1.NodeSelectorRequirement{
+													{
+														Key:      "topology.kubernetes.io/zone",
+														Operator: k8scorev1.NodeSelectorOpIn,
+														Values:   []string{"zone-a"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			rendered: &k8sappsv1.Deployment{
+				Spec: k8sappsv1.DeploymentSpec{
+					Template: k8scorev1.PodTemplateSpec{
+						Spec: k8scorev1.PodSpec{
+							Affinity: &k8scorev1.Affinity{
+								NodeAffinity: &k8scorev1.NodeAffinity{
+									RequiredDuringSchedulingIgnoredDuringExecution: &k8scorev1.NodeSelector{
+										NodeSelectorTerms: []k8scorev1.NodeSelectorTerm{
+											{
+												MatchExpressions: []k8scorev1.NodeSelectorRequirement{
+													{
+														Key:      "topology.kubernetes.io/zone",
+														Operator: k8scorev1.NodeSelectorOpIn,
+														Values:   []string{"zone-b"},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			ownerUID: apimachinerytypes.UID("clabernetes-testing"),
+			conforms: false,
+		},
 	}
 
 	for _, testCase := range cases {
@@ -1524,6 +1732,7 @@ func TestDeploymentConforms(t *testing.T) {
 						testCase.rendered,
 					)
 				}
-			})
+			},
+		)
 	}
 }

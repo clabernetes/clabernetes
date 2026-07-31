@@ -256,6 +256,13 @@ func (r *DeploymentReconciler) Conforms( //nolint: gocyclo
 	}
 
 	if !reflect.DeepEqual(
+		existingDeployment.Spec.Template.Spec.Affinity,
+		renderedDeployment.Spec.Template.Spec.Affinity,
+	) {
+		return false
+	}
+
+	if !reflect.DeepEqual(
 		existingDeployment.Spec.Template.Spec.Volumes,
 		renderedDeployment.Spec.Template.Spec.Volumes,
 	) {
@@ -401,9 +408,10 @@ func (r *DeploymentReconciler) renderDeploymentScheduling(
 	deployment *k8sappsv1.Deployment,
 	owningTopology *clabernetesapisv1alpha1.Topology,
 ) {
-	tolerations := owningTopology.Spec.Deployment.Scheduling.Tolerations
+	scheduling := owningTopology.Spec.Deployment.Scheduling
 
-	deployment.Spec.Template.Spec.Tolerations = tolerations
+	deployment.Spec.Template.Spec.Tolerations = scheduling.Tolerations
+	deployment.Spec.Template.Spec.Affinity = scheduling.Affinity
 }
 
 func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen

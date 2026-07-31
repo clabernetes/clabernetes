@@ -229,6 +229,10 @@ type Scheduling struct {
 	// +listType=atomic
 	// +optional
 	Tolerations []k8scorev1.Toleration `json:"tolerations"`
+	// Affinity sets the affinity rules that will be configured on all launcher pods for this
+	// Topology. This supports both affinity and anti-affinity rules.
+	// +optional
+	Affinity *k8scorev1.Affinity `json:"affinity,omitempty"`
 }
 
 // StatusProbes holds details about if the status probes are enabled and if so how they should be

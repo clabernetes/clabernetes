@@ -20,6 +20,35 @@ spec:
         - key: "nvidia.com/gpu"
           operator: "Exists"
           effect: "NoSchedule"
+      # Affinity / anti-affinity rules for launcher pods.
+      # Use nodeAffinity to require or prefer specific nodes, and podAntiAffinity to spread
+      # launcher pods across nodes (useful for large topologies).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/zone
+                    operator: In
+                    values:
+                      - zone-a
+                      - zone-b
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - key: node-type
+                    operator: In
+                    values:
+                      - network-lab
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    clabernetes/topology: scheduled-topology
+                topologyKey: kubernetes.io/hostname
   definition:
     containerlab: |
       name: scheduled
