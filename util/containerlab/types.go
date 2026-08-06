@@ -38,6 +38,7 @@ type MgmtNet struct {
 type Topology struct {
 	Defaults *NodeDefinition            `yaml:"defaults"`
 	Kinds    map[string]*NodeDefinition `yaml:"kinds,omitempty"`
+	Groups   map[string]*NodeDefinition `yaml:"groups,omitempty"`
 	Nodes    map[string]*NodeDefinition `yaml:"nodes,omitempty"`
 	Links    []*LinkDefinition          `yaml:"links,omitempty"`
 }

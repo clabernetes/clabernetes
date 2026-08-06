@@ -502,6 +502,41 @@ func collectKindsForGroup(
 	return kindsMap
 }
 
+func collectGroupsForGroup(
+	topology *clabernetesutilcontainerlab.Topology,
+	groupNodeNames []string,
+) map[string]*clabernetesutilcontainerlab.NodeDefinition {
+	if topology.Groups == nil {
+		return nil
+	}
+
+	groupsMap := make(map[string]*clabernetesutilcontainerlab.NodeDefinition)
+
+	for _, nodeName := range groupNodeNames {
+		nodeDefinition, ok := topology.Nodes[nodeName]
+		if !ok || nodeDefinition.Group == "" {
+			continue
+		}
+
+		groupName := nodeDefinition.Group
+
+		if _, alreadyCollected := groupsMap[groupName]; alreadyCollected {
+			continue
+		}
+
+		groupDefinition, groupOk := topology.Groups[groupName]
+		if groupOk {
+			groupsMap[groupName] = groupDefinition
+		}
+	}
+
+	if len(groupsMap) == 0 {
+		return nil
+	}
+
+	return groupsMap
+}
+
 // moveDefaultsPortsToPrimary moves default ports to the primary node when there are secondaries.
 func moveDefaultsPortsToPrimary(
 	nodesMap map[string]*clabernetesutilcontainerlab.NodeDefinition,
@@ -597,6 +632,7 @@ func (p *containerlabDefinitionProcessor) processConfigForNodeGroup(
 
 	nodesMap := buildNodesMapForGroup(ctx)
 	resolvedKinds := collectKindsForGroup(containerlabConfig.Topology, groupNodeNames)
+	resolvedGroups := collectGroupsForGroup(containerlabConfig.Topology, groupNodeNames)
 
 	moveDefaultsPortsToPrimary(nodesMap, primaryNodeName, group, deepCopiedDefaults)
 
@@ -606,6 +642,7 @@ func (p *containerlabDefinitionProcessor) processConfigForNodeGroup(
 		Topology: &clabernetesutilcontainerlab.Topology{
 			Defaults: deepCopiedDefaults,
 			Kinds:    resolvedKinds,
+			Groups:   resolvedGroups,
 			Nodes:    nodesMap,
 			Links:    nil,
 		},

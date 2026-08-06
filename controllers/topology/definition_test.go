@@ -400,6 +400,53 @@ func TestDefinitionProcess(t *testing.T) {
 			},
 			removeTopologyPrefix: false,
 		},
+		{
+			name: "containerlab-groups",
+			inTopology: &clabernetesapisv1alpha1.Topology{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "process-containerlab-definition-groups-test",
+					Namespace: "clabernetes",
+				},
+				Spec: clabernetesapisv1alpha1.TopologySpec{
+					Definition: clabernetesapisv1alpha1.Definition{
+						Containerlab: `---
+    name: groups-test
+    topology:
+      kinds:
+        nokia_srlinux:
+          image: ghcr.io/nokia/srlinux
+      groups:
+        spine:
+          kind: nokia_srlinux
+          type: ixrd3l
+        leaf:
+          kind: nokia_srlinux
+          type: ixrd2l
+      nodes:
+        spine1:
+          group: spine
+        leaf1:
+          group: leaf
+      links:
+        - endpoints: ["spine1:e1-1", "leaf1:e1-1"]
+`,
+					},
+				},
+			},
+			reconcileData: &clabernetescontrollerstopology.ReconcileData{
+				Kind:           "containerlab",
+				ResolvedHashes: clabernetesapisv1alpha1.ReconcileHashes{},
+				ResolvedConfigs: map[string]*clabernetesutilcontainerlab.Config{
+					"spine1": {},
+					"leaf1":  {},
+				},
+				ResolvedTunnels: map[string][]*clabernetesapisv1alpha1.PointToPointTunnel{
+					"spine1": {},
+					"leaf1":  {},
+				},
+			},
+			removeTopologyPrefix: false,
+		},
 	}
 
 	for _, testCase := range cases {
