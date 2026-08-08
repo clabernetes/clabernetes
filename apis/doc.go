@@ -22,6 +22,6 @@ const (
 	// Link is the Kind of the Link custom resource.
 	Link = "link"
 
-	// NodeProfile is the Kind of the NodeProfile custom resource.
-	NodeProfile = "nodeProfile"
+	// LauncherProfile is the Kind of the LauncherProfile custom resource.
+	LauncherProfile = "launcherProfile"
 )

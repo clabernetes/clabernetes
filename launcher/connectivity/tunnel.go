@@ -18,6 +18,8 @@ import (
 type Tunnel struct {
 	// TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id).
 	TunnelID int
+	// Connectivity is the normalized per-Link connectivity flavor.
+	Connectivity clabernetesapisv1alpha1.LinkConnectivity
 	// Destination is the remote launcher's fabric service to connect to (qualified k8s service
 	// name) -- a pure function of the link spec since fabric services exist per node.
 	Destination string
@@ -80,6 +82,7 @@ func LinkToLocalTunnel(
 
 	return &Tunnel{
 		TunnelID:        link.Status.TunnelID,
+		Connectivity:    link.Spec.NormalizedConnectivity(),
 		Destination:     linkDestination(link.GetNamespace(), remote.NodeName),
 		LocalNode:       local.NodeName,
 		LocalInterface:  local.InterfaceName,

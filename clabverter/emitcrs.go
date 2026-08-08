@@ -28,15 +28,15 @@ type statuslessLink struct {
 	Spec clabernetesapisv1alpha1.LinkSpec `json:"spec"`
 }
 
-// statuslessNodeProfile is a NodeProfile without the status field.
-type statuslessNodeProfile struct {
+// statuslessLauncherProfile is a LauncherProfile without the status field.
+type statuslessLauncherProfile struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec clabernetesapisv1alpha1.NodeProfileSpec `json:"spec"`
+	Spec clabernetesapisv1alpha1.LauncherProfileSpec `json:"spec"`
 }
 
-// handleCRManifests renders the primitive Node/Link/NodeProfile manifests for the loaded
+// handleCRManifests renders the primitive Node/Link/LauncherProfile manifests for the loaded
 // topology -- no Topology object involved. This reuses the very same compile+render pipeline
 // the in-cluster Topology compiler runs, so `clabverter --emit-crs` output matches what the
 // compiler would emit for the equivalent Topology (minus owner references).
@@ -55,18 +55,18 @@ func (c *Clabverter) handleCRManifests() error {
 
 	content := make([]byte, 0)
 
-	for _, node := range clabernetescontrollerstopology.RenderNodes(
+	for _, profile := range clabernetescontrollerstopology.RenderLauncherProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	) {
-		content, err = appendManifest(content, &statuslessNode{
+		content, err = appendManifest(content, &statuslessLauncherProfile{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: manifestAPIVersion,
-				Kind:       "Node",
+				Kind:       "LauncherProfile",
 			},
-			ObjectMeta: node.ObjectMeta,
-			Spec:       node.Spec,
+			ObjectMeta: profile.ObjectMeta,
+			Spec:       profile.Spec,
 		})
 		if err != nil {
 			return err
@@ -91,18 +91,18 @@ func (c *Clabverter) handleCRManifests() error {
 		}
 	}
 
-	for _, profile := range clabernetescontrollerstopology.RenderNodeProfiles(
+	for _, node := range clabernetescontrollerstopology.RenderNodes(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	) {
-		content, err = appendManifest(content, &statuslessNodeProfile{
+		content, err = appendManifest(content, &statuslessNode{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: manifestAPIVersion,
-				Kind:       "NodeProfile",
+				Kind:       "Node",
 			},
-			ObjectMeta: profile.ObjectMeta,
-			Spec:       profile.Spec,
+			ObjectMeta: node.ObjectMeta,
+			Spec:       node.Spec,
 		})
 		if err != nil {
 			return err
@@ -114,7 +114,7 @@ func (c *Clabverter) handleCRManifests() error {
 	c.renderedFiles = append(
 		c.renderedFiles,
 		renderedContent{
-			friendlyName: "clabernetes node/link/nodeprofile manifests",
+			friendlyName: "clabernetes launcherprofile/node/link manifests",
 			fileName:     fileName,
 			content:      content,
 		},
@@ -139,6 +139,8 @@ func appendManifest(content []byte, manifest any) ([]byte, error) {
 // buildInMemoryTopology assembles the Topology object the compile+render pipeline runs on --
 // exactly the object the topology manifest output would declare, just never persisted. A
 // provided topo spec file is the base, flags/files layer on top.
+//
+//nolint:gocyclo // Keeping all input overlays together makes their precedence explicit.
 func (c *Clabverter) buildInMemoryTopology() (*clabernetesapisv1alpha1.Topology, error) {
 	topology := &clabernetesapisv1alpha1.Topology{
 		ObjectMeta: metav1.ObjectMeta{
@@ -164,6 +166,13 @@ func (c *Clabverter) buildInMemoryTopology() (*clabernetesapisv1alpha1.Topology,
 	topology.Spec.ImagePull.InsecureRegistries = c.insecureRegistries
 	topology.Spec.ImagePull.PullSecrets = c.imagePullSecrets
 	topology.Spec.Deployment.ContainerlabVersion = c.containerlabVersion
+
+	// An in-memory Topology does not pass through API-server defaulting. Normalize defaults whose
+	// compiled representation belongs on a primitive resource so direct output is semantically
+	// identical to compiling a persisted Topology.
+	if topology.Spec.Connectivity == "" {
+		topology.Spec.Connectivity = string(clabernetesapisv1alpha1.LinkConnectivityVXLAN)
+	}
 
 	files := map[string][]topologyConfigMapTemplateVars{}
 

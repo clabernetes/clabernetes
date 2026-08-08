@@ -23,7 +23,7 @@ func TestContainerlabBasic(t *testing.T) {
 
 	steps := clabernetestesthelpersuite.Steps{
 		{
-			// the topology compiles to node/link/nodeprofile objects and the node controller
+			// the topology compiles to Node/Link/LauncherProfile objects and the Node controller
 			// realizes those -- so this asserts the whole compile + realize pipeline including
 			// the (unprefixed! the namespace is the topology boundary) deployment and services
 			Index:       10,
@@ -45,7 +45,7 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 				},
-				"nodeprofile": {
+				"launcherprofile": {
 					{
 						Name:           testName,
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
@@ -104,12 +104,16 @@ func TestContainerlabBasic(t *testing.T) {
 				},
 				"link": {
 					{
-						Name:           "srl1-e1-1-srl2-e1-1",
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
+						Name: "srl1-e1-1-srl2-e1-1",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeLink,
+						},
 					},
 					{
-						Name:           "srl1-e1-3-host-eth13",
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
+						Name: "srl1-e1-3-host-eth13",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeLink,
+						},
 					},
 				},
 				"service": {

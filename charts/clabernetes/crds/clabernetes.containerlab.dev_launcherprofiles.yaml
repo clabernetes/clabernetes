@@ -4,22 +4,19 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: nodeprofiles.clabernetes.containerlab.dev
+  name: launcherprofiles.clabernetes.containerlab.dev
 spec:
   group: clabernetes.containerlab.dev
   names:
-    kind: NodeProfile
-    listKind: NodeProfileList
-    plural: nodeprofiles
+    kind: LauncherProfile
+    listKind: LauncherProfileList
+    plural: launcherprofiles
     shortNames:
     - c9sprofile
-    singular: nodeprofile
+    singular: launcherprofile
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.priority
-      name: Priority
-      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -27,17 +24,9 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          NodeProfile holds *deployment policy* for a set of Nodes -- everything that is fleet policy
-          rather than per-node payload: expose behavior, image pull configuration, launcher pod
-          resources, scheduling, privileges/persistence, status probes, management network and
-          connectivity flavor. Profiles select Nodes with a standard label selector, which keeps
-          emitters of Nodes (users, the Topology compiler, containerlab tooling) completely decoupled
-          from deployment policy -- an emitter never needs to know profiles exist to emit a valid Node.
-          Policy resolution for a Node is deliberately boring: the helm-managed global Config is the
-          base (lowest precedence), then all matching NodeProfiles merge over it *per field* in
-          ascending priority order (name breaks ties). There are no per-Node overrides -- if a single
-          node needs special treatment, give it a label and a profile. The resolved chain is recorded in
-          each Node's status.appliedProfiles.
+          LauncherProfile holds reusable Kubernetes and launcher realization policy for Nodes. A Node
+          applies at most one LauncherProfile through spec.launcherProfileRef; fields omitted from the
+          profile inherit the global Config defaults.
         properties:
           apiVersion:
             description: |-
@@ -57,39 +46,25 @@ spec:
           metadata:
             type: object
           spec:
-            description: NodeProfileSpec is the spec for a NodeProfile resource.
+            description: LauncherProfileSpec is the spec for a LauncherProfile resource.
             properties:
-              connectivity:
-                description: |-
-                  Connectivity defines the type of connectivity to use between nodes -- "vxlan" (default) or
-                  the experimental "slurpeeth". Both sides of a link must resolve the same flavor for the
-                  tunnel to come up, so this is typically set by an all-nodes profile (or the Topology
-                  compiler).
-                enum:
-                - vxlan
-                - slurpeeth
-                type: string
               deployment:
-                description: |-
-                  Deployment holds launcher deployment settings (privileges, persistence, launcher
-                  image/log level, containerlab flags, extra env/files) for the selected nodes.
+                description: Deployment holds launcher deployment settings.
                 properties:
                   containerlabDebug:
-                    description: ContainerlabDebug sets the `--debug` flag when invoking
-                      containerlab in the launcher pods.
+                    description: ContainerlabDebug sets the containerlab --debug flag.
                     type: boolean
                   containerlabTimeout:
-                    description: |-
-                      ContainerlabTimeout sets the `--timeout` flag when invoking containerlab in the launcher
-                      pods.
+                    description: ContainerlabTimeout sets the containerlab --timeout
+                      flag.
                     type: string
                   containerlabVersion:
-                    description: ContainerlabVersion sets a custom version to use
-                      for containerlab in the launcher pods.
+                    description: ContainerlabVersion selects a custom containerlab
+                      version.
                     type: string
                   extraEnv:
                     description: ExtraEnv is a list of additional environment variables
-                      to set on the launcher container.
+                      for the launcher container.
                     items:
                       description: EnvVar represents an environment variable present
                         in a Container.
@@ -247,60 +222,19 @@ spec:
                       type: object
                     type: array
                     x-kubernetes-list-type: atomic
-                  filesFromConfigMap:
-                    description: |-
-                      FilesFromConfigMap is a slice of FileFromConfigMap that define the configmap/path and
-                      path on the launcher pod that the file should be mounted to.
-                    items:
-                      description: |-
-                        FileFromConfigMap represents a file that you would like to mount (from a configmap) in the
-                        launcher pod for a given node.
-                      properties:
-                        configMapName:
-                          description: ConfigMapName is the name of the configmap
-                            to mount.
-                          type: string
-                        configMapPath:
-                          description: |-
-                            ConfigMapPath is the path/key in the configmap to mount, if not specified the configmap will
-                            be mounted without a sub-path.
-                          type: string
-                        filePath:
-                          description: FilePath is the path to mount the file.
-                          type: string
-                        mode:
-                          default: read
-                          description: |-
-                            Mode sets the file permissions when mounting the configmap. Since the configmap will be read
-                            only filesystem anyway, we basically just want to expose if the file should be mounted as
-                            executable or not. So, default permissions would be 0o444 (read) and execute would be 0o555.
-                          enum:
-                          - read
-                          - execute
-                          type: string
-                      required:
-                      - configMapName
-                      - filePath
-                      type: object
-                    type: array
-                    x-kubernetes-list-type: atomic
                   launcherImage:
-                    description: LauncherImage sets the launcher image to use when
-                      spawning the launcher deployments.
+                    description: LauncherImage selects the launcher image.
                     type: string
                   launcherImagePullPolicy:
-                    description: |-
-                      LauncherImagePullPolicy sets the launcher image pull policy -- one of
-                      IfNotPresent/Always/Never.
+                    description: LauncherImagePullPolicy selects the launcher image
+                      pull policy.
                     enum:
                     - IfNotPresent
                     - Always
                     - Never
                     type: string
                   launcherLogLevel:
-                    description: |-
-                      LauncherLogLevel sets the launcher log level -- one of
-                      disabled/critical/warn/info/debug.
+                    description: LauncherLogLevel selects the launcher log level.
                     enum:
                     - disabled
                     - critical
@@ -309,9 +243,8 @@ spec:
                     - debug
                     type: string
                   persistence:
-                    description: |-
-                      Persistence enables persisting the containerlab working directory of the selected nodes'
-                      launchers in a PVC.
+                    description: Persistence enables persistence of the containerlab
+                      working directory.
                     properties:
                       claimSize:
                         description: |-
@@ -336,30 +269,25 @@ spec:
                     - enabled
                     type: object
                   privilegedLauncher:
-                    description: |-
-                      PrivilegedLauncher, when true, sets the launcher containers to privileged -- see the
-                      Topology CRD (or docs) for the "not so privileged" mode details.
+                    description: PrivilegedLauncher configures launcher containers
+                      as privileged.
                     type: boolean
                 type: object
               expose:
-                description: Expose holds configurations relevant to how the nodes
-                  selected by this profile are exposed.
+                description: Expose holds configurations relevant to how Nodes using
+                  this profile are exposed.
                 properties:
                   disableAutoExpose:
-                    description: |-
-                      DisableAutoExpose disables the automagic exposing of the default port list -- see the
-                      Topology CRD (or docs) for that list; when disabled only ports explicitly listed in the
-                      node definition are exposed.
+                    description: DisableAutoExpose disables automatic exposure of
+                      the default port list.
                     type: boolean
                   disableExpose:
-                    description: |-
-                      DisableExpose indicates if exposing selected nodes via a service should be disabled -- by
-                      default any ports in a node definition (plus the auto-expose defaults) are exposed.
+                    description: DisableExpose indicates if exposing Nodes via a Service
+                      should be disabled.
                     type: boolean
                   exposeType:
-                    description: |-
-                      ExposeType configures the service type used for exposing the selected nodes -- one of
-                      "None", "ClusterIP", "Headless" or "LoadBalancer" (default).
+                    description: ExposeType configures the Service type used for exposing
+                      Nodes.
                     enum:
                     - None
                     - ClusterIP
@@ -367,50 +295,40 @@ spec:
                     - LoadBalancer
                     type: string
                   useNodeMgmtIpv4Address:
-                    description: |-
-                      UseNodeMgmtIpv4Address assigns each selected node's `mgmt-ipv4` address as the
-                      LoadBalancerIP of its expose service (LoadBalancer expose type only).
+                    description: UseNodeMgmtIpv4Address assigns a Node's management
+                      IPv4 address as its LoadBalancerIP.
                     type: boolean
                   useNodeMgmtIpv6Address:
-                    description: |-
-                      UseNodeMgmtIpv6Address assigns each selected node's `mgmt-ipv6` address as the
-                      LoadBalancerIP of its expose service (LoadBalancer expose type only).
+                    description: UseNodeMgmtIpv6Address assigns a Node's management
+                      IPv6 address as its LoadBalancerIP.
                     type: boolean
                 type: object
               imagePull:
-                description: |-
-                  ImagePull holds configurations relevant to how the launcher pods for the selected nodes
-                  handle pulling images.
+                description: ImagePull holds configurations relevant to how launcher
+                  Pods handle pulling images.
                 properties:
                   dockerConfig:
-                    description: |-
-                      DockerConfig sets the secret (in the node's namespace, with a "config.json" key) holding
-                      the docker (root user) config to mount in the launchers.
+                    description: DockerConfig names the Secret containing config.json.
                     type: string
                   dockerDaemonConfig:
-                    description: |-
-                      DockerDaemonConfig sets the secret (in the node's namespace, with a "daemon.json" key)
-                      holding the docker daemon config to mount in the launchers.
+                    description: DockerDaemonConfig names the Secret containing daemon.json.
                     type: string
                   insecureRegistries:
-                    description: |-
-                      InsecureRegistries is a slice of strings of insecure registries to configure in the
-                      launcher pods.
+                    description: InsecureRegistries is a slice of insecure registries
+                      to configure in launcher Pods.
                     items:
                       type: string
                     type: array
                   pullSecrets:
-                    description: |-
-                      PullSecrets allows for providing secret(s) to use when pulling the image. This is only
-                      applicable *if* image pull through mode is auto or always.
+                    description: PullSecrets provides Secrets to use when pulling
+                      images.
                     items:
                       type: string
                     type: array
                     x-kubernetes-list-type: set
                   pullThroughOverride:
-                    description: |-
-                      PullThroughOverride allows for overriding the image pull through mode for the launcher
-                      pods of the selected nodes.
+                    description: PullThroughOverride overrides the image pull-through
+                      mode.
                     enum:
                     - auto
                     - always
@@ -419,8 +337,8 @@ spec:
                 type: object
               mgmt:
                 description: |-
-                  Mgmt holds the containerlab management network settings the launchers of the selected
-                  nodes run their (pod local) management network with.
+                  Mgmt temporarily retains shared containerlab management network settings for Topology
+                  compatibility. Its final ownership is intentionally deferred.
                 properties:
                   external-access:
                     description: ExternalAccess enables (or disables) external access
@@ -452,63 +370,9 @@ spec:
                       for the management network.
                     type: string
                 type: object
-              nodeSelector:
-                description: |-
-                  NodeSelector selects the Nodes (in the profile's namespace) this profile applies to. An
-                  empty (or omitted) selector selects *every* Node in the namespace.
-                properties:
-                  matchExpressions:
-                    description: matchExpressions is a list of label selector requirements.
-                      The requirements are ANDed.
-                    items:
-                      description: |-
-                        A label selector requirement is a selector that contains values, a key, and an operator that
-                        relates the key and values.
-                      properties:
-                        key:
-                          description: key is the label key that the selector applies
-                            to.
-                          type: string
-                        operator:
-                          description: |-
-                            operator represents a key's relationship to a set of values.
-                            Valid operators are In, NotIn, Exists and DoesNotExist.
-                          type: string
-                        values:
-                          description: |-
-                            values is an array of string values. If the operator is In or NotIn,
-                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                            the values array must be empty. This array is replaced during a strategic
-                            merge patch.
-                          items:
-                            type: string
-                          type: array
-                          x-kubernetes-list-type: atomic
-                      required:
-                      - key
-                      - operator
-                      type: object
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  matchLabels:
-                    additionalProperties:
-                      type: string
-                    description: |-
-                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
-                      map is equivalent to an element of matchExpressions, whose key field is "key", the
-                      operator is "In", and the values array contains only "value". The requirements are ANDed.
-                    type: object
-                type: object
-                x-kubernetes-map-type: atomic
-              priority:
-                description: |-
-                  Priority orders profiles when more than one selects a Node -- higher priority wins per
-                  field on overlap, profile name breaks ties.
-                type: integer
               resources:
-                description: |-
-                  Resources holds the kubernetes resource requirements for the launcher pods of the selected
-                  nodes.
+                description: Resources holds the Kubernetes resource requirements
+                  for launcher Pods.
                 properties:
                   claims:
                     description: |-
@@ -567,9 +431,7 @@ spec:
                     type: object
                 type: object
               scheduling:
-                description: |-
-                  Scheduling holds information about how the launcher pods of the selected nodes should be
-                  configured with respect to "scheduling" things (node selector/tolerations).
+                description: Scheduling holds launcher Pod scheduling settings.
                 properties:
                   nodeSelector:
                     additionalProperties:
@@ -622,9 +484,8 @@ spec:
                     x-kubernetes-list-type: atomic
                 type: object
               statusProbes:
-                description: |-
-                  StatusProbes holds the configurations relevant to how clabernetes and the launcher check
-                  and report the (containerlab) node status for the selected nodes.
+                description: StatusProbes holds the configurations used to check and
+                  report Node status.
                 properties:
                   enabled:
                     default: true
@@ -745,7 +606,8 @@ spec:
                 type: object
             type: object
           status:
-            description: NodeProfileStatus is the status for a NodeProfile resource.
+            description: LauncherProfileStatus is the status for a LauncherProfile
+              resource.
             type: object
         type: object
     served: true

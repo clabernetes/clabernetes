@@ -8,17 +8,41 @@ import (
 	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
 )
 
-// maxTunnelID is the (very generous) ceiling for tunnel id allocation -- vxlan vnids can go to
-// ~16 million. slurpeeth segment ids are uint16, but since allocation always hands out the
-// lowest free id per namespace that ceiling only matters once a single namespace holds >65k
-// concurrent links.
-const maxTunnelID = 16_000_000
+// maxVXLANTunnelID is the ceiling retained from the Link status API. Slurpeeth uses a smaller
+// uint16 segment identifier, selected per Link below.
+const maxVXLANTunnelID = 16_000_000
 
 // ValidateLink checks the parts of a link spec that the crd schema cannot express. A non-nil
 // error means the spec is terminally invalid -- there is nothing to retry until the spec
 // changes.
 func ValidateLink(link *clabernetesapisv1alpha1.Link) error {
 	return clabernetesutilcontainerlab.ValidateLink(link)
+}
+
+// ValidateLinkEndpoints verifies that every non-host endpoint resolves to a Node in the Link's
+// namespace.
+func ValidateLinkEndpoints(
+	link *clabernetesapisv1alpha1.Link,
+	nodes map[string]*clabernetesapisv1alpha1.Node,
+) error {
+	for _, endpoint := range []clabernetesapisv1alpha1.LinkEndpointSpec{
+		link.Spec.EndpointA,
+		link.Spec.EndpointB,
+	} {
+		if endpoint.NodeName == clabernetesapisv1alpha1.LinkHostNodeName {
+			continue
+		}
+
+		if _, exists := nodes[endpoint.NodeName]; !exists {
+			return fmt.Errorf(
+				"%w: endpoint Node %q does not exist",
+				claberneteserrors.ErrInvalidData,
+				endpoint.NodeName,
+			)
+		}
+	}
+
+	return nil
 }
 
 // IsHostLink returns true if either side of the link is a (reserved node name) host endpoint.
@@ -49,6 +73,23 @@ func FindEndpointConflict(
 	return clabernetesutilcontainerlab.FindEndpointConflict(link, namespaceLinks)
 }
 
+// LinksWithResolvedEndpoints filters unresolved Links out of deterministic endpoint conflict
+// resolution. An unresolved Link cannot reserve an interface from a realizable Link.
+func LinksWithResolvedEndpoints(
+	namespaceLinks []clabernetesapisv1alpha1.Link,
+	nodes map[string]*clabernetesapisv1alpha1.Node,
+) []clabernetesapisv1alpha1.Link {
+	resolved := make([]clabernetesapisv1alpha1.Link, 0, len(namespaceLinks))
+
+	for idx := range namespaceLinks {
+		if ValidateLinkEndpoints(&namespaceLinks[idx], nodes) == nil {
+			resolved = append(resolved, namespaceLinks[idx])
+		}
+	}
+
+	return resolved
+}
+
 // ResolveDesiredTunnelID determines the tunnel id the given link should hold in its status:
 //
 //   - host links and same-launcher links need no tunnel -- 0.
@@ -75,8 +116,13 @@ func ResolveDesiredTunnelID(
 		return 0, nil
 	}
 
-	usedIDs := map[int]bool{}
+	maxTunnelID := maxVXLANTunnelID
+	if link.Spec.NormalizedConnectivity() ==
+		clabernetesapisv1alpha1.LinkConnectivitySlurpeeth {
+		maxTunnelID = clabernetesapisv1alpha1.SlurpeethMaxSegmentID
+	}
 
+	usedIDs := map[int]bool{}
 	ownIDContested := false
 
 	for idx := range namespaceLinks {

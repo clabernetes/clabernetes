@@ -85,10 +85,6 @@ const (
 	// topology that a given launcher is responsible for.
 	LauncherNodeImageEnv = "LAUNCHER_NODE_IMAGE"
 
-	// LauncherConnectivityKind is the env var that holds the flavor cf connectivity the launcher
-	// should run (vxlan/slurpeeth).
-	LauncherConnectivityKind = "LAUNCHER_CONNECTIVITY_KIND"
-
 	// LauncherContainerlabVersion is the env var that holds the possibly user specified version of
 	// containerlab to download and use in the launcher.
 	LauncherContainerlabVersion = "LAUNCHER_CONTAINERLAB_VERSION"

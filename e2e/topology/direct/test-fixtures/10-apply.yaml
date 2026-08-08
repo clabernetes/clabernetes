@@ -1,23 +1,11 @@
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: Node
+kind: LauncherProfile
 metadata:
-  name: srl1
-  labels:
-    c9s: direct
+  name: direct
 spec:
-  kind: nokia_srlinux
-  image: ghcr.io/nokia/srlinux
----
-apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: Node
-metadata:
-  name: srl2
-  labels:
-    c9s: direct
-spec:
-  kind: nokia_srlinux
-  image: ghcr.io/nokia/srlinux
+  expose:
+    disableAutoExpose: true
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
 kind: Link
@@ -30,14 +18,28 @@ spec:
   endpointB:
     nodeName: srl2
     interfaceName: e1-1
+  connectivity: vxlan
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: NodeProfile
+kind: Node
 metadata:
-  name: direct
+  name: srl1
+  labels:
+    c9s: direct
 spec:
-  nodeSelector:
-    matchLabels:
-      c9s: direct
-  expose:
-    disableAutoExpose: true
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux
+  launcherProfileRef:
+    name: direct
+---
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  name: srl2
+  labels:
+    c9s: direct
+spec:
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux
+  launcherProfileRef:
+    name: direct

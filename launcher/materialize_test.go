@@ -185,6 +185,7 @@ func TestTunnelsForLinks(t *testing.T) {
 	}
 
 	if tunnels[0].TunnelID != 7 ||
+		tunnels[0].Connectivity != clabernetesapisv1alpha1.LinkConnectivityVXLAN ||
 		tunnels[0].Destination != "srl9-vx.clabernetes.svc.cluster.local" {
 		t.Fatalf("unexpected tunnel: %+v", tunnels[0])
 	}

@@ -8,10 +8,12 @@ import (
 	clabernetescontrollers "github.com/srl-labs/clabernetes/controllers"
 	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	clientgoworkqueue "k8s.io/client-go/util/workqueue"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimebuilder "sigs.k8s.io/controller-runtime/pkg/builder"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
+	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	ctrlruntimereconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -73,10 +75,74 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// are same-launcher links (and those need no tunnel id)
 		Watches(
 			&clabernetesapisv1alpha1.Node{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueLinksInNamespace),
+			c.nodeEnqueueHandler(),
 			ctrlruntimebuilder.WithPredicates(ctrlruntimepredicate.GenerationChangedPredicate{}),
 		).
 		Complete(c)
+}
+
+// nodeEnqueueHandler records actual Node deletion events and enqueues Links whose lifecycle or
+// launcher grouping may be affected. Reconcile performs the authoritative UID comparison and logs
+// each Link it deletes.
+func (c *Controller) nodeEnqueueHandler() ctrlruntimehandler.EventHandler {
+	enqueue := func(
+		ctx context.Context,
+		obj ctrlruntimeclient.Object,
+		queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
+	) {
+		for _, request := range c.enqueueLinksInNamespace(ctx, obj) {
+			queue.Add(request)
+		}
+	}
+
+	return ctrlruntimehandler.Funcs{
+		CreateFunc: func(
+			ctx context.Context,
+			event ctrlruntimeevent.CreateEvent,
+			queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
+		) {
+			enqueue(ctx, event.Object, queue)
+		},
+		UpdateFunc: func(
+			ctx context.Context,
+			event ctrlruntimeevent.UpdateEvent,
+			queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
+		) {
+			enqueue(ctx, event.ObjectOld, queue)
+			enqueue(ctx, event.ObjectNew, queue)
+		},
+		DeleteFunc: func(
+			ctx context.Context,
+			event ctrlruntimeevent.DeleteEvent,
+			queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
+		) {
+			requests := c.enqueueLinksInNamespace(ctx, event.Object)
+			referencedLinks := 0
+
+			for _, request := range requests {
+				link := &clabernetesapisv1alpha1.Link{}
+
+				err := c.Client.Get(ctx, request.NamespacedName, link)
+				if err == nil &&
+					(link.Spec.EndpointA.NodeName == event.Object.GetName() ||
+						link.Spec.EndpointB.NodeName == event.Object.GetName()) {
+					referencedLinks++
+				}
+
+				queue.Add(request)
+			}
+
+			c.Log.Infof(
+				"observed Node deletion event for %q; scheduled %d referenced Link(s)"+
+					" for lifecycle cleanup",
+				apimachinerytypes.NamespacedName{
+					Namespace: event.Object.GetNamespace(),
+					Name:      event.Object.GetName(),
+				}.String(),
+				referencedLinks,
+			)
+		},
+	}
 }
 
 // enqueueLinksInNamespace enqueues all Links in the changed object's namespace. Node grouping and

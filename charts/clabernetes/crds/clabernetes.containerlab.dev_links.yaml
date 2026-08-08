@@ -39,12 +39,13 @@ spec:
           Link represents a single point-to-point "wire" between two (containerlab) nodes. Links are a
           primary clabernetes API -- like Nodes they can be created by users directly or emitted by the
           (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints
-          (Node object names in the same namespace plus interface names) and an optional mtu. The link
-          controller allocates a tunnel id into the status for links that cross launcher pods; links
-          between nodes co-located in one launcher pod and links to the reserved `host` node need no
-          tunnel and are materialized directly by the owning launcher. Launchers select the links
-          terminating on their nodes with *field selectors* on the endpoint node names (which requires
-          kubernetes 1.31+) -- no labels are required, ever, and no launcher watches more than its own
+          (Node object names in the same namespace plus interface names), connectivity flavor, and an
+          optional mtu. The link controller allocates a tunnel id into the status for links that cross
+          launcher pods; links between nodes co-located in one launcher pod and links to the reserved
+          `host` node need no tunnel and are materialized directly by the owning launcher. Launchers
+          select only the links terminating on their nodes with *field selectors* on the endpoint node
+          names (which requires kubernetes 1.31+) -- no labels are required, ever, and no launcher
+          watches more than its own
           links. Storing one object per wire keeps every persisted object O(1) regardless of topology
           size.
         properties:
@@ -71,6 +72,15 @@ spec:
               Anything operational (the allocated tunnel id) lives in the status, and anything derivable
               (i.e. the remote launcher's fabric service) is derived by the launchers.
             properties:
+              connectivity:
+                default: vxlan
+                description: |-
+                  Connectivity is the flavor used to realize this Link across launcher Pods. Empty values on
+                  objects stored before API defaulting was introduced are normalized to VXLAN by consumers.
+                enum:
+                - vxlan
+                - slurpeeth
+                type: string
               endpointA:
                 description: EndpointA is the "a" side of this link.
                 properties:
@@ -126,6 +136,46 @@ spec:
                   tunnel id); invalid links and deterministic endpoint-conflict losers carry an error and are
                   ignored by node controllers and launchers until their spec or conflicting links change.
                 type: string
+              resolvedEndpoints:
+                description: |-
+                  ResolvedEndpoints identifies the exact Nodes to which this Link is bound. The controller
+                  sets both endpoints atomically after every non-host endpoint resolves. A host endpoint is
+                  recorded by name with an empty UID because it does not refer to a Node object.
+                properties:
+                  endpointA:
+                    description: EndpointA is the resolved identity corresponding
+                      to spec.endpointA.
+                    properties:
+                      nodeName:
+                        description: NodeName is the observed endpoint Node name,
+                          or the reserved name "host".
+                        type: string
+                      uid:
+                        description: UID distinguishes replacement Nodes that reuse
+                          a name. It is empty only for host endpoints.
+                        type: string
+                    required:
+                    - nodeName
+                    type: object
+                  endpointB:
+                    description: EndpointB is the resolved identity corresponding
+                      to spec.endpointB.
+                    properties:
+                      nodeName:
+                        description: NodeName is the observed endpoint Node name,
+                          or the reserved name "host".
+                        type: string
+                      uid:
+                        description: UID distinguishes replacement Nodes that reuse
+                          a name. It is empty only for host endpoints.
+                        type: string
+                    required:
+                    - nodeName
+                    type: object
+                required:
+                - endpointA
+                - endpointB
+                type: object
               tunnelID:
                 description: |-
                   TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller

@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"path"
@@ -33,26 +34,55 @@ func initializeCrds(c clabernetesmanagertypes.Clabernetes) error {
 		}
 	}
 
-	return removeLegacyCrds(c, extensionsClient)
-}
-
-// removeLegacyCrds deletes crds (and thereby their instances) that clabernetes no longer uses --
-// currently just the pre node/link "connectivity" crd whose job (tunnel data) moved into the
-// per-link statuses.
-func removeLegacyCrds(
-	c clabernetesmanagertypes.Clabernetes,
-	extensionsClient *apiextensionsclient.Clientset,
-) error {
 	ctx, ctxCancel := c.NewContextWithTimeout()
 	defer ctxCancel()
 
-	legacyCrdName := "connectivities.clabernetes.containerlab.dev"
+	return removeLegacyCrds(ctx, extensionsClient)
+}
 
-	err := extensionsClient.ApiextensionsV1().
-		CustomResourceDefinitions().
-		Delete(ctx, legacyCrdName, metav1.DeleteOptions{})
-	if err != nil && !apimachineryerrors.IsNotFound(err) {
-		return fmt.Errorf("deleting legacy crd %s: %w", legacyCrdName, err)
+// removeLegacyCrds deletes alpha CRDs (and thereby their instances) that clabernetes no longer
+// uses. Connectivity allocation moved into Link status, and the unreleased selector-based
+// NodeProfile API was replaced by explicit Node references to LauncherProfile.
+func removeLegacyCrds(
+	ctx context.Context,
+	extensionsClient apiextensionsclient.Interface,
+) error {
+	legacyCrds := []struct {
+		name        string
+		replacement string
+	}{
+		{name: "connectivities.clabernetes.containerlab.dev"},
+		{
+			name:        "nodeprofiles.clabernetes.containerlab.dev",
+			replacement: "launcherprofiles.clabernetes.containerlab.dev",
+		},
+	}
+
+	for _, legacyCrd := range legacyCrds {
+		if legacyCrd.replacement != "" {
+			_, err := extensionsClient.ApiextensionsV1().
+				CustomResourceDefinitions().
+				Get(ctx, legacyCrd.replacement, metav1.GetOptions{})
+			if apimachineryerrors.IsNotFound(err) {
+				// Never remove the old API until its replacement is established.
+				continue
+			}
+
+			if err != nil {
+				return fmt.Errorf(
+					"checking replacement crd %s: %w",
+					legacyCrd.replacement,
+					err,
+				)
+			}
+		}
+
+		err := extensionsClient.ApiextensionsV1().
+			CustomResourceDefinitions().
+			Delete(ctx, legacyCrd.name, metav1.DeleteOptions{})
+		if err != nil && !apimachineryerrors.IsNotFound(err) {
+			return fmt.Errorf("deleting legacy crd %s: %w", legacyCrd.name, err)
+		}
 	}
 
 	return nil

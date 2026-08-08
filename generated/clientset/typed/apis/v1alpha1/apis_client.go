@@ -30,9 +30,9 @@ type ClabernetesV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ConfigsGetter
 	ImageRequestsGetter
+	LauncherProfilesGetter
 	LinksGetter
 	NodesGetter
-	NodeProfilesGetter
 	TopologiesGetter
 }
 
@@ -49,16 +49,16 @@ func (c *ClabernetesV1alpha1Client) ImageRequests(namespace string) ImageRequest
 	return newImageRequests(c, namespace)
 }
 
+func (c *ClabernetesV1alpha1Client) LauncherProfiles(namespace string) LauncherProfileInterface {
+	return newLauncherProfiles(c, namespace)
+}
+
 func (c *ClabernetesV1alpha1Client) Links(namespace string) LinkInterface {
 	return newLinks(c, namespace)
 }
 
 func (c *ClabernetesV1alpha1Client) Nodes(namespace string) NodeInterface {
 	return newNodes(c, namespace)
-}
-
-func (c *ClabernetesV1alpha1Client) NodeProfiles(namespace string) NodeProfileInterface {
-	return newNodeProfiles(c, namespace)
 }
 
 func (c *ClabernetesV1alpha1Client) Topologies(namespace string) TopologyInterface {

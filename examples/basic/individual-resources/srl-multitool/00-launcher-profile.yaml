@@ -1,0 +1,18 @@
+# Shared Kubernetes and launcher policy for both nodes.
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: LauncherProfile
+metadata:
+  name: srl-multitool
+  labels:
+    clabernetes/example: srl-multitool
+spec:
+  statusProbes:
+    enabled: true
+    excludedNodes:
+      - multitool
+    probeConfiguration:
+      startupSeconds: 1200
+      sshProbeConfiguration:
+        username: admin
+        password: NokiaSrl1!
+        port: 22

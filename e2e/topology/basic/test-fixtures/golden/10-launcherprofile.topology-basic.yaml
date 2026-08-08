@@ -1,5 +1,5 @@
 apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: NodeProfile
+kind: LauncherProfile
 metadata:
   labels:
     clabernetes/app: clabernetes
@@ -10,19 +10,17 @@ metadata:
   namespace: NAMESPACE
   ownerReferences:
     - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      blockOwnerDeletion: true
+      controller: true
       kind: Topology
       name: topology-basic
 spec:
-  connectivity: vxlan
   expose:
     disableAutoExpose: false
     disableExpose: false
     exposeType: LoadBalancer
     useNodeMgmtIpv4Address: false
     useNodeMgmtIpv6Address: false
-  nodeSelector:
-    matchLabels:
-      clabernetes/topologyOwner: topology-basic
   statusProbes:
     enabled: false
     probeConfiguration:

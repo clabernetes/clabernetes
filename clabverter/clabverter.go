@@ -53,7 +53,7 @@ type Clabverter struct {
 
 	disableExpose bool
 
-	// emitCRs renders Node/Link/NodeProfile manifests directly instead of a Topology manifest
+	// emitCRs renders LauncherProfile/Node/Link manifests directly instead of a Topology manifest
 	emitCRs bool
 
 	topologyPath       string

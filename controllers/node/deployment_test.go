@@ -30,11 +30,22 @@ func TestRenderDeployment(t *testing.T) {
 	}
 	node.Spec.Kind = "nokia_srlinux"
 	node.Spec.Image = "ghcr.io/nokia/srlinux:latest"
+	node.Spec.FilesFromConfigMap = []clabernetesapisv1alpha1.FileFromConfigMap{{
+		FilePath:      "srl1/startup.cfg",
+		ConfigMapName: "shared-config",
+		ConfigMapPath: "startup.cfg",
+	}}
+	simA := &clabernetesapisv1alpha1.Node{}
+	simA.Name = "sim-a"
+	simA.Spec.FilesFromConfigMap = []clabernetesapisv1alpha1.FileFromConfigMap{{
+		FilePath:      "sim-a/startup.cfg",
+		ConfigMapName: "shared-config",
+		ConfigMapPath: "startup.cfg",
+	}}
 
 	profile := testResolvedProfile(t, func(profile *clabernetescontrollersnode.ResolvedProfile) {
 		profile.LauncherImage = "launcher:latest"
 		profile.LauncherImagePullPolicy = "IfNotPresent"
-		profile.Connectivity = "vxlan"
 	})
 
 	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
@@ -47,9 +58,13 @@ func TestRenderDeployment(t *testing.T) {
 
 	deployment := reconciler.Render(
 		&clabernetescontrollersnode.RenderInput{
-			Node:                  node,
-			Profile:               profile,
-			GroupMembers:          []string{"srl1", "sim-a", "sim-b"},
+			Node:         node,
+			Profile:      profile,
+			GroupMembers: []string{"srl1", "sim-a", "sim-b"},
+			NodesByName: map[string]*clabernetesapisv1alpha1.Node{
+				"srl1":  node,
+				"sim-a": simA,
+			},
 			LinkAttachmentsDigest: "attachments-digest",
 			NodeConfigDigest:      "config-digest",
 		},
@@ -78,6 +93,24 @@ func TestRenderDeployment(t *testing.T) {
 	}
 
 	assertRenderedContainer(t, &deployment.Spec.Template.Spec.Containers[0])
+
+	payloadVolumeNames := map[string]bool{}
+
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.ConfigMap == nil {
+			continue
+		}
+
+		if payloadVolumeNames[volume.Name] {
+			t.Fatalf("expected unique grouped payload volume names, duplicate %q", volume.Name)
+		}
+
+		payloadVolumeNames[volume.Name] = true
+	}
+
+	if len(payloadVolumeNames) != 2 {
+		t.Fatalf("expected both grouped Node payloads, got volumes %+v", payloadVolumeNames)
+	}
 }
 
 func assertRenderedContainer(t *testing.T, container *k8scorev1.Container) {
@@ -100,6 +133,12 @@ func assertRenderedContainer(t *testing.T, container *k8scorev1.Container) {
 	nodeImageEnv := findEnv(container.Env, clabernetesconstants.LauncherNodeImageEnv)
 	if nodeImageEnv == nil || nodeImageEnv.Value != "ghcr.io/nokia/srlinux:latest" {
 		t.Fatalf("expected node image env, got %+v", nodeImageEnv)
+	}
+
+	for _, env := range container.Env {
+		if env.Name == "LAUNCHER_CONNECTIVITY_KIND" {
+			t.Fatal("connectivity is Link-owned and must not be injected as launcher-wide env")
+		}
 	}
 
 	var podinfoMounted bool

@@ -1,0 +1,9 @@
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: LauncherProfile
+metadata:
+  annotations: {}
+  name: direct
+  namespace: NAMESPACE
+spec:
+  expose:
+    disableAutoExpose: true

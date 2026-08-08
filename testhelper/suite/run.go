@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	updateReconcileWait    = 2 * time.Second
+	updateReconcileWait    = 30 * time.Second
 	eventuallyPollInterval = 3 * time.Second
 	eventuallyMaxTime      = 120 * time.Second
 )

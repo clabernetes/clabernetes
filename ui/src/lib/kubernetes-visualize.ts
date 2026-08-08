@@ -192,6 +192,10 @@ export async function visualizeTopology(namespace: string, name: string): Promis
 
     edges.push({
       id: `${aInterface} / ${bInterface}`,
+      label:
+        (link.status?.error ?? "") !== ""
+          ? link.status?.error
+          : `${link.spec?.connectivity ?? "vxlan"} / tunnel ${link.status?.tunnelID ?? "local or pending"}`,
       source: aInterface,
       target: bInterface,
     });

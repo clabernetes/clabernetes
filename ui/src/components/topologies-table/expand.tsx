@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ReactElement, useState } from "react";
 import type {
+  ClabernetesContainerlabDevLauncherprofileV1Alpha1,
+  ClabernetesContainerlabDevLinkV1Alpha1,
   ClabernetesContainerlabDevNodeV1Alpha1,
   ClabernetesContainerlabDevTopologyV1Alpha1,
 } from "@/lib/clabernetes-client";
@@ -8,7 +10,11 @@ import type { Row } from "@tanstack/react-table";
 import { CircleAlert, CircleCheck, CircleHelp } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import { getExpandCollapseIcon } from "@/components/topologies-table/table.tsx";
-import { listTopologyNodes } from "@/lib/kubernetes.ts";
+import {
+  listTopologyLauncherProfiles,
+  listTopologyLinks,
+  listTopologyNodes,
+} from "@/lib/kubernetes.ts";
 import { useQuery } from "@tanstack/react-query";
 
 function getTopologyReadyIcon(
@@ -71,6 +77,15 @@ function getTopologyNodeCard(
   // the node spec is a flat containerlab node definition, so kind/image are right there
   const kind = node.spec?.kind ?? "unknown";
   const image = node.spec?.image ?? "unknown";
+  const requestedProfileName = node.spec?.launcherProfileRef?.name;
+  let profileName = "Config defaults";
+  if (requestedProfileName) {
+    profileName = `${requestedProfileName} (unresolved)`;
+  }
+
+  if (node.status?.appliedLauncherProfile?.name) {
+    profileName = node.status.appliedLauncherProfile.name;
+  }
   const loadBalancerAddress = nodeExposedPortData?.loadBalancerAddress;
   const allocatedPorts = nodeExposedPortData?.ports ?? [];
   const exposedTcpPorts = allocatedPorts
@@ -98,6 +113,10 @@ function getTopologyNodeCard(
           <div className="flex items-center">
             <span className="w-24 pr-2 text-right font-semibold">Image:</span>
             <span>{`${image}`}</span>
+          </div>
+          <div className="flex items-center">
+            <span className="w-24 pr-2 text-right font-semibold">Profile:</span>
+            <span>{profileName}</span>
           </div>
           <div className="flex items-center">
             <span className="w-24 pr-2 text-right font-semibold">LB Address:</span>
@@ -185,12 +204,41 @@ export function Expand(props: ExpandProps): ReactElement {
     retry: true,
     throwOnError: true,
   });
+  const { data: objLinks } = useQuery({
+    enabled: true,
+    queryFn: async (): Promise<ClabernetesContainerlabDevLinkV1Alpha1[]> => {
+      const response = await listTopologyLinks(namespace, name);
+
+      return JSON.parse(response) as ClabernetesContainerlabDevLinkV1Alpha1[];
+    },
+    queryKey: ["topology-links", { name: name, namespace: namespace }],
+    retry: true,
+    throwOnError: true,
+  });
+  const { data: objProfiles } = useQuery({
+    enabled: true,
+    queryFn: async (): Promise<ClabernetesContainerlabDevLauncherprofileV1Alpha1[]> => {
+      const response = await listTopologyLauncherProfiles(namespace, name);
+
+      return JSON.parse(response) as ClabernetesContainerlabDevLauncherprofileV1Alpha1[];
+    },
+    queryKey: ["topology-launcher-profiles", { name: name, namespace: namespace }],
+    retry: true,
+    throwOnError: true,
+  });
 
   const sortedNodes = [...(objNodes ?? [])].sort((a, b) =>
     ((a.metadata?.name as string | undefined) ?? "").localeCompare(
       (b.metadata?.name as string | undefined) ?? "",
     ),
   );
+  const links = objLinks ?? [];
+  const invalidLinkCount = links.filter((link) => (link.status?.error ?? "") !== "").length;
+  const profileNames = [...(objProfiles ?? [])]
+    .map((profile) => profile.metadata?.name ?? "")
+    .filter((profileName) => profileName !== "")
+    .sort()
+    .join(", ");
 
   return (
     <div>
@@ -211,6 +259,21 @@ export function Expand(props: ExpandProps): ReactElement {
                 <span>
                   {getTopologyReadyIcon(obj.spec?.statusProbes?.enabled, obj.status?.topologyReady)}
                 </span>
+              </div>
+              <div className="flex items-center">
+                <span className="w-24 pr-2 text-right font-semibold">Nodes:</span>
+                <span>{sortedNodes.length}</span>
+              </div>
+              <div className="flex items-center">
+                <span className="w-24 pr-2 text-right font-semibold">Links:</span>
+                <span>
+                  {links.length}
+                  {invalidLinkCount > 0 ? ` (${invalidLinkCount} invalid)` : ""}
+                </span>
+              </div>
+              <div className="flex items-center">
+                <span className="w-24 pr-2 text-right font-semibold">Profiles:</span>
+                <span>{profileNames || "none"}</span>
               </div>
             </div>
           </CardTitle>

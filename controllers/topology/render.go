@@ -13,6 +13,8 @@ import (
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	clabernetesutil "github.com/srl-labs/clabernetes/util"
 	clabernetesutilkubernetes "github.com/srl-labs/clabernetes/util/kubernetes"
+	k8scorev1 "k8s.io/api/core/v1"
+	apimachineryequality "k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -86,15 +88,18 @@ func RenderNodes(
 	nodes := make([]*clabernetesapisv1alpha1.Node, 0, len(compiled.Nodes))
 
 	for nodeName, nodeDefinition := range compiled.Nodes {
+		profileName := launcherProfileNameForNode(topology, nodeName)
 		node := &clabernetesapisv1alpha1.Node{
 			ObjectMeta: topologyOwnedObjectMetadata(topology, nodeName, configManagerGetter),
 			Spec: clabernetesapisv1alpha1.NodeSpec{
-				NodeDefinition: *nodeDefinition.DeepCopy(),
-				FilesFromURL:   topology.Spec.Deployment.FilesFromURL[nodeName],
+				NodeDefinition:     *nodeDefinition.DeepCopy(),
+				LauncherProfileRef: &k8scorev1.LocalObjectReference{Name: profileName},
+				FilesFromConfigMap: topology.Spec.Deployment.FilesFromConfigMap[nodeName],
+				FilesFromURL:       topology.Spec.Deployment.FilesFromURL[nodeName],
 			},
 		}
 
-		// the per-node label is what per-node profiles (and humans) select on
+		// Retain this label for human selection and compatibility; profile attachment is explicit.
 		node.Labels[clabernetesconstants.LabelTopologyNode] = nodeName
 
 		nodes = append(nodes, node)
@@ -105,6 +110,39 @@ func RenderNodes(
 	return nodes
 }
 
+func launcherProfileNameForNode(
+	topology *clabernetesapisv1alpha1.Topology,
+	nodeName string,
+) string {
+	if hasDistinctLauncherPolicy(topology, nodeName) {
+		return clabernetesutilkubernetes.SafeConcatNameKubernetes(topology.GetName(), nodeName)
+	}
+
+	return topology.GetName()
+}
+
+// hasDistinctLauncherPolicy reports whether a Node needs a dedicated LauncherProfile. Today the
+// only per-node launcher policy exposed by Topology is deployment.resources; payload maps are
+// rendered directly onto Nodes and therefore do not create one-off profiles.
+func hasDistinctLauncherPolicy(
+	topology *clabernetesapisv1alpha1.Topology,
+	nodeName string,
+) bool {
+	nodeResources, hasNodeResources := topology.Spec.Deployment.Resources[nodeName]
+	if !hasNodeResources {
+		return false
+	}
+
+	defaultResources, hasDefaultResources := topology.Spec.Deployment.
+		Resources[clabernetesconstants.Default]
+	if !hasDefaultResources {
+		// The map entry is itself meaningful, including an explicitly empty resource policy.
+		return true
+	}
+
+	return !apimachineryequality.Semantic.DeepEqual(nodeResources, defaultResources)
+}
+
 // RenderLinks renders the Link objects for the compiled topology, sorted by name.
 func RenderLinks(
 	topology *clabernetesapisv1alpha1.Topology,
@@ -112,6 +150,11 @@ func RenderLinks(
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) []*clabernetesapisv1alpha1.Link {
 	links := make([]*clabernetesapisv1alpha1.Link, 0, len(compiled.Links))
+	connectivity := clabernetesapisv1alpha1.LinkConnectivity(topology.Spec.Connectivity)
+
+	if connectivity == "" {
+		connectivity = clabernetesapisv1alpha1.LinkConnectivityVXLAN
+	}
 
 	for _, compiledLink := range compiled.Links {
 		links = append(links, &clabernetesapisv1alpha1.Link{
@@ -121,9 +164,10 @@ func RenderLinks(
 				configManagerGetter,
 			),
 			Spec: clabernetesapisv1alpha1.LinkSpec{
-				EndpointA: compiledLink.EndpointA,
-				EndpointB: compiledLink.EndpointB,
-				MTU:       compiledLink.MTU,
+				EndpointA:    compiledLink.EndpointA,
+				EndpointB:    compiledLink.EndpointB,
+				MTU:          compiledLink.MTU,
+				Connectivity: connectivity,
 			},
 		})
 	}
@@ -133,27 +177,20 @@ func RenderLinks(
 	return links
 }
 
-// RenderNodeProfiles renders the NodeProfile objects compiling the topology's deployment policy
-// knobs: one topology wide profile (named after the topology, selecting the topology owner
-// label), plus one per-node profile for every node that has per-node resources or files from
-// configmap configured (selecting the topology node label, at a higher priority).
-func RenderNodeProfiles(
+// RenderLauncherProfiles renders one shared topology LauncherProfile plus a complete dedicated
+// profile for each compiled Node with distinct launcher policy.
+func RenderLauncherProfiles(
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) []*clabernetesapisv1alpha1.NodeProfile {
+) []*clabernetesapisv1alpha1.LauncherProfile {
 	perNodeNames := make([]string, 0)
+	sharedProfileNeeded := false
 
-	for nodeName := range topology.Spec.Deployment.Resources {
-		if nodeName == clabernetesconstants.Default {
-			continue
-		}
+	for nodeName := range compiled.Nodes {
+		if !hasDistinctLauncherPolicy(topology, nodeName) {
+			sharedProfileNeeded = true
 
-		perNodeNames = append(perNodeNames, nodeName)
-	}
-
-	for nodeName := range topology.Spec.Deployment.FilesFromConfigMap {
-		if _, alreadyListed := topology.Spec.Deployment.Resources[nodeName]; alreadyListed {
 			continue
 		}
 
@@ -162,32 +199,45 @@ func RenderNodeProfiles(
 
 	sort.Strings(perNodeNames)
 
-	profiles := make([]*clabernetesapisv1alpha1.NodeProfile, 0, 1+len(perNodeNames))
-	profiles = append(profiles, renderTopologyProfile(topology, compiled, configManagerGetter))
+	profileCount := len(perNodeNames)
+	if sharedProfileNeeded {
+		profileCount++
+	}
+
+	profiles := make([]*clabernetesapisv1alpha1.LauncherProfile, 0, profileCount)
+
+	if sharedProfileNeeded {
+		profiles = append(
+			profiles,
+			renderTopologyLauncherProfile(topology, compiled, configManagerGetter),
+		)
+	}
 
 	for _, nodeName := range perNodeNames {
-		profiles = append(profiles, renderPerNodeProfile(topology, nodeName, configManagerGetter))
+		profiles = append(
+			profiles,
+			renderPerNodeLauncherProfile(
+				topology,
+				compiled,
+				nodeName,
+				configManagerGetter,
+			),
+		)
 	}
 
 	return profiles
 }
 
-// renderTopologyProfile compiles the topology-wide policy knobs into the topology's main
-// profile. Only knobs actually set on the Topology are compiled in -- unset knobs stay unset on
-// the profile too, deferring down the chain to the global config exactly as they did on the
-// Topology.
-func renderTopologyProfile(
+// renderTopologyLauncherProfile compiles topology-wide policy into the shared profile. Only
+// values represented by the Topology API are copied; omitted pointer/collection values continue
+// to inherit Config defaults.
+func renderTopologyLauncherProfile(
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) *clabernetesapisv1alpha1.NodeProfile {
-	spec := clabernetesapisv1alpha1.NodeProfileSpec{
-		NodeSelector: metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				clabernetesconstants.LabelTopologyOwner: topology.GetName(),
-			},
-		},
-		Expose: &clabernetesapisv1alpha1.NodeProfileExpose{
+) *clabernetesapisv1alpha1.LauncherProfile {
+	spec := clabernetesapisv1alpha1.LauncherProfileSpec{
+		Expose: &clabernetesapisv1alpha1.LauncherProfileExpose{
 			DisableExpose: clabernetesutil.ToPointer(topology.Spec.Expose.DisableExpose),
 			DisableAutoExpose: clabernetesutil.ToPointer(
 				topology.Spec.Expose.DisableAutoExpose,
@@ -200,15 +250,22 @@ func renderTopologyProfile(
 				topology.Spec.Expose.UseNodeMgmtIpv6Address,
 			),
 		},
-		Connectivity: topology.Spec.Connectivity,
 	}
 
-	imagePull := &clabernetesapisv1alpha1.NodeProfileImagePull{
+	imagePull := &clabernetesapisv1alpha1.LauncherProfileImagePull{
 		InsecureRegistries:  topology.Spec.ImagePull.InsecureRegistries,
 		PullThroughOverride: topology.Spec.ImagePull.PullThroughOverride,
 		PullSecrets:         topology.Spec.ImagePull.PullSecrets,
-		DockerDaemonConfig:  topology.Spec.ImagePull.DockerDaemonConfig,
-		DockerConfig:        topology.Spec.ImagePull.DockerConfig,
+	}
+
+	if topology.Spec.ImagePull.DockerDaemonConfig != "" {
+		imagePull.DockerDaemonConfig = clabernetesutil.ToPointer(
+			topology.Spec.ImagePull.DockerDaemonConfig,
+		)
+	}
+
+	if topology.Spec.ImagePull.DockerConfig != "" {
+		imagePull.DockerConfig = clabernetesutil.ToPointer(topology.Spec.ImagePull.DockerConfig)
 	}
 
 	if !reflectValueIsZero(imagePull) {
@@ -221,20 +278,30 @@ func renderTopologyProfile(
 		spec.Resources = defaultResources.DeepCopy()
 	}
 
-	if len(topology.Spec.Deployment.Scheduling.NodeSelector) != 0 ||
+	if topology.Spec.Deployment.Scheduling.NodeSelector != nil ||
 		topology.Spec.Deployment.Scheduling.Tolerations != nil {
 		spec.Scheduling = topology.Spec.Deployment.Scheduling.DeepCopy()
 	}
 
-	deployment := &clabernetesapisv1alpha1.NodeProfileDeployment{
+	deployment := &clabernetesapisv1alpha1.LauncherProfileDeployment{
 		PrivilegedLauncher:      topology.Spec.Deployment.PrivilegedLauncher,
 		ContainerlabDebug:       topology.Spec.Deployment.ContainerlabDebug,
-		ContainerlabTimeout:     topology.Spec.Deployment.ContainerlabTimeout,
-		ContainerlabVersion:     topology.Spec.Deployment.ContainerlabVersion,
 		LauncherImage:           topology.Spec.Deployment.LauncherImage,
 		LauncherImagePullPolicy: topology.Spec.Deployment.LauncherImagePullPolicy,
 		LauncherLogLevel:        topology.Spec.Deployment.LauncherLogLevel,
 		ExtraEnv:                topology.Spec.Deployment.ExtraEnv,
+	}
+
+	if topology.Spec.Deployment.ContainerlabTimeout != "" {
+		deployment.ContainerlabTimeout = clabernetesutil.ToPointer(
+			topology.Spec.Deployment.ContainerlabTimeout,
+		)
+	}
+
+	if topology.Spec.Deployment.ContainerlabVersion != "" {
+		deployment.ContainerlabVersion = clabernetesutil.ToPointer(
+			topology.Spec.Deployment.ContainerlabVersion,
+		)
 	}
 
 	if topology.Spec.Deployment.Persistence.Enabled {
@@ -251,7 +318,7 @@ func renderTopologyProfile(
 		spec.Mgmt = compiled.Mgmt.DeepCopy()
 	}
 
-	profile := &clabernetesapisv1alpha1.NodeProfile{
+	profile := &clabernetesapisv1alpha1.LauncherProfile{
 		ObjectMeta: topologyOwnedObjectMetadata(
 			topology,
 			topology.GetName(),
@@ -263,39 +330,24 @@ func renderTopologyProfile(
 	return profile
 }
 
-// renderPerNodeProfile compiles per-node deployment knobs (per node resources / files from
-// configmap) into a higher priority profile selecting exactly that node.
-func renderPerNodeProfile(
+// renderPerNodeLauncherProfile creates a complete policy profile for a Node with a distinct
+// resource override. LauncherProfiles do not inherit from each other, so the shared policy is
+// copied before replacing Resources.
+func renderPerNodeLauncherProfile(
 	topology *clabernetesapisv1alpha1.Topology,
+	compiled *CompiledTopology,
 	nodeName string,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) *clabernetesapisv1alpha1.NodeProfile {
-	profile := &clabernetesapisv1alpha1.NodeProfile{
-		ObjectMeta: topologyOwnedObjectMetadata(
-			topology,
-			clabernetesutilkubernetes.SafeConcatNameKubernetes(topology.GetName(), nodeName),
-			configManagerGetter,
-		),
-		Spec: clabernetesapisv1alpha1.NodeProfileSpec{
-			NodeSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					clabernetesconstants.LabelTopologyOwner: topology.GetName(),
-					clabernetesconstants.LabelTopologyNode:  nodeName,
-				},
-			},
-			// beat the topology wide profile per field
-			Priority: 1,
-		},
-	}
+) *clabernetesapisv1alpha1.LauncherProfile {
+	profile := renderTopologyLauncherProfile(topology, compiled, configManagerGetter)
+	profile.ObjectMeta = topologyOwnedObjectMetadata(
+		topology,
+		clabernetesutilkubernetes.SafeConcatNameKubernetes(topology.GetName(), nodeName),
+		configManagerGetter,
+	)
 
 	if nodeResources, ok := topology.Spec.Deployment.Resources[nodeName]; ok {
 		profile.Spec.Resources = nodeResources.DeepCopy()
-	}
-
-	if files, ok := topology.Spec.Deployment.FilesFromConfigMap[nodeName]; ok {
-		profile.Spec.Deployment = &clabernetesapisv1alpha1.NodeProfileDeployment{
-			FilesFromConfigMap: files,
-		}
 	}
 
 	return profile
@@ -305,25 +357,25 @@ func renderPerNodeProfile(
 // used to skip emitting empty policy blocks.
 func reflectValueIsZero(value any) bool {
 	switch typed := value.(type) {
-	case *clabernetesapisv1alpha1.NodeProfileImagePull:
+	case *clabernetesapisv1alpha1.LauncherProfileImagePull:
 		return imagePullIsZero(typed)
-	case *clabernetesapisv1alpha1.NodeProfileDeployment:
+	case *clabernetesapisv1alpha1.LauncherProfileDeployment:
 		return deploymentIsZero(typed)
 	default:
 		return false
 	}
 }
 
-func imagePullIsZero(imagePull *clabernetesapisv1alpha1.NodeProfileImagePull) bool {
+func imagePullIsZero(imagePull *clabernetesapisv1alpha1.LauncherProfileImagePull) bool {
 	return imagePull.InsecureRegistries == nil && imagePull.PullThroughOverride == "" &&
-		imagePull.PullSecrets == nil && imagePull.DockerDaemonConfig == "" &&
-		imagePull.DockerConfig == ""
+		imagePull.PullSecrets == nil && imagePull.DockerDaemonConfig == nil &&
+		imagePull.DockerConfig == nil
 }
 
-func deploymentIsZero(deployment *clabernetesapisv1alpha1.NodeProfileDeployment) bool {
+func deploymentIsZero(deployment *clabernetesapisv1alpha1.LauncherProfileDeployment) bool {
 	return deployment.PrivilegedLauncher == nil && deployment.Persistence == nil &&
-		deployment.ContainerlabDebug == nil && deployment.ContainerlabTimeout == "" &&
-		deployment.ContainerlabVersion == "" && deployment.LauncherImage == "" &&
+		deployment.ContainerlabDebug == nil && deployment.ContainerlabTimeout == nil &&
+		deployment.ContainerlabVersion == nil && deployment.LauncherImage == "" &&
 		deployment.LauncherImagePullPolicy == "" && deployment.LauncherLogLevel == "" &&
-		deployment.ExtraEnv == nil && deployment.FilesFromConfigMap == nil
+		deployment.ExtraEnv == nil
 }

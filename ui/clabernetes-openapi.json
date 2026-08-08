@@ -993,8 +993,8 @@
                     "kind": "imagerequestList"
                 }
             },
-            "clabernetes-containerlab-dev.link.v1alpha1": {
-                "description": "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a\nprimary clabernetes API -- like Nodes they can be created by users directly or emitted by the\n(optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints\n(Node object names in the same namespace plus interface names) and an optional mtu. The link\ncontroller allocates a tunnel id into the status for links that cross launcher pods; links\nbetween nodes co-located in one launcher pod and links to the reserved `host` node need no\ntunnel and are materialized directly by the owning launcher. Launchers select the links\nterminating on their nodes with *field selectors* on the endpoint node names (which requires\nkubernetes 1.31+) -- no labels are required, ever, and no launcher watches more than its own\nlinks. Storing one object per wire keeps every persisted object O(1) regardless of topology\nsize.",
+            "clabernetes-containerlab-dev.launcherprofile.v1alpha1": {
+                "description": "LauncherProfile holds reusable Kubernetes and launcher realization policy for Nodes. A Node\napplies at most one LauncherProfile through spec.launcherProfileRef; fields omitted from the\nprofile inherit the global Config defaults.",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -1008,162 +1008,25 @@
                         "type": "object"
                     },
                     "spec": {
-                        "description": "LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.\nAnything operational (the allocated tunnel id) lives in the status, and anything derivable\n(i.e. the remote launcher's fabric service) is derived by the launchers.",
+                        "description": "LauncherProfileSpec is the spec for a LauncherProfile resource.",
                         "properties": {
-                            "endpointA": {
-                                "description": "EndpointA is the \"a\" side of this link.",
-                                "properties": {
-                                    "interfaceName": {
-                                        "description": "InterfaceName is the name of the interface on the node this side of the link is on.",
-                                        "minLength": 1,
-                                        "type": "string"
-                                    },
-                                    "nodeName": {
-                                        "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
-                                        "minLength": 1,
-                                        "type": "string"
-                                    }
-                                },
-                                "required": [
-                                    "interfaceName",
-                                    "nodeName"
-                                ],
-                                "type": "object"
-                            },
-                            "endpointB": {
-                                "description": "EndpointB is the \"b\" side of this link.",
-                                "properties": {
-                                    "interfaceName": {
-                                        "description": "InterfaceName is the name of the interface on the node this side of the link is on.",
-                                        "minLength": 1,
-                                        "type": "string"
-                                    },
-                                    "nodeName": {
-                                        "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
-                                        "minLength": 1,
-                                        "type": "string"
-                                    }
-                                },
-                                "required": [
-                                    "interfaceName",
-                                    "nodeName"
-                                ],
-                                "type": "object"
-                            },
-                            "mtu": {
-                                "description": "MTU is the mtu for the link -- launchers apply this to the (node side of the) link\ntermination they create; zero means \"unset\" (use the containerlab default).",
-                                "type": "integer"
-                            }
-                        },
-                        "required": [
-                            "endpointA",
-                            "endpointB"
-                        ],
-                        "type": "object"
-                    },
-                    "status": {
-                        "description": "LinkStatus is the status for a Link resource.",
-                        "properties": {
-                            "error": {
-                                "description": "Error holds the reason this link cannot currently be realized. An empty value means the\nlink is eligible for materialization (a cross-launcher link can still be waiting for its\ntunnel id); invalid links and deterministic endpoint-conflict losers carry an error and are\nignored by node controllers and launchers until their spec or conflicting links change.",
-                                "type": "string"
-                            },
-                            "tunnelID": {
-                                "description": "TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller\nallocated for this link -- both sides of the link use the same id. This is an allocation\nrather than user intent, hence it living in the status; zero means \"not allocated (yet)\"\n(launchers skip such links until the controller has filled the id in).",
-                                "maximum": 16000000,
-                                "minimum": 0,
-                                "type": "integer"
-                            }
-                        },
-                        "type": "object"
-                    }
-                },
-                "type": "object",
-                "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
-                    "version": "v1alpha1",
-                    "kind": "link"
-                }
-            },
-            "clabernetes-containerlab-dev.linkList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.link.v1alpha1 resources",
-                "properties": {
-                    "apiVersion": {
-                        "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-                        "type": "string"
-                    },
-                    "items": {
-                        "description": "List of links. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
-                        "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
-                        },
-                        "type": "array"
-                    },
-                    "kind": {
-                        "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-                        "type": "string"
-                    },
-                    "metadata": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.ListMeta"
-                            }
-                        ],
-                        "description": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"
-                    }
-                },
-                "type": "object",
-                "required": [
-                    "items"
-                ],
-                "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
-                    "version": "v1alpha1",
-                    "kind": "linkList"
-                }
-            },
-            "clabernetes-containerlab-dev.nodeprofile.v1alpha1": {
-                "description": "NodeProfile holds *deployment policy* for a set of Nodes -- everything that is fleet policy\nrather than per-node payload: expose behavior, image pull configuration, launcher pod\nresources, scheduling, privileges/persistence, status probes, management network and\nconnectivity flavor. Profiles select Nodes with a standard label selector, which keeps\nemitters of Nodes (users, the Topology compiler, containerlab tooling) completely decoupled\nfrom deployment policy -- an emitter never needs to know profiles exist to emit a valid Node.\nPolicy resolution for a Node is deliberately boring: the helm-managed global Config is the\nbase (lowest precedence), then all matching NodeProfiles merge over it *per field* in\nascending priority order (name breaks ties). There are no per-Node overrides -- if a single\nnode needs special treatment, give it a label and a profile. The resolved chain is recorded in\neach Node's status.appliedProfiles.",
-                "properties": {
-                    "apiVersion": {
-                        "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-                        "type": "string"
-                    },
-                    "kind": {
-                        "description": "Kind is a string value representing the REST resource this object represents.\nServers may infer this from the endpoint the client submits requests to.\nCannot be updated.\nIn CamelCase.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-                        "type": "string"
-                    },
-                    "metadata": {
-                        "type": "object"
-                    },
-                    "spec": {
-                        "description": "NodeProfileSpec is the spec for a NodeProfile resource.",
-                        "properties": {
-                            "connectivity": {
-                                "description": "Connectivity defines the type of connectivity to use between nodes -- \"vxlan\" (default) or\nthe experimental \"slurpeeth\". Both sides of a link must resolve the same flavor for the\ntunnel to come up, so this is typically set by an all-nodes profile (or the Topology\ncompiler).",
-                                "enum": [
-                                    "vxlan",
-                                    "slurpeeth"
-                                ],
-                                "type": "string"
-                            },
                             "deployment": {
-                                "description": "Deployment holds launcher deployment settings (privileges, persistence, launcher\nimage/log level, containerlab flags, extra env/files) for the selected nodes.",
+                                "description": "Deployment holds launcher deployment settings.",
                                 "properties": {
                                     "containerlabDebug": {
-                                        "description": "ContainerlabDebug sets the `--debug` flag when invoking containerlab in the launcher pods.",
+                                        "description": "ContainerlabDebug sets the containerlab --debug flag.",
                                         "type": "boolean"
                                     },
                                     "containerlabTimeout": {
-                                        "description": "ContainerlabTimeout sets the `--timeout` flag when invoking containerlab in the launcher\npods.",
+                                        "description": "ContainerlabTimeout sets the containerlab --timeout flag.",
                                         "type": "string"
                                     },
                                     "containerlabVersion": {
-                                        "description": "ContainerlabVersion sets a custom version to use for containerlab in the launcher pods.",
+                                        "description": "ContainerlabVersion selects a custom containerlab version.",
                                         "type": "string"
                                     },
                                     "extraEnv": {
-                                        "description": "ExtraEnv is a list of additional environment variables to set on the launcher container.",
+                                        "description": "ExtraEnv is a list of additional environment variables for the launcher container.",
                                         "items": {
                                             "description": "EnvVar represents an environment variable present in a Container.",
                                             "properties": {
@@ -1314,48 +1177,12 @@
                                         "type": "array",
                                         "x-kubernetes-list-type": "atomic"
                                     },
-                                    "filesFromConfigMap": {
-                                        "description": "FilesFromConfigMap is a slice of FileFromConfigMap that define the configmap/path and\npath on the launcher pod that the file should be mounted to.",
-                                        "items": {
-                                            "description": "FileFromConfigMap represents a file that you would like to mount (from a configmap) in the\nlauncher pod for a given node.",
-                                            "properties": {
-                                                "configMapName": {
-                                                    "description": "ConfigMapName is the name of the configmap to mount.",
-                                                    "type": "string"
-                                                },
-                                                "configMapPath": {
-                                                    "description": "ConfigMapPath is the path/key in the configmap to mount, if not specified the configmap will\nbe mounted without a sub-path.",
-                                                    "type": "string"
-                                                },
-                                                "filePath": {
-                                                    "description": "FilePath is the path to mount the file.",
-                                                    "type": "string"
-                                                },
-                                                "mode": {
-                                                    "default": "read",
-                                                    "description": "Mode sets the file permissions when mounting the configmap. Since the configmap will be read\nonly filesystem anyway, we basically just want to expose if the file should be mounted as\nexecutable or not. So, default permissions would be 0o444 (read) and execute would be 0o555.",
-                                                    "enum": [
-                                                        "read",
-                                                        "execute"
-                                                    ],
-                                                    "type": "string"
-                                                }
-                                            },
-                                            "required": [
-                                                "configMapName",
-                                                "filePath"
-                                            ],
-                                            "type": "object"
-                                        },
-                                        "type": "array",
-                                        "x-kubernetes-list-type": "atomic"
-                                    },
                                     "launcherImage": {
-                                        "description": "LauncherImage sets the launcher image to use when spawning the launcher deployments.",
+                                        "description": "LauncherImage selects the launcher image.",
                                         "type": "string"
                                     },
                                     "launcherImagePullPolicy": {
-                                        "description": "LauncherImagePullPolicy sets the launcher image pull policy -- one of\nIfNotPresent/Always/Never.",
+                                        "description": "LauncherImagePullPolicy selects the launcher image pull policy.",
                                         "enum": [
                                             "IfNotPresent",
                                             "Always",
@@ -1364,7 +1191,7 @@
                                         "type": "string"
                                     },
                                     "launcherLogLevel": {
-                                        "description": "LauncherLogLevel sets the launcher log level -- one of\ndisabled/critical/warn/info/debug.",
+                                        "description": "LauncherLogLevel selects the launcher log level.",
                                         "enum": [
                                             "disabled",
                                             "critical",
@@ -1375,7 +1202,7 @@
                                         "type": "string"
                                     },
                                     "persistence": {
-                                        "description": "Persistence enables persisting the containerlab working directory of the selected nodes'\nlaunchers in a PVC.",
+                                        "description": "Persistence enables persistence of the containerlab working directory.",
                                         "properties": {
                                             "claimSize": {
                                                 "description": "ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 5Gi.\nIf provided, the string value must be a valid kubernetes storage requests style string. Note\nthe claim size *cannot be made smaller* once created, but it *can* be expanded. If you need\nto make the claim smaller you must delete the topology (or the node from the topology) and\nre-add it.",
@@ -1396,25 +1223,25 @@
                                         "type": "object"
                                     },
                                     "privilegedLauncher": {
-                                        "description": "PrivilegedLauncher, when true, sets the launcher containers to privileged -- see the\nTopology CRD (or docs) for the \"not so privileged\" mode details.",
+                                        "description": "PrivilegedLauncher configures launcher containers as privileged.",
                                         "type": "boolean"
                                     }
                                 },
                                 "type": "object"
                             },
                             "expose": {
-                                "description": "Expose holds configurations relevant to how the nodes selected by this profile are exposed.",
+                                "description": "Expose holds configurations relevant to how Nodes using this profile are exposed.",
                                 "properties": {
                                     "disableAutoExpose": {
-                                        "description": "DisableAutoExpose disables the automagic exposing of the default port list -- see the\nTopology CRD (or docs) for that list; when disabled only ports explicitly listed in the\nnode definition are exposed.",
+                                        "description": "DisableAutoExpose disables automatic exposure of the default port list.",
                                         "type": "boolean"
                                     },
                                     "disableExpose": {
-                                        "description": "DisableExpose indicates if exposing selected nodes via a service should be disabled -- by\ndefault any ports in a node definition (plus the auto-expose defaults) are exposed.",
+                                        "description": "DisableExpose indicates if exposing Nodes via a Service should be disabled.",
                                         "type": "boolean"
                                     },
                                     "exposeType": {
-                                        "description": "ExposeType configures the service type used for exposing the selected nodes -- one of\n\"None\", \"ClusterIP\", \"Headless\" or \"LoadBalancer\" (default).",
+                                        "description": "ExposeType configures the Service type used for exposing Nodes.",
                                         "enum": [
                                             "None",
                                             "ClusterIP",
@@ -1424,36 +1251,36 @@
                                         "type": "string"
                                     },
                                     "useNodeMgmtIpv4Address": {
-                                        "description": "UseNodeMgmtIpv4Address assigns each selected node's `mgmt-ipv4` address as the\nLoadBalancerIP of its expose service (LoadBalancer expose type only).",
+                                        "description": "UseNodeMgmtIpv4Address assigns a Node's management IPv4 address as its LoadBalancerIP.",
                                         "type": "boolean"
                                     },
                                     "useNodeMgmtIpv6Address": {
-                                        "description": "UseNodeMgmtIpv6Address assigns each selected node's `mgmt-ipv6` address as the\nLoadBalancerIP of its expose service (LoadBalancer expose type only).",
+                                        "description": "UseNodeMgmtIpv6Address assigns a Node's management IPv6 address as its LoadBalancerIP.",
                                         "type": "boolean"
                                     }
                                 },
                                 "type": "object"
                             },
                             "imagePull": {
-                                "description": "ImagePull holds configurations relevant to how the launcher pods for the selected nodes\nhandle pulling images.",
+                                "description": "ImagePull holds configurations relevant to how launcher Pods handle pulling images.",
                                 "properties": {
                                     "dockerConfig": {
-                                        "description": "DockerConfig sets the secret (in the node's namespace, with a \"config.json\" key) holding\nthe docker (root user) config to mount in the launchers.",
+                                        "description": "DockerConfig names the Secret containing config.json.",
                                         "type": "string"
                                     },
                                     "dockerDaemonConfig": {
-                                        "description": "DockerDaemonConfig sets the secret (in the node's namespace, with a \"daemon.json\" key)\nholding the docker daemon config to mount in the launchers.",
+                                        "description": "DockerDaemonConfig names the Secret containing daemon.json.",
                                         "type": "string"
                                     },
                                     "insecureRegistries": {
-                                        "description": "InsecureRegistries is a slice of strings of insecure registries to configure in the\nlauncher pods.",
+                                        "description": "InsecureRegistries is a slice of insecure registries to configure in launcher Pods.",
                                         "items": {
                                             "type": "string"
                                         },
                                         "type": "array"
                                     },
                                     "pullSecrets": {
-                                        "description": "PullSecrets allows for providing secret(s) to use when pulling the image. This is only\napplicable *if* image pull through mode is auto or always.",
+                                        "description": "PullSecrets provides Secrets to use when pulling images.",
                                         "items": {
                                             "type": "string"
                                         },
@@ -1461,7 +1288,7 @@
                                         "x-kubernetes-list-type": "set"
                                     },
                                     "pullThroughOverride": {
-                                        "description": "PullThroughOverride allows for overriding the image pull through mode for the launcher\npods of the selected nodes.",
+                                        "description": "PullThroughOverride overrides the image pull-through mode.",
                                         "enum": [
                                             "auto",
                                             "always",
@@ -1473,7 +1300,7 @@
                                 "type": "object"
                             },
                             "mgmt": {
-                                "description": "Mgmt holds the containerlab management network settings the launchers of the selected\nnodes run their (pod local) management network with.",
+                                "description": "Mgmt temporarily retains shared containerlab management network settings for Topology\ncompatibility. Its final ownership is intentionally deferred.",
                                 "properties": {
                                     "external-access": {
                                         "description": "ExternalAccess enables (or disables) external access to the management network.",
@@ -1514,57 +1341,8 @@
                                 },
                                 "type": "object"
                             },
-                            "nodeSelector": {
-                                "description": "NodeSelector selects the Nodes (in the profile's namespace) this profile applies to. An\nempty (or omitted) selector selects *every* Node in the namespace.",
-                                "properties": {
-                                    "matchExpressions": {
-                                        "description": "matchExpressions is a list of label selector requirements. The requirements are ANDed.",
-                                        "items": {
-                                            "description": "A label selector requirement is a selector that contains values, a key, and an operator that\nrelates the key and values.",
-                                            "properties": {
-                                                "key": {
-                                                    "description": "key is the label key that the selector applies to.",
-                                                    "type": "string"
-                                                },
-                                                "operator": {
-                                                    "description": "operator represents a key's relationship to a set of values.\nValid operators are In, NotIn, Exists and DoesNotExist.",
-                                                    "type": "string"
-                                                },
-                                                "values": {
-                                                    "description": "values is an array of string values. If the operator is In or NotIn,\nthe values array must be non-empty. If the operator is Exists or DoesNotExist,\nthe values array must be empty. This array is replaced during a strategic\nmerge patch.",
-                                                    "items": {
-                                                        "type": "string"
-                                                    },
-                                                    "type": "array",
-                                                    "x-kubernetes-list-type": "atomic"
-                                                }
-                                            },
-                                            "required": [
-                                                "key",
-                                                "operator"
-                                            ],
-                                            "type": "object"
-                                        },
-                                        "type": "array",
-                                        "x-kubernetes-list-type": "atomic"
-                                    },
-                                    "matchLabels": {
-                                        "additionalProperties": {
-                                            "type": "string"
-                                        },
-                                        "description": "matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels\nmap is equivalent to an element of matchExpressions, whose key field is \"key\", the\noperator is \"In\", and the values array contains only \"value\". The requirements are ANDed.",
-                                        "type": "object"
-                                    }
-                                },
-                                "type": "object",
-                                "x-kubernetes-map-type": "atomic"
-                            },
-                            "priority": {
-                                "description": "Priority orders profiles when more than one selects a Node -- higher priority wins per\nfield on overlap, profile name breaks ties.",
-                                "type": "integer"
-                            },
                             "resources": {
-                                "description": "Resources holds the kubernetes resource requirements for the launcher pods of the selected\nnodes.",
+                                "description": "Resources holds the Kubernetes resource requirements for launcher Pods.",
                                 "properties": {
                                     "claims": {
                                         "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
@@ -1627,7 +1405,7 @@
                                 "type": "object"
                             },
                             "scheduling": {
-                                "description": "Scheduling holds information about how the launcher pods of the selected nodes should be\nconfigured with respect to \"scheduling\" things (node selector/tolerations).",
+                                "description": "Scheduling holds launcher Pod scheduling settings.",
                                 "properties": {
                                     "nodeSelector": {
                                         "additionalProperties": {
@@ -1672,7 +1450,7 @@
                                 "type": "object"
                             },
                             "statusProbes": {
-                                "description": "StatusProbes holds the configurations relevant to how clabernetes and the launcher check\nand report the (containerlab) node status for the selected nodes.",
+                                "description": "StatusProbes holds the configurations used to check and report Node status.",
                                 "properties": {
                                     "enabled": {
                                         "default": true,
@@ -1788,7 +1566,7 @@
                         "type": "object"
                     },
                     "status": {
-                        "description": "NodeProfileStatus is the status for a NodeProfile resource.",
+                        "description": "LauncherProfileStatus is the status for a LauncherProfile resource.",
                         "type": "object"
                     }
                 },
@@ -1796,20 +1574,20 @@
                 "x-kubernetes-gvk": {
                     "group": "clabernetes-containerlab-dev",
                     "version": "v1alpha1",
-                    "kind": "nodeprofile"
+                    "kind": "launcherprofile"
                 }
             },
-            "clabernetes-containerlab-dev.nodeprofileList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.nodeprofile.v1alpha1 resources",
+            "clabernetes-containerlab-dev.launcherprofileList.v1alpha1": {
+                "description": "a list of clabernetes-containerlab-dev.launcherprofile.v1alpha1 resources",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
                         "type": "string"
                     },
                     "items": {
-                        "description": "List of nodeprofiles. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
+                        "description": "List of launcherprofiles. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
                         "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
+                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
                         },
                         "type": "array"
                     },
@@ -1833,11 +1611,11 @@
                 "x-kubernetes-gvk": {
                     "group": "clabernetes-containerlab-dev",
                     "version": "v1alpha1",
-                    "kind": "nodeprofileList"
+                    "kind": "launcherprofileList"
                 }
             },
-            "clabernetes-containerlab-dev.node.v1alpha1": {
-                "description": "Node represents a single containerlab node (\"device\") and is realized as a single launcher\npod. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by\nthe (optional) Topology compiler, or created by any other machinery (i.e. a containerlab\nruntime); the node controller treats all of these identically. The object name *is* the\ncontainerlab node name -- the launcher pod hostname and the node's services (`<name>` for\nexposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the\nnamespace is the topology boundary. The spec is simply what a human would write for the node\nin a containerlab topology file (plus filesFromURL); wiring lives exclusively on Link objects\nand everything operational (port allocations, readiness, applied profiles) is stamped by the\ncontroller into the status.",
+            "clabernetes-containerlab-dev.link.v1alpha1": {
+                "description": "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a\nprimary clabernetes API -- like Nodes they can be created by users directly or emitted by the\n(optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints\n(Node object names in the same namespace plus interface names), connectivity flavor, and an\noptional mtu. The link controller allocates a tunnel id into the status for links that cross\nlauncher pods; links between nodes co-located in one launcher pod and links to the reserved\n`host` node need no tunnel and are materialized directly by the owning launcher. Launchers\nselect only the links terminating on their nodes with *field selectors* on the endpoint node\nnames (which requires kubernetes 1.31+) -- no labels are required, ever, and no launcher\nwatches more than its own\nlinks. Storing one object per wire keeps every persisted object O(1) regardless of topology\nsize.",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -1851,7 +1629,189 @@
                         "type": "object"
                     },
                     "spec": {
-                        "description": "NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --\nverbatim containerlab vocabulary, no wrapper -- plus the one clabernetes-side per-node payload\nfield (filesFromURL). The definition must be self-contained: expanding topology\ndefaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do\nthis for you). Anything that is deployment *policy* rather than node payload -- expose\nbehavior, image pull config, launcher resources, scheduling, privileges -- lives on\nNodeProfile objects which select Nodes by label. Unknown (i.e. newer containerlab vocabulary)\nfields are preserved by the api server but are not (yet) interpreted by clabernetes.",
+                        "description": "LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.\nAnything operational (the allocated tunnel id) lives in the status, and anything derivable\n(i.e. the remote launcher's fabric service) is derived by the launchers.",
+                        "properties": {
+                            "connectivity": {
+                                "default": "vxlan",
+                                "description": "Connectivity is the flavor used to realize this Link across launcher Pods. Empty values on\nobjects stored before API defaulting was introduced are normalized to VXLAN by consumers.",
+                                "enum": [
+                                    "vxlan",
+                                    "slurpeeth"
+                                ],
+                                "type": "string"
+                            },
+                            "endpointA": {
+                                "description": "EndpointA is the \"a\" side of this link.",
+                                "properties": {
+                                    "interfaceName": {
+                                        "description": "InterfaceName is the name of the interface on the node this side of the link is on.",
+                                        "minLength": 1,
+                                        "type": "string"
+                                    },
+                                    "nodeName": {
+                                        "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
+                                        "minLength": 1,
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "interfaceName",
+                                    "nodeName"
+                                ],
+                                "type": "object"
+                            },
+                            "endpointB": {
+                                "description": "EndpointB is the \"b\" side of this link.",
+                                "properties": {
+                                    "interfaceName": {
+                                        "description": "InterfaceName is the name of the interface on the node this side of the link is on.",
+                                        "minLength": 1,
+                                        "type": "string"
+                                    },
+                                    "nodeName": {
+                                        "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
+                                        "minLength": 1,
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "interfaceName",
+                                    "nodeName"
+                                ],
+                                "type": "object"
+                            },
+                            "mtu": {
+                                "description": "MTU is the mtu for the link -- launchers apply this to the (node side of the) link\ntermination they create; zero means \"unset\" (use the containerlab default).",
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "endpointA",
+                            "endpointB"
+                        ],
+                        "type": "object"
+                    },
+                    "status": {
+                        "description": "LinkStatus is the status for a Link resource.",
+                        "properties": {
+                            "error": {
+                                "description": "Error holds the reason this link cannot currently be realized. An empty value means the\nlink is eligible for materialization (a cross-launcher link can still be waiting for its\ntunnel id); invalid links and deterministic endpoint-conflict losers carry an error and are\nignored by node controllers and launchers until their spec or conflicting links change.",
+                                "type": "string"
+                            },
+                            "resolvedEndpoints": {
+                                "description": "ResolvedEndpoints identifies the exact Nodes to which this Link is bound. The controller\nsets both endpoints atomically after every non-host endpoint resolves. A host endpoint is\nrecorded by name with an empty UID because it does not refer to a Node object.",
+                                "properties": {
+                                    "endpointA": {
+                                        "description": "EndpointA is the resolved identity corresponding to spec.endpointA.",
+                                        "properties": {
+                                            "nodeName": {
+                                                "description": "NodeName is the observed endpoint Node name, or the reserved name \"host\".",
+                                                "type": "string"
+                                            },
+                                            "uid": {
+                                                "description": "UID distinguishes replacement Nodes that reuse a name. It is empty only for host endpoints.",
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": [
+                                            "nodeName"
+                                        ],
+                                        "type": "object"
+                                    },
+                                    "endpointB": {
+                                        "description": "EndpointB is the resolved identity corresponding to spec.endpointB.",
+                                        "properties": {
+                                            "nodeName": {
+                                                "description": "NodeName is the observed endpoint Node name, or the reserved name \"host\".",
+                                                "type": "string"
+                                            },
+                                            "uid": {
+                                                "description": "UID distinguishes replacement Nodes that reuse a name. It is empty only for host endpoints.",
+                                                "type": "string"
+                                            }
+                                        },
+                                        "required": [
+                                            "nodeName"
+                                        ],
+                                        "type": "object"
+                                    }
+                                },
+                                "required": [
+                                    "endpointA",
+                                    "endpointB"
+                                ],
+                                "type": "object"
+                            },
+                            "tunnelID": {
+                                "description": "TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller\nallocated for this link -- both sides of the link use the same id. This is an allocation\nrather than user intent, hence it living in the status; zero means \"not allocated (yet)\"\n(launchers skip such links until the controller has filled the id in).",
+                                "maximum": 16000000,
+                                "minimum": 0,
+                                "type": "integer"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "type": "object",
+                "x-kubernetes-gvk": {
+                    "group": "clabernetes-containerlab-dev",
+                    "version": "v1alpha1",
+                    "kind": "link"
+                }
+            },
+            "clabernetes-containerlab-dev.linkList.v1alpha1": {
+                "description": "a list of clabernetes-containerlab-dev.link.v1alpha1 resources",
+                "properties": {
+                    "apiVersion": {
+                        "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+                        "type": "string"
+                    },
+                    "items": {
+                        "description": "List of links. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
+                        "items": {
+                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                        },
+                        "type": "array"
+                    },
+                    "kind": {
+                        "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+                        "type": "string"
+                    },
+                    "metadata": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.ListMeta"
+                            }
+                        ],
+                        "description": "Standard list metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "items"
+                ],
+                "x-kubernetes-gvk": {
+                    "group": "clabernetes-containerlab-dev",
+                    "version": "v1alpha1",
+                    "kind": "linkList"
+                }
+            },
+            "clabernetes-containerlab-dev.node.v1alpha1": {
+                "description": "Node represents a single containerlab node (\"device\") and is realized as a single launcher\npod. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by\nthe (optional) Topology compiler, or created by any other machinery (i.e. a containerlab\nruntime); the node controller treats all of these identically. The object name *is* the\ncontainerlab node name -- the launcher pod hostname and the node's services (`<name>` for\nexposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the\nnamespace is the topology boundary. The spec is simply what a human would write for the node\nin a containerlab topology file (plus per-node payload and launcherProfileRef); wiring lives\nexclusively on Link objects and everything operational is stamped by the controller into\nstatus.",
+                "properties": {
+                    "apiVersion": {
+                        "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "description": "Kind is a string value representing the REST resource this object represents.\nServers may infer this from the endpoint the client submits requests to.\nCannot be updated.\nIn CamelCase.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+                        "type": "string"
+                    },
+                    "metadata": {
+                        "type": "object"
+                    },
+                    "spec": {
+                        "description": "NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --\nverbatim containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields\nand an optional LauncherProfile reference. The definition must be self-contained: expanding\ntopology defaults/kinds into the node is the emitter's job (the Topology compiler and\nclabverter do this for you). Anything that is deployment *policy* rather than node payload --\nexpose behavior, image pull config, launcher resources, scheduling, privileges -- lives on\nLauncherProfile objects explicitly referenced by Nodes. Unknown (i.e. newer containerlab\nvocabulary) fields are preserved by the api server but are not (yet) interpreted by\nclabernetes.",
                         "properties": {
                             "SANs": {
                                 "description": "SANs is the list of subject alternative names to be added to the node's certificate.",
@@ -1993,7 +1953,7 @@
                                 "type": "object"
                             },
                             "cpu": {
-                                "description": "CPU is the node CPU limit (cgroup or hypervisor) -- note that this is the *containerlab*\n(docker) cpu setting, launcher pod resources are NodeProfile territory.",
+                                "description": "CPU is the node CPU limit (cgroup or hypervisor) -- note that this is the *containerlab*\n(docker) cpu setting, launcher pod resources are LauncherProfile territory.",
                                 "type": "number"
                             },
                             "cpu-set": {
@@ -2087,8 +2047,44 @@
                                 },
                                 "type": "object"
                             },
+                            "filesFromConfigMap": {
+                                "description": "FilesFromConfigMap holds files mounted from ConfigMaps into the launcher responsible for\nthis Node.",
+                                "items": {
+                                    "description": "FileFromConfigMap represents a file that you would like to mount (from a configmap) in the\nlauncher pod for a given node.",
+                                    "properties": {
+                                        "configMapName": {
+                                            "description": "ConfigMapName is the name of the configmap to mount.",
+                                            "type": "string"
+                                        },
+                                        "configMapPath": {
+                                            "description": "ConfigMapPath is the path/key in the configmap to mount, if not specified the configmap will\nbe mounted without a sub-path.",
+                                            "type": "string"
+                                        },
+                                        "filePath": {
+                                            "description": "FilePath is the path to mount the file.",
+                                            "type": "string"
+                                        },
+                                        "mode": {
+                                            "default": "read",
+                                            "description": "Mode sets the file permissions when mounting the configmap. Since the configmap will be read\nonly filesystem anyway, we basically just want to expose if the file should be mounted as\nexecutable or not. So, default permissions would be 0o444 (read) and execute would be 0o555.",
+                                            "enum": [
+                                                "read",
+                                                "execute"
+                                            ],
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "configMapName",
+                                        "filePath"
+                                    ],
+                                    "type": "object"
+                                },
+                                "type": "array",
+                                "x-kubernetes-list-type": "atomic"
+                            },
                             "filesFromURL": {
-                                "description": "FilesFromURL holds any files that the launcher for this node should fetch from a URL prior\nto launching the node. This is the one clabernetes (non containerlab) field in the spec --\nit is per-node payload, unlike the policy knobs which live on NodeProfile.",
+                                "description": "FilesFromURL holds any files that the launcher for this node should fetch from a URL prior\nto launching the node.",
                                 "items": {
                                     "description": "FileFromURL represents a file that you would like to mount from a URL in the launcher pod for\na given node.",
                                     "properties": {
@@ -2166,6 +2162,18 @@
                                 },
                                 "description": "Labels holds the container labels for the node.",
                                 "type": "object"
+                            },
+                            "launcherProfileRef": {
+                                "description": "LauncherProfileRef optionally names the same-namespace LauncherProfile supplying launcher\npolicy. When omitted, global Config defaults are used.",
+                                "properties": {
+                                    "name": {
+                                        "default": "",
+                                        "description": "Name of the referent.\nThis field is effectively required, but due to backwards compatibility is\nallowed to be empty. Instances of this type with an empty value here are\nalmost certainly wrong.\nMore info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object",
+                                "x-kubernetes-map-type": "atomic"
                             },
                             "license": {
                                 "description": "License is the path to the license file for the node.",
@@ -2253,13 +2261,88 @@
                     "status": {
                         "description": "NodeStatus is the status for a Node resource. Everything in here is an *allocation* or an\n*observation* made by the controller -- user intent never lives in the status.",
                         "properties": {
-                            "appliedProfiles": {
-                                "description": "AppliedProfiles lists the NodeProfiles (in ascending precedence order) that were applied\nwhen rendering this node's deployment -- purely observability so a human can answer \"which\nprofile won\".",
+                            "appliedLauncherProfile": {
+                                "description": "AppliedLauncherProfile identifies the LauncherProfile successfully applied to the launcher\nworkload. It is nil when the Node uses only global Config defaults.",
+                                "properties": {
+                                    "generation": {
+                                        "description": "Generation is the applied LauncherProfile generation.",
+                                        "format": "int64",
+                                        "type": "integer"
+                                    },
+                                    "name": {
+                                        "description": "Name is the LauncherProfile name.",
+                                        "type": "string"
+                                    },
+                                    "uid": {
+                                        "description": "UID distinguishes replacement profiles that reuse a name.",
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "generation",
+                                    "name",
+                                    "uid"
+                                ],
+                                "type": "object"
+                            },
+                            "conditions": {
+                                "description": "Conditions contains the current conditions for this Node.",
                                 "items": {
-                                    "type": "string"
+                                    "description": "Condition contains details for one aspect of the current state of this API Resource.",
+                                    "properties": {
+                                        "lastTransitionTime": {
+                                            "description": "lastTransitionTime is the last time the condition transitioned from one status to another.\nThis should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.",
+                                            "format": "date-time",
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "description": "message is a human readable message indicating details about the transition.\nThis may be an empty string.",
+                                            "maxLength": 32768,
+                                            "type": "string"
+                                        },
+                                        "observedGeneration": {
+                                            "description": "observedGeneration represents the .metadata.generation that the condition was set based upon.\nFor instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date\nwith respect to the current state of the instance.",
+                                            "format": "int64",
+                                            "minimum": 0,
+                                            "type": "integer"
+                                        },
+                                        "reason": {
+                                            "description": "reason contains a programmatic identifier indicating the reason for the condition's last transition.\nProducers of specific condition types may define expected values and meanings for this field,\nand whether the values are considered a guaranteed API.\nThe value should be a CamelCase string.\nThis field may not be empty.",
+                                            "maxLength": 1024,
+                                            "minLength": 1,
+                                            "pattern": "^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$",
+                                            "type": "string"
+                                        },
+                                        "status": {
+                                            "description": "status of the condition, one of True, False, Unknown.",
+                                            "enum": [
+                                                "True",
+                                                "False",
+                                                "Unknown"
+                                            ],
+                                            "type": "string"
+                                        },
+                                        "type": {
+                                            "description": "type of condition in CamelCase or in foo.example.com/CamelCase.",
+                                            "maxLength": 316,
+                                            "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$",
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "lastTransitionTime",
+                                        "message",
+                                        "reason",
+                                        "status",
+                                        "type"
+                                    ],
+                                    "type": "object"
                                 },
                                 "type": "array",
-                                "x-kubernetes-list-type": "atomic"
+                                "x-kubernetes-list-map-keys": [
+                                    "type"
+                                ],
+                                "x-kubernetes-list-type": "map"
                             },
                             "exposedPorts": {
                                 "description": "ExposedPorts holds the expose port *allocations* for this node -- the controller assigns\nan expose port for every (spec or auto-expose default) port and programs the node's expose\nservice from this very field; the launcher reads it to publish the ports on the pod.",
@@ -4743,6 +4826,779 @@
                 }
             ]
         },
+        "/apis/clabernetes.containerlab.dev/v1alpha1/launcherprofiles": {
+            "get": {
+                "description": "list objects of kind Launcherprofile",
+                "operationId": "listClabernetesContainerlabDevV1Alpha1LauncherprofileForAllNamespaces",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofileList.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofileList.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "parameters": [
+                {
+                    "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
+                    "in": "query",
+                    "name": "allowWatchBookmarks",
+                    "schema": {
+                        "type": "boolean",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+                    "in": "query",
+                    "name": "continue",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+                    "in": "query",
+                    "name": "fieldSelector",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+                    "in": "query",
+                    "name": "labelSelector",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+                    "in": "query",
+                    "name": "limit",
+                    "schema": {
+                        "type": "integer",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "If 'true', then the output is pretty printed.",
+                    "in": "query",
+                    "name": "pretty",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                    "in": "query",
+                    "name": "resourceVersion",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                    "in": "query",
+                    "name": "resourceVersionMatch",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+                    "in": "query",
+                    "name": "timeoutSeconds",
+                    "schema": {
+                        "type": "integer",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+                    "in": "query",
+                    "name": "watch",
+                    "schema": {
+                        "type": "boolean",
+                        "uniqueItems": true
+                    }
+                }
+            ]
+        },
+        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles": {
+            "delete": {
+                "description": "delete collection of Launcherprofile",
+                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLauncherprofile",
+                "parameters": [
+                    {
+                        "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
+                        "in": "query",
+                        "name": "allowWatchBookmarks",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+                        "in": "query",
+                        "name": "continue",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+                        "in": "query",
+                        "name": "fieldSelector",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+                        "in": "query",
+                        "name": "labelSelector",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersion",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersionMatch",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+                        "in": "query",
+                        "name": "timeoutSeconds",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+                        "in": "query",
+                        "name": "watch",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "get": {
+                "description": "list objects of kind Launcherprofile",
+                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "parameters": [
+                    {
+                        "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
+                        "in": "query",
+                        "name": "allowWatchBookmarks",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+                        "in": "query",
+                        "name": "continue",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+                        "in": "query",
+                        "name": "fieldSelector",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+                        "in": "query",
+                        "name": "labelSelector",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersion",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersionMatch",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+                        "in": "query",
+                        "name": "timeoutSeconds",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+                        "in": "query",
+                        "name": "watch",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofileList.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofileList.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "post": {
+                "description": "create a Launcherprofile",
+                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "parameters": [
+                    {
+                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+                        "in": "query",
+                        "name": "dryRun",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+                        "in": "query",
+                        "name": "fieldManager",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+                        "in": "query",
+                        "name": "fieldValidation",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                            }
+                        },
+                        "application/yaml": {
+                            "schema": {
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "Created"
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "Accepted"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "parameters": [
+                {
+                    "description": "object name and auth scope, such as for teams and projects",
+                    "in": "path",
+                    "name": "namespace",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "If 'true', then the output is pretty printed.",
+                    "in": "query",
+                    "name": "pretty",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                }
+            ]
+        },
+        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}": {
+            "delete": {
+                "description": "delete a Launcherprofile",
+                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "parameters": [
+                    {
+                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+                        "in": "query",
+                        "name": "dryRun",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.",
+                        "in": "query",
+                        "name": "gracePeriodSeconds",
+                        "schema": {
+                            "type": "integer",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the \"orphan\" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.",
+                        "in": "query",
+                        "name": "orphanDependents",
+                        "schema": {
+                            "type": "boolean",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.",
+                        "in": "query",
+                        "name": "propagationPolicy",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
+                            }
+                        },
+                        "application/yaml": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+                                }
+                            }
+                        },
+                        "description": "Accepted"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "get": {
+                "description": "read the specified Launcherprofile",
+                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "parameters": [
+                    {
+                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
+                        "in": "query",
+                        "name": "resourceVersion",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "patch": {
+                "description": "partially update the specified Launcherprofile",
+                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "parameters": [
+                    {
+                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+                        "in": "query",
+                        "name": "dryRun",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+                        "in": "query",
+                        "name": "fieldManager",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+                        "in": "query",
+                        "name": "fieldValidation",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/apply-patch+yaml": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
+                            }
+                        },
+                        "application/json-patch+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
+                            }
+                        },
+                        "application/merge-patch+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "put": {
+                "description": "replace the specified Launcherprofile",
+                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "parameters": [
+                    {
+                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+                        "in": "query",
+                        "name": "dryRun",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
+                        "in": "query",
+                        "name": "fieldManager",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    },
+                    {
+                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
+                        "in": "query",
+                        "name": "fieldValidation",
+                        "schema": {
+                            "type": "string",
+                            "uniqueItems": true
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                            }
+                        },
+                        "application/yaml": {
+                            "schema": {
+                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            },
+                            "application/yaml": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                }
+                            }
+                        },
+                        "description": "Created"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "tags": []
+            },
+            "parameters": [
+                {
+                    "description": "name of the Launcherprofile",
+                    "in": "path",
+                    "name": "name",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "object name and auth scope, such as for teams and projects",
+                    "in": "path",
+                    "name": "namespace",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                },
+                {
+                    "description": "If 'true', then the output is pretty printed.",
+                    "in": "query",
+                    "name": "pretty",
+                    "schema": {
+                        "type": "string",
+                        "uniqueItems": true
+                    }
+                }
+            ]
+        },
         "/apis/clabernetes.containerlab.dev/v1alpha1/links": {
             "get": {
                 "description": "list objects of kind Link",
@@ -5487,779 +6343,6 @@
             "parameters": [
                 {
                     "description": "name of the Link",
-                    "in": "path",
-                    "name": "name",
-                    "required": true,
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "object name and auth scope, such as for teams and projects",
-                    "in": "path",
-                    "name": "namespace",
-                    "required": true,
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "If 'true', then the output is pretty printed.",
-                    "in": "query",
-                    "name": "pretty",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                }
-            ]
-        },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/nodeprofiles": {
-            "get": {
-                "description": "list objects of kind Nodeprofile",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NodeprofileForAllNamespaces",
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofileList.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofileList.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "parameters": [
-                {
-                    "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
-                    "in": "query",
-                    "name": "allowWatchBookmarks",
-                    "schema": {
-                        "type": "boolean",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
-                    "in": "query",
-                    "name": "continue",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
-                    "in": "query",
-                    "name": "fieldSelector",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
-                    "in": "query",
-                    "name": "labelSelector",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
-                    "in": "query",
-                    "name": "limit",
-                    "schema": {
-                        "type": "integer",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "If 'true', then the output is pretty printed.",
-                    "in": "query",
-                    "name": "pretty",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                    "in": "query",
-                    "name": "resourceVersion",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                    "in": "query",
-                    "name": "resourceVersionMatch",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
-                    "in": "query",
-                    "name": "timeoutSeconds",
-                    "schema": {
-                        "type": "integer",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
-                    "in": "query",
-                    "name": "watch",
-                    "schema": {
-                        "type": "boolean",
-                        "uniqueItems": true
-                    }
-                }
-            ]
-        },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodeprofiles": {
-            "delete": {
-                "description": "delete collection of Nodeprofile",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeprofile",
-                "parameters": [
-                    {
-                        "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
-                        "in": "query",
-                        "name": "allowWatchBookmarks",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
-                        "in": "query",
-                        "name": "continue",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
-                        "in": "query",
-                        "name": "fieldSelector",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
-                        "in": "query",
-                        "name": "labelSelector",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
-                        "in": "query",
-                        "name": "limit",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersion",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersionMatch",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
-                        "in": "query",
-                        "name": "timeoutSeconds",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
-                        "in": "query",
-                        "name": "watch",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "get": {
-                "description": "list objects of kind Nodeprofile",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedNodeprofile",
-                "parameters": [
-                    {
-                        "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
-                        "in": "query",
-                        "name": "allowWatchBookmarks",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
-                        "in": "query",
-                        "name": "continue",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
-                        "in": "query",
-                        "name": "fieldSelector",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
-                        "in": "query",
-                        "name": "labelSelector",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
-                        "in": "query",
-                        "name": "limit",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersion",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "resourceVersionMatch determines how resourceVersion is applied to list calls. It is highly recommended that resourceVersionMatch be set for list calls where resourceVersion is set See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersionMatch",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
-                        "in": "query",
-                        "name": "timeoutSeconds",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
-                        "in": "query",
-                        "name": "watch",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofileList.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofileList.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "post": {
-                "description": "create a Nodeprofile",
-                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedNodeprofile",
-                "parameters": [
-                    {
-                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-                        "in": "query",
-                        "name": "dryRun",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
-                        "in": "query",
-                        "name": "fieldManager",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
-                        "in": "query",
-                        "name": "fieldValidation",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                            }
-                        },
-                        "application/yaml": {
-                            "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "Created"
-                    },
-                    "202": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "Accepted"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "parameters": [
-                {
-                    "description": "object name and auth scope, such as for teams and projects",
-                    "in": "path",
-                    "name": "namespace",
-                    "required": true,
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                },
-                {
-                    "description": "If 'true', then the output is pretty printed.",
-                    "in": "query",
-                    "name": "pretty",
-                    "schema": {
-                        "type": "string",
-                        "uniqueItems": true
-                    }
-                }
-            ]
-        },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodeprofiles/{name}": {
-            "delete": {
-                "description": "delete a Nodeprofile",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedNodeprofile",
-                "parameters": [
-                    {
-                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-                        "in": "query",
-                        "name": "dryRun",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.",
-                        "in": "query",
-                        "name": "gracePeriodSeconds",
-                        "schema": {
-                            "type": "integer",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the \"orphan\" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.",
-                        "in": "query",
-                        "name": "orphanDependents",
-                        "schema": {
-                            "type": "boolean",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.",
-                        "in": "query",
-                        "name": "propagationPolicy",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
-                            }
-                        },
-                        "application/yaml": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "202": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
-                                }
-                            }
-                        },
-                        "description": "Accepted"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "get": {
-                "description": "read the specified Nodeprofile",
-                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedNodeprofile",
-                "parameters": [
-                    {
-                        "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
-                        "in": "query",
-                        "name": "resourceVersion",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "patch": {
-                "description": "partially update the specified Nodeprofile",
-                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedNodeprofile",
-                "parameters": [
-                    {
-                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-                        "in": "query",
-                        "name": "dryRun",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
-                        "in": "query",
-                        "name": "fieldManager",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
-                        "in": "query",
-                        "name": "fieldValidation",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/apply-patch+yaml": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
-                            }
-                        },
-                        "application/json-patch+json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
-                            }
-                        },
-                        "application/merge-patch+json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "put": {
-                "description": "replace the specified Nodeprofile",
-                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedNodeprofile",
-                "parameters": [
-                    {
-                        "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
-                        "in": "query",
-                        "name": "dryRun",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.",
-                        "in": "query",
-                        "name": "fieldManager",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    },
-                    {
-                        "description": "fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.",
-                        "in": "query",
-                        "name": "fieldValidation",
-                        "schema": {
-                            "type": "string",
-                            "uniqueItems": true
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                            }
-                        },
-                        "application/yaml": {
-                            "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    },
-                    "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            },
-                            "application/yaml": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeprofile.v1alpha1"
-                                }
-                            }
-                        },
-                        "description": "Created"
-                    },
-                    "401": {
-                        "description": "Unauthorized"
-                    }
-                },
-                "tags": []
-            },
-            "parameters": [
-                {
-                    "description": "name of the Nodeprofile",
                     "in": "path",
                     "name": "name",
                     "required": true,

@@ -5,6 +5,8 @@ import { CoreV1Api, KubeConfig } from "@kubernetes/client-node";
 import {
   createClabernetesContainerlabDevV1Alpha1NamespacedTopology,
   deleteClabernetesContainerlabDevV1Alpha1NamespacedTopology,
+  listClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile,
+  listClabernetesContainerlabDevV1Alpha1NamespacedLink,
   listClabernetesContainerlabDevV1Alpha1NamespacedNode,
   listClabernetesContainerlabDevV1Alpha1NamespacedTopology,
   listClabernetesContainerlabDevV1Alpha1TopologyForAllNamespaces,
@@ -37,6 +39,28 @@ export async function listNamespacedTopologies(namespace: string): Promise<strin
 
 export async function listTopologyNodes(namespace: string, topologyName: string): Promise<string> {
   const response = await listClabernetesContainerlabDevV1Alpha1NamespacedNode({
+    path: { namespace: namespace },
+    query: { labelSelector: `clabernetes/topologyOwner=${topologyName}` },
+  }).catch((error: unknown) => {
+    throw error;
+  });
+
+  return JSON.stringify(response.data?.items);
+}
+
+export async function listTopologyLinks(namespace: string, topologyName: string): Promise<string> {
+  const response = await listClabernetesContainerlabDevV1Alpha1NamespacedLink({
+    path: { namespace: namespace },
+    query: { labelSelector: `clabernetes/topologyOwner=${topologyName}` },
+  }).catch((error: unknown) => {
+    throw error;
+  });
+
+  return JSON.stringify(response.data?.items);
+}
+
+export async function listTopologyLauncherProfiles(namespace: string, topologyName: string): Promise<string> {
+  const response = await listClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile({
     path: { namespace: namespace },
     query: { labelSelector: `clabernetes/topologyOwner=${topologyName}` },
   }).catch((error: unknown) => {

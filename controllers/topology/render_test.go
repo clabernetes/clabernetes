@@ -1,7 +1,9 @@
 package topology_test
 
 import (
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
@@ -29,6 +31,13 @@ func renderTestTopology(t *testing.T) (
 	topology.Spec.Deployment.FilesFromURL = map[string][]clabernetesapisv1alpha1.FileFromURL{
 		"srl1": {{FilePath: "some-config", URL: "http://example.com/config"}},
 	}
+	topology.Spec.Deployment.FilesFromConfigMap = map[string][]clabernetesapisv1alpha1.FileFromConfigMap{
+		"srl1": {{
+			FilePath:      "startup.cfg",
+			ConfigMapName: "srl1-config",
+			ConfigMapPath: "startup.cfg",
+		}},
+	}
 	topology.Spec.Deployment.Resources = map[string]k8scorev1.ResourceRequirements{
 		clabernetesconstants.Default: {
 			Requests: k8scorev1.ResourceList{
@@ -38,6 +47,18 @@ func renderTestTopology(t *testing.T) (
 		"multitool": {
 			Requests: k8scorev1.ResourceList{
 				"memory": resource.MustParse("128Mi"),
+			},
+		},
+		// Equal to the shared policy: this must not create a redundant dedicated profile.
+		"srl1": {
+			Requests: k8scorev1.ResourceList{
+				"memory": resource.MustParse("2Gi"),
+			},
+		},
+		// Not a compiled Node: stale/invalid map keys must not create orphan profiles.
+		"not-a-node": {
+			Requests: k8scorev1.ResourceList{
+				"memory": resource.MustParse("1Gi"),
 			},
 		},
 	}
@@ -87,6 +108,27 @@ func TestRenderNodes(t *testing.T) {
 		srl1.Spec.FilesFromURL[0].URL != "http://example.com/config" {
 		t.Fatalf("expected files from url on rendered node, got %+v", srl1.Spec.FilesFromURL)
 	}
+
+	if len(srl1.Spec.FilesFromConfigMap) != 1 ||
+		srl1.Spec.FilesFromConfigMap[0].ConfigMapName != "srl1-config" {
+		t.Fatalf(
+			"expected ConfigMap payload on rendered node, got %+v",
+			srl1.Spec.FilesFromConfigMap,
+		)
+	}
+
+	if srl1.Spec.LauncherProfileRef == nil ||
+		srl1.Spec.LauncherProfileRef.Name != "render-test" {
+		t.Fatalf("expected shared LauncherProfile reference, got %+v", srl1.Spec.LauncherProfileRef)
+	}
+
+	if nodes[0].Spec.LauncherProfileRef == nil ||
+		nodes[0].Spec.LauncherProfileRef.Name != "render-test-multitool" {
+		t.Fatalf(
+			"expected dedicated LauncherProfile reference, got %+v",
+			nodes[0].Spec.LauncherProfileRef,
+		)
+	}
 }
 
 func TestRenderLinks(t *testing.T) {
@@ -113,38 +155,54 @@ func TestRenderLinks(t *testing.T) {
 		t.Fatalf("expected link mtu to be rendered, got %d", links[0].Spec.MTU)
 	}
 
+	for _, link := range links {
+		if link.Spec.Connectivity != clabernetesapisv1alpha1.LinkConnectivityVXLAN {
+			t.Fatalf(
+				"expected topology connectivity on Link %q, got %q",
+				link.GetName(),
+				link.Spec.Connectivity,
+			)
+		}
+	}
+
 	if links[0].Status.TunnelID != 0 {
 		t.Fatal("the compiler must never allocate tunnel ids -- that is the link controller's job")
 	}
+
+	topology.Spec.Connectivity = ""
+	defaultedLinks := clabernetescontrollerstopology.RenderLinks(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	for _, link := range defaultedLinks {
+		if link.Spec.Connectivity != clabernetesapisv1alpha1.LinkConnectivityVXLAN {
+			t.Fatalf(
+				"expected omitted topology connectivity to compile to vxlan, got %+v",
+				link.Spec,
+			)
+		}
+	}
 }
 
-func TestRenderNodeProfiles(t *testing.T) {
+func TestRenderLauncherProfiles(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	profiles := clabernetescontrollerstopology.RenderNodeProfiles(
+	profiles := clabernetescontrollerstopology.RenderLauncherProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
 
 	if len(profiles) != 2 {
-		t.Fatalf("expected topology wide + one per node profile, got %d", len(profiles))
+		t.Fatalf("expected shared + one dedicated LauncherProfile, got %d", len(profiles))
 	}
 
 	main := profiles[0]
 
 	if main.GetName() != "render-test" {
 		t.Fatalf("expected topology wide profile named after topology, got %q", main.GetName())
-	}
-
-	expectedSelector := map[string]string{
-		clabernetesconstants.LabelTopologyOwner: "render-test",
-	}
-	if !reflect.DeepEqual(main.Spec.NodeSelector.MatchLabels, expectedSelector) {
-		t.Fatalf(
-			"expected topology profile to select the owner label, got %v",
-			main.Spec.NodeSelector.MatchLabels,
-		)
 	}
 
 	if main.Spec.Expose == nil || main.Spec.Expose.DisableAutoExpose == nil ||
@@ -169,29 +227,68 @@ func TestRenderNodeProfiles(t *testing.T) {
 		t.Fatalf("expected mgmt settings compiled into profile, got %+v", main.Spec.Mgmt)
 	}
 
-	assertPerNodeProfile(t, profiles[1])
+	profileSpecJSON, err := json.Marshal(main.Spec)
+	if err != nil {
+		t.Fatalf("failed marshaling LauncherProfile spec: %s", err)
+	}
+
+	if strings.Contains(string(profileSpecJSON), "connectivity") {
+		t.Fatalf("LauncherProfile must not contain connectivity: %s", profileSpecJSON)
+	}
+
+	assertPerNodeLauncherProfile(t, profiles[1])
 }
 
-func assertPerNodeProfile(t *testing.T, perNode *clabernetesapisv1alpha1.NodeProfile) {
+func TestRenderLauncherProfilesOmitsUnusedSharedProfile(t *testing.T) {
+	topology, compiled := renderTestTopology(t)
+	topology.Spec.Deployment.Resources = map[string]k8scorev1.ResourceRequirements{
+		"multitool": {
+			Requests: k8scorev1.ResourceList{
+				"memory": resource.MustParse("128Mi"),
+			},
+		},
+		"srl1": {
+			Requests: k8scorev1.ResourceList{
+				"memory": resource.MustParse("2Gi"),
+			},
+		},
+	}
+
+	profiles := clabernetescontrollerstopology.RenderLauncherProfiles(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	if len(profiles) != 2 {
+		t.Fatalf("expected only two referenced dedicated profiles, got %d", len(profiles))
+	}
+
+	expectedNames := []string{"render-test-multitool", "render-test-srl1"}
+
+	actualNames := []string{profiles[0].GetName(), profiles[1].GetName()}
+	if !reflect.DeepEqual(actualNames, expectedNames) {
+		t.Fatalf("expected dedicated profiles %v, got %v", expectedNames, actualNames)
+	}
+
+	for _, profile := range profiles {
+		if profile.Spec.Mgmt == nil || profile.Spec.Mgmt.IPv4Subnet != "172.20.20.0/24" {
+			t.Fatalf(
+				"expected every dedicated profile to retain topology mgmt compatibility, got %+v",
+				profile.Spec.Mgmt,
+			)
+		}
+	}
+}
+
+func assertPerNodeLauncherProfile(
+	t *testing.T,
+	perNode *clabernetesapisv1alpha1.LauncherProfile,
+) {
 	t.Helper()
 
 	if perNode.GetName() != "render-test-multitool" {
-		t.Fatalf("expected per node profile name, got %q", perNode.GetName())
-	}
-
-	if perNode.Spec.Priority != 1 {
-		t.Fatalf("expected per node profile priority 1, got %d", perNode.Spec.Priority)
-	}
-
-	expectedPerNodeSelector := map[string]string{
-		clabernetesconstants.LabelTopologyOwner: "render-test",
-		clabernetesconstants.LabelTopologyNode:  "multitool",
-	}
-	if !reflect.DeepEqual(perNode.Spec.NodeSelector.MatchLabels, expectedPerNodeSelector) {
-		t.Fatalf(
-			"expected per node profile selector, got %v",
-			perNode.Spec.NodeSelector.MatchLabels,
-		)
+		t.Fatalf("expected dedicated LauncherProfile name, got %q", perNode.GetName())
 	}
 
 	if perNode.Spec.Resources == nil ||
@@ -199,6 +296,21 @@ func assertPerNodeProfile(t *testing.T, perNode *clabernetesapisv1alpha1.NodePro
 		t.Fatalf(
 			"expected per node resources compiled into profile, got %+v",
 			perNode.Spec.Resources,
+		)
+	}
+
+	if perNode.Spec.Expose == nil || perNode.Spec.Expose.DisableAutoExpose == nil ||
+		!*perNode.Spec.Expose.DisableAutoExpose {
+		t.Fatalf(
+			"expected dedicated profile to contain complete shared policy, got %+v",
+			perNode.Spec,
+		)
+	}
+
+	if perNode.Spec.Mgmt == nil || perNode.Spec.Mgmt.IPv4Subnet != "172.20.20.0/24" {
+		t.Fatalf(
+			"expected dedicated profile to retain topology mgmt compatibility, got %+v",
+			perNode.Spec.Mgmt,
 		)
 	}
 }

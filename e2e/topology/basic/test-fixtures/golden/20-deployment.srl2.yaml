@@ -30,7 +30,7 @@ spec:
     metadata:
       annotations:
         clabernetes/linkAttachmentsDigest: d5356ec192a38f2106fb899d77a779db35dad64271ba3fb903dce1e3640cdf3a
-        clabernetes/nodeConfigDigest: 04a2ff8ab19b74efe5fa15cd1e4fe9defa57de6c11899288cd75f120c1976bd3
+        clabernetes/nodeConfigDigest: 581b4e19255efe4e2722d63475149cf22026975b81bd644ca36742cabb26ba45
       labels:
         app.kubernetes.io/name: srl2
         clabernetes/app: clabernetes
@@ -72,8 +72,6 @@ spec:
               value: srl2
             - name: LAUNCHER_NODE_IMAGE
               value: ghcr.io/nokia/srlinux
-            - name: LAUNCHER_CONNECTIVITY_KIND
-              value: vxlan
             - name: LAUNCHER_IN_CLUSTER_DNS_SUFFIX
               value: svc.cluster.local
             - name: LAUNCHER_CONTAINERLAB_VERSION
@@ -104,10 +102,6 @@ spec:
             - mountPath: /clabernetes/podinfo
               name: podinfo
               readOnly: true
-            - mountPath: /clabernetes/.node/containerd.sock
-              name: cri-sock
-              readOnly: true
-              subPath: containerd.sock
           workingDir: /clabernetes
       dnsPolicy: ClusterFirst
       hostname: srl2
@@ -128,8 +122,4 @@ spec:
                   fieldPath: metadata.annotations[clabernetes/linkAttachmentsDigest]
                 path: link-attachments-digest
           name: podinfo
-        - hostPath:
-            path: /run/containerd
-            type: ""
-          name: cri-sock
 status: {}

@@ -1,26 +1,19 @@
 package node
 
 import (
-	"fmt"
-	"sort"
+	"maps"
 
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/srl-labs/clabernetes/config"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
 	k8scorev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 )
 
-// ResolvedProfile holds the fully resolved deployment policy for a single Node -- the result of
-// layering all matching NodeProfiles (in ascending priority order, per field) over the
-// helm-managed global config defaults. Everything downstream (deployment/service/pvc rendering,
-// expose allocation) reads policy exclusively from this struct.
+// ResolvedProfile holds the fully resolved launcher policy for a Node. Global Config values form
+// the base and, when present, one explicitly referenced LauncherProfile overrides them.
 type ResolvedProfile struct {
-	// AppliedProfiles holds the names of the profiles that were applied, in application
-	// (ascending precedence) order.
-	AppliedProfiles []string
+	// AppliedLauncherProfile identifies the explicit profile layered over Config. It is nil when
+	// only Config defaults are used.
+	AppliedLauncherProfile *clabernetesapisv1alpha1.AppliedLauncherProfileStatus
 
 	// expose policy
 	DisableExpose          bool
@@ -36,7 +29,7 @@ type ResolvedProfile struct {
 	DockerDaemonConfig  string
 	DockerConfig        string
 
-	// launcher pod resources -- nil means "fall back to the global by-containerlab-kind lookup"
+	// launcher Pod resources -- nil means use the Config by-containerlab-kind lookup
 	Resources *k8scorev1.ResourceRequirements
 
 	// scheduling
@@ -45,7 +38,6 @@ type ResolvedProfile struct {
 
 	// launcher deployment settings
 	PrivilegedLauncher      bool
-	FilesFromConfigMap      []clabernetesapisv1alpha1.FileFromConfigMap
 	Persistence             clabernetesapisv1alpha1.Persistence
 	ContainerlabDebug       bool
 	ContainerlabTimeout     string
@@ -58,25 +50,19 @@ type ResolvedProfile struct {
 	// status probes
 	StatusProbes clabernetesapisv1alpha1.StatusProbes
 
-	// management network settings for the launcher's (pod local) docker network
+	// management network settings for the launcher's Pod-local Docker network
 	Mgmt *clabernetesapisv1alpha1.MgmtNet
-
-	// connectivity flavor (vxlan/slurpeeth)
-	Connectivity string
 }
 
-// ResolveProfile resolves the deployment policy for the given node: the global config is the
-// base, then every profile whose selector matches the node's labels merges over it per field in
-// ascending priority order (lexically larger name wins ties).
+// ResolveProfile resolves Config defaults plus at most one explicitly selected LauncherProfile.
 func ResolveProfile(
-	node *clabernetesapisv1alpha1.Node,
-	profiles []clabernetesapisv1alpha1.NodeProfile,
+	_ *clabernetesapisv1alpha1.Node,
+	profile *clabernetesapisv1alpha1.LauncherProfile,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) (*ResolvedProfile, error) {
 	configManager := configManagerGetter()
 
 	resolved := &ResolvedProfile{
-		AppliedProfiles:         []string{},
 		ExposeType:              "LoadBalancer",
 		PullThroughOverride:     configManager.GetImagePullThroughMode(),
 		DockerDaemonConfig:      configManager.GetDockerDaemonConfig(),
@@ -89,64 +75,25 @@ func ResolveProfile(
 		LauncherImagePullPolicy: configManager.GetLauncherImagePullPolicy(),
 		LauncherLogLevel:        configManager.GetLauncherLogLevel(),
 		ExtraEnv:                configManager.GetExtraEnv(),
-		Connectivity:            clabernetesconstants.ConnectivityVXLAN,
 	}
 
-	matched, err := matchingProfiles(node, profiles)
-	if err != nil {
-		return nil, err
+	if profile == nil {
+		return resolved, nil
 	}
 
-	for idx := range matched {
-		applyProfile(resolved, &matched[idx])
-
-		resolved.AppliedProfiles = append(resolved.AppliedProfiles, matched[idx].GetName())
+	applyProfile(resolved, profile)
+	resolved.AppliedLauncherProfile = &clabernetesapisv1alpha1.AppliedLauncherProfileStatus{
+		Name:       profile.GetName(),
+		UID:        profile.GetUID(),
+		Generation: profile.GetGeneration(),
 	}
 
 	return resolved, nil
 }
 
-// matchingProfiles returns the profiles whose selector matches the node's labels, sorted in
-// application order -- ascending priority, name as the tie break (so on equal priority the
-// lexically last profile name wins).
-func matchingProfiles(
-	node *clabernetesapisv1alpha1.Node,
-	profiles []clabernetesapisv1alpha1.NodeProfile,
-) ([]clabernetesapisv1alpha1.NodeProfile, error) {
-	matched := make([]clabernetesapisv1alpha1.NodeProfile, 0)
-
-	for idx := range profiles {
-		nodeSelector := profiles[idx].Spec.NodeSelector
-
-		selector, err := metav1.LabelSelectorAsSelector(&nodeSelector)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"%w: node profile %q has an invalid node selector: %w",
-				claberneteserrors.ErrParse,
-				profiles[idx].GetName(),
-				err,
-			)
-		}
-
-		if selector.Matches(labels.Set(node.GetLabels())) {
-			matched = append(matched, profiles[idx])
-		}
-	}
-
-	sort.Slice(matched, func(i, j int) bool {
-		if matched[i].Spec.Priority != matched[j].Spec.Priority {
-			return matched[i].Spec.Priority < matched[j].Spec.Priority
-		}
-
-		return matched[i].GetName() < matched[j].GetName()
-	})
-
-	return matched, nil
-}
-
-func applyProfile( //nolint:cyclop
+func applyProfile(
 	resolved *ResolvedProfile,
-	profile *clabernetesapisv1alpha1.NodeProfile,
+	profile *clabernetesapisv1alpha1.LauncherProfile,
 ) {
 	applyProfileExpose(resolved, profile.Spec.Expose)
 	applyProfileImagePull(resolved, profile.Spec.ImagePull)
@@ -157,12 +104,15 @@ func applyProfile( //nolint:cyclop
 	}
 
 	if profile.Spec.Scheduling != nil {
-		if len(profile.Spec.Scheduling.NodeSelector) != 0 {
-			resolved.NodeSelector = profile.Spec.Scheduling.NodeSelector
+		scheduling := profile.Spec.Scheduling.DeepCopy()
+
+		// A non-nil empty map/slice explicitly clears a Config-derived collection.
+		if scheduling.NodeSelector != nil {
+			resolved.NodeSelector = maps.Clone(scheduling.NodeSelector)
 		}
 
-		if profile.Spec.Scheduling.Tolerations != nil {
-			resolved.Tolerations = profile.Spec.Scheduling.Tolerations
+		if scheduling.Tolerations != nil {
+			resolved.Tolerations = scheduling.Tolerations
 		}
 	}
 
@@ -173,15 +123,11 @@ func applyProfile( //nolint:cyclop
 	if profile.Spec.Mgmt != nil {
 		resolved.Mgmt = profile.Spec.Mgmt.DeepCopy()
 	}
-
-	if profile.Spec.Connectivity != "" {
-		resolved.Connectivity = profile.Spec.Connectivity
-	}
 }
 
 func applyProfileExpose(
 	resolved *ResolvedProfile,
-	expose *clabernetesapisv1alpha1.NodeProfileExpose,
+	expose *clabernetesapisv1alpha1.LauncherProfileExpose,
 ) {
 	if expose == nil {
 		return
@@ -210,36 +156,37 @@ func applyProfileExpose(
 
 func applyProfileImagePull(
 	resolved *ResolvedProfile,
-	imagePull *clabernetesapisv1alpha1.NodeProfileImagePull,
+	imagePull *clabernetesapisv1alpha1.LauncherProfileImagePull,
 ) {
 	if imagePull == nil {
 		return
 	}
 
-	if len(imagePull.InsecureRegistries) != 0 {
-		resolved.InsecureRegistries = imagePull.InsecureRegistries
+	// Nil means inherit; a non-nil empty collection means explicitly clear.
+	if imagePull.InsecureRegistries != nil {
+		resolved.InsecureRegistries = append([]string{}, imagePull.InsecureRegistries...)
 	}
 
 	if imagePull.PullThroughOverride != "" {
 		resolved.PullThroughOverride = imagePull.PullThroughOverride
 	}
 
-	if len(imagePull.PullSecrets) != 0 {
-		resolved.PullSecrets = imagePull.PullSecrets
+	if imagePull.PullSecrets != nil {
+		resolved.PullSecrets = append([]string{}, imagePull.PullSecrets...)
 	}
 
-	if imagePull.DockerDaemonConfig != "" {
-		resolved.DockerDaemonConfig = imagePull.DockerDaemonConfig
+	if imagePull.DockerDaemonConfig != nil {
+		resolved.DockerDaemonConfig = *imagePull.DockerDaemonConfig
 	}
 
-	if imagePull.DockerConfig != "" {
-		resolved.DockerConfig = imagePull.DockerConfig
+	if imagePull.DockerConfig != nil {
+		resolved.DockerConfig = *imagePull.DockerConfig
 	}
 }
 
-func applyProfileDeployment( //nolint:cyclop
+func applyProfileDeployment(
 	resolved *ResolvedProfile,
-	deployment *clabernetesapisv1alpha1.NodeProfileDeployment,
+	deployment *clabernetesapisv1alpha1.LauncherProfileDeployment,
 ) {
 	if deployment == nil {
 		return
@@ -247,10 +194,6 @@ func applyProfileDeployment( //nolint:cyclop
 
 	if deployment.PrivilegedLauncher != nil {
 		resolved.PrivilegedLauncher = *deployment.PrivilegedLauncher
-	}
-
-	if deployment.FilesFromConfigMap != nil {
-		resolved.FilesFromConfigMap = deployment.FilesFromConfigMap
 	}
 
 	if deployment.Persistence != nil {
@@ -261,12 +204,12 @@ func applyProfileDeployment( //nolint:cyclop
 		resolved.ContainerlabDebug = *deployment.ContainerlabDebug
 	}
 
-	if deployment.ContainerlabTimeout != "" {
-		resolved.ContainerlabTimeout = deployment.ContainerlabTimeout
+	if deployment.ContainerlabTimeout != nil {
+		resolved.ContainerlabTimeout = *deployment.ContainerlabTimeout
 	}
 
-	if deployment.ContainerlabVersion != "" {
-		resolved.ContainerlabVersion = deployment.ContainerlabVersion
+	if deployment.ContainerlabVersion != nil {
+		resolved.ContainerlabVersion = *deployment.ContainerlabVersion
 	}
 
 	if deployment.LauncherImage != "" {
@@ -282,6 +225,6 @@ func applyProfileDeployment( //nolint:cyclop
 	}
 
 	if deployment.ExtraEnv != nil {
-		resolved.ExtraEnv = deployment.ExtraEnv
+		resolved.ExtraEnv = append([]k8scorev1.EnvVar{}, deployment.ExtraEnv...)
 	}
 }

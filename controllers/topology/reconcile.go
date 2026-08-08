@@ -18,7 +18,7 @@ import (
 )
 
 // Reconciler is the topology reconciler -- it *compiles* a Topology definition into the
-// primitive Node/Link/NodeProfile objects (all actual reconciliation of those happens in their
+// primitive Node/Link/LauncherProfile objects (all actual reconciliation of those happens in their
 // own controllers, identically for compiled and hand written objects), prunes emitted objects
 // that fell out of the definition, protects them from drift, and aggregates their statuses back
 // into the Topology status.
@@ -106,9 +106,9 @@ func (r *Reconciler) Reconcile(
 	// emit both *before* the nodes so the node controller never renders a node against default
 	// policy (i.e. creating expose load balancers the user explicitly disabled) or a partial
 	// wiring view while the rest of the compilation is still landing
-	err = r.reconcileNodeProfiles(ctx, topology, compiled)
+	err = r.reconcileLauncherProfiles(ctx, topology, compiled)
 	if err != nil {
-		r.logEmittedReconcileFailure("node profiles", err)
+		r.logEmittedReconcileFailure("launcher profiles", err)
 
 		return err
 	}
@@ -154,6 +154,21 @@ func ownedBy(obj ctrlruntimeclient.Object, topology *clabernetesapisv1alpha1.Top
 	return false
 }
 
+// generatedForTopology recognizes compiler output even when either its owner reference or labels
+// have drifted. Requiring the compiler app and owner labels prevents adopting an unrelated
+// directly-authored object based only on a coincidentally matching name.
+func generatedForTopology(
+	obj ctrlruntimeclient.Object,
+	topology *clabernetesapisv1alpha1.Topology,
+) bool {
+	if ownedBy(obj, topology) {
+		return true
+	}
+
+	return obj.GetLabels()[clabernetesconstants.LabelApp] == clabernetesconstants.Clabernetes &&
+		obj.GetLabels()[clabernetesconstants.LabelTopologyOwner] == topology.GetName()
+}
+
 func (r *Reconciler) reconcileNodes( //nolint:dupl
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
@@ -167,9 +182,6 @@ func (r *Reconciler) reconcileNodes( //nolint:dupl
 		ctx,
 		ownedNodes,
 		ctrlruntimeclient.InNamespace(topology.GetNamespace()),
-		ctrlruntimeclient.MatchingLabels{
-			clabernetesconstants.LabelTopologyOwner: topology.GetName(),
-		},
 	)
 	if err != nil {
 		return err
@@ -178,7 +190,7 @@ func (r *Reconciler) reconcileNodes( //nolint:dupl
 	existing := make(map[string]*clabernetesapisv1alpha1.Node, len(ownedNodes.Items))
 
 	for idx := range ownedNodes.Items {
-		if !ownedBy(&ownedNodes.Items[idx], topology) {
+		if !generatedForTopology(&ownedNodes.Items[idx], topology) {
 			continue
 		}
 
@@ -209,6 +221,7 @@ func emittedObjectConforms[T interface {
 	renderedSpec := reflect.ValueOf(rendered).Elem().FieldByName("Spec").Interface()
 
 	return specConforms(existingSpec, renderedSpec) &&
+		ownerReferencesConform(existing, rendered) &&
 		clabernetesutilkubernetes.ExistingMapStringStringContainsAllExpectedKeyValues(
 			existing.GetLabels(),
 			rendered.GetLabels(),
@@ -217,6 +230,26 @@ func emittedObjectConforms[T interface {
 			existing.GetAnnotations(),
 			rendered.GetAnnotations(),
 		)
+}
+
+func ownerReferencesConform(existing, rendered ctrlruntimeclient.Object) bool {
+	for _, expectedOwnerReference := range rendered.GetOwnerReferences() {
+		found := false
+
+		for _, existingOwnerReference := range existing.GetOwnerReferences() {
+			if reflect.DeepEqual(existingOwnerReference, expectedOwnerReference) {
+				found = true
+
+				break
+			}
+		}
+
+		if !found {
+			return false
+		}
+	}
+
+	return true
 }
 
 // specConforms compares an emitted object's specs through a json round trip -- the api server
@@ -250,9 +283,6 @@ func (r *Reconciler) reconcileLinks( //nolint:dupl
 		ctx,
 		ownedLinks,
 		ctrlruntimeclient.InNamespace(topology.GetNamespace()),
-		ctrlruntimeclient.MatchingLabels{
-			clabernetesconstants.LabelTopologyOwner: topology.GetName(),
-		},
 	)
 	if err != nil {
 		return err
@@ -261,7 +291,7 @@ func (r *Reconciler) reconcileLinks( //nolint:dupl
 	existing := make(map[string]*clabernetesapisv1alpha1.Link, len(ownedLinks.Items))
 
 	for idx := range ownedLinks.Items {
-		if !ownedBy(&ownedLinks.Items[idx], topology) {
+		if !generatedForTopology(&ownedLinks.Items[idx], topology) {
 			continue
 		}
 
@@ -283,31 +313,31 @@ func (r *Reconciler) reconcileLinks( //nolint:dupl
 	)
 }
 
-func (r *Reconciler) reconcileNodeProfiles(
+func (r *Reconciler) reconcileLauncherProfiles(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
 ) error {
-	rendered := RenderNodeProfiles(topology, compiled, r.configManagerGetter)
+	rendered := RenderLauncherProfiles(topology, compiled, r.configManagerGetter)
 
-	ownedProfiles := &clabernetesapisv1alpha1.NodeProfileList{}
+	ownedProfiles := &clabernetesapisv1alpha1.LauncherProfileList{}
 
 	err := r.Client.List(
 		ctx,
 		ownedProfiles,
 		ctrlruntimeclient.InNamespace(topology.GetNamespace()),
-		ctrlruntimeclient.MatchingLabels{
-			clabernetesconstants.LabelTopologyOwner: topology.GetName(),
-		},
 	)
 	if err != nil {
 		return err
 	}
 
-	existing := make(map[string]*clabernetesapisv1alpha1.NodeProfile, len(ownedProfiles.Items))
+	existing := make(
+		map[string]*clabernetesapisv1alpha1.LauncherProfile,
+		len(ownedProfiles.Items),
+	)
 
 	for idx := range ownedProfiles.Items {
-		if !ownedBy(&ownedProfiles.Items[idx], topology) {
+		if !generatedForTopology(&ownedProfiles.Items[idx], topology) {
 			continue
 		}
 
@@ -318,11 +348,11 @@ func (r *Reconciler) reconcileNodeProfiles(
 		ctx,
 		r,
 		topology,
-		"node profile",
+		"launcher profile",
 		rendered,
 		existing,
-		emittedObjectConforms[*clabernetesapisv1alpha1.NodeProfile],
-		func(_, _ *clabernetesapisv1alpha1.NodeProfile) {},
+		emittedObjectConforms[*clabernetesapisv1alpha1.LauncherProfile],
+		func(_, _ *clabernetesapisv1alpha1.LauncherProfile) {},
 	)
 }
 
@@ -339,7 +369,7 @@ func reconcileEmitted[T ctrlruntimeclient.Object](
 	carryOver func(existing, rendered T),
 ) error {
 	for _, renderedObj := range rendered {
-		err := ctrlruntimeutil.SetOwnerReference(topology, renderedObj, r.Client.Scheme())
+		err := ctrlruntimeutil.SetControllerReference(topology, renderedObj, r.Client.Scheme())
 		if err != nil {
 			return err
 		}

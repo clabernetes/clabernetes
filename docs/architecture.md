@@ -11,26 +11,27 @@ and the management interfaces of the nodes exposed.
 The model in one picture:
 
 ```
-                     ┌──────────────────────────────────────────────┐
-   OPTIONAL          │  Topology CR  (compiler / convenience layer) │
-                     │  containerlab yaml in → emits Node+Link CRs  │
-                     └──────────────┬───────────────────────────────┘
-                                    │ emits (owns, prunes, aggregates status)
-                                    ▼
-   AUTHORITATIVE     Node CRs (1 per launcher pod)     Link CRs (1 per wire)
-   API               created by: user | tooling | Topology compiler
-                                    │                        │
-                     ┌──────────────┴─────────┐   ┌──────────┴─────────┐
-                     │ Node controller        │   │ Link controller    │
-                     │ deployment, services,  │   │ validates, allocs  │
-                     │ PVC, digests, status   │   │ tunnelID → status  │
-                     └──────────────┬─────────┘   └──────────┬─────────┘
-                                    ▼                        ▼
-                     launcher pod: fetches its Node, field-selector-watches its
-                     Links, materializes topo.clab.yaml, runs clab + tunnels
+                 ┌──────────────────────────────────────────────────────┐
+  AUXILIARY      │ Topology CR (backward-compatible compiler layer)    │
+                 │ containerlab/KNE + existing knobs → primitives      │
+                 └──────────────────────┬───────────────────────────────┘
+                                        │ owns, corrects drift, prunes
+                                        ▼
+  PRIMARY API    LauncherProfile     Node CRs                 Link CRs
+                 launcher policy  ← explicit reference       one wire +
+                                      per-node payload        connectivity
+                                        │                        │
+                           ┌────────────┴───────────┐  ┌─────────┴────────┐
+                           │ Node controller        │  │ Link controller  │
+                           │ deployment/services/   │  │ validates and    │
+                           │ PVC/status             │  │ allocates status │
+                           └────────────┬───────────┘  └─────────┬────────┘
+                                        ▼                        ▼
+                         launcher reads its Nodes and terminating Links,
+                         materializes topo.clab.yaml, runs clab + tunnels
 ```
 
-Everything below the "AUTHORITATIVE API" line works identically whether the custom resources
+Everything below the "PRIMARY API" line works identically whether the custom resources
 were written by a person, by tooling, or by the Topology compiler.
 
 
@@ -46,14 +47,21 @@ The object name of a Node *is* the containerlab node name: the launcher pod host
 node's services derive from it, which also means the **namespace is the topology boundary**.
 Everything operational is controller-stamped into the statuses: expose port allocations and
 readiness on Nodes, tunnel id allocations on Links. Deployment *policy* -- expose behavior,
-image pull config, launcher resources, scheduling, privileges -- lives on `NodeProfile`
-objects that select Nodes by label, so whoever (or whatever) emits Nodes never needs to know
-about deployment policy.
+image pull config, launcher resources, scheduling, privileges -- lives on `LauncherProfile`.
+Each Node can explicitly reference one same-namespace profile through
+`spec.launcherProfileRef`; an omitted reference uses global Config defaults, while a missing
+explicit reference prevents realization instead of silently falling back.
 
-A deliberate scale property falls out of this design: no persisted object grows with the size
-of the topology. A Node grows only with its own definition, a Link is O(1), and each launcher
-watches exactly the links terminating on its own nodes (server side field selectors, which is
-why clabernetes requires kubernetes 1.31+).
+The primitive objects are bounded: a Node grows only with its own definition and payload, a
+Link contains one wire, and each launcher watches only Links terminating on its own Nodes
+(server-side field selectors require Kubernetes 1.31+). This removes the single authoritative
+aggregate-object ceiling; it does not imply arbitrary runtime scale because API-server capacity,
+controller throughput, and total object count remain finite.
+
+`Topology` remains a supported, backward-compatible auxiliary resource. Its existing
+`connectivity`, `expose`, `deployment`, `imagePull`, and `statusProbes` fields are accepted and
+compiled into primitive resources. Because a Topology still embeds the whole source definition,
+large labs should use clabverter's direct primitive output instead of persisting a Topology.
 
 
 ## Components
@@ -68,10 +76,17 @@ The "brains" of clabernetes is the manager deployment which runs three cooperati
   (containerlab's `network-mode: container:<primary>`) share their primary's pod.
 - the **link controller** validates Links and allocates tunnel ids into their statuses.
 - the **topology controller** is the optional convenience layer: it *compiles* a Topology
-  (a containerlab or kne file plus knobs) into Node/Link/NodeProfile objects -- expanding
+  (a containerlab or kne file plus knobs) into LauncherProfile/Link/Node objects -- expanding
   topology defaults/kinds into each node so every emitted Node is self contained -- prunes
   emitted objects that fall out of the definition, protects them from drift, and aggregates
-  node readiness back into the Topology status.
+  fixed-size counts and readiness back into the Topology status. Profiles and Links are
+  reconciled before Nodes.
+
+The compiler normally emits one shared LauncherProfile and places its explicit reference on
+every Node. A distinct per-node launcher resource policy produces a complete dedicated profile,
+not an inheritance chain. Shared containerlab management-network settings temporarily remain in
+every generated LauncherProfile required by the Topology's Nodes; this is a compatibility bridge,
+not the final ownership model.
 
 ### Launchers
 
@@ -87,7 +102,8 @@ containerlab topology file locally and runs plain containerlab.
 ### Inter-Node Connectivity
 
 Cross-pod wires are realized as vxlan (or, experimentally, slurpeeth) tunnels between the
-per-node fabric services. The tunnel destination is *derived* from the link spec alone
+per-node fabric services. Connectivity is declared on each Link and consumed by both endpoints;
+it is not a LauncherProfile setting. The tunnel destination is *derived* from the link spec alone
 (`<remote node>-vx.<namespace>...`), and the launcher keeps watching its links: moving a
 wire's far end ("rewiring") re-targets the tunnel live without restarting anything, while
 changing the set of interfaces attached to a node rolls just that node's pod.
@@ -119,6 +135,6 @@ configmaps containing the file contents and a Topology that appropriately mounts
 the pods.
 
 clabverter can also skip the Topology object entirely: `--emit-crs` renders the primitive
-Node/Link/NodeProfile manifests directly, using the very same compile pipeline the in-cluster
-compiler runs -- handy when you want the primary api objects in a git repo rather than an
-in-cluster compiler owning them.
+LauncherProfile/Link/Node manifests directly, using the same compile and render pipeline as the
+in-cluster compiler (without Topology owner references). This is the preferred path when the
+aggregate source Topology would be too large to persist.

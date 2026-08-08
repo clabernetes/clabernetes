@@ -15,11 +15,15 @@ import (
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimeutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+const topologyOwnerKind = "Topology"
 
 // Reconciler is the node reconciler -- it holds the sub-reconcilers for all the objects a
 // (launcher) Node projects into the cluster and orchestrates a full reconcile of a node group.
@@ -86,8 +90,12 @@ func (c *Controller) Reconcile(
 	err := c.BaseController.Client.Get(ctx, req.NamespacedName, node)
 	if err != nil {
 		if apimachineryerrors.IsNotFound(err) {
-			// deleted; owner references garbage collect everything the node projected
-			c.BaseController.LogReconcileCompleteObjectNotExist(req)
+			// Delete events are logged by the Node event handler. Dependent object events can
+			// enqueue the same deleted Node several more times, so keep these stale requests quiet.
+			c.BaseController.Log.Debugf(
+				"Node %q no longer exists; skipping stale reconcile request",
+				req.NamespacedName.String(),
+			)
 
 			return ctrlruntime.Result{}, nil
 		}
@@ -174,39 +182,75 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 ) error {
 	groupMembers := clabernetesutilcontainerlab.ResolveGroupMembers(nodesByName, node.GetName())
 
-	namespaceProfiles := &clabernetesapisv1alpha1.NodeProfileList{}
-
-	err := r.Client.List(
-		ctx,
-		namespaceProfiles,
-		ctrlruntimeclient.InNamespace(node.GetNamespace()),
+	profileName, err := resolveGroupLauncherProfileReference(
+		node.GetName(),
+		groupMembers,
+		nodesByName,
 	)
 	if err != nil {
-		r.Log.Criticalf("failed listing node profiles in namespace, err: %s", err)
+		r.Log.Warnf(
+			"invalid LauncherProfile references for node group %q, err: %s",
+			node.GetName(),
+			err,
+		)
 
-		return err
+		return r.updateProfileResolutionFailure(
+			ctx,
+			groupMembers,
+			nodesByName,
+			"LauncherProfileConflict",
+			err.Error(),
+		)
 	}
 
-	if r.topologyProfilePending(node, namespaceProfiles.Items) {
-		return nil
-	}
+	var profile *clabernetesapisv1alpha1.LauncherProfile
 
-	memberProfiles := make(map[string]*ResolvedProfile, len(groupMembers))
+	if profileName != "" {
+		profile = &clabernetesapisv1alpha1.LauncherProfile{}
 
-	for _, member := range groupMembers {
-		memberProfiles[member], err = ResolveProfile(
-			nodesByName[member],
-			namespaceProfiles.Items,
-			r.configManagerGetter,
+		err = r.Client.Get(
+			ctx,
+			apimachinerytypes.NamespacedName{
+				Namespace: node.GetNamespace(),
+				Name:      profileName,
+			},
+			profile,
 		)
 		if err != nil {
-			r.Log.Criticalf("failed resolving profile for node %q, err: %s", member, err)
+			if apimachineryerrors.IsNotFound(err) {
+				message := fmt.Sprintf("referenced LauncherProfile %q does not exist", profileName)
+				r.Log.Warn(message)
+
+				return r.updateProfileResolutionFailure(
+					ctx,
+					groupMembers,
+					nodesByName,
+					"LauncherProfileNotFound",
+					message,
+				)
+			}
+
+			r.Log.Criticalf("failed getting LauncherProfile %q, err: %s", profileName, err)
 
 			return err
 		}
 	}
 
-	launcherProfile := memberProfiles[node.GetName()]
+	launcherProfile, err := ResolveProfile(node, profile, r.configManagerGetter)
+	if err != nil {
+		r.Log.Criticalf(
+			"failed resolving LauncherProfile for node %q, err: %s",
+			node.GetName(),
+			err,
+		)
+
+		return err
+	}
+
+	memberProfiles := make(map[string]*ResolvedProfile, len(groupMembers))
+	for _, member := range groupMembers {
+		memberProfiles[member] = launcherProfile
+	}
 
 	memberExposedPorts, err := r.resolveGroupExposedPorts(
 		groupMembers,
@@ -270,6 +314,7 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 				Node:                      node,
 				Profile:                   launcherProfile,
 				GroupMembers:              groupMembers,
+				NodesByName:               nodesByName,
 				LinkAttachmentsDigest:     linkAttachmentsDigest,
 				NodeConfigDigest:          nodeConfigDigest,
 				PersistentVolumeClaimName: persistentVolumeClaimName,
@@ -316,12 +361,23 @@ func (r *Reconciler) reconcileLauncher( //nolint:funlen,cyclop,gocyclo
 	probeStatuses := r.collectProbeStatuses(ctx, node, currentDeployment)
 
 	for _, member := range groupMembers {
+		appliedLauncherProfile := copyAppliedLauncherProfile(
+			memberProfiles[member].AppliedLauncherProfile,
+		)
 		desiredStatus := clabernetesapisv1alpha1.NodeStatus{
-			Readiness:       readiness,
-			ProbeStatuses:   probeStatuses.DeepCopy(),
-			ExposedPorts:    memberExposedPorts[member],
-			AppliedProfiles: memberProfiles[member].AppliedProfiles,
+			Readiness:              readiness,
+			ProbeStatuses:          probeStatuses.DeepCopy(),
+			ExposedPorts:           memberExposedPorts[member],
+			Conditions:             nodesByName[member].Status.Conditions,
+			AppliedLauncherProfile: appliedLauncherProfile,
 		}
+		apimachinerymeta.SetStatusCondition(&desiredStatus.Conditions, metav1.Condition{
+			Type:               clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: nodesByName[member].GetGeneration(),
+			Reason:             "LauncherProfileResolved",
+			Message:            launcherProfileResolutionMessage(appliedLauncherProfile),
+		})
 
 		err = r.updateNodeStatus(ctx, nodesByName[member], desiredStatus)
 		if err != nil {
@@ -571,7 +627,7 @@ func topologyOwnerIdentity(
 	}
 
 	for _, ownerReference := range node.GetOwnerReferences() {
-		if ownerReference.Name == topologyName && ownerReference.Kind == "Topology" {
+		if ownerReference.Name == topologyName && ownerReference.Kind == topologyOwnerKind {
 			return topologyName, ownerReference.UID
 		}
 	}
@@ -708,40 +764,121 @@ func (r *Reconciler) updateService(
 	return r.Client.Update(ctx, rendered)
 }
 
-// topologyProfilePending returns true when the given node was emitted by a Topology whose
-// topology-wide profile is not in the given profile list (yet). Nodes compiled from a Topology
-// always come with a topology-wide profile (named after the topology) carrying the user's
-// deployment/expose policy; rendering before that profile is visible would apply the default
-// policy instead -- i.e. create expose load balancers the user explicitly disabled -- so such
-// nodes hold off until it lands, the NodeProfile watch re-enqueues the namespace's nodes when
-// it does.
-func (r *Reconciler) topologyProfilePending(
-	node *clabernetesapisv1alpha1.Node,
-	profiles []clabernetesapisv1alpha1.NodeProfile,
-) bool {
-	topologyName, _ := topologyOwnerIdentity(node)
-	if topologyName == "" || profileExists(profiles, topologyName) {
-		return false
+func resolveGroupLauncherProfileReference(
+	launcherNodeName string,
+	groupMembers []string,
+	nodesByName map[string]*clabernetesapisv1alpha1.Node,
+) (string, error) {
+	launcherNode, ok := nodesByName[launcherNodeName]
+	if !ok {
+		return "", fmt.Errorf(
+			"%w: launcher Node %q is missing from its group",
+			claberneteserrors.ErrInvalidData,
+			launcherNodeName,
+		)
 	}
 
-	r.Log.Infof(
-		"topology emitted node %q cannot see topology profile %q yet, deferring reconcile",
-		node.GetName(),
-		topologyName,
-	)
-
-	return true
-}
-
-// profileExists returns true when a profile with the given name is in the given profile list.
-func profileExists(profiles []clabernetesapisv1alpha1.NodeProfile, name string) bool {
-	for idx := range profiles {
-		if profiles[idx].GetName() == name {
-			return true
+	profileName := ""
+	if launcherNode.Spec.LauncherProfileRef != nil {
+		profileName = launcherNode.Spec.LauncherProfileRef.Name
+		if profileName == "" {
+			return "", fmt.Errorf(
+				"%w: launcher Node %q has an empty LauncherProfile reference",
+				claberneteserrors.ErrInvalidData,
+				launcherNodeName,
+			)
 		}
 	}
 
-	return false
+	for _, memberName := range groupMembers {
+		if memberName == launcherNodeName {
+			continue
+		}
+
+		member := nodesByName[memberName]
+		if member == nil || member.Spec.LauncherProfileRef == nil {
+			continue
+		}
+
+		memberProfileName := member.Spec.LauncherProfileRef.Name
+		if memberProfileName == "" {
+			return "", fmt.Errorf(
+				"%w: secondary Node %q has an empty LauncherProfile reference",
+				claberneteserrors.ErrInvalidData,
+				memberName,
+			)
+		}
+
+		if profileName == "" || memberProfileName != profileName {
+			return "", fmt.Errorf(
+				"%w: secondary Node %q references LauncherProfile %q, but primary Node %q uses %q",
+				claberneteserrors.ErrInvalidData,
+				memberName,
+				memberProfileName,
+				launcherNodeName,
+				profileName,
+			)
+		}
+	}
+
+	return profileName, nil
+}
+
+func (r *Reconciler) updateProfileResolutionFailure(
+	ctx context.Context,
+	groupMembers []string,
+	nodesByName map[string]*clabernetesapisv1alpha1.Node,
+	reason,
+	message string,
+) error {
+	for _, memberName := range groupMembers {
+		member := nodesByName[memberName]
+		if member == nil {
+			continue
+		}
+
+		desiredStatus := *member.Status.DeepCopy()
+		apimachinerymeta.SetStatusCondition(&desiredStatus.Conditions, metav1.Condition{
+			Type:               clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: member.GetGeneration(),
+			Reason:             reason,
+			Message:            message,
+		})
+
+		err := r.updateNodeStatus(ctx, member, desiredStatus)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func copyAppliedLauncherProfile(
+	applied *clabernetesapisv1alpha1.AppliedLauncherProfileStatus,
+) *clabernetesapisv1alpha1.AppliedLauncherProfileStatus {
+	if applied == nil {
+		return nil
+	}
+
+	copied := *applied
+
+	return &copied
+}
+
+func launcherProfileResolutionMessage(
+	applied *clabernetesapisv1alpha1.AppliedLauncherProfileStatus,
+) string {
+	if applied == nil {
+		return "using global Config defaults without an explicit LauncherProfile"
+	}
+
+	return fmt.Sprintf(
+		"applied LauncherProfile %q at generation %d",
+		applied.Name,
+		applied.Generation,
+	)
 }
 
 func ownedByUID(obj ctrlruntimeclient.Object, expectedOwnerUID apimachinerytypes.UID) bool {

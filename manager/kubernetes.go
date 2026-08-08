@@ -55,7 +55,7 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 							},
 						},
 					},
-					// nodes/links/node profiles are the primary api -- they are created by
+					// nodes/links/launcher profiles are the primary api -- they are created by
 					// users (or tooling) and carry no clabernetes/app label, so they must be
 					// cached unconditionally
 					&clabernetesapisv1alpha1.Node{}: {
@@ -72,7 +72,7 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 							},
 						},
 					},
-					&clabernetesapisv1alpha1.NodeProfile{}: {
+					&clabernetesapisv1alpha1.LauncherProfile{}: {
 						Namespaces: map[string]ctrlruntimecache.Config{
 							ctrlruntimecache.AllNamespaces: {
 								LabelSelector: labels.Everything(),

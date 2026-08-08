@@ -52,6 +52,12 @@ func testNode(name, networkMode string) clabernetesapisv1alpha1.Node {
 }
 
 func TestValidateLink(t *testing.T) {
+	slurpeethLink := testLink("slurpeeth", "srl1", "e1-1", "srl2", "e1-1", 0)
+	slurpeethLink.Spec.Connectivity = clabernetesapisv1alpha1.LinkConnectivitySlurpeeth
+
+	unknownLink := testLink("unknown", "srl1", "e1-1", "srl2", "e1-1", 0)
+	unknownLink.Spec.Connectivity = "unknown"
+
 	cases := []struct {
 		name        string
 		link        clabernetesapisv1alpha1.Link
@@ -61,6 +67,16 @@ func TestValidateLink(t *testing.T) {
 			name:        "simple",
 			link:        testLink("simple", "srl1", "e1-1", "srl2", "e1-1", 0),
 			expectValid: true,
+		},
+		{
+			name:        "explicit-slurpeeth",
+			link:        slurpeethLink,
+			expectValid: true,
+		},
+		{
+			name:        "unknown-connectivity",
+			link:        unknownLink,
+			expectValid: false,
 		},
 		{
 			name:        "host-link",
@@ -96,6 +112,20 @@ func TestValidateLink(t *testing.T) {
 				t.Fatal("expected link to be invalid, got no error")
 			}
 		})
+	}
+}
+
+func TestLinkConnectivityNormalization(t *testing.T) {
+	link := testLink("default", "srl1", "e1-1", "srl2", "e1-1", 0)
+	if got := link.Spec.NormalizedConnectivity(); got !=
+		clabernetesapisv1alpha1.LinkConnectivityVXLAN {
+		t.Fatalf("expected omitted connectivity to normalize to VXLAN, got %q", got)
+	}
+
+	link.Spec.Connectivity = clabernetesapisv1alpha1.LinkConnectivitySlurpeeth
+	if got := link.Spec.NormalizedConnectivity(); got !=
+		clabernetesapisv1alpha1.LinkConnectivitySlurpeeth {
+		t.Fatalf("expected explicit slurpeeth connectivity, got %q", got)
 	}
 }
 
@@ -159,6 +189,26 @@ func TestFindEndpointConflict(t *testing.T) {
 }
 
 func TestResolveDesiredTunnelID(t *testing.T) {
+	slurpeethOutOfRange := testLink(
+		"slurpeeth",
+		"srl1",
+		"e1-1",
+		"srl2",
+		"e1-1",
+		clabernetesapisv1alpha1.SlurpeethMaxSegmentID+1,
+	)
+	slurpeethOutOfRange.Spec.Connectivity = clabernetesapisv1alpha1.LinkConnectivitySlurpeeth
+
+	slurpeethMax := testLink(
+		"slurpeeth",
+		"srl1",
+		"e1-1",
+		"srl2",
+		"e1-1",
+		clabernetesapisv1alpha1.SlurpeethMaxSegmentID,
+	)
+	slurpeethMax.Spec.Connectivity = clabernetesapisv1alpha1.LinkConnectivitySlurpeeth
+
 	cases := []struct {
 		name           string
 		link           clabernetesapisv1alpha1.Link
@@ -231,6 +281,16 @@ func TestResolveDesiredTunnelID(t *testing.T) {
 				testNode("sim-b", "container:srl2"),
 			},
 			expected: 1,
+		},
+		{
+			name:     "slurpeeth-reallocates-id-outside-uint16-range",
+			link:     slurpeethOutOfRange,
+			expected: 1,
+		},
+		{
+			name:     "slurpeeth-retains-stable-id-at-uint16-limit",
+			link:     slurpeethMax,
+			expected: clabernetesapisv1alpha1.SlurpeethMaxSegmentID,
 		},
 	}
 

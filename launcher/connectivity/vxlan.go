@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	claberneteserrors "github.com/srl-labs/clabernetes/errors"
 	"github.com/vishvananda/netlink"
@@ -39,32 +40,18 @@ type vxlanManager struct {
 	deleteTunnel   func(context.Context, string, string) error
 }
 
-func (m *vxlanManager) Run() {
+func (m *vxlanManager) start(initialTunnels []*Tunnel) error {
 	m.currentTunnels = make(map[string]*Tunnel)
 	m.createTunnel = m.runContainerlabVxlanToolsCreate
 	m.deleteTunnel = m.runContainerlabVxlanToolsDelete
 
-	m.logger.Info(
-		"connectivity mode is 'vxlan', setting up any required tunnels...",
-	)
+	m.logger.Info("setting up initial VXLAN Links...")
 
-	err := m.updateVxlanTunnels(m.initialTunnels)
-	if err != nil {
-		m.logger.Fatalf("failed setting up initial vxlan tunnels, error: %s", err)
-	}
+	return m.updateVxlanTunnels(initialTunnels)
+}
 
-	m.logger.Debug("initial vxlan tunnel creation complete")
-
-	m.logger.Debug("start link custom resource watch...")
-
-	go watchLinks(
-		m.ctx,
-		m.logger,
-		m.clabernetesClient,
-		m.updateVxlanTunnels,
-	)
-
-	m.logger.Debug("vxlan connectivity setup complete")
+func (m *vxlanManager) reconcile(tunnels []*Tunnel) error {
+	return m.updateVxlanTunnels(tunnels)
 }
 
 func (m *vxlanManager) resolveVXLANService(vxlanRemote string) (string, error) {
@@ -176,7 +163,7 @@ func (m *vxlanManager) runContainerlabVxlanToolsDelete(
 			return ctxErr
 		}
 
-		if link.Type() != clabernetesconstants.ConnectivityVXLAN ||
+		if link.Type() != string(clabernetesapisv1alpha1.LinkConnectivityVXLAN) ||
 			!vxlanLinkMatchesName(link, vxlanInterfaceName) {
 			continue
 		}
@@ -204,15 +191,16 @@ func (m *vxlanManager) updateVxlanTunnels(
 	desiredTunnels := make(map[string]*Tunnel, len(tunnels))
 
 	for _, tunnel := range tunnels {
-		if _, exists := desiredTunnels[tunnel.LocalInterface]; exists {
+		termination := tunnelTerminationKey(tunnel)
+		if _, exists := desiredTunnels[termination]; exists {
 			return fmt.Errorf(
-				"%w: multiple tunnels use local interface %q",
+				"%w: multiple VXLAN tunnels use local termination %q",
 				claberneteserrors.ErrConnectivity,
-				tunnel.LocalInterface,
+				termination,
 			)
 		}
 
-		desiredTunnels[tunnel.LocalInterface] = tunnel
+		desiredTunnels[termination] = tunnel
 	}
 
 	if m.createTunnel == nil {
@@ -225,21 +213,21 @@ func (m *vxlanManager) updateVxlanTunnels(
 
 	nextTunnels := make(map[string]*Tunnel, len(tunnels))
 	reconcileErrors := make([]error, 0)
-	existingInterfaces := make([]string, 0, len(m.currentTunnels))
+	existingTerminations := make([]string, 0, len(m.currentTunnels))
 
-	for localInterface := range m.currentTunnels {
-		existingInterfaces = append(existingInterfaces, localInterface)
+	for termination := range m.currentTunnels {
+		existingTerminations = append(existingTerminations, termination)
 	}
 
-	slices.Sort(existingInterfaces)
+	slices.Sort(existingTerminations)
 
-	for _, localInterface := range existingInterfaces {
-		existingTunnel := m.currentTunnels[localInterface]
-		desiredTunnel, stillDesired := desiredTunnels[localInterface]
+	for _, termination := range existingTerminations {
+		existingTunnel := m.currentTunnels[termination]
+		desiredTunnel, stillDesired := desiredTunnels[termination]
 
 		if stillDesired && reflect.DeepEqual(existingTunnel, desiredTunnel) {
-			nextTunnels[localInterface] = existingTunnel
-			delete(desiredTunnels, localInterface)
+			nextTunnels[termination] = existingTunnel
+			delete(desiredTunnels, termination)
 
 			continue
 		}
@@ -252,21 +240,21 @@ func (m *vxlanManager) updateVxlanTunnels(
 				existingTunnel.LocalInterface,
 				err,
 			))
-			nextTunnels[localInterface] = existingTunnel
-			delete(desiredTunnels, localInterface)
+			nextTunnels[termination] = existingTunnel
+			delete(desiredTunnels, termination)
 		}
 	}
 
-	desiredInterfaces := make([]string, 0, len(desiredTunnels))
+	desiredTerminations := make([]string, 0, len(desiredTunnels))
 
-	for localInterface := range desiredTunnels {
-		desiredInterfaces = append(desiredInterfaces, localInterface)
+	for termination := range desiredTunnels {
+		desiredTerminations = append(desiredTerminations, termination)
 	}
 
-	slices.Sort(desiredInterfaces)
+	slices.Sort(desiredTerminations)
 
-	for _, localInterface := range desiredInterfaces {
-		tunnel := desiredTunnels[localInterface]
+	for _, termination := range desiredTerminations {
+		tunnel := desiredTunnels[termination]
 
 		err := m.createTunnel(
 			tunnel.LocalNode,
@@ -285,7 +273,7 @@ func (m *vxlanManager) updateVxlanTunnels(
 			continue
 		}
 
-		nextTunnels[localInterface] = tunnel
+		nextTunnels[termination] = tunnel
 	}
 
 	m.currentTunnels = nextTunnels

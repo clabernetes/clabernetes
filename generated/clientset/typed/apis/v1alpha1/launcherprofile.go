@@ -29,34 +29,34 @@ import (
 	gentype "k8s.io/client-go/gentype"
 )
 
-// NodeProfilesGetter has a method to return a NodeProfileInterface.
+// LauncherProfilesGetter has a method to return a LauncherProfileInterface.
 // A group's client should implement this interface.
-type NodeProfilesGetter interface {
-	NodeProfiles(namespace string) NodeProfileInterface
+type LauncherProfilesGetter interface {
+	LauncherProfiles(namespace string) LauncherProfileInterface
 }
 
-// NodeProfileInterface has methods to work with NodeProfile resources.
-type NodeProfileInterface interface {
+// LauncherProfileInterface has methods to work with LauncherProfile resources.
+type LauncherProfileInterface interface {
 	Create(
 		ctx context.Context,
-		nodeProfile *apisv1alpha1.NodeProfile,
+		launcherProfile *apisv1alpha1.LauncherProfile,
 		opts v1.CreateOptions,
-	) (*apisv1alpha1.NodeProfile, error)
+	) (*apisv1alpha1.LauncherProfile, error)
 	Update(
 		ctx context.Context,
-		nodeProfile *apisv1alpha1.NodeProfile,
+		launcherProfile *apisv1alpha1.LauncherProfile,
 		opts v1.UpdateOptions,
-	) (*apisv1alpha1.NodeProfile, error)
+	) (*apisv1alpha1.LauncherProfile, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
 	UpdateStatus(
 		ctx context.Context,
-		nodeProfile *apisv1alpha1.NodeProfile,
+		launcherProfile *apisv1alpha1.LauncherProfile,
 		opts v1.UpdateOptions,
-	) (*apisv1alpha1.NodeProfile, error)
+	) (*apisv1alpha1.LauncherProfile, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*apisv1alpha1.NodeProfile, error)
-	List(ctx context.Context, opts v1.ListOptions) (*apisv1alpha1.NodeProfileList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*apisv1alpha1.LauncherProfile, error)
+	List(ctx context.Context, opts v1.ListOptions) (*apisv1alpha1.LauncherProfileList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
 	Patch(
 		ctx context.Context,
@@ -65,25 +65,25 @@ type NodeProfileInterface interface {
 		data []byte,
 		opts v1.PatchOptions,
 		subresources ...string,
-	) (result *apisv1alpha1.NodeProfile, err error)
-	NodeProfileExpansion
+	) (result *apisv1alpha1.LauncherProfile, err error)
+	LauncherProfileExpansion
 }
 
-// nodeProfiles implements NodeProfileInterface
-type nodeProfiles struct {
-	*gentype.ClientWithList[*apisv1alpha1.NodeProfile, *apisv1alpha1.NodeProfileList]
+// launcherProfiles implements LauncherProfileInterface
+type launcherProfiles struct {
+	*gentype.ClientWithList[*apisv1alpha1.LauncherProfile, *apisv1alpha1.LauncherProfileList]
 }
 
-// newNodeProfiles returns a NodeProfiles
-func newNodeProfiles(c *ClabernetesV1alpha1Client, namespace string) *nodeProfiles {
-	return &nodeProfiles{
-		gentype.NewClientWithList[*apisv1alpha1.NodeProfile, *apisv1alpha1.NodeProfileList](
-			"nodeprofiles",
+// newLauncherProfiles returns a LauncherProfiles
+func newLauncherProfiles(c *ClabernetesV1alpha1Client, namespace string) *launcherProfiles {
+	return &launcherProfiles{
+		gentype.NewClientWithList[*apisv1alpha1.LauncherProfile, *apisv1alpha1.LauncherProfileList](
+			"launcherprofiles",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *apisv1alpha1.NodeProfile { return &apisv1alpha1.NodeProfile{} },
-			func() *apisv1alpha1.NodeProfileList { return &apisv1alpha1.NodeProfileList{} },
+			func() *apisv1alpha1.LauncherProfile { return &apisv1alpha1.LauncherProfile{} },
+			func() *apisv1alpha1.LauncherProfileList { return &apisv1alpha1.LauncherProfileList{} },
 		),
 	}
 }

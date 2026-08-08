@@ -1,99 +1,6 @@
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: Node
-metadata:
-  labels:
-    clabernetes/app: clabernetes
-    clabernetes/name: srl1
-    clabernetes/topologyKind: containerlab
-    clabernetes/topologyNode: srl1
-    clabernetes/topologyOwner: topo01
-  name: srl1
-  namespace: notclabernetes
-spec:
-  image: ghcr.io/nokia/srlinux
-  kind: srl
-  license: taco/srl1.license
-  startup-config: srl1.cfg
----
-apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: Node
-metadata:
-  labels:
-    clabernetes/app: clabernetes
-    clabernetes/name: srl2
-    clabernetes/topologyKind: containerlab
-    clabernetes/topologyNode: srl2
-    clabernetes/topologyOwner: topo01
-  name: srl2
-  namespace: notclabernetes
-spec:
-  binds:
-  - __clabDir__/potato.txt:/potato.txt
-  - __clabNodeDir__/potato.txt:/nodedir-potato.txt
-  image: ghcr.io/nokia/srlinux
-  kind: srl
-  license: srl2.license
-  startup-config: srl2.cfg
----
-apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: Node
-metadata:
-  labels:
-    clabernetes/app: clabernetes
-    clabernetes/name: sros1
-    clabernetes/topologyKind: containerlab
-    clabernetes/topologyNode: sros1
-    clabernetes/topologyOwner: topo01
-  name: sros1
-  namespace: notclabernetes
-spec:
-  image: nokia_sros:latest
-  kind: nokia_sros
-  license: taco/srl1.license
----
-apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: Node
-metadata:
-  labels:
-    clabernetes/app: clabernetes
-    clabernetes/name: sros2
-    clabernetes/topologyKind: containerlab
-    clabernetes/topologyNode: sros2
-    clabernetes/topologyOwner: topo01
-  name: sros2
-  namespace: notclabernetes
-spec:
-  healthcheck:
-    interval: 1
-    start-period: 5
-    test:
-    - CMD-SHELL
-    - cat /etc/os-release
-  image: nokia_sros:latest
-  kind: nokia_sros
-  license: srl2.license
----
-apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: Link
-metadata:
-  labels:
-    clabernetes/app: clabernetes
-    clabernetes/name: srl1-e1-1-srl2-e1-1
-    clabernetes/topologyKind: containerlab
-    clabernetes/topologyOwner: topo01
-  name: srl1-e1-1-srl2-e1-1
-  namespace: notclabernetes
-spec:
-  endpointA:
-    interfaceName: e1-1
-    nodeName: srl1
-  endpointB:
-    interfaceName: e1-1
-    nodeName: srl2
----
-apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: NodeProfile
+kind: LauncherProfile
 metadata:
   labels:
     clabernetes/app: clabernetes
@@ -113,9 +20,9 @@ spec:
     - 1.2.3.4
     pullSecrets:
     - regcred
-  nodeSelector:
-    matchLabels:
-      clabernetes/topologyOwner: topo01
+  resources:
+    requests:
+      memory: 1Gi
   statusProbes:
     enabled: false
     excludedNodes: null
@@ -124,36 +31,7 @@ spec:
       startupSeconds: 0
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: NodeProfile
-metadata:
-  labels:
-    clabernetes/app: clabernetes
-    clabernetes/name: topo01-srl1
-    clabernetes/topologyKind: containerlab
-    clabernetes/topologyOwner: topo01
-  name: topo01-srl1
-  namespace: notclabernetes
-spec:
-  deployment:
-    filesFromConfigMap:
-    - configMapName: topo01-srl1-startup-config
-      configMapPath: REPLACED
-      filePath: srl1.cfg
-      mode: read
-    - configMapName: topo01-srl1-files
-      configMapPath: REPLACED
-      filePath: taco/srl1.license
-      mode: read
-  nodeSelector:
-    matchLabels:
-      clabernetes/topologyNode: srl1
-      clabernetes/topologyOwner: topo01
-  priority: 1
-status: {}
-
----
-apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: NodeProfile
+kind: LauncherProfile
 metadata:
   labels:
     clabernetes/app: clabernetes
@@ -163,77 +41,163 @@ metadata:
   name: topo01-srl2
   namespace: notclabernetes
 spec:
-  deployment:
-    filesFromConfigMap:
-    - configMapName: topo01-srl2-files
-      configMapPath: REPLACED
-      filePath: /some/dir/clabernetes/clabverter/test-fixtures/clabversiontest/potato.txt
-      mode: read
-    - configMapName: topo01-srl2-files
-      configMapPath: REPLACED
-      filePath: /some/dir/clabernetes/clabverter/test-fixtures/clabversiontest/srl2/potato.txt
-      mode: read
-    - configMapName: topo01-srl2-startup-config
-      configMapPath: REPLACED
-      filePath: srl2.cfg
-      mode: read
-    - configMapName: topo01-srl2-files
-      configMapPath: REPLACED
-      filePath: srl2.license
-      mode: read
-  nodeSelector:
-    matchLabels:
-      clabernetes/topologyNode: srl2
-      clabernetes/topologyOwner: topo01
-  priority: 1
-status: {}
-
+  expose:
+    disableAutoExpose: false
+    disableExpose: false
+    useNodeMgmtIpv4Address: false
+    useNodeMgmtIpv6Address: false
+  imagePull:
+    insecureRegistries:
+    - 1.2.3.4
+    pullSecrets:
+    - regcred
+  resources:
+    requests:
+      memory: 2Gi
+  statusProbes:
+    enabled: false
+    excludedNodes: null
+    nodeProbeConfigurations: null
+    probeConfiguration:
+      startupSeconds: 0
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: NodeProfile
+kind: Link
 metadata:
   labels:
     clabernetes/app: clabernetes
-    clabernetes/name: topo01-sros1
+    clabernetes/name: srl1-e1-1-srl2-e1-1
     clabernetes/topologyKind: containerlab
     clabernetes/topologyOwner: topo01
-  name: topo01-sros1
+  name: srl1-e1-1-srl2-e1-1
   namespace: notclabernetes
 spec:
-  deployment:
-    filesFromConfigMap:
-    - configMapName: topo01-sros1-files
-      configMapPath: REPLACED
-      filePath: taco/srl1.license
-      mode: read
-  nodeSelector:
-    matchLabels:
-      clabernetes/topologyNode: sros1
-      clabernetes/topologyOwner: topo01
-  priority: 1
-status: {}
-
+  connectivity: slurpeeth
+  endpointA:
+    interfaceName: e1-1
+    nodeName: srl1
+  endpointB:
+    interfaceName: e1-1
+    nodeName: srl2
 ---
 apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: NodeProfile
+kind: Node
 metadata:
   labels:
     clabernetes/app: clabernetes
-    clabernetes/name: topo01-sros2
+    clabernetes/name: srl1
     clabernetes/topologyKind: containerlab
+    clabernetes/topologyNode: srl1
     clabernetes/topologyOwner: topo01
-  name: topo01-sros2
+  name: srl1
   namespace: notclabernetes
 spec:
-  deployment:
-    filesFromConfigMap:
-    - configMapName: topo01-sros2-files
-      configMapPath: REPLACED
-      filePath: srl2.license
-      mode: read
-  nodeSelector:
-    matchLabels:
-      clabernetes/topologyNode: sros2
-      clabernetes/topologyOwner: topo01
-  priority: 1
-status: {}
+  filesFromConfigMap:
+  - configMapName: topo01-srl1-startup-config
+    configMapPath: REPLACED
+    filePath: srl1.cfg
+    mode: read
+  - configMapName: topo01-srl1-files
+    configMapPath: REPLACED
+    filePath: taco/srl1.license
+    mode: read
+  image: ghcr.io/nokia/srlinux
+  kind: srl
+  launcherProfileRef:
+    name: topo01
+  license: taco/srl1.license
+  startup-config: srl1.cfg
+
+---
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  labels:
+    clabernetes/app: clabernetes
+    clabernetes/name: srl2
+    clabernetes/topologyKind: containerlab
+    clabernetes/topologyNode: srl2
+    clabernetes/topologyOwner: topo01
+  name: srl2
+  namespace: notclabernetes
+spec:
+  binds:
+  - __clabDir__/potato.txt:/potato.txt
+  - __clabNodeDir__/potato.txt:/nodedir-potato.txt
+  filesFromConfigMap:
+  - configMapName: topo01-srl2-files
+    configMapPath: REPLACED
+    filePath: /some/dir/clabernetes/clabverter/test-fixtures/clabversiontest/potato.txt
+    mode: read
+  - configMapName: topo01-srl2-files
+    configMapPath: REPLACED
+    filePath: /some/dir/clabernetes/clabverter/test-fixtures/clabversiontest/srl2/potato.txt
+    mode: read
+  - configMapName: topo01-srl2-startup-config
+    configMapPath: REPLACED
+    filePath: srl2.cfg
+    mode: read
+  - configMapName: topo01-srl2-files
+    configMapPath: REPLACED
+    filePath: srl2.license
+    mode: read
+  image: ghcr.io/nokia/srlinux
+  kind: srl
+  launcherProfileRef:
+    name: topo01-srl2
+  license: srl2.license
+  startup-config: srl2.cfg
+
+---
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  labels:
+    clabernetes/app: clabernetes
+    clabernetes/name: sros1
+    clabernetes/topologyKind: containerlab
+    clabernetes/topologyNode: sros1
+    clabernetes/topologyOwner: topo01
+  name: sros1
+  namespace: notclabernetes
+spec:
+  filesFromConfigMap:
+  - configMapName: topo01-sros1-files
+    configMapPath: REPLACED
+    filePath: taco/srl1.license
+    mode: read
+  image: nokia_sros:latest
+  kind: nokia_sros
+  launcherProfileRef:
+    name: topo01
+  license: taco/srl1.license
+
+---
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  labels:
+    clabernetes/app: clabernetes
+    clabernetes/name: sros2
+    clabernetes/topologyKind: containerlab
+    clabernetes/topologyNode: sros2
+    clabernetes/topologyOwner: topo01
+  name: sros2
+  namespace: notclabernetes
+spec:
+  filesFromConfigMap:
+  - configMapName: topo01-sros2-files
+    configMapPath: REPLACED
+    filePath: srl2.license
+    mode: read
+  healthcheck:
+    interval: 1
+    start-period: 5
+    test:
+    - CMD-SHELL
+    - cat /etc/os-release
+  image: nokia_sros:latest
+  kind: nokia_sros
+  launcherProfileRef:
+    name: topo01
+  license: srl2.license

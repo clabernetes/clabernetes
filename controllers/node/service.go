@@ -85,7 +85,7 @@ func (r *ServiceReconciler) RenderFabricService(
 	service.Spec.Type = k8scorev1.ServiceTypeClusterIP
 	service.Spec.Ports = []k8scorev1.ServicePort{
 		{
-			Name:     clabernetesconstants.ConnectivityVXLAN,
+			Name:     string(clabernetesapisv1alpha1.LinkConnectivityVXLAN),
 			Protocol: clabernetesconstants.UDP,
 			Port:     clabernetesconstants.VXLANServicePort,
 			TargetPort: intstr.IntOrString{
@@ -93,7 +93,7 @@ func (r *ServiceReconciler) RenderFabricService(
 			},
 		},
 		{
-			Name:     clabernetesconstants.ConnectivitySlurpeeth,
+			Name:     string(clabernetesapisv1alpha1.LinkConnectivitySlurpeeth),
 			Protocol: clabernetesconstants.TCP,
 			Port:     clabernetesconstants.SlurpeethServicePort,
 			TargetPort: intstr.IntOrString{

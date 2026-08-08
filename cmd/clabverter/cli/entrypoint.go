@@ -78,7 +78,7 @@ func Entrypoint() *cli.App {
 			},
 			&cli.BoolFlag{
 				Name: emitCRs,
-				Usage: "emit Node/Link/NodeProfile manifests directly instead of a Topology" +
+				Usage: "emit LauncherProfile/Node/Link manifests directly instead of a Topology" +
 					" manifest -- exactly what the in-cluster compiler would emit",
 				Required: false,
 				Value:    false,

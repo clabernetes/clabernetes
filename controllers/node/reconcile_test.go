@@ -13,6 +13,7 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 	k8srbacv1 "k8s.io/api/rbac/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
@@ -312,9 +313,11 @@ func TestReconcilePersistentVolumeClaimAdoptsLegacyClaim(t *testing.T) {
 	}
 }
 
-func TestReconcileWaitsForTopologyProfile(t *testing.T) {
+//nolint:gocognit,gocyclo // This lifecycle test intentionally verifies each fail-closed transition.
+func TestReconcileFailsClosedForMissingLauncherProfile(t *testing.T) {
 	scheme := nodeReconcileTestScheme(t)
 	node := nodeReconcileTestNode()
+	node.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: "my-lab"}
 	node.Labels[clabernetesconstants.LabelTopologyOwner] = "my-lab"
 	node.OwnerReferences = []metav1.OwnerReference{{
 		APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(),
@@ -343,8 +346,8 @@ func TestReconcileWaitsForTopologyProfile(t *testing.T) {
 		Name:      node.GetName(),
 	}
 
-	// the topology profile is not visible yet -- the reconcile must defer rather than render
-	// the node against default policy (which would create an expose load balancer service)
+	// The explicit profile is not visible yet. Reconcile must set a failure condition and avoid
+	// rendering the launcher against Config defaults.
 	current := &clabernetesapisv1alpha1.Node{}
 
 	err := client.Get(ctx, nodeKey, current)
@@ -359,28 +362,40 @@ func TestReconcileWaitsForTopologyProfile(t *testing.T) {
 
 	err = client.Get(ctx, projectedKey, &k8sappsv1.Deployment{})
 	if !apimachineryerrors.IsNotFound(err) {
-		t.Fatalf("expected no deployment before the topology profile is visible, got: %v", err)
+		t.Fatalf("expected no deployment before the LauncherProfile is visible, got: %v", err)
 	}
 
 	err = client.Get(ctx, projectedKey, &k8scorev1.Service{})
 	if !apimachineryerrors.IsNotFound(err) {
-		t.Fatalf("expected no expose service before the topology profile is visible, got: %v", err)
+		t.Fatalf("expected no expose service before the LauncherProfile is visible, got: %v", err)
 	}
 
-	// the topology profile lands (with expose disabled) -- now the node renders, but still
-	// without any expose service
-	profile := &clabernetesapisv1alpha1.NodeProfile{
+	current = &clabernetesapisv1alpha1.Node{}
+
+	err = client.Get(ctx, nodeKey, current)
+	if err != nil {
+		t.Fatalf("failed getting Node status: %s", err)
+	}
+
+	condition := apimachinerymeta.FindStatusCondition(
+		current.Status.Conditions,
+		clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+	)
+	if condition == nil || condition.Status != metav1.ConditionFalse ||
+		condition.Reason != "LauncherProfileNotFound" {
+		t.Fatalf("expected missing profile condition, got %+v", condition)
+	}
+
+	// The profile lands with expose disabled. The Node now renders and records exact identity.
+	profile := &clabernetesapisv1alpha1.LauncherProfile{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-lab",
-			Namespace: node.GetNamespace(),
+			Name:       "my-lab",
+			Namespace:  node.GetNamespace(),
+			UID:        "profile-uid",
+			Generation: 1,
 		},
-		Spec: clabernetesapisv1alpha1.NodeProfileSpec{
-			NodeSelector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					clabernetesconstants.LabelTopologyOwner: "my-lab",
-				},
-			},
-			Expose: &clabernetesapisv1alpha1.NodeProfileExpose{
+		Spec: clabernetesapisv1alpha1.LauncherProfileSpec{
+			Expose: &clabernetesapisv1alpha1.LauncherProfileExpose{
 				DisableExpose: clabernetesutil.ToPointer(true),
 			},
 		},
@@ -411,6 +426,229 @@ func TestReconcileWaitsForTopologyProfile(t *testing.T) {
 	err = client.Get(ctx, projectedKey, &k8scorev1.Service{})
 	if !apimachineryerrors.IsNotFound(err) {
 		t.Fatalf("expected no expose service with expose disabled, got: %v", err)
+	}
+
+	current = &clabernetesapisv1alpha1.Node{}
+
+	err = client.Get(ctx, nodeKey, current)
+	if err != nil {
+		t.Fatalf("failed getting reconciled Node: %s", err)
+	}
+
+	condition = apimachinerymeta.FindStatusCondition(
+		current.Status.Conditions,
+		clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+	)
+	if condition == nil || condition.Status != metav1.ConditionTrue {
+		t.Fatalf("expected resolved profile condition, got %+v", condition)
+	}
+
+	if current.Status.AppliedLauncherProfile == nil ||
+		current.Status.AppliedLauncherProfile.UID != profile.GetUID() ||
+		current.Status.AppliedLauncherProfile.Generation != 1 {
+		t.Fatalf(
+			"expected applied LauncherProfile identity, got %+v",
+			current.Status.AppliedLauncherProfile,
+		)
+	}
+
+	// A profile update is applied and its new generation is observable.
+	profile.Generation = 2
+
+	err = client.Update(ctx, profile)
+	if err != nil {
+		t.Fatalf("failed updating LauncherProfile: %s", err)
+	}
+
+	current = &clabernetesapisv1alpha1.Node{}
+
+	err = client.Get(ctx, nodeKey, current)
+	if err != nil {
+		t.Fatalf("failed getting Node before profile update reconcile: %s", err)
+	}
+
+	err = reconciler.Reconcile(ctx, current)
+	if err != nil {
+		t.Fatalf("reconcile with updated LauncherProfile failed: %s", err)
+	}
+
+	current = &clabernetesapisv1alpha1.Node{}
+
+	err = client.Get(ctx, nodeKey, current)
+	if err != nil {
+		t.Fatalf("failed getting Node after profile update: %s", err)
+	}
+
+	if current.Status.AppliedLauncherProfile == nil ||
+		current.Status.AppliedLauncherProfile.Generation != 2 {
+		t.Fatalf(
+			"expected applied LauncherProfile generation 2, got %+v",
+			current.Status.AppliedLauncherProfile,
+		)
+	}
+
+	// Deleting the referenced profile fails closed and leaves the existing workload in place.
+	err = client.Delete(ctx, profile)
+	if err != nil {
+		t.Fatalf("failed deleting LauncherProfile: %s", err)
+	}
+
+	err = reconciler.Reconcile(ctx, current)
+	if err != nil {
+		t.Fatalf("reconcile after LauncherProfile deletion failed: %s", err)
+	}
+
+	err = client.Get(ctx, projectedKey, &k8sappsv1.Deployment{})
+	if err != nil {
+		t.Fatalf("expected existing deployment to remain after profile deletion, got: %v", err)
+	}
+
+	current = &clabernetesapisv1alpha1.Node{}
+
+	err = client.Get(ctx, nodeKey, current)
+	if err != nil {
+		t.Fatalf("failed getting Node after profile deletion: %s", err)
+	}
+
+	condition = apimachinerymeta.FindStatusCondition(
+		current.Status.Conditions,
+		clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+	)
+	if condition == nil || condition.Status != metav1.ConditionFalse {
+		t.Fatalf("expected failed condition after profile deletion, got %+v", condition)
+	}
+
+	if current.Status.AppliedLauncherProfile == nil ||
+		current.Status.AppliedLauncherProfile.Generation != 2 {
+		t.Fatalf(
+			"expected last applied profile identity to remain while workload is unchanged, got %+v",
+			current.Status.AppliedLauncherProfile,
+		)
+	}
+}
+
+func TestReconcileGroupedNodesInheritPrimaryLauncherProfile(t *testing.T) {
+	scheme := nodeReconcileTestScheme(t)
+	primary := nodeReconcileTestNode()
+	primary.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: "group-profile"}
+	secondary := nodeReconcileTestNode()
+	secondary.Name = "sim-a"
+	secondary.UID = "sim-a-uid"
+	secondary.Spec.NetworkMode = "container:srl1"
+	profile := &clabernetesapisv1alpha1.LauncherProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "group-profile",
+			Namespace:  primary.GetNamespace(),
+			UID:        "group-profile-uid",
+			Generation: 3,
+		},
+	}
+
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(primary, secondary, profile).
+		Build()
+	reconciler := NewReconciler(
+		&claberneteslogging.FakeInstance{},
+		client,
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	err := reconciler.Reconcile(context.Background(), primary)
+	if err != nil {
+		t.Fatalf("group reconcile failed: %s", err)
+	}
+
+	for _, nodeName := range []string{primary.GetName(), secondary.GetName()} {
+		actual := &clabernetesapisv1alpha1.Node{}
+
+		err = client.Get(
+			context.Background(),
+			apimachinerytypes.NamespacedName{
+				Namespace: primary.GetNamespace(),
+				Name:      nodeName,
+			},
+			actual,
+		)
+		if err != nil {
+			t.Fatalf("failed getting grouped Node %q: %s", nodeName, err)
+		}
+
+		if actual.Status.AppliedLauncherProfile == nil ||
+			actual.Status.AppliedLauncherProfile.Name != profile.GetName() ||
+			actual.Status.AppliedLauncherProfile.Generation != 3 {
+			t.Fatalf(
+				"expected Node %q to inherit primary profile, got %+v",
+				nodeName,
+				actual.Status.AppliedLauncherProfile,
+			)
+		}
+	}
+}
+
+func TestReconcileRejectsGroupedLauncherProfileConflict(t *testing.T) {
+	scheme := nodeReconcileTestScheme(t)
+	primary := nodeReconcileTestNode()
+	primary.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: "primary-profile"}
+	secondary := nodeReconcileTestNode()
+	secondary.Name = "sim-a"
+	secondary.UID = "sim-a-uid"
+	secondary.Spec.NetworkMode = "container:srl1"
+	secondary.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: "other-profile"}
+
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(primary, secondary).
+		Build()
+	reconciler := NewReconciler(
+		&claberneteslogging.FakeInstance{},
+		client,
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	err := reconciler.Reconcile(context.Background(), primary)
+	if err != nil {
+		t.Fatalf("conflicting group reconcile failed: %s", err)
+	}
+
+	err = client.Get(
+		context.Background(),
+		ctrlruntimeclient.ObjectKeyFromObject(primary),
+		&k8sappsv1.Deployment{},
+	)
+	if !apimachineryerrors.IsNotFound(err) {
+		t.Fatalf("expected no workload for conflicting profile references, got: %v", err)
+	}
+
+	for _, nodeName := range []string{primary.GetName(), secondary.GetName()} {
+		actual := &clabernetesapisv1alpha1.Node{}
+
+		err = client.Get(
+			context.Background(),
+			apimachinerytypes.NamespacedName{
+				Namespace: primary.GetNamespace(),
+				Name:      nodeName,
+			},
+			actual,
+		)
+		if err != nil {
+			t.Fatalf("failed getting grouped Node %q: %s", nodeName, err)
+		}
+
+		condition := apimachinerymeta.FindStatusCondition(
+			actual.Status.Conditions,
+			clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+		)
+		if condition == nil || condition.Status != metav1.ConditionFalse ||
+			condition.Reason != "LauncherProfileConflict" {
+			t.Fatalf("expected profile conflict on Node %q, got %+v", nodeName, condition)
+		}
 	}
 }
 

@@ -66,6 +66,9 @@ type RenderInput struct {
 	// GroupMembers holds the names of all nodes hosted by this launcher (the launcher node
 	// itself first, secondaries sorted after).
 	GroupMembers []string
+	// NodesByName supplies the current Node objects for all group members. Payload declarations
+	// are read from each member while launcher policy comes from the primary's Profile.
+	NodesByName map[string]*clabernetesapisv1alpha1.Node
 	// LinkAttachmentsDigest is the digest of the group's link attachment set (see digest.go).
 	LinkAttachmentsDigest string
 	// NodeConfigDigest is the digest of the group's launcher-relevant config (see digest.go).
@@ -400,60 +403,77 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 		)
 	}
 
-	for _, podVolume := range input.Profile.FilesFromConfigMap {
-		volumeName := clabernetesutilkubernetes.EnforceDNSLabelConvention(
-			clabernetesutilkubernetes.SafeConcatNameKubernetes(
-				podVolume.ConfigMapName,
-				podVolume.ConfigMapPath,
-			),
-		)
-
-		var mode *int32
-
-		switch podVolume.Mode {
-		case clabernetesconstants.FileModeRead:
-			mode = clabernetesutil.ToPointer(
-				int32(clabernetesconstants.PermissionsEveryoneRead),
-			)
-		case clabernetesconstants.FileModeExecute:
-			mode = clabernetesutil.ToPointer(
-				int32(clabernetesconstants.PermissionsEveryoneReadExecute),
-			)
+	for _, memberName := range input.GroupMembers {
+		memberNode := input.NodesByName[memberName]
+		if memberNode == nil && memberName == input.Node.GetName() {
+			memberNode = input.Node
 		}
 
-		volumes = append(
-			volumes,
-			k8scorev1.Volume{
-				Name: volumeName,
-				VolumeSource: k8scorev1.VolumeSource{
-					ConfigMap: &k8scorev1.ConfigMapVolumeSource{
-						LocalObjectReference: k8scorev1.LocalObjectReference{
-							Name: podVolume.ConfigMapName,
+		if memberNode == nil {
+			continue
+		}
+
+		for fileIndex, podVolume := range memberNode.Spec.FilesFromConfigMap {
+			// Prefix every volume with the member and attachment index. Different grouped Nodes
+			// may legitimately use the same ConfigMap key, but Kubernetes volume names in their
+			// shared launcher Pod must still be unique.
+			volumeName := clabernetesutilkubernetes.EnforceDNSLabelConvention(
+				clabernetesutilkubernetes.SafeConcatNameKubernetes(
+					"node-payload",
+					memberName,
+					strconv.Itoa(fileIndex),
+					podVolume.ConfigMapName,
+					podVolume.ConfigMapPath,
+				),
+			)
+
+			var mode *int32
+
+			switch podVolume.Mode {
+			case clabernetesconstants.FileModeRead:
+				mode = clabernetesutil.ToPointer(
+					int32(clabernetesconstants.PermissionsEveryoneRead),
+				)
+			case clabernetesconstants.FileModeExecute:
+				mode = clabernetesutil.ToPointer(
+					int32(clabernetesconstants.PermissionsEveryoneReadExecute),
+				)
+			}
+
+			volumes = append(
+				volumes,
+				k8scorev1.Volume{
+					Name: volumeName,
+					VolumeSource: k8scorev1.VolumeSource{
+						ConfigMap: &k8scorev1.ConfigMapVolumeSource{
+							LocalObjectReference: k8scorev1.LocalObjectReference{
+								Name: podVolume.ConfigMapName,
+							},
+							DefaultMode: mode,
 						},
-						DefaultMode: mode,
 					},
 				},
-			},
-		)
+			)
 
-		var mountPath string
+			var mountPath string
 
-		// mount relative paths under /clabernetes, and absolute paths as is
-		if strings.HasPrefix(podVolume.FilePath, "/") {
-			mountPath = podVolume.FilePath
-		} else {
-			mountPath = fmt.Sprintf("/clabernetes/%s", podVolume.FilePath)
+			// mount relative paths under /clabernetes, and absolute paths as is
+			if strings.HasPrefix(podVolume.FilePath, "/") {
+				mountPath = podVolume.FilePath
+			} else {
+				mountPath = fmt.Sprintf("/clabernetes/%s", podVolume.FilePath)
+			}
+
+			volumeMountsFromCommonSpec = append(
+				volumeMountsFromCommonSpec,
+				k8scorev1.VolumeMount{
+					Name:      volumeName,
+					ReadOnly:  false,
+					MountPath: mountPath,
+					SubPath:   podVolume.ConfigMapPath,
+				},
+			)
 		}
-
-		volumeMountsFromCommonSpec = append(
-			volumeMountsFromCommonSpec,
-			k8scorev1.VolumeMount{
-				Name:      volumeName,
-				ReadOnly:  false,
-				MountPath: mountPath,
-				SubPath:   podVolume.ConfigMapPath,
-			},
-		)
 	}
 
 	deployment.Spec.Template.Spec.Volumes = volumes
@@ -512,12 +532,12 @@ func (r *DeploymentReconciler) renderDeploymentContainer(
 		Command:    []string{"/clabernetes/manager", "launch"},
 		Ports: []k8scorev1.ContainerPort{
 			{
-				Name:          clabernetesconstants.ConnectivityVXLAN,
+				Name:          string(clabernetesapisv1alpha1.LinkConnectivityVXLAN),
 				ContainerPort: clabernetesconstants.VXLANServicePort,
 				Protocol:      clabernetesconstants.UDP,
 			},
 			{
-				Name:          clabernetesconstants.ConnectivitySlurpeeth,
+				Name:          string(clabernetesapisv1alpha1.LinkConnectivitySlurpeeth),
 				ContainerPort: clabernetesconstants.SlurpeethServicePort,
 				Protocol:      clabernetesconstants.TCP,
 			},
@@ -615,10 +635,6 @@ func (r *DeploymentReconciler) renderDeploymentContainerEnv( //nolint: funlen
 		{
 			Name:  clabernetesconstants.LauncherNodeImageEnv,
 			Value: nodeImage,
-		},
-		{
-			Name:  clabernetesconstants.LauncherConnectivityKind,
-			Value: profile.Connectivity,
 		},
 		{
 			Name:  clabernetesconstants.LauncherInClusterDNSSuffixEnv,
@@ -738,9 +754,11 @@ func (r *DeploymentReconciler) renderDeploymentNodeSelectors(
 	deployment *k8sappsv1.Deployment,
 	input *RenderInput,
 ) {
-	nodeSelectors := r.configManagerGetter().GetNodeSelectorsByImage(input.Node.Spec.Image)
-	if len(nodeSelectors) == 0 {
-		maps.Copy(nodeSelectors, input.Profile.NodeSelector)
+	var nodeSelectors map[string]string
+	if input.Profile.NodeSelector != nil {
+		nodeSelectors = maps.Clone(input.Profile.NodeSelector)
+	} else {
+		nodeSelectors = r.configManagerGetter().GetNodeSelectorsByImage(input.Node.Spec.Image)
 	}
 
 	deployment.Spec.Template.Spec.NodeSelector = nodeSelectors

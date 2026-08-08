@@ -127,7 +127,7 @@ func watchLinks(
 		case <-ctx.Done():
 			return
 		case <-linkEvents:
-			logger.Info("processing link event(s)")
+			logger.Info("processing link events")
 
 			nodeTunnels, err := ListNodeTunnels(
 				ctx,

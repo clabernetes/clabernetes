@@ -9,7 +9,7 @@ This document provides a comprehensive reference for all Custom Resource Definit
   - [TopologyStatus Fields](#topologystatus-fields)
 - [Node CRD](#node-crd)
 - [Link CRD](#link-crd)
-- [NodeProfile CRD](#nodeprofile-crd)
+- [LauncherProfile CRD](#launcherprofile-crd)
 - [Config CRD](#config-crd)
 - [ImageRequest CRD](#imagerequest-crd)
 
@@ -17,7 +17,16 @@ This document provides a comprehensive reference for all Custom Resource Definit
 
 ## Topology CRD
 
-The `Topology` CRD is the primary resource for defining network topologies in Clabernetes. It represents a containerlab (or KNE) topology that will be deployed across Kubernetes pods.
+The `Topology` CRD is a supported, backward-compatible auxiliary resource for defining a whole
+containerlab or KNE lab at a high level. Its controller compiles the definition and existing
+`connectivity`, `expose`, `deployment`, `imagePull`, and `statusProbes` settings into independently
+reconciled `LauncherProfile`, `Link`, and `Node` resources. `Node` and `Link` are the primary API
+and do not require a Topology.
+
+Topology is convenient, but its source definition still grows with the lab. Large generated labs
+should apply direct primitive manifests (for example, `clabverter --emit-crs`) so no persisted
+Clabernetes object contains the full lab. Bounded primitive objects remove one object-size limit;
+they do not promise arbitrary runtime scale.
 
 ### Basic Structure
 
@@ -369,28 +378,36 @@ apiVersion: clabernetes.containerlab.dev/v1alpha1
 kind: Node
 metadata:
   name: srl1
-  labels:
-    clabernetes/topologyOwner: my-lab   # free-form; NodeProfiles select on labels
 spec:
   # the spec IS a (self contained) containerlab node definition -- flat, verbatim
   # containerlab vocabulary, no wrapper. defaults/kinds expansion is the emitter's job.
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux:latest
+  launcherProfileRef:
+    name: my-lab
   startup-config: |
     set / interface ethernet-1/1 admin-state enable
   ports:
     - 60000:57400/tcp
-  # the one clabernetes-side field (per-node payload, not policy):
-  filesFromURL: []
+  filesFromConfigMap:
+    - filePath: /etc/opt/srlinux/license.key
+      configMapName: srl-license
+      configMapPath: license.key
+  filesFromURL:
+    - filePath: /tmp/bootstrap.json
+      url: https://example.com/bootstrap/srl1.json
 status:
   readiness: ready
+  appliedLauncherProfile:
+    name: my-lab
+    uid: 0184c11b-1671-46d9-8584-c590a9502ca2
+    generation: 3
   exposedPorts:
     loadBalancerAddress: 172.18.255.1
     ports:
       - exposePort: 60000
         destinationPort: 57400
         protocol: TCP
-  appliedProfiles: ["my-lab"]
 ```
 
 ### NodeSpec Fields
@@ -398,21 +415,26 @@ status:
 The spec is flat containerlab vocabulary (`kind`, `image`, `startup-config`, `ports`, `env`,
 `binds`, `network-mode`, ...) -- see the containerlab
 [node definition documentation](https://containerlab.dev/manual/nodes/) for the full list --
-plus exactly one clabernetes field:
+plus these Clabernetes fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `launcherProfileRef` | LocalObjectReference | Optional explicit same-namespace LauncherProfile reference (`name`) |
+| `filesFromConfigMap` | []FileFromConfigMap | ConfigMap-backed payload files mounted for this Node |
 | `filesFromURL` | []FileFromURL | Files the launcher fetches from a URL before launching the node (`filePath` + `url`) |
 
 Notable properties:
 
 - **No links/interfaces in the spec.** Wiring lives exclusively on [Link](#link-crd) objects.
 - **No deployment policy in the spec.** Expose behavior, resources, pull secrets, scheduling,
-  privileges and the like live on [NodeProfile](#nodeprofile-crd) objects selected by labels.
+  privileges and the like live on one explicitly referenced
+  [LauncherProfile](#launcherprofile-crd), or global Config defaults when the reference is absent.
+- **An explicit missing profile fails closed.** The Node is not realized and reports a
+  `LauncherProfileResolved=False` condition; the controller does not silently use defaults.
 - **Grouped nodes** (several containerlab nodes sharing one pod) need no clabernetes field:
   `network-mode: container:<primary>` -- the containerlab-native expression -- is what the
-  controller derives grouping from. Secondaries get no own deployment; their services select
-  the primary's pod.
+  controller derives grouping from. The primary's profile is authoritative; a secondary can
+  omit its reference or name the same profile, but cannot select a conflicting profile.
 - `ports` feeds the expose machinery: the controller allocates the load balancer port set into
   `status.exposedPorts` (allocations are status, never spec). Omitting ports gives you the
   auto-expose defaults unless a profile disables them.
@@ -425,7 +447,8 @@ Notable properties:
 | `readiness` | string | `ready`, `notready` or `unknown` -- as reported by the launcher deployment |
 | `probeStatuses` | NodeProbeStatuses | Per-probe (startup/readiness/liveness) statuses |
 | `exposedPorts` | NodeExposedPorts | Expose port allocations (`exposePort`/`destinationPort`/`protocol`) and load balancer address |
-| `appliedProfiles` | []string | NodeProfiles applied when rendering this node, in ascending precedence order |
+| `conditions` | []Condition | Includes LauncherProfile resolution and realization state |
+| `appliedLauncherProfile` | object | Successfully applied profile `name`, `uid`, and `generation`; absent when only Config defaults are used |
 
 ---
 
@@ -453,6 +476,7 @@ kind: Link
 metadata:
   name: srl1-e1-1-srl2-e1-1     # any name; deterministic when compiler emitted
 spec:                            # the wire as the user drew it -- nothing else
+  connectivity: vxlan           # optional; defaults to vxlan, or use slurpeeth
   endpointA:
     nodeName: srl1               # references the Node object name in this namespace
     interfaceName: e1-1
@@ -470,6 +494,7 @@ status:
 |-------|------|-------------|
 | `endpointA` | LinkEndpointSpec | The "a" side: `nodeName` + `interfaceName` |
 | `endpointB` | LinkEndpointSpec | The "b" side: `nodeName` + `interfaceName` |
+| `connectivity` | string | Authoritative flavor consumed by both endpoints: `vxlan` (default) or `slurpeeth` |
 | `mtu` | int | Optional link MTU; zero means containerlab default |
 
 ### LinkStatus Fields
@@ -486,24 +511,21 @@ just that node's pod.
 
 ---
 
-## NodeProfile CRD
+## LauncherProfile CRD
 
-The `NodeProfile` CRD holds *deployment policy* -- everything that is fleet policy rather than
-per-node payload. Profiles select Nodes with a standard label selector, so emitters of Nodes
-never need to know profiles exist (the kubernetes policy-attachment pattern).
+The `LauncherProfile` CRD holds reusable Kubernetes and launcher realization policy. A Node
+explicitly attaches at most one profile through `spec.launcherProfileRef`; labels, selectors,
+priorities, and multi-profile merging are not attachment mechanisms. Omitted profile fields
+inherit global [Config](#config-crd) defaults.
 
 ### Basic Structure
 
 ```yaml
 apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: NodeProfile
+kind: LauncherProfile
 metadata:
   name: my-lab
 spec:
-  nodeSelector:                  # standard label selector; empty = every Node in namespace
-    matchLabels:
-      clabernetes/topologyOwner: my-lab
-  priority: 10                   # higher wins per field on overlap; name breaks ties
   expose:
     disableAutoExpose: false
   imagePull:
@@ -514,28 +536,29 @@ spec:
   scheduling: {}                 # nodeSelector/tolerations for launcher pods
   deployment: {}                 # privileged, persistence, launcher image/log level, ...
   statusProbes: {}               # ssh/tcp status probe configuration
-  connectivity: vxlan            # or slurpeeth
 ```
 
-### NodeProfileSpec Fields
+### LauncherProfileSpec Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `nodeSelector` | LabelSelector | Which Nodes (in this namespace) the profile applies to; empty selects all |
-| `priority` | int | Ordering when several profiles select a Node -- higher wins per field, name breaks ties |
-| `expose` | NodeProfileExpose | `disableExpose`, `disableAutoExpose`, `exposeType`, `useNodeMgmtIpv4Address`, `useNodeMgmtIpv6Address` |
-| `imagePull` | NodeProfileImagePull | `insecureRegistries`, `pullThroughOverride`, `pullSecrets`, `dockerDaemonConfig`, `dockerConfig` |
+| `expose` | LauncherProfileExpose | `disableExpose`, `disableAutoExpose`, `exposeType`, `useNodeMgmtIpv4Address`, `useNodeMgmtIpv6Address` |
+| `imagePull` | LauncherProfileImagePull | `insecureRegistries`, `pullThroughOverride`, `pullSecrets`, `dockerDaemonConfig`, `dockerConfig` |
 | `resources` | ResourceRequirements | Launcher pod resources |
 | `scheduling` | Scheduling | Launcher pod `nodeSelector` and `tolerations` |
-| `deployment` | NodeProfileDeployment | `privilegedLauncher`, `persistence`, `filesFromConfigMap`, `containerlabDebug/Timeout/Version`, `launcherImage/PullPolicy/LogLevel`, `extraEnv` |
+| `deployment` | LauncherProfileDeployment | `privilegedLauncher`, `persistence`, `containerlabDebug/Timeout/Version`, `launcherImage/PullPolicy/LogLevel`, `extraEnv` |
 | `statusProbes` | StatusProbes | Status probe configuration (same shape as on Topology) |
-| `mgmt` | MgmtNet | containerlab management network settings for the launcher pods |
-| `connectivity` | string | `vxlan` (default) or `slurpeeth` |
+| `mgmt` | MgmtNet | Temporary shared management-network compatibility field for Topology-generated profiles |
 
-Resolution, kept deliberately boring: the helm-managed global [Config](#config-crd) is the
-base, then every matching profile merges over it per field in ascending `priority`. There are
-no per-Node overrides -- if a single node needs special treatment, give it a label and a
-profile. The chain applied to a node is recorded in its `status.appliedProfiles`.
+Per-node payload belongs on Node, and connectivity belongs on Link. `mgmt` remains on
+LauncherProfile only as a temporary bridge so existing Topology manifests retain their current
+management-network behavior; its final owner is deferred.
+
+This replaces the unreleased alpha `NodeProfile` contract. For manifests created on that branch,
+create an equivalent LauncherProfile, remove selector/priority fields, move connectivity to each
+Link and payload attachments to each Node, then set `spec.launcherProfileRef.name` on intended
+Nodes. No released-user Topology migration is required: existing Topology manifests continue to
+compile into the new primitives.
 
 ---
 

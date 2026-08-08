@@ -1,7 +1,15 @@
 package v1alpha1
 
 import (
+	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+)
+
+const (
+	// NodeConditionLauncherProfileResolved reports whether the Node's effective
+	// LauncherProfile reference resolved successfully.
+	NodeConditionLauncherProfileResolved = "LauncherProfileResolved"
 )
 
 // +genclient
@@ -14,9 +22,9 @@ import (
 // containerlab node name -- the launcher pod hostname and the node's services (`<name>` for
 // exposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the
 // namespace is the topology boundary. The spec is simply what a human would write for the node
-// in a containerlab topology file (plus filesFromURL); wiring lives exclusively on Link objects
-// and everything operational (port allocations, readiness, applied profiles) is stamped by the
-// controller into the status.
+// in a containerlab topology file (plus per-node payload and launcherProfileRef); wiring lives
+// exclusively on Link objects and everything operational is stamped by the controller into
+// status.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path="nodes",shortName="c9snode"
 // +kubebuilder:printcolumn:JSONPath=".spec.kind",name=Kind,type=string
@@ -32,20 +40,30 @@ type Node struct {
 }
 
 // NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
-// verbatim containerlab vocabulary, no wrapper -- plus the one clabernetes-side per-node payload
-// field (filesFromURL). The definition must be self-contained: expanding topology
-// defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
-// this for you). Anything that is deployment *policy* rather than node payload -- expose
-// behavior, image pull config, launcher resources, scheduling, privileges -- lives on
-// NodeProfile objects which select Nodes by label. Unknown (i.e. newer containerlab vocabulary)
-// fields are preserved by the api server but are not (yet) interpreted by clabernetes.
+// verbatim containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields
+// and an optional LauncherProfile reference. The definition must be self-contained: expanding
+// topology defaults/kinds into the node is the emitter's job (the Topology compiler and
+// clabverter do this for you). Anything that is deployment *policy* rather than node payload --
+// expose behavior, image pull config, launcher resources, scheduling, privileges -- lives on
+// LauncherProfile objects explicitly referenced by Nodes. Unknown (i.e. newer containerlab
+// vocabulary) fields are preserved by the api server but are not (yet) interpreted by
+// clabernetes.
 // +kubebuilder:pruning:PreserveUnknownFields
 type NodeSpec struct {
 	NodeDefinition `json:",inline" yaml:",inline"`
 
+	// LauncherProfileRef optionally names the same-namespace LauncherProfile supplying launcher
+	// policy. When omitted, global Config defaults are used.
+	// +optional
+	//nolint:lll // The qualified type and serialization tags form one declaration.
+	LauncherProfileRef *k8scorev1.LocalObjectReference `json:"launcherProfileRef,omitempty" yaml:"-"`
+	// FilesFromConfigMap holds files mounted from ConfigMaps into the launcher responsible for
+	// this Node.
+	// +listType=atomic
+	// +optional
+	FilesFromConfigMap []FileFromConfigMap `json:"filesFromConfigMap,omitempty" yaml:"-"`
 	// FilesFromURL holds any files that the launcher for this node should fetch from a URL prior
-	// to launching the node. This is the one clabernetes (non containerlab) field in the spec --
-	// it is per-node payload, unlike the policy knobs which live on NodeProfile.
+	// to launching the node.
 	// +listType=atomic
 	// +optional
 	FilesFromURL []FileFromURL `json:"filesFromURL,omitempty" yaml:"-"`
@@ -67,12 +85,25 @@ type NodeStatus struct {
 	// service from this very field; the launcher reads it to publish the ports on the pod.
 	// +optional
 	ExposedPorts *NodeExposedPorts `json:"exposedPorts,omitempty"`
-	// AppliedProfiles lists the NodeProfiles (in ascending precedence order) that were applied
-	// when rendering this node's deployment -- purely observability so a human can answer "which
-	// profile won".
-	// +listType=atomic
+	// Conditions contains the current conditions for this Node.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
-	AppliedProfiles []string `json:"appliedProfiles,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// AppliedLauncherProfile identifies the LauncherProfile successfully applied to the launcher
+	// workload. It is nil when the Node uses only global Config defaults.
+	// +optional
+	AppliedLauncherProfile *AppliedLauncherProfileStatus `json:"appliedLauncherProfile,omitempty"`
+}
+
+// AppliedLauncherProfileStatus identifies the exact LauncherProfile revision applied to a Node.
+type AppliedLauncherProfileStatus struct {
+	// Name is the LauncherProfile name.
+	Name string `json:"name"`
+	// UID distinguishes replacement profiles that reuse a name.
+	UID apimachinerytypes.UID `json:"uid"`
+	// Generation is the applied LauncherProfile generation.
+	Generation int64 `json:"generation"`
 }
 
 // NodeExposedPorts holds the resolved expose port allocations (and the resulting load balancer

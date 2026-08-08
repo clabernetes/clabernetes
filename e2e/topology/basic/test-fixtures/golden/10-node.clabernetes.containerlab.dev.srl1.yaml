@@ -11,14 +11,18 @@ metadata:
   namespace: NAMESPACE
   ownerReferences:
     - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      blockOwnerDeletion: true
+      controller: true
       kind: Topology
       name: topology-basic
 spec:
   image: ghcr.io/nokia/srlinux
   kind: srl
+  launcherProfileRef:
+    name: topology-basic
 status:
-  appliedProfiles:
-    - topology-basic
+  appliedLauncherProfile:
+    name: topology-basic
   exposedPorts:
     ports:
       - destinationPort: 21

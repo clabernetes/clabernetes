@@ -120,7 +120,7 @@ type NodeDefinition struct {
 	// +optional
 	Runtime string `json:"runtime,omitempty" yaml:"runtime,omitempty"`
 	// CPU is the node CPU limit (cgroup or hypervisor) -- note that this is the *containerlab*
-	// (docker) cpu setting, launcher pod resources are NodeProfile territory.
+	// (docker) cpu setting, launcher pod resources are LauncherProfile territory.
 	// +optional
 	CPU float64 `json:"cpu,omitempty" yaml:"cpu,omitempty"`
 	// CPUSet is the set of CPUs the node can use.

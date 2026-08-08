@@ -15,7 +15,7 @@ func TestUpdateVxlanTunnelsCommitsCurrentState(t *testing.T) {
 	manager := &vxlanManager{
 		common: &common{ctx: t.Context(), logger: &claberneteslogging.FakeInstance{}},
 		currentTunnels: map[string]*Tunnel{
-			initial.LocalInterface: initial,
+			tunnelTerminationKey(initial): initial,
 		},
 	}
 
@@ -53,7 +53,8 @@ func TestUpdateVxlanTunnelsCommitsCurrentState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(manager.currentTunnels[initial.LocalInterface], initial) || creates != 1 {
+	if !reflect.DeepEqual(manager.currentTunnels[tunnelTerminationKey(initial)], initial) ||
+		creates != 1 {
 		t.Fatalf(
 			"create did not commit desired state: tunnels=%v creates=%d",
 			manager.currentTunnels,
@@ -81,7 +82,7 @@ func TestUpdateVxlanTunnelsCommitsCurrentState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(manager.currentTunnels[changed.LocalInterface], changed) {
+	if !reflect.DeepEqual(manager.currentTunnels[tunnelTerminationKey(changed)], changed) {
 		t.Fatalf("replacement did not commit changed tunnel: %v", manager.currentTunnels)
 	}
 
@@ -95,7 +96,7 @@ func TestUpdateVxlanTunnelsKeepsRetryableStateOnFailure(t *testing.T) {
 	manager := &vxlanManager{
 		common: &common{ctx: t.Context(), logger: &claberneteslogging.FakeInstance{}},
 		currentTunnels: map[string]*Tunnel{
-			initial.LocalInterface: initial,
+			tunnelTerminationKey(initial): initial,
 		},
 		deleteTunnel: func(context.Context, string, string) error {
 			return claberneteserrors.ErrConnectivity
@@ -110,7 +111,7 @@ func TestUpdateVxlanTunnelsKeepsRetryableStateOnFailure(t *testing.T) {
 		t.Fatal("expected delete failure")
 	}
 
-	if !reflect.DeepEqual(manager.currentTunnels[initial.LocalInterface], initial) {
+	if !reflect.DeepEqual(manager.currentTunnels[tunnelTerminationKey(initial)], initial) {
 		t.Fatal("failed delete was removed from current state")
 	}
 

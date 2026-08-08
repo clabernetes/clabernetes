@@ -43,6 +43,7 @@ func TestLinkToLocalTunnel(t *testing.T) {
 			localNodes: map[string]bool{"srl1": true},
 			expectedTunnel: &Tunnel{
 				TunnelID:        101,
+				Connectivity:    clabernetesapisv1alpha1.LinkConnectivityVXLAN,
 				Destination:     "srl2-vx.clabernetes.svc.cluster.local",
 				LocalNode:       "srl1",
 				LocalInterface:  "e1-1",
@@ -56,6 +57,7 @@ func TestLinkToLocalTunnel(t *testing.T) {
 			localNodes: map[string]bool{"srl2": true},
 			expectedTunnel: &Tunnel{
 				TunnelID:        101,
+				Connectivity:    clabernetesapisv1alpha1.LinkConnectivityVXLAN,
 				Destination:     "srl1-vx.clabernetes.svc.cluster.local",
 				LocalNode:       "srl2",
 				LocalInterface:  "e1-1",
@@ -70,6 +72,7 @@ func TestLinkToLocalTunnel(t *testing.T) {
 			dnsSuffix:  "svc.some.cluster",
 			expectedTunnel: &Tunnel{
 				TunnelID:        101,
+				Connectivity:    clabernetesapisv1alpha1.LinkConnectivityVXLAN,
 				Destination:     "srl2-vx.clabernetes.svc.some.cluster",
 				LocalNode:       "srl1",
 				LocalInterface:  "e1-1",
@@ -102,6 +105,17 @@ func TestLinkToLocalTunnel(t *testing.T) {
 				t.Fatalf("expected tunnel %+v, got %+v", testCase.expectedTunnel, actual)
 			}
 		})
+	}
+}
+
+func TestLinkToLocalTunnelCarriesExplicitConnectivity(t *testing.T) {
+	link := testLink()
+	link.Spec.Connectivity = clabernetesapisv1alpha1.LinkConnectivitySlurpeeth
+
+	tunnel := LinkToLocalTunnel(map[string]bool{"srl1": true}, link)
+	if tunnel == nil ||
+		tunnel.Connectivity != clabernetesapisv1alpha1.LinkConnectivitySlurpeeth {
+		t.Fatalf("expected explicit slurpeeth tunnel, got %+v", tunnel)
 	}
 }
 

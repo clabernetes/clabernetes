@@ -40,9 +40,9 @@ spec:
           containerlab node name -- the launcher pod hostname and the node's services (`<name>` for
           exposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the
           namespace is the topology boundary. The spec is simply what a human would write for the node
-          in a containerlab topology file (plus filesFromURL); wiring lives exclusively on Link objects
-          and everything operational (port allocations, readiness, applied profiles) is stamped by the
-          controller into the status.
+          in a containerlab topology file (plus per-node payload and launcherProfileRef); wiring lives
+          exclusively on Link objects and everything operational is stamped by the controller into
+          status.
         properties:
           apiVersion:
             description: |-
@@ -64,13 +64,14 @@ spec:
           spec:
             description: |-
               NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
-              verbatim containerlab vocabulary, no wrapper -- plus the one clabernetes-side per-node payload
-              field (filesFromURL). The definition must be self-contained: expanding topology
-              defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
-              this for you). Anything that is deployment *policy* rather than node payload -- expose
-              behavior, image pull config, launcher resources, scheduling, privileges -- lives on
-              NodeProfile objects which select Nodes by label. Unknown (i.e. newer containerlab vocabulary)
-              fields are preserved by the api server but are not (yet) interpreted by clabernetes.
+              verbatim containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields
+              and an optional LauncherProfile reference. The definition must be self-contained: expanding
+              topology defaults/kinds into the node is the emitter's job (the Topology compiler and
+              clabverter do this for you). Anything that is deployment *policy* rather than node payload --
+              expose behavior, image pull config, launcher resources, scheduling, privileges -- lives on
+              LauncherProfile objects explicitly referenced by Nodes. Unknown (i.e. newer containerlab
+              vocabulary) fields are preserved by the api server but are not (yet) interpreted by
+              clabernetes.
             properties:
               SANs:
                 description: SANs is the list of subject alternative names to be added
@@ -187,7 +188,7 @@ spec:
               cpu:
                 description: |-
                   CPU is the node CPU limit (cgroup or hypervisor) -- note that this is the *containerlab*
-                  (docker) cpu setting, launcher pod resources are NodeProfile territory.
+                  (docker) cpu setting, launcher pod resources are LauncherProfile territory.
                 type: number
               cpu-set:
                 description: CPUSet is the set of CPUs the node can use.
@@ -262,11 +263,46 @@ spec:
                     type: array
                     x-kubernetes-list-type: atomic
                 type: object
+              filesFromConfigMap:
+                description: |-
+                  FilesFromConfigMap holds files mounted from ConfigMaps into the launcher responsible for
+                  this Node.
+                items:
+                  description: |-
+                    FileFromConfigMap represents a file that you would like to mount (from a configmap) in the
+                    launcher pod for a given node.
+                  properties:
+                    configMapName:
+                      description: ConfigMapName is the name of the configmap to mount.
+                      type: string
+                    configMapPath:
+                      description: |-
+                        ConfigMapPath is the path/key in the configmap to mount, if not specified the configmap will
+                        be mounted without a sub-path.
+                      type: string
+                    filePath:
+                      description: FilePath is the path to mount the file.
+                      type: string
+                    mode:
+                      default: read
+                      description: |-
+                        Mode sets the file permissions when mounting the configmap. Since the configmap will be read
+                        only filesystem anyway, we basically just want to expose if the file should be mounted as
+                        executable or not. So, default permissions would be 0o444 (read) and execute would be 0o555.
+                      enum:
+                      - read
+                      - execute
+                      type: string
+                  required:
+                  - configMapName
+                  - filePath
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
               filesFromURL:
                 description: |-
                   FilesFromURL holds any files that the launcher for this node should fetch from a URL prior
-                  to launching the node. This is the one clabernetes (non containerlab) field in the spec --
-                  it is per-node payload, unlike the policy knobs which live on NodeProfile.
+                  to launching the node.
                 items:
                   description: |-
                     FileFromURL represents a file that you would like to mount from a URL in the launcher pod for
@@ -338,6 +374,22 @@ spec:
                   type: string
                 description: Labels holds the container labels for the node.
                 type: object
+              launcherProfileRef:
+                description: |-
+                  LauncherProfileRef optionally names the same-namespace LauncherProfile supplying launcher
+                  policy. When omitted, global Config defaults are used.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               license:
                 description: License is the path to the license file for the node.
                 type: string
@@ -421,15 +473,87 @@ spec:
               NodeStatus is the status for a Node resource. Everything in here is an *allocation* or an
               *observation* made by the controller -- user intent never lives in the status.
             properties:
-              appliedProfiles:
+              appliedLauncherProfile:
                 description: |-
-                  AppliedProfiles lists the NodeProfiles (in ascending precedence order) that were applied
-                  when rendering this node's deployment -- purely observability so a human can answer "which
-                  profile won".
+                  AppliedLauncherProfile identifies the LauncherProfile successfully applied to the launcher
+                  workload. It is nil when the Node uses only global Config defaults.
+                properties:
+                  generation:
+                    description: Generation is the applied LauncherProfile generation.
+                    format: int64
+                    type: integer
+                  name:
+                    description: Name is the LauncherProfile name.
+                    type: string
+                  uid:
+                    description: UID distinguishes replacement profiles that reuse
+                      a name.
+                    type: string
+                required:
+                - generation
+                - name
+                - uid
+                type: object
+              conditions:
+                description: Conditions contains the current conditions for this Node.
                 items:
-                  type: string
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
                 type: array
-                x-kubernetes-list-type: atomic
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               exposedPorts:
                 description: |-
                   ExposedPorts holds the expose port *allocations* for this node -- the controller assigns

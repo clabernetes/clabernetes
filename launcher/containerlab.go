@@ -16,6 +16,11 @@ import (
 	clabernetesutil "github.com/srl-labs/clabernetes/util"
 )
 
+const (
+	containerlabArchAMD64 = "amd64"
+	containerlabArchARM64 = "arm64"
+)
+
 func extractContainerlabBin(r io.Reader) error {
 	gzipReader, err := gzip.NewReader(r)
 	if err != nil {
@@ -69,7 +74,7 @@ func extractContainerlabBin(r io.Reader) error {
 
 func containerlabReleaseArch(goarch string) (string, error) {
 	switch goarch {
-	case "amd64", "arm64":
+	case containerlabArchAMD64, containerlabArchARM64:
 		return goarch, nil
 	default:
 		return "", fmt.Errorf(

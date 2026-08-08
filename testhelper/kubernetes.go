@@ -168,6 +168,19 @@ func NormalizeNode(t *testing.T, objectData []byte) []byte {
 	objectData = YQCommand(t, objectData, "del(.status.exposedPorts.loadBalancerAddress)")
 	objectData = YQCommand(t, objectData, "del(.status.readiness)")
 	objectData = YQCommand(t, objectData, "del(.status.probeStatuses)")
+	objectData = YQCommand(t, objectData, "del(.status.appliedLauncherProfile.uid)")
+	objectData = YQCommand(t, objectData, "del(.status.appliedLauncherProfile.generation)")
+
+	return objectData
+}
+
+// NormalizeLink removes cluster-assigned endpoint UIDs while preserving the endpoint names that
+// demonstrate the Link controller has bound the Link to both Node identities.
+func NormalizeLink(t *testing.T, objectData []byte) []byte {
+	t.Helper()
+
+	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointA.uid)")
+	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointB.uid)")
 
 	return objectData
 }

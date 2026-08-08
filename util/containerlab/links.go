@@ -12,6 +12,17 @@ import (
 func ValidateLink(link *clabernetesapisv1alpha1.Link) error {
 	endpointA, endpointB := link.Spec.EndpointA, link.Spec.EndpointB
 
+	switch link.Spec.NormalizedConnectivity() {
+	case clabernetesapisv1alpha1.LinkConnectivityVXLAN,
+		clabernetesapisv1alpha1.LinkConnectivitySlurpeeth:
+	default:
+		return fmt.Errorf(
+			"%w: unsupported link connectivity %q",
+			claberneteserrors.ErrInvalidData,
+			link.Spec.Connectivity,
+		)
+	}
+
 	if endpointA.NodeName == clabernetesapisv1alpha1.LinkHostNodeName &&
 		endpointB.NodeName == clabernetesapisv1alpha1.LinkHostNodeName {
 		return fmt.Errorf(

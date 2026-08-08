@@ -15,7 +15,7 @@ func TestMain(m *testing.M) {
 }
 
 // TestNodeLinkDirect exercises the primary api without any Topology object: hand written Node,
-// Link, and NodeProfile objects must yield launcher deployments, per-node services, tunnel id
+// Link, and LauncherProfile objects must yield launcher deployments, per-node services, tunnel id
 // allocations, and status stamping -- and a rewire (changing a link's remote interface) must
 // keep the allocated tunnel id (the launchers move the tunnel live, no pod roll).
 func TestNodeLinkDirect(t *testing.T) {
@@ -28,8 +28,14 @@ func TestNodeLinkDirect(t *testing.T) {
 	steps := clabernetestesthelpersuite.Steps{
 		{
 			Index:       10,
-			Description: "Create node/link/nodeprofile objects directly -- no Topology",
+			Description: "Create Node/Link/LauncherProfile objects directly -- no Topology",
 			AssertObjects: map[string][]clabernetestesthelpersuite.AssertObject{
+				"launcherprofile": {
+					{
+						Name:           "direct",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
+					},
+				},
 				"node.clabernetes.containerlab.dev": {
 					{
 						Name: "srl1",
@@ -46,8 +52,10 @@ func TestNodeLinkDirect(t *testing.T) {
 				},
 				"link": {
 					{
-						Name:           "srl1-e1-1-srl2-e1-1",
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
+						Name: "srl1-e1-1-srl2-e1-1",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeLink,
+						},
 					},
 				},
 				"service": {
@@ -87,8 +95,10 @@ func TestNodeLinkDirect(t *testing.T) {
 			AssertObjects: map[string][]clabernetestesthelpersuite.AssertObject{
 				"link": {
 					{
-						Name:           "srl1-e1-1-srl2-e1-1",
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
+						Name: "srl1-e1-1-srl2-e1-1",
+						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
+							clabernetestesthelper.NormalizeLink,
+						},
 					},
 				},
 			},

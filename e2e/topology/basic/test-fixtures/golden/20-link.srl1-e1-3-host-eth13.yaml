@@ -10,13 +10,21 @@ metadata:
   namespace: NAMESPACE
   ownerReferences:
     - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      blockOwnerDeletion: true
+      controller: true
       kind: Topology
       name: topology-basic
 spec:
+  connectivity: vxlan
   endpointA:
     interfaceName: e1-3
     nodeName: srl1
   endpointB:
     interfaceName: eth13
     nodeName: host
-status: {}
+status:
+  resolvedEndpoints:
+    endpointA:
+      nodeName: srl1
+    endpointB:
+      nodeName: host
