@@ -62,8 +62,6 @@ spec:
               value: clabernetes
             - name: MANAGER_NAMESPACE
               value: clabernetes
-            - name: LAUNCHER_CRI_KIND
-              value: containerd
             - name: LAUNCHER_IMAGE_PULL_THROUGH_MODE
               value: auto
             - name: LAUNCHER_LOGGER_LEVEL
