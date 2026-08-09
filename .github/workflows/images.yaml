@@ -57,7 +57,11 @@ jobs:
       - name: checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
+          lfs: true
+
+      - name: pull git lfs assets
+        run: git lfs pull
 
       - name: login to ghcr
         if: ${{ inputs.push }}
