@@ -1,3 +1,4 @@
 node_modules/
 .react-router/
 build/
+app/generated/crd-views.ts

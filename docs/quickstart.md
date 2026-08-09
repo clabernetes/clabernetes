@@ -1,6 +1,7 @@
 ---
 title: Local quickstart
 description: Launch c9s and a sample network lab in a disposable KinD cluster.
+icon: Rocket
 ---
 
 The repository includes a local workflow that creates a single-node KinD cluster, installs the

@@ -290,5 +290,5 @@ kubectl exec -it deploy/my-topology-srl1 -- sr_cli
 
 ## Related
 
-- [CRD Reference: Expose Fields](/docs/crd-reference#expose)
+- [CRD Reference: Expose Fields](/docs/crd/topology)
 - [Examples: Expose Configurations](https://github.com/clabernetes/clabernetes/tree/main/examples/expose)

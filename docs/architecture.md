@@ -1,6 +1,7 @@
 ---
 title: Architecture
 description: How Clabernetes controllers, launchers, resources, and connectivity work together.
+icon: Layers
 ---
 
 ## Overview

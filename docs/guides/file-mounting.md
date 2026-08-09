@@ -403,5 +403,5 @@ kubectl run curl-test --rm -it --image=curlimages/curl -- curl -I <url>
 ## Related
 
 - [Example: with-configmap-files.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-configmap-files.yaml)
-- [CRD Reference: FilesFromConfigMap](/docs/crd-reference#filefromconfigmap)
-- [CRD Reference: FilesFromURL](/docs/crd-reference#filefromurl)
+- [CRD Reference: FilesFromConfigMap](/docs/crd/node)
+- [CRD Reference: FilesFromURL](/docs/crd/node)

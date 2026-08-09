@@ -1,0 +1,15 @@
+{
+  "title": "CRD Reference",
+  "description": "Custom resource definitions reference",
+  "icon": "Braces",
+  "root": true,
+  "pages": [
+    "index",
+    "topology",
+    "node",
+    "link",
+    "launcher-profile",
+    "config",
+    "image-request"
+  ]
+}

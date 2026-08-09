@@ -234,4 +234,4 @@ Consider:
 ## Related
 
 - [Example: with-persistence.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-persistence.yaml)
-- [CRD Reference: Persistence](/docs/crd-reference#persistence)
+- [CRD Reference: Persistence](/docs/crd/launcher-profile)

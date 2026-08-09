@@ -414,5 +414,5 @@ or multi-profile priority chain.
 ## Related
 
 - [Example: private-registry.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/advanced/private-registry.yaml)
-- [CRD Reference: ImagePull](/docs/crd-reference#imagepull)
-- [CRD Reference: ImageRequest](/docs/crd-reference#imagerequest-crd)
+- [CRD Reference: ImagePull](/docs/crd/topology)
+- [CRD Reference: ImageRequest](/docs/crd/image-request)

@@ -1,0 +1,12 @@
+---
+title: Topology
+description: Topology custom resource schema.
+icon: Network
+---
+
+The `Topology` CRD is a supported, backward-compatible auxiliary resource for defining a whole
+containerlab lab. Its controller compiles the definition into independently reconciled
+`LauncherProfile`, `Link`, and `Node` resources. Node and Link are the primary API and do not
+require a Topology.
+
+<CrdViewer name="topology" />

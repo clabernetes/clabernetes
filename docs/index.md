@@ -1,6 +1,7 @@
 ---
 title: Overview
 description: Run containerlab network topologies across a Kubernetes cluster.
+icon: Sparkles
 ---
 
 Clabernetes, also known as **c9s**, is a set of Kubernetes custom resources and controllers for
@@ -40,4 +41,4 @@ make try-c9s
 - [Architecture](/docs/architecture) explains the controllers, launchers, and connectivity model.
 - [Guides](/docs/guides/expose-configuration) cover common deployment and operations tasks.
 - [Examples](/docs/examples) point to complete manifests in this repository.
-- [CRD reference](/docs/crd-reference) documents the available resource fields.
+- [CRD reference](/docs/crd) documents the available resource fields.
