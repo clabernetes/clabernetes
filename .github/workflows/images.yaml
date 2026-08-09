@@ -39,9 +39,6 @@ jobs:
           - name: clabernetes-launcher
             file: build/launcher.Dockerfile
             context: "."
-          - name: clabernetes-ui
-            file: build/ui.Dockerfile
-            context: ui
           - name: clabverter
             file: build/clabverter.Dockerfile
             context: "."
@@ -114,7 +111,6 @@ jobs:
         image:
           - clabernetes-manager
           - clabernetes-launcher
-          - clabernetes-ui
           - clabverter
     steps:
       - name: download digests

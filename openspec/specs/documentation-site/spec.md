@@ -8,12 +8,12 @@ Provide a local-first, statically prerenderable documentation site for c9s that 
 
 ### Requirement: Isolated local documentation workflow
 
-The repository SHALL provide a pnpm-managed documentation application that can be installed, developed, built, and previewed independently of the existing operator UI. The repository SHALL expose a `docs-install` Makefile target for locked dependency installation and a `make serve-docs` target that depends on it and starts a host-reachable documentation development server from the repository root.
+The repository SHALL provide a pnpm-managed documentation application that can be installed, developed, built, and previewed independently of the c9s operator. The repository SHALL expose a `docs-install` Makefile target for locked dependency installation and a `make serve-docs` target that depends on it and starts a host-reachable documentation development server from the repository root.
 
 #### Scenario: Start the local documentation site
 
 - **WHEN** a contributor runs the documented development command without previously installing documentation dependencies
-- **THEN** the locked dependencies are installed and a host-reachable local development server starts with live content updates without requiring Kubernetes, the operator UI, or any Clabernetes service
+- **THEN** the locked dependencies are installed and a host-reachable local development server starts with live content updates without requiring Kubernetes or any Clabernetes service
 
 #### Scenario: Run through the root Makefile
 
@@ -87,12 +87,12 @@ Documentation links SHALL resolve to site routes or explicit repository and exte
 
 ### Requirement: Documentation application isolation
 
-The documentation application SHALL maintain its own dependency manifest and pnpm lockfile and SHALL NOT require imports from or installation of the existing `ui` package.
+The documentation application SHALL maintain its own dependency manifest and pnpm lockfile.
 
 #### Scenario: Install documentation dependencies
 
 - **WHEN** a contributor installs dependencies from the documentation package
-- **THEN** pnpm resolves the documentation dependency graph without installing the operator UI dependency graph
+- **THEN** pnpm resolves the documentation dependency graph
 
 ### Requirement: Hosted documentation deployment integration
 

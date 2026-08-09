@@ -3,7 +3,7 @@
 This package contains the Fumadocs application. Documentation content remains in the repository
 `docs/` directory and is loaded by the Vite development and static build workflows.
 
-The package uses pnpm independently of the npm-managed operator UI under `ui/`.
+The package uses pnpm for dependency management.
 
 From the repository root:
 

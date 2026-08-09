@@ -25,37 +25,3 @@ spec:
     clabernetes/app: clabernetes-plus-clicker
     clabernetes/name: "clabernetes-plus-clicker-manager"
     clabernetes/component: manager
----
-# Source: clabernetes/templates/service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: clabernetes-plus-clicker-ui
-  namespace: clabernetes
-  labels:
-    chart: "clabernetes-0.0.0"
-    release: release-name
-    heritage: Helm
-    revision: "1"
-    app.kubernetes.io/name: "clabernetes-plus-clicker-ui"
-    clabernetes/app: clabernetes-plus-clicker
-    clabernetes/name: "clabernetes-plus-clicker-ui"
-    clabernetes/component: ui
-    anotherlabel: anotherlabelvalue
-    somelabel: somelabelvalue
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    annotherannotation: anotherannotationvalue
-    someannotation: someannotationvalue
-spec:
-  type: ClusterIP
-  sessionAffinity: None
-  ports:
-    - name: http
-      port: 80
-      protocol: TCP
-      targetPort: 3000
-  selector:
-    clabernetes/app: clabernetes-plus-clicker
-    clabernetes/name: "clabernetes-plus-clicker-ui"
-    clabernetes/component: ui

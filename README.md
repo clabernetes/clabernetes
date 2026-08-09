@@ -23,11 +23,10 @@ sample SR Linux plus multitool topology with:
 make try-c9s
 ```
 
-The target requires Docker and creates a single-node KinD cluster by default. It writes a KinD
-config with a fixed UI host port mapping, installs MetalLB, and prints access endpoints:
+The target requires Docker and creates a single-node KinD cluster by default. It installs MetalLB
+and prints access endpoints:
 
 ```text
-UI:                http://localhost:3000
 SR Linux SSH:      ssh admin@<load-balancer-ip>
 SR Linux gNMI:     <load-balancer-ip>:57400
 SR Linux NETCONF:  <load-balancer-ip>:830
@@ -55,7 +54,7 @@ make test-e2e-local
 ```
 
 This downloads pinned tools into `build/e2e/bin`, creates a single-node KinD
-cluster, builds the manager/launcher/ui images, loads them into the cluster,
+cluster, builds the manager/launcher images, loads them into the cluster,
 installs the local Helm chart, and runs the `e2e/...` Go tests. Re-runs are
 cheap: tools are cached and the cluster is reused.
 
@@ -80,9 +79,8 @@ make e2e-clean
 
 ## Documentation development
 
-The Fumadocs site under `docs-site/` renders the repository-owned content in `docs/`. It is an
-isolated pnpm package; the operator UI under `ui/` continues to use npm. Start the Vite development
-server from the repository root:
+The Fumadocs site under `docs-site/` renders the repository-owned content in `docs/`. Start the Vite
+development server from the repository root:
 
 ```bash
 make serve-docs
@@ -109,7 +107,7 @@ desired `kubectl` context, then run:
 make dev
 ```
 
-The target uses the existing DevSpace configuration to build the manager, launcher, and UI images,
+The target uses the existing DevSpace configuration to build the manager and launcher images,
 install the local Helm chart in the `clabernetes` namespace, synchronize the source tree into the
 manager pod, and start the manager with debug logging. If `devspace` is not already on `PATH`, the
 pinned version is downloaded to `build/dev/bin`. Each run forces the local chart to be redeployed

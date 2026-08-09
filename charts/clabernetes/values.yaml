@@ -170,40 +170,6 @@ globalConfig:
   naming: prefixed
 
 #
-# ui
-#
-# ya know, the ui, web thingy so you can click some buttons and see pretty pictures and stuff
-#
-ui:
-  enabled: true
-
-  deploymentAnnotations: {}
-  deploymentLabels: {}
-  deploymentTolerations: []
-  podAnnotations: {}
-  podLabels: {}
-
-  # defaults to .Chart.Version, if 0.0.0 version defaults to 'dev-latest' tag
-  image: "" # ghcr.io/clabernetes/clabernetes/clabernetes-ui:{{ .Chart.Version }}
-  imagePullPolicy: IfNotPresent
-
-  replicaCount: 3
-  resources:
-    requests:
-      memory: 128Mi
-      cpu: 50m
-    limits: {}
-
-  affinity: {}
-
-  ingress:
-    enabled: true
-    ingressClass: nginx
-    # you really almost certainly gotta do something with this if you want the ingress to work :)
-    host: ui.clabernetes.containerlab.dev
-    tls: []
-
-#
 # clicker
 #
 # this is an optional feature that can configure nodes in a cluster -- useful for setting things
