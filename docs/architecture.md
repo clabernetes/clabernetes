@@ -15,7 +15,7 @@ The model in one picture:
 ```
                  ┌──────────────────────────────────────────────────────┐
   AUXILIARY      │ Topology CR (backward-compatible compiler layer)    │
-                 │ containerlab/KNE + existing knobs → primitives      │
+                 │ containerlab + existing knobs → primitives            │
                  └──────────────────────┬───────────────────────────────┘
                                         │ owns, corrects drift, prunes
                                         ▼
@@ -76,7 +76,7 @@ The "brains" of clabernetes is the manager deployment which runs three cooperati
   (containerlab's `network-mode: container:<primary>`) share their primary's pod.
 - the **link controller** validates Links and allocates tunnel ids into their statuses.
 - the **topology controller** is the optional convenience layer: it *compiles* a Topology
-  (a containerlab or kne file plus knobs) into LauncherProfile/Link/Node objects -- expanding
+  (a containerlab file plus knobs) into LauncherProfile/Link/Node objects -- expanding
   topology defaults/kinds into each node so every emitted Node is self contained -- prunes
   emitted objects that fall out of the definition, protects them from drift, and aggregates
   fixed-size counts and readiness back into the Topology status. Profiles and Links are

@@ -1,10 +1,10 @@
 ---
 title: Topology
-description: The supported higher-level compiler from containerlab or KNE definitions to primitive resources.
+description: The supported higher-level compiler from containerlab definitions to primitive resources.
 ---
 
 `Topology` is a supported auxiliary resource for authors who want to submit a complete containerlab
-or KNE lab as one object. Its controller compiles that source into the primary c9s resources:
+lab as one object. Its controller compiles that source into the primary c9s resources:
 
 ```text
 Topology

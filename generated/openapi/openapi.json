@@ -2511,17 +2511,16 @@
                                 "type": "string"
                             },
                             "definition": {
-                                "description": "Definition defines the actual set of nodes (network ones, not k8s ones!) that this Topology\nCR represents. Historically, and probably most often, this means Topology holds a \"normal\"\ncontainerlab topology file that will be \"clabernetsified\", however this could also be a \"kne\"\nconfig, or perhaps others in the future.",
+                                "description": "Definition defines the actual set of nodes (network ones, not k8s ones!) that this Topology\nCR represents -- a containerlab topology file that will be \"clabernetsified\".",
                                 "properties": {
                                     "containerlab": {
                                         "description": "Containerlab holds a valid containerlab topology.",
                                         "type": "string"
-                                    },
-                                    "kne": {
-                                        "description": "Kne holds a valid kne topology.",
-                                        "type": "string"
                                     }
                                 },
+                                "required": [
+                                    "containerlab"
+                                ],
                                 "type": "object"
                             },
                             "deployment": {
@@ -2922,7 +2921,7 @@
                                 "description": "Expose holds configurations relevant to how clabernetes exposes a topology.",
                                 "properties": {
                                     "disableAutoExpose": {
-                                        "description": "DisableAutoExpose disables the automagic exposing of ports for a given topology. When this\nsetting is disabled clabernetes will not auto add ports so if you want to expose (via a\nload balancer service) you will need to have ports outlined in your containerlab config\n(or equivalent for kne). When this is `false` (default), clabernetes will add and expose the\nfollowing list of ports to whatever ports you have already defined:\n\n21    - tcp - ftp\n22    - tcp - ssh\n23    - tcp - telnet\n80    - tcp - http\n161   - udp - snmp\n443   - tcp - https\n830   - tcp - netconf (over ssh)\n5000  - tcp - telnet for vrnetlab qemu host\n5900  - tcp - vnc\n6030  - tcp - gnmi (arista default)\n9339  - tcp - gnmi/gnoi\n9340  - tcp - gribi\n9559  - tcp - p4rt\n57400 - tcp - gnmi (nokia srl/sros default)\n\nThis setting is *ignored completely* if `DisableExpose` is true!",
+                                        "description": "DisableAutoExpose disables the automagic exposing of ports for a given topology. When this\nsetting is disabled clabernetes will not auto add ports so if you want to expose (via a\nload balancer service) you will need to have ports outlined in your containerlab config.\nWhen this is `false` (default), clabernetes will add and expose the\nfollowing list of ports to whatever ports you have already defined:\n\n21    - tcp - ftp\n22    - tcp - ssh\n23    - tcp - telnet\n80    - tcp - http\n161   - udp - snmp\n443   - tcp - https\n830   - tcp - netconf (over ssh)\n5000  - tcp - telnet for vrnetlab qemu host\n5900  - tcp - vnc\n6030  - tcp - gnmi (arista default)\n9339  - tcp - gnmi/gnoi\n9340  - tcp - gribi\n9559  - tcp - p4rt\n57400 - tcp - gnmi (nokia srl/sros default)\n\nThis setting is *ignored completely* if `DisableExpose` is true!",
                                         "type": "boolean"
                                     },
                                     "disableExpose": {
@@ -3191,10 +3190,9 @@
                                 "x-kubernetes-list-type": "atomic"
                             },
                             "kind": {
-                                "description": "Kind is the topology kind this CR represents -- for example \"containerlab\".",
+                                "description": "Kind is the topology kind this CR represents -- \"containerlab\".",
                                 "enum": [
-                                    "containerlab",
-                                    "kne"
+                                    "containerlab"
                                 ],
                                 "type": "string"
                             },

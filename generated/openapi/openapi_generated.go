@@ -885,18 +885,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Definition(
 					"containerlab": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Containerlab holds a valid containerlab topology.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"kne": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kne holds a valid kne topology.",
+							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 				},
+				Required: []string{"containerlab"},
 			},
 		},
 	}
@@ -1084,7 +1079,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Expose(
 					},
 					"disableAutoExpose": {
 						SchemaProps: spec.SchemaProps{
-							Description: "DisableAutoExpose disables the automagic exposing of ports for a given topology. When this setting is disabled clabernetes will not auto add ports so if you want to expose (via a load balancer service) you will need to have ports outlined in your containerlab config (or equivalent for kne). When this is `false` (default), clabernetes will add and expose the following list of ports to whatever ports you have already defined:\n\n21    - tcp - ftp 22    - tcp - ssh 23    - tcp - telnet 80    - tcp - http 161   - udp - snmp 443   - tcp - https 830   - tcp - netconf (over ssh) 5000  - tcp - telnet for vrnetlab qemu host 5900  - tcp - vnc 6030  - tcp - gnmi (arista default) 9339  - tcp - gnmi/gnoi 9340  - tcp - gribi 9559  - tcp - p4rt 57400 - tcp - gnmi (nokia srl/sros default)\n\nThis setting is *ignored completely* if `DisableExpose` is true!",
+							Description: "DisableAutoExpose disables the automagic exposing of ports for a given topology. When this setting is disabled clabernetes will not auto add ports so if you want to expose (via a load balancer service) you will need to have ports outlined in your containerlab config. When this is `false` (default), clabernetes will add and expose the following list of ports to whatever ports you have already defined:\n\n21    - tcp - ftp 22    - tcp - ssh 23    - tcp - telnet 80    - tcp - http 161   - udp - snmp 443   - tcp - https 830   - tcp - netconf (over ssh) 5000  - tcp - telnet for vrnetlab qemu host 5900  - tcp - vnc 6030  - tcp - gnmi (arista default) 9339  - tcp - gnmi/gnoi 9340  - tcp - gribi 9559  - tcp - p4rt 57400 - tcp - gnmi (nokia srl/sros default)\n\nThis setting is *ignored completely* if `DisableExpose` is true!",
 							Default:     false,
 							Type:        []string{"boolean"},
 							Format:      "",
@@ -3988,7 +3983,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 				Properties: map[string]spec.Schema{
 					"definition": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Definition defines the actual set of nodes (network ones, not k8s ones!) that this Topology CR represents. Historically, and probably most often, this means Topology holds a \"normal\" containerlab topology file that will be \"clabernetsified\", however this could also be a \"kne\" config, or perhaps others in the future.",
+							Description: "Definition defines the actual set of nodes (network ones, not k8s ones!) that this Topology CR represents -- a containerlab topology file that will be \"clabernetsified\".",
 							Default:     map[string]interface{}{},
 							Ref: ref(
 								"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition",
@@ -4066,7 +4061,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyStatus(
 				Properties: map[string]spec.Schema{
 					"kind": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Kind is the topology kind this CR represents -- for example \"containerlab\".",
+							Description: "Kind is the topology kind this CR represents -- \"containerlab\".",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",

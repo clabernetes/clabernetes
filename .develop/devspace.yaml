@@ -28,7 +28,6 @@ vars:
   MANAGER_IMAGE: ${REGISTRY}/${CLABERNETES}-manager
   MANAGER_DEV_IMAGE: ${MANAGER_IMAGE}-dev
   LAUNCHER_IMAGE: ${REGISTRY}/${CLABERNETES}-launcher
-  UI_IMAGE: ${REGISTRY}/${CLABERNETES}-ui
   CLABVERTER_IMAGE: ${REGISTRY}/clabverter
 
   # always build w/ 0.0.0 -- overridden for actual releases by release profile. for "normal" builds
@@ -90,21 +89,6 @@ images:
       - ${COMMIT_HASH}
       - dev-latest
 
-  clabernetes-ui:
-    createPullSecret: false
-    image: ${UI_IMAGE}
-    context: ../ui/
-    dockerfile: ../build/ui.Dockerfile
-    rebuildStrategy: ignoreContextChanges
-    buildArgs:
-      VERSION: ${VERSION}-${COMMIT_HASH}
-    buildKit:
-      args:
-        - "--platform=${TARGET_PLATFORM}"
-    tags:
-      - dev-latest
-      - ${COMMIT_HASH}
-
   clabverter:
     createPullSecret: false
     image: ${CLABVERTER_IMAGE}
@@ -129,9 +113,6 @@ deployments:
       values:
         manager:
           image: ${MANAGER_IMAGE}
-          imagePullPolicy: ${PULL_POLICY}
-        ui:
-          image: ${UI_IMAGE}
           imagePullPolicy: ${PULL_POLICY}
         globalConfig:
           # The development deployment is declarative: it must replace launcher settings left by
@@ -163,16 +144,6 @@ dev:
       command: .develop/start.sh
 
 profiles:
-  - name: dev
-    patches:
-      - op: add
-        path: deployments.clabernetes.helm.values.ui
-        value:
-          enabled: true
-          ingress:
-            enabled: true
-            host: ui.clabernetes.${CLABERNETES_DEV_DOMAIN}
-
   - name: debug
     patches:
       - op: add
@@ -189,12 +160,6 @@ profiles:
     patches:
       - op: add
         path: deployments.clabernetes.helm.values.manager.replicaCount
-        value: 1
-
-  - name: single-ui
-    patches:
-      - op: add
-        path: deployments.clabernetes.helm.values.ui.replicaCount
         value: 1
 
   - name: auto-run-manager
@@ -243,16 +208,6 @@ profiles:
         value: ${RELEASE_VERSION}
 
       - op: replace
-        path: images.clabernetes-ui.tags
-        value:
-          - latest
-          - ${RELEASE_VERSION}
-          - ${COMMIT_HASH}
-      - op: replace
-        path: images.clabernetes-ui.buildArgs.VERSION
-        value: ${RELEASE_VERSION}
-
-      - op: replace
         path: images.clabverter.tags
         value:
           - latest
@@ -283,14 +238,6 @@ profiles:
         value: ${RELEASE_VERSION}
 
       - op: replace
-        path: images.clabernetes-ui.tags
-        value:
-          - ${RELEASE_VERSION}
-      - op: replace
-        path: images.clabernetes-ui.buildArgs.VERSION
-        value: ${RELEASE_VERSION}
-
-      - op: replace
         path: images.clabverter.tags
         value:
           - ${RELEASE_VERSION}
@@ -302,12 +249,12 @@ pipelines:
   build:
     # override the default build pipeline so we don't bother building dev image in ci
     run: |
-      build_images clabernetes clabernetes-launcher clabernetes-ui clabverter
+      build_images clabernetes clabernetes-launcher clabverter
 
   dev:
     # override the default dev pipeline to not bother building clabverter while doing dev things
     run: |
-      build_images clabernetes-dev clabernetes clabernetes-launcher clabernetes-ui
+      build_images clabernetes-dev clabernetes clabernetes-launcher
       create_deployments --all
       start_dev --all
 
@@ -316,7 +263,7 @@ pipelines:
     # deploy pipeline
     run: |
       run_dependencies --all
-      build_images clabernetes clabernetes-launcher clabernetes-ui
+      build_images clabernetes clabernetes-launcher
       create_deployments --all
 
   purge:

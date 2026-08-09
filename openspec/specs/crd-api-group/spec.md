@@ -31,12 +31,7 @@ The system SHALL register exactly these namespaced CRDs under `c9s.run/v1alpha1`
 
 ### Requirement: Generated API artifacts use the new group
 
-CRD YAML, typed clients, OpenAPI documents, and UI API client types SHALL be generated from API source constants that declare group `c9s.run`. REST discovery paths SHALL use `/apis/c9s.run/v1alpha1/`.
-
-#### Scenario: UI lists topologies
-
-- **WHEN** the UI fetches topologies from the Kubernetes API
-- **THEN** it requests `/apis/c9s.run/v1alpha1/topologies`
+CRD YAML, typed clients, and OpenAPI documents SHALL be generated from API source constants that declare group `c9s.run`. REST discovery paths SHALL use `/apis/c9s.run/v1alpha1/`.
 
 ### Requirement: Helm RBAC grants access to the new group
 

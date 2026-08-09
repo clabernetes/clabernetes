@@ -26,10 +26,9 @@ From the repository root, run:
 make try-c9s
 ```
 
-The command prints the operator UI address and the assigned SR Linux management endpoints:
+The command prints the assigned SR Linux management endpoints:
 
 ```text
-UI:                http://localhost:3000
 SR Linux SSH:      ssh admin@<load-balancer-ip>
 SR Linux gNMI:     <load-balancer-ip>:57400
 SR Linux NETCONF:  <load-balancer-ip>:830

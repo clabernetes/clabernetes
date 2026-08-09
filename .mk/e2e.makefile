@@ -8,8 +8,8 @@
 ## OS/ARCH detection (OS/ARCH), the CURL wrapper, and the download-bin /
 ## download-bin-from-archive helpers come from .mk/tools.makefile. Tool versions
 ## and the *_SRC download URLs are reused from .mk/try-c9s.makefile so there is a
-## single set of pins for both flows. IMAGE_BASE / MANAGER_IMAGE / LAUNCHER_IMAGE
-## / UI_IMAGE and the build-* targets come from the root Makefile.
+## single set of pins for both flows. IMAGE_BASE / MANAGER_IMAGE / LAUNCHER_IMAGE and the
+## build-* targets come from the root Makefile.
 
 E2E_CLUSTER_NAME ?= c9s-e2e
 E2E_NAMESPACE := clabernetes
@@ -68,12 +68,11 @@ e2e-cluster: e2e-tools ## Create the local e2e KinD cluster (idempotent)
 
 .PHONY: e2e-images
 e2e-images: e2e-cluster ## Build clabernetes images locally and load them into the e2e cluster
-	@echo "--> E2E: building manager, launcher, and ui images tagged $(E2E_IMAGE_TAG)"
-	@$(MAKE) --no-print-directory build-manager build-launcher build-ui IMAGE_TAG=$(E2E_IMAGE_TAG)
+	@echo "--> E2E: building manager and launcher images tagged $(E2E_IMAGE_TAG)"
+	@$(MAKE) --no-print-directory build-manager build-launcher IMAGE_TAG=$(E2E_IMAGE_TAG)
 	@echo "--> E2E: loading images into KinD cluster $(E2E_CLUSTER_NAME)"
 	@$(E2E_KIND) load docker-image "$(MANAGER_IMAGE):$(E2E_IMAGE_TAG)" --name $(E2E_CLUSTER_NAME)
 	@$(E2E_KIND) load docker-image "$(LAUNCHER_IMAGE):$(E2E_IMAGE_TAG)" --name $(E2E_CLUSTER_NAME)
-	@$(E2E_KIND) load docker-image "$(UI_IMAGE):$(E2E_IMAGE_TAG)" --name $(E2E_CLUSTER_NAME)
 
 .PHONY: e2e-deploy
 e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally built images
@@ -86,10 +85,6 @@ e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally 
 		--set manager.replicaCount=1 \
 		--set manager.managerLogLevel=debug \
 		--set manager.controllerLogLevel=debug \
-		--set ui.image=$(UI_IMAGE):$(E2E_IMAGE_TAG) \
-		--set ui.imagePullPolicy=IfNotPresent \
-		--set ui.replicaCount=1 \
-		--set ui.ingress.enabled=false \
 		--set globalConfig.deployment.launcherImage=$(LAUNCHER_IMAGE):$(E2E_IMAGE_TAG) \
 		--set globalConfig.deployment.launcherImagePullPolicy=IfNotPresent \
 		--set globalConfig.deployment.launcherLogLevel=debug

@@ -25,31 +25,3 @@ spec:
     clabernetes/app: clabernetes
     clabernetes/name: "clabernetes-manager"
     clabernetes/component: manager
----
-# Source: clabernetes/templates/service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: clabernetes-ui
-  namespace: clabernetes
-  labels:
-    chart: "clabernetes-0.0.0"
-    release: release-name
-    heritage: Helm
-    revision: "1"
-    app.kubernetes.io/name: "clabernetes-ui"
-    clabernetes/app: clabernetes
-    clabernetes/name: "clabernetes-ui"
-    clabernetes/component: ui
-spec:
-  type: ClusterIP
-  sessionAffinity: None
-  ports:
-    - name: http
-      port: 80
-      protocol: TCP
-      targetPort: 3000
-  selector:
-    clabernetes/app: clabernetes
-    clabernetes/name: "clabernetes-ui"
-    clabernetes/component: ui

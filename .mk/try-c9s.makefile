@@ -3,7 +3,6 @@ TRY_C9S_CHART ?= oci://ghcr.io/clabernetes/clabernetes/clabernetes
 TRY_C9S_CHART_VERSION ?=
 TRY_C9S_TOPOLOGY ?= examples/basic/srl-multitool.yaml
 TRY_C9S_TOPOLOGY_NAME ?= srl-multitool
-TRY_C9S_UI_PORT ?= 3000
 TRY_C9S_TIMEOUT ?= 600s
 
 TRY_C9S_NAMESPACE := clabernetes
@@ -15,7 +14,6 @@ TRY_C9S_TOOLS_DIR := $(TRY_C9S_BUILD_DIR)/bin
 ## ----------------------------------------------------------------------------|
 TRY_C9S_KIND_TEMPLATE := $(TRY_C9S_BUILD_DIR)/kind.yaml
 TRY_C9S_METALLB_TEMPLATE := $(TRY_C9S_BUILD_DIR)/metallb.yaml
-TRY_C9S_UI_SERVICE_TEMPLATE := $(TRY_C9S_BUILD_DIR)/ui-service.yaml
 
 ## OS/arch detection (OS/ARCH), the curl wrapper (CURL), and the download-bin /
 ## download-bin-from-archive helpers come from .mk/tools.makefile.
@@ -94,7 +92,7 @@ define try-c9s-proxy-helm-args
 endef
 
 .PHONY: try-c9s
-try-c9s: try-c9s-expose ## Launch published clabernetes in KinD and apply a sample topology
+try-c9s: try-c9s-apply-topology try-c9s-print-access ## Launch published clabernetes in KinD and apply a sample topology
 	@echo "--> TRY-C9S: clabernetes is ready to try"
 
 $(TRY_C9S_TOOLS_DIR):
@@ -144,9 +142,7 @@ try-c9s-tools: | $(KIND) $(KUBECTL) $(HELM) $(YQ) $(UV) ## Download the tools (k
 .PHONY: try-c9s-kind-config
 try-c9s-kind-config: try-c9s-tools | $(TRY_C9S_STATE_DIR)
 	@echo "--> TRY-C9S: writing KinD config $(TRY_C9S_STATE_DIR)/kind.yaml"
-	@TRY_C9S_UI_PORT="$(TRY_C9S_UI_PORT)" $(YQ) \
-		'.nodes[0].extraPortMappings[0].hostPort = env(TRY_C9S_UI_PORT)' \
-		"$(TRY_C9S_KIND_TEMPLATE)" > "$(TRY_C9S_STATE_DIR)/kind.yaml"
+	@cp "$(TRY_C9S_KIND_TEMPLATE)" "$(TRY_C9S_STATE_DIR)/kind.yaml"
 
 .PHONY: try-c9s-cluster
 try-c9s-cluster: try-c9s-kind-config try-c9s-tools
@@ -194,12 +190,9 @@ try-c9s-install: try-c9s-metallb
 		--create-namespace \
 		$(TRY_C9S_HELM_WAIT_ARG) \
 		--timeout $(TRY_C9S_TIMEOUT) \
-		--set ui.ingress.enabled=false \
 		--set manager.replicaCount=1 \
-		--set ui.replicaCount=1 \
 		$$proxy_helm_args
 	@$(KUBECTL) -n $(TRY_C9S_NAMESPACE) rollout status deploy/clabernetes-manager --timeout=$(TRY_C9S_TIMEOUT)
-	@$(KUBECTL) -n $(TRY_C9S_NAMESPACE) rollout status deploy/clabernetes-ui --timeout=$(TRY_C9S_TIMEOUT)
 
 .PHONY: try-c9s-apply-topology
 try-c9s-apply-topology: try-c9s-install
@@ -215,19 +208,9 @@ try-c9s-apply-topology: try-c9s-install
 		$(KUBECTL) -n default get pods -l clabernetes/topologyOwner=$(TRY_C9S_TOPOLOGY_NAME) || true; \
 	fi
 
-.PHONY: try-c9s-ui-service
-try-c9s-ui-service: try-c9s-apply-topology | $(TRY_C9S_STATE_DIR)
-	@echo "--> TRY-C9S: creating fixed UI NodePort service"
-	@$(KUBECTL) -n default delete service try-c9s-srl --ignore-not-found=true >/dev/null 2>&1 || true
-	@TRY_C9S_NAMESPACE="$(TRY_C9S_NAMESPACE)" $(YQ) \
-		'.metadata.namespace = strenv(TRY_C9S_NAMESPACE)' \
-		"$(TRY_C9S_UI_SERVICE_TEMPLATE)" > "$(TRY_C9S_STATE_DIR)/ui-service.yaml"
-	@$(KUBECTL) apply -f "$(TRY_C9S_STATE_DIR)/ui-service.yaml"
-
 .PHONY: try-c9s-print-access
 try-c9s-print-access:
 	@srl_ip=$$($(KUBECTL) -n default get svc "srl1" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true); \
-	echo "--> TRY-C9S: UI: http://localhost:$(TRY_C9S_UI_PORT)"; \
 	if [ -n "$$srl_ip" ]; then \
 		echo "--> TRY-C9S: SR Linux SSH: ssh admin@$$srl_ip"; \
 		echo "--> TRY-C9S: SR Linux gNMI: $$srl_ip:57400"; \
@@ -235,15 +218,6 @@ try-c9s-print-access:
 	else \
 		echo "--> TRY-C9S: SR Linux service: kubectl -n default get svc srl1"; \
 	fi
-
-.PHONY: try-c9s-expose
-try-c9s-expose: try-c9s-ui-service
-	@if ! docker port "$(TRY_C9S_CLUSTER_NAME)-control-plane" 32767/tcp >/dev/null 2>&1; then \
-		echo "--> TRY-C9S: KinD UI host port mapping is missing"; \
-		echo "--> TRY-C9S: run 'make try-c9s-clean' and then 'make try-c9s'"; \
-		exit 1; \
-	fi
-	@$(MAKE) --no-print-directory try-c9s-print-access
 
 .PHONY: try-c9s-clean
 try-c9s-clean: ## Remove try-c9s sample resources and KinD cluster

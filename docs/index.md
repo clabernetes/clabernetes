@@ -20,7 +20,7 @@ which makes direct resources the preferred model for generated and larger labs.
 
 ### Topology
 
-`Topology` is a supported higher-level resource that accepts a containerlab or KNE definition and
+`Topology` is a supported higher-level resource that accepts a containerlab definition and
 compiles it into `LauncherProfile`, `Node`, and `Link` resources.
 
 [Learn about Topology](/docs/concepts/topology)

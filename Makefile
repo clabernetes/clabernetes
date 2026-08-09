@@ -27,7 +27,6 @@ IMAGE_TAG ?= latest
 IMAGE_BASE ?= ghcr.io/clabernetes/clabernetes
 MANAGER_IMAGE ?= $(IMAGE_BASE)/clabernetes-manager
 LAUNCHER_IMAGE ?= $(IMAGE_BASE)/clabernetes-launcher
-UI_IMAGE ?= $(IMAGE_BASE)/clabernetes-ui
 CLABVERTER_IMAGE ?= $(IMAGE_BASE)/clabverter
 
 DEVSPACE_TOOLS_DIR ?= build/dev/bin
@@ -142,8 +141,7 @@ run-openapi-gen: ## Run openapi-gen
 	--output-file openapi_generated.go \
 	--output-pkg github.com/clabernetes/clabernetes/generated/openapi \
 	github.com/clabernetes/clabernetes/apis/...
-	$(CRDS_TO_OPENAPI_PYTHON) build/crds-to-openapi/crds-to-openapi.py && \
-	cp generated/openapi/openapi.json ui/clabernetes-openapi.json
+	$(CRDS_TO_OPENAPI_PYTHON) build/crds-to-openapi/crds-to-openapi.py
 
 run-client-gen: ## Run client-gen
 	client-gen \
@@ -161,19 +159,15 @@ run-generate-crds: ## Run controller-gen for crds
 	cp charts/clabernetes/crds/*.yaml assets/crd/
 
 # note: crds must be generated (and synced into assets/crd/, which is what crds-to-openapi
-# reads) *before* openapi-gen -- the openapi json (and from it the ui client types) is derived
-# from the crd yamls, so any other order needs two passes to converge
+# reads) *before* openapi-gen -- the openapi json is derived from the crd yamls, so any
+# other order needs two passes to converge
 run-generate: install-tools install-code-generators run-deepcopy-gen run-generate-crds run-openapi-gen run-client-gen fmt ## Run all code gen tasks
-	npm --prefix ui ci
-	$(MAKE) --no-print-directory -C ui regenerate-types
 
 VERIFY_GENERATED_PATHS := \
 	apis/v1alpha1/zz_generated.deepcopy.go \
 	assets/crd \
 	charts/clabernetes/crds \
-	generated \
-	ui/clabernetes-openapi.json \
-	ui/src/lib/clabernetes-client
+	generated
 
 verify-generated: run-generate ## Regenerate all API artifacts and fail if generated outputs change
 	git diff --exit-code -- $(VERIFY_GENERATED_PATHS)
@@ -189,9 +183,6 @@ build-manager: ## Builds the clabernetes manager container; typically built via 
 
 build-launcher: ## Builds the clabernetes launcher container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
 	docker build -t $(LAUNCHER_IMAGE):$(IMAGE_TAG) -f ./build/launcher.Dockerfile .
-
-build-ui: ## Builds the clabernetes ui container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker build -t $(UI_IMAGE):$(IMAGE_TAG) -f ./build/ui.Dockerfile ui/
 
 build-clabverter: ## Builds the clabverter container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
 	docker build -t $(CLABVERTER_IMAGE):$(IMAGE_TAG) -f ./build/clabverter.Dockerfile .

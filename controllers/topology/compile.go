@@ -27,7 +27,7 @@ type CompiledLink struct {
 // objects (plus LauncherProfiles for deployment policy) -- all actual reconciliation
 // happens in the node/link controllers, identically for compiled and hand written objects.
 type CompiledTopology struct {
-	// Kind is the topology definition kind -- containerlab or kne.
+	// Kind is the topology definition kind -- containerlab.
 	Kind string
 	// Nodes maps (containerlab) node name to its flattened node definition.
 	Nodes map[string]*clabernetesutilcontainerlab.NodeDefinition
@@ -42,25 +42,17 @@ func CompileTopology(
 	logger claberneteslogging.Instance,
 	topology *clabernetesapisv1alpha1.Topology,
 ) (*CompiledTopology, error) {
-	switch {
-	case topology.Spec.Definition.Containerlab != "":
-		return compileContainerlabDefinition(logger, topology.Spec.Definition.Containerlab)
-	case topology.Spec.Definition.Kne != "":
-		return compileKneDefinition(logger, topology.Spec.Definition.Kne)
-	default:
+	if topology.Spec.Definition.Containerlab == "" {
 		return nil, fmt.Errorf(
-			"%w: unknown or unsupported topology definition kind, this is *probably* a bug",
+			"%w: topology definition must include a containerlab topology",
 			claberneteserrors.ErrReconcile,
 		)
 	}
+
+	return compileContainerlabDefinition(logger, topology.Spec.Definition.Containerlab)
 }
 
-// GetTopologyKind returns the "kind" of topology this CR represents -- typically this will be
-// "containerlab", but may be "kne" as well.
-func GetTopologyKind(t *clabernetesapisv1alpha1.Topology) string {
-	if t.Spec.Definition.Kne != "" {
-		return clabernetesapis.TopologyKindKne
-	}
-
+// GetTopologyKind returns the "kind" of topology this CR represents.
+func GetTopologyKind(_ *clabernetesapisv1alpha1.Topology) string {
 	return clabernetesapis.TopologyKindContainerlab
 }

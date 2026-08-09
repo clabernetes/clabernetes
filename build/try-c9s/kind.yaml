@@ -5,10 +5,6 @@ networking:
   ipFamily: dual
 nodes:
   - role: control-plane
-    extraPortMappings:
-      - containerPort: 32767
-        hostPort: 3000
-        listenAddress: "0.0.0.0"
     kubeadmConfigPatches:
       - |
         kind: KubeletConfiguration
