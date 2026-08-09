@@ -1,5 +1,5 @@
 "use server";
-import type {Edge} from "@xyflow/react";
+import { listClabernetesContainerlabDevV1Alpha1NamespacedLink } from "@/lib/clabernetes-client";
 import {
   AppsV1Api,
   CoreV1Api,
@@ -7,9 +7,7 @@ import {
   type V1DeploymentList,
   type V1ServiceList,
 } from "@kubernetes/client-node";
-import {
-  readClabernetesContainerlabDevV1Alpha1NamespacedConnectivity
-} from "@/lib/clabernetes-client";
+import type { Edge } from "@xyflow/react";
 
 async function deploymentsByOwner(
   namespace: string,
@@ -21,11 +19,11 @@ async function deploymentsByOwner(
   kc.loadFromDefault();
 
   return await kc
-      .makeApiClient(AppsV1Api)
-      .listNamespacedDeployment({namespace: namespace, labelSelector: labelSelector})
-      .catch((error: unknown) => {
-        throw error;
-      });
+    .makeApiClient(AppsV1Api)
+    .listNamespacedDeployment({ namespace: namespace, labelSelector: labelSelector })
+    .catch((error: unknown) => {
+      throw error;
+    });
 }
 
 async function servicesByOwner(
@@ -38,11 +36,11 @@ async function servicesByOwner(
   kc.loadFromDefault();
 
   return await kc
-      .makeApiClient(CoreV1Api)
-      .listNamespacedService({namespace: namespace, labelSelector: labelSelector})
-      .catch((error: unknown) => {
-        throw error;
-      });
+    .makeApiClient(CoreV1Api)
+    .listNamespacedService({ namespace: namespace, labelSelector: labelSelector })
+    .catch((error: unknown) => {
+      throw error;
+    });
 }
 
 export interface VisualizeObject {
@@ -68,8 +66,9 @@ export async function visualizeTopology(namespace: string, name: string): Promis
 
   const services = await servicesByOwner(namespace, name);
 
-  const connectivity = await readClabernetesContainerlabDevV1Alpha1NamespacedConnectivity({
-    path: { name: name, namespace: namespace },
+  const links = await listClabernetesContainerlabDevV1Alpha1NamespacedLink({
+    path: { namespace: namespace },
+    query: { labelSelector: `clabernetes/topologyOwner=${name}` },
   }).catch((error: unknown) => {
     throw error;
   });
@@ -138,64 +137,68 @@ export async function visualizeTopology(namespace: string, name: string): Promis
     });
   }
 
-  const recordedTunnels: Record<number, boolean> = {};
+  for (const link of links.data?.items ?? []) {
+    const endpointA = link.spec?.endpointA;
+    const endpointB = link.spec?.endpointB;
 
-  // doing this to de-dup things because we have both sides of tunnels represented basically
-  for (const tunnelDefinitions of Object.values(
-    connectivity.data?.spec?.pointToPointTunnels ?? {},
-  )) {
-    for (const tunnelDefinition of tunnelDefinitions) {
-      if (tunnelDefinition.tunnelID in recordedTunnels) {
-        continue;
-      }
+    if (endpointA === undefined || endpointB === undefined) {
+      continue;
+    }
 
-      recordedTunnels[tunnelDefinition.tunnelID] = true;
+    // fabric services exist per (containerlab) node, so the endpoint node names alone identify
+    // the services terminating the wire
+    const aFabricService = `svc/${endpointA.nodeName}-vx`;
+    const aInterface = `${endpointA.nodeName}-${endpointA.interfaceName}`;
+    const bFabricService = `svc/${endpointB.nodeName}-vx`;
+    const bInterface = `${endpointB.nodeName}-${endpointB.interfaceName}`;
 
-      const localFabricService = `svc/${tunnelDefinition.localNode}-vx`;
-      const localInterface = `${tunnelDefinition.localNode}-${tunnelDefinition.localInterface}`;
-      const remoteFabricService = `svc/${tunnelDefinition.remoteNode}-vx`;
-      const remoteInterface = `${tunnelDefinition.remoteNode}-${tunnelDefinition.remoteInterface}`;
+    nodes.push({
+      data: {
+        label: aInterface,
+        owningNode: endpointA.nodeName,
+      },
+      id: aInterface,
+      position: { x: 0, y: 0 },
+      style: { height: 50, width: 150 },
+      type: "interface",
+    });
 
-      nodes.push({
-        data: {
-          label: localInterface,
-          owningNode: tunnelDefinition.localNode,
-        },
-        id: localInterface,
-        position: { x: 0, y: 0 },
-        style: { height: 50, width: 150 },
-        type: "interface",
-      });
-
+    if (endpointA.nodeName !== "host") {
       edges.push({
-        id: `${localFabricService} / ${localInterface}`,
-        source: localFabricService,
-        target: localInterface,
-      });
-
-      nodes.push({
-        data: {
-          label: remoteInterface,
-          owningNode: tunnelDefinition.remoteNode,
-        },
-        id: remoteInterface,
-        position: { x: 0, y: 0 },
-        style: { height: 50, width: 150 },
-        type: "interface",
-      });
-
-      edges.push({
-        id: `${remoteFabricService} / ${remoteInterface}`,
-        source: remoteFabricService,
-        target: remoteInterface,
-      });
-
-      edges.push({
-        id: `${localInterface} / ${remoteInterface}`,
-        source: localInterface,
-        target: remoteInterface,
+        id: `${aFabricService} / ${aInterface}`,
+        source: aFabricService,
+        target: aInterface,
       });
     }
+
+    nodes.push({
+      data: {
+        label: bInterface,
+        owningNode: endpointB.nodeName,
+      },
+      id: bInterface,
+      position: { x: 0, y: 0 },
+      style: { height: 50, width: 150 },
+      type: "interface",
+    });
+
+    if (endpointB.nodeName !== "host") {
+      edges.push({
+        id: `${bFabricService} / ${bInterface}`,
+        source: bFabricService,
+        target: bInterface,
+      });
+    }
+
+    edges.push({
+      id: `${aInterface} / ${bInterface}`,
+      label:
+        (link.status?.error ?? "") !== ""
+          ? link.status?.error
+          : `${link.spec?.connectivity ?? "vxlan"} / tunnel ${link.status?.tunnelID ?? "local or pending"}`,
+      source: aInterface,
+      target: bInterface,
+    });
   }
 
   return JSON.stringify({

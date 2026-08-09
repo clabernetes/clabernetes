@@ -121,7 +121,9 @@ rules:
   - apiGroups:
       - clabernetes.containerlab.dev
     resources:
-      - connectivities
+      - nodes
+      - links
     verbs:
       - get
+      - list
       - watch

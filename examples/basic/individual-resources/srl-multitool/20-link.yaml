@@ -1,0 +1,15 @@
+# Point-to-point connection between the two nodes.
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Link
+metadata:
+  name: srl1-e1-1-multitool-eth1
+  labels:
+    clabernetes/example: srl-multitool
+spec:
+  endpointA:
+    nodeName: srl1
+    interfaceName: e1-1
+  endpointB:
+    nodeName: multitool
+    interfaceName: eth1
+  connectivity: vxlan

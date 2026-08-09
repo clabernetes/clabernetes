@@ -7,15 +7,26 @@ This document provides a comprehensive reference for all Custom Resource Definit
 - [Topology CRD](#topology-crd)
   - [TopologySpec Fields](#topologyspec-fields)
   - [TopologyStatus Fields](#topologystatus-fields)
+- [Node CRD](#node-crd)
+- [Link CRD](#link-crd)
+- [LauncherProfile CRD](#launcherprofile-crd)
 - [Config CRD](#config-crd)
-- [Connectivity CRD](#connectivity-crd)
 - [ImageRequest CRD](#imagerequest-crd)
 
 ---
 
 ## Topology CRD
 
-The `Topology` CRD is the primary resource for defining network topologies in Clabernetes. It represents a containerlab (or KNE) topology that will be deployed across Kubernetes pods.
+The `Topology` CRD is a supported, backward-compatible auxiliary resource for defining a whole
+containerlab or KNE lab at a high level. Its controller compiles the definition and existing
+`connectivity`, `expose`, `deployment`, `imagePull`, and `statusProbes` settings into independently
+reconciled `LauncherProfile`, `Link`, and `Node` resources. `Node` and `Link` are the primary API
+and do not require a Topology.
+
+Topology is convenient, but its source definition still grows with the lab. Large generated labs
+should apply direct primitive manifests (for example, `clabverter --emit-crs`) so no persisted
+Clabernetes object contains the full lab. Bounded primitive objects remove one object-size limit;
+they do not promise arbitrary runtime scale.
 
 ### Basic Structure
 
@@ -296,13 +307,9 @@ spec:
 
 #### naming
 
-Controls resource naming convention.
-
-| Value | Description |
-|-------|-------------|
-| `global` | Use global Config setting (default) |
-| `prefixed` | Include topology name as prefix in resources |
-| `non-prefixed` | Don't include topology name prefix |
+Deprecated (accepted for 0.6.x compatibility, ignored). Emitted Node objects are named after
+their containerlab node names -- the **namespace is the topology boundary**, so deploy one
+topology per namespace.
 
 **Note:** This field is immutable after creation. Use `non-prefixed` only when deploying topologies in separate namespaces.
 
@@ -345,29 +352,12 @@ diagram and troubleshooting steps.
 Boolean. `true` when every node in the topology has reported ready. Mirrors the
 `TopologyReady` condition and is surfaced here for `kubectl get` print columns.
 
-#### nodeReadiness
+#### nodeCount / readyNodeCount / linkCount
 
-Map of node name → simplified readiness string. Updated every reconcile cycle.
-
-| Value | Description |
-|-------|-------------|
-| `ready` | Startup and readiness probes both passing. |
-| `notready` | Pod exists but probes have not yet passed. |
-| `unknown` | No deployment found for this node. |
-| `deploymentDisabled` | The topology has the `clabernetes/disableDeployments` label set. |
-
-#### nodeProbeStatuses
-
-Map of node name → per-probe status object. Provides finer-grained observability than
-`nodeReadiness`. Each node entry has three fields:
-
-| Field | Description |
-|-------|-------------|
-| `startupProbe` | Derived from `pod.status.containerStatuses[0].started`. Passing once the lab node writes its status file. |
-| `readinessProbe` | Derived from `pod.status.containerStatuses[0].ready`. Passing when the node is ready to accept traffic. |
-| `livenessProbe` | Inferred from container state: `Running` → passing; `CrashLoopBackOff` → failing; other → unknown. |
-
-Possible values for all probe fields: `passing`, `failing`, `unknown`, `disabled`.
+Aggregated counts over the emitted objects. All *per node* detail (readiness, probe statuses,
+exposed port allocations) lives on the [Node](#node-crd) objects, and per link detail (tunnel
+ids) on the [Link](#link-crd) objects -- the Topology only aggregates, which keeps its size
+bounded regardless of how big the definition is.
 
 #### conditions
 
@@ -376,6 +366,208 @@ List of `metav1.Condition` entries managed by the controller. Currently contains
 | Type | True when | False when |
 |------|-----------|------------|
 | `TopologyReady` | All nodes report ready. | Any node is not ready. |
+
+---
+
+## Node CRD
+
+The `Node` CRD represents a single containerlab node ("device") realized as a single launcher
+pod. Together with `Link`, Nodes are the primary clabernetes API: they can be written by hand,
+emitted by the (optional) [Topology compiler](#topology-crd), or created by any other tooling --
+the node controller treats all of these identically. No Topology object is required.
+
+The object **name is the containerlab node name**: the launcher pod hostname, the expose
+service (`<name>`) and the fabric service (`<name>-vx`) all derive from it. Because of this,
+the **namespace is the topology boundary** -- run one topology per namespace.
+
+### Basic Structure
+
+```yaml
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+spec:
+  # the spec IS a (self contained) containerlab node definition -- flat, verbatim
+  # containerlab vocabulary, no wrapper. defaults/kinds expansion is the emitter's job.
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+  launcherProfileRef:
+    name: my-lab
+  startup-config: |
+    set / interface ethernet-1/1 admin-state enable
+  ports:
+    - 60000:57400/tcp
+  filesFromConfigMap:
+    - filePath: /etc/opt/srlinux/license.key
+      configMapName: srl-license
+      configMapPath: license.key
+  filesFromURL:
+    - filePath: /tmp/bootstrap.json
+      url: https://example.com/bootstrap/srl1.json
+status:
+  readiness: ready
+  appliedLauncherProfile:
+    name: my-lab
+    uid: 0184c11b-1671-46d9-8584-c590a9502ca2
+    generation: 3
+  exposedPorts:
+    loadBalancerAddress: 172.18.255.1
+    ports:
+      - exposePort: 60000
+        destinationPort: 57400
+        protocol: TCP
+```
+
+### NodeSpec Fields
+
+The spec is flat containerlab vocabulary (`kind`, `image`, `startup-config`, `ports`, `env`,
+`binds`, `network-mode`, ...) -- see the containerlab
+[node definition documentation](https://containerlab.dev/manual/nodes/) for the full list --
+plus these Clabernetes fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `launcherProfileRef` | LocalObjectReference | Optional explicit same-namespace LauncherProfile reference (`name`) |
+| `filesFromConfigMap` | []FileFromConfigMap | ConfigMap-backed payload files mounted for this Node |
+| `filesFromURL` | []FileFromURL | Files the launcher fetches from a URL before launching the node (`filePath` + `url`) |
+
+Notable properties:
+
+- **No links/interfaces in the spec.** Wiring lives exclusively on [Link](#link-crd) objects.
+- **No deployment policy in the spec.** Expose behavior, resources, pull secrets, scheduling,
+  privileges and the like live on one explicitly referenced
+  [LauncherProfile](#launcherprofile-crd), or global Config defaults when the reference is absent.
+- **An explicit missing profile fails closed.** The Node is not realized and reports a
+  `LauncherProfileResolved=False` condition; the controller does not silently use defaults.
+- **Grouped nodes** (several containerlab nodes sharing one pod) need no clabernetes field:
+  `network-mode: container:<primary>` -- the containerlab-native expression -- is what the
+  controller derives grouping from. The primary's profile is authoritative; a secondary can
+  omit its reference or name the same profile, but cannot select a conflicting profile.
+- `ports` feeds the expose machinery: the controller allocates the load balancer port set into
+  `status.exposedPorts` (allocations are status, never spec). Omitting ports gives you the
+  auto-expose defaults unless a profile disables them.
+- Unknown (newer containerlab vocabulary) fields are preserved by the api server.
+
+### NodeStatus Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `readiness` | string | `ready`, `notready` or `unknown` -- as reported by the launcher deployment |
+| `probeStatuses` | NodeProbeStatuses | Per-probe (startup/readiness/liveness) statuses |
+| `exposedPorts` | NodeExposedPorts | Expose port allocations (`exposePort`/`destinationPort`/`protocol`) and load balancer address |
+| `conditions` | []Condition | Includes LauncherProfile resolution and realization state |
+| `appliedLauncherProfile` | object | Successfully applied profile `name`, `uid`, and `generation`; absent when only Config defaults are used |
+
+---
+
+## Link CRD
+
+The `Link` CRD represents a single point-to-point wire between two containerlab nodes. One Link
+per wire, for **all** wire flavors:
+
+- **cross-launcher**: endpoints on different launcher pods -- the controller allocates a
+  `status.tunnelID` and the launchers build the tunnel (vxlan or slurpeeth).
+- **same-launcher**: both endpoints in one pod (grouped nodes) -- no tunnel id; the launcher
+  materializes a direct containerlab link.
+- **host**: `nodeName: host` (reserved name) -- node-local; the launcher owning the other
+  endpoint materializes it verbatim.
+
+Launchers select their links with **field selectors** on the endpoint node names
+(`spec.endpointA.nodeName` / `spec.endpointB.nodeName`), which requires **kubernetes 1.31+**.
+No labels are required, and no launcher watches more than its own links.
+
+### Basic Structure
+
+```yaml
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Link
+metadata:
+  name: srl1-e1-1-srl2-e1-1     # any name; deterministic when compiler emitted
+spec:                            # the wire as the user drew it -- nothing else
+  connectivity: vxlan           # optional; defaults to vxlan, or use slurpeeth
+  endpointA:
+    nodeName: srl1               # references the Node object name in this namespace
+    interfaceName: e1-1
+  endpointB:
+    nodeName: srl2
+    interfaceName: e1-1
+  mtu: 9212                      # optional
+status:
+  tunnelID: 1                    # controller allocation (0 = not yet allocated)
+```
+
+### LinkSpec Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `endpointA` | LinkEndpointSpec | The "a" side: `nodeName` + `interfaceName` |
+| `endpointB` | LinkEndpointSpec | The "b" side: `nodeName` + `interfaceName` |
+| `connectivity` | string | Authoritative flavor consumed by both endpoints: `vxlan` (default) or `slurpeeth` |
+| `mtu` | int | Optional link MTU; zero means containerlab default |
+
+### LinkStatus Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tunnelID` | int | Allocated tunnel id (vxlan vnid / slurpeeth segment id); both sides use the same id; 0 = not allocated (yet) |
+
+There is deliberately no "destination" or launcher metadata on the Link: the remote end of a
+tunnel is a pure function of the spec (`<remote nodeName>-vx.<namespace>.<dns suffix>`),
+because fabric services exist per node. Rewiring a Link (changing a remote endpoint) moves the
+tunnel live without restarting pods; changing the set of interfaces attached to a node rolls
+just that node's pod.
+
+---
+
+## LauncherProfile CRD
+
+The `LauncherProfile` CRD holds reusable Kubernetes and launcher realization policy. A Node
+explicitly attaches at most one profile through `spec.launcherProfileRef`; labels, selectors,
+priorities, and multi-profile merging are not attachment mechanisms. Omitted profile fields
+inherit global [Config](#config-crd) defaults.
+
+### Basic Structure
+
+```yaml
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: LauncherProfile
+metadata:
+  name: my-lab
+spec:
+  expose:
+    disableAutoExpose: false
+  imagePull:
+    pullSecrets: [regcred]
+  resources:
+    requests:
+      memory: 2Gi
+  scheduling: {}                 # nodeSelector/tolerations for launcher pods
+  deployment: {}                 # privileged, persistence, launcher image/log level, ...
+  statusProbes: {}               # ssh/tcp status probe configuration
+```
+
+### LauncherProfileSpec Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `expose` | LauncherProfileExpose | `disableExpose`, `disableAutoExpose`, `exposeType`, `useNodeMgmtIpv4Address`, `useNodeMgmtIpv6Address` |
+| `imagePull` | LauncherProfileImagePull | `insecureRegistries`, `pullThroughOverride`, `pullSecrets`, `dockerDaemonConfig`, `dockerConfig` |
+| `resources` | ResourceRequirements | Launcher pod resources |
+| `scheduling` | Scheduling | Launcher pod `nodeSelector` and `tolerations` |
+| `deployment` | LauncherProfileDeployment | `privilegedLauncher`, `persistence`, `containerlabDebug/Timeout/Version`, `launcherImage/PullPolicy/LogLevel`, `extraEnv` |
+| `statusProbes` | StatusProbes | Status probe configuration (same shape as on Topology) |
+| `mgmt` | MgmtNet | Temporary shared management-network compatibility field for Topology-generated profiles |
+
+Per-node payload belongs on Node, and connectivity belongs on Link. `mgmt` remains on
+LauncherProfile only as a temporary bridge so existing Topology manifests retain their current
+management-network behavior; its final owner is deferred.
+
+This replaces the unreleased alpha `NodeProfile` contract. For manifests created on that branch,
+create an equivalent LauncherProfile, remove selector/priority fields, move connectivity to each
+Link and payload attachments to each Node, then set `spec.launcherProfileRef.name` on intended
+Nodes. No released-user Topology migration is required: existing Topology manifests continue to
+compile into the new primitives.
 
 ---
 
@@ -509,47 +701,6 @@ Global naming convention for resources.
 |-------|-------------|
 | `prefixed` | Include topology name as prefix (default) |
 | `non-prefixed` | Don't include topology name prefix |
-
----
-
-## Connectivity CRD
-
-The `Connectivity` CRD is automatically managed by clabernetes to track point-to-point tunnels between nodes. Users typically do not create or modify this resource directly.
-
-### Basic Structure
-
-```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
-kind: Connectivity
-metadata:
-  name: my-topology
-spec:
-  pointToPointTunnels:
-    srl1:
-      - tunnelID: 1
-        destination: my-topology-srl2.default.svc.cluster.local
-        localNode: srl1
-        localInterface: e1-1
-        remoteNode: srl2
-        remoteInterface: e1-1
-```
-
-### ConnectivitySpec Fields
-
-#### pointToPointTunnels
-
-Map of node names to their tunnel configurations.
-
-##### PointToPointTunnel
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `tunnelID` | int | Tunnel ID (VNID or segment ID) |
-| `destination` | string | Destination service FQDN |
-| `localNode` | string | Local node name |
-| `localInterface` | string | Local interface name |
-| `remoteNode` | string | Remote node name |
-| `remoteInterface` | string | Remote interface name |
 
 ---
 

@@ -1,0 +1,35 @@
+# Nokia SR Linux node.
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+  labels:
+    clabernetes/example: srl-multitool
+spec:
+  launcherProfileRef:
+    name: srl-multitool
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:26.3
+  startup-config: |
+    set / interface ethernet-1/1 admin-state enable
+    set / interface ethernet-1/1 subinterface 0
+    set / interface ethernet-1/1 subinterface 0 ipv4
+    set / interface ethernet-1/1 subinterface 0 ipv4 admin-state enable
+    set / interface ethernet-1/1 subinterface 0 ipv4 address 192.0.2.0/31
+    set / network-instance default
+    set / network-instance default interface ethernet-1/1.0
+---
+# Linux network multitool node.
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  name: multitool
+  labels:
+    clabernetes/example: srl-multitool
+spec:
+  launcherProfileRef:
+    name: srl-multitool
+  kind: linux
+  image: ghcr.io/srl-labs/network-multitool:latest
+  exec:
+    - ip addr add 192.0.2.1/31 dev eth1

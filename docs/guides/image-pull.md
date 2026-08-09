@@ -387,9 +387,13 @@ kubectl logs -l clabernetes/topologyNode=<node> -c clabernetes-launcher
 
 ## Configuration Priority
 
-1. Topology-level `imagePull` settings
-2. Global Config CRD `imagePull` settings
+1. The one explicitly referenced LauncherProfile (or the shared profile generated from
+   Topology-level `imagePull` settings)
+2. Global Config CRD `imagePull` settings for fields the profile omits
 3. Default behavior (auto pull-through)
+
+LauncherProfiles are attached through `Node.spec.launcherProfileRef`; there is no label selector
+or multi-profile priority chain.
 
 ## Related
 

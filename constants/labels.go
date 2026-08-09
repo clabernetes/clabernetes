@@ -32,6 +32,22 @@ const (
 )
 
 const (
+	// AnnotationLinkAttachmentsDigest is the pod (template) annotation holding the digest of the
+	// set of link attachments (local interface + materialization mode) of the launcher's node
+	// group -- attachment set changes roll the pod (containerlab wiring is boot time), while
+	// remote-end-only changes ("rewires") keep the digest stable and are handled live by the
+	// launcher. The launcher reads the annotation via the downward api and compares it against
+	// the digest of the links it fetched to know its view is complete.
+	AnnotationLinkAttachmentsDigest = "clabernetes/linkAttachmentsDigest"
+
+	// AnnotationNodeConfigDigest is the pod (template) annotation holding the digest of the
+	// launcher-relevant node configuration (the node definitions of the launcher's group, the
+	// expose port allocations, and the management network settings) -- so config changes that
+	// are not otherwise visible in the deployment spec still roll the pod.
+	AnnotationNodeConfigDigest = "clabernetes/nodeConfigDigest"
+)
+
+const (
 	// TopologyServiceTypeFabric is one of the allowed values for the LabelTopologyServiceType label
 	// type -- this indicates that this service is of the type that facilitates the connectivity
 	// between containerlab devices in the cluster.

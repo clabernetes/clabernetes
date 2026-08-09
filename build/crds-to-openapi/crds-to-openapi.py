@@ -432,7 +432,8 @@ def main():
         "paths": {}
     }
 
-    for f in Path("assets/crd/").glob("*.yaml"):
+    # sorted so the output is deterministic regardless of directory order
+    for f in sorted(Path("assets/crd/").glob("*.yaml")):
         contents = yaml.load(f)
 
         spec = contents.get("spec")

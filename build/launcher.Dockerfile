@@ -53,6 +53,13 @@ RUN apt-get update && \
     inetutils-ping \
     traceroute
 
+# DevSpace can provide the host trust bundle for environments with an intercepting proxy. The
+# secret is optional, so release and other builds continue using the image's standard CA bundle.
+RUN --mount=type=secret,id=host_ca,required=false \
+    if [[ -f /run/secrets/host_ca ]]; then \
+      cp /run/secrets/host_ca /etc/ssl/certs/ca-certificates.crt; \
+    fi
+
 RUN echo "deb [trusted=yes] https://apt.fury.io/netdevops/ /" | \
     tee -a /etc/apt/sources.list.d/netdevops.list
 

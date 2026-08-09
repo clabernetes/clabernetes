@@ -32,12 +32,22 @@ func (c *FakeClabernetesV1alpha1) Configs(namespace string) v1alpha1.ConfigInter
 	return newFakeConfigs(c, namespace)
 }
 
-func (c *FakeClabernetesV1alpha1) Connectivities(namespace string) v1alpha1.ConnectivityInterface {
-	return newFakeConnectivities(c, namespace)
-}
-
 func (c *FakeClabernetesV1alpha1) ImageRequests(namespace string) v1alpha1.ImageRequestInterface {
 	return newFakeImageRequests(c, namespace)
+}
+
+func (c *FakeClabernetesV1alpha1) LauncherProfiles(
+	namespace string,
+) v1alpha1.LauncherProfileInterface {
+	return newFakeLauncherProfiles(c, namespace)
+}
+
+func (c *FakeClabernetesV1alpha1) Links(namespace string) v1alpha1.LinkInterface {
+	return newFakeLinks(c, namespace)
+}
+
+func (c *FakeClabernetesV1alpha1) Nodes(namespace string) v1alpha1.NodeInterface {
+	return newFakeNodes(c, namespace)
 }
 
 func (c *FakeClabernetesV1alpha1) Topologies(namespace string) v1alpha1.TopologyInterface {

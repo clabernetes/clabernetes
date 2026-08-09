@@ -232,8 +232,10 @@ func (c *clabernetes) createImageRequestCR(
 					Name: imageRequestCRName,
 				},
 				Spec: clabernetesapisv1alpha1.ImageRequestSpec{
+					// nodes are the primary api and need no topology -- the (launcher) node
+					// name doubles as the "owner" of the request
 					TopologyName: os.Getenv(
-						clabernetesconstants.LauncherTopologyNameEnv,
+						clabernetesconstants.LauncherNodeNameEnv,
 					),
 					TopologyNodeName:          os.Getenv(clabernetesconstants.LauncherNodeNameEnv),
 					KubernetesNode:            nodeName,

@@ -1,0 +1,615 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: launcherprofiles.clabernetes.containerlab.dev
+spec:
+  group: clabernetes.containerlab.dev
+  names:
+    kind: LauncherProfile
+    listKind: LauncherProfileList
+    plural: launcherprofiles
+    shortNames:
+    - c9sprofile
+    singular: launcherprofile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          LauncherProfile holds reusable Kubernetes and launcher realization policy for Nodes. A Node
+          applies at most one LauncherProfile through spec.launcherProfileRef; fields omitted from the
+          profile inherit the global Config defaults.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: LauncherProfileSpec is the spec for a LauncherProfile resource.
+            properties:
+              deployment:
+                description: Deployment holds launcher deployment settings.
+                properties:
+                  containerlabDebug:
+                    description: ContainerlabDebug sets the containerlab --debug flag.
+                    type: boolean
+                  containerlabTimeout:
+                    description: ContainerlabTimeout sets the containerlab --timeout
+                      flag.
+                    type: string
+                  containerlabVersion:
+                    description: ContainerlabVersion selects a custom containerlab
+                      version.
+                    type: string
+                  extraEnv:
+                    description: ExtraEnv is a list of additional environment variables
+                      for the launcher container.
+                    items:
+                      description: EnvVar represents an environment variable present
+                        in a Container.
+                      properties:
+                        name:
+                          description: |-
+                            Name of the environment variable.
+                            May consist of any printable ASCII characters except '='.
+                          type: string
+                        value:
+                          description: |-
+                            Variable references $(VAR_NAME) are expanded
+                            using the previously defined environment variables in the container and
+                            any service environment variables. If a variable cannot be resolved,
+                            the reference in the input string will be unchanged. Double $$ are reduced
+                            to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                            "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                            Escaped references will never be expanded, regardless of whether the variable
+                            exists or not.
+                            Defaults to "".
+                          type: string
+                        valueFrom:
+                          description: Source for the environment variable's value.
+                            Cannot be used if value is not empty.
+                          properties:
+                            configMapKeyRef:
+                              description: Selects a key of a ConfigMap.
+                              properties:
+                                key:
+                                  description: The key to select.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the ConfigMap or its
+                                    key must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            fieldRef:
+                              description: |-
+                                Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                                spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                              properties:
+                                apiVersion:
+                                  description: Version of the schema the FieldPath
+                                    is written in terms of, defaults to "v1".
+                                  type: string
+                                fieldPath:
+                                  description: Path of the field to select in the
+                                    specified API version.
+                                  type: string
+                              required:
+                              - fieldPath
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            fileKeyRef:
+                              description: |-
+                                FileKeyRef selects a key of the env file.
+                                Requires the EnvFiles feature gate to be enabled.
+                              properties:
+                                key:
+                                  description: |-
+                                    The key within the env file. An invalid key will prevent the pod from starting.
+                                    The keys defined within a source may consist of any printable ASCII characters except '='.
+                                    During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                                  type: string
+                                optional:
+                                  default: false
+                                  description: |-
+                                    Specify whether the file or its key must be defined. If the file or key
+                                    does not exist, then the env var is not published.
+                                    If optional is set to true and the specified key does not exist,
+                                    the environment variable will not be set in the Pod's containers.
+
+                                    If optional is set to false and the specified key does not exist,
+                                    an error will be returned during Pod creation.
+                                  type: boolean
+                                path:
+                                  description: |-
+                                    The path within the volume from which to select the file.
+                                    Must be relative and may not contain the '..' path or start with '..'.
+                                  type: string
+                                volumeName:
+                                  description: The name of the volume mount containing
+                                    the env file.
+                                  type: string
+                              required:
+                              - key
+                              - path
+                              - volumeName
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            resourceFieldRef:
+                              description: |-
+                                Selects a resource of the container: only resources limits and requests
+                                (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                              properties:
+                                containerName:
+                                  description: 'Container name: required for volumes,
+                                    optional for env vars'
+                                  type: string
+                                divisor:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  description: Specifies the output format of the
+                                    exposed resources, defaults to "1"
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                resource:
+                                  description: 'Required: resource to select'
+                                  type: string
+                              required:
+                              - resource
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            secretKeyRef:
+                              description: Selects a key of a secret in the pod's
+                                namespace
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  launcherImage:
+                    description: LauncherImage selects the launcher image.
+                    type: string
+                  launcherImagePullPolicy:
+                    description: LauncherImagePullPolicy selects the launcher image
+                      pull policy.
+                    enum:
+                    - IfNotPresent
+                    - Always
+                    - Never
+                    type: string
+                  launcherLogLevel:
+                    description: LauncherLogLevel selects the launcher log level.
+                    enum:
+                    - disabled
+                    - critical
+                    - warn
+                    - info
+                    - debug
+                    type: string
+                  persistence:
+                    description: Persistence enables persistence of the containerlab
+                      working directory.
+                    properties:
+                      claimSize:
+                        description: |-
+                          ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 5Gi.
+                          If provided, the string value must be a valid kubernetes storage requests style string. Note
+                          the claim size *cannot be made smaller* once created, but it *can* be expanded. If you need
+                          to make the claim smaller you must delete the topology (or the node from the topology) and
+                          re-add it.
+                        type: string
+                      enabled:
+                        description: |-
+                          Enabled indicates if persistence of hte containerlab lab/working directory will be placed in
+                          a mounted PVC.
+                        type: boolean
+                      storageClassName:
+                        description: |-
+                          StorageClassName is the storage class to set in the PVC -- if not provided this will be left
+                          empty which will end up using your default storage class. Note that currently we assume you
+                          have (as default) or provide a dynamically provisionable storage class, hence no selector.
+                        type: string
+                    required:
+                    - enabled
+                    type: object
+                  privilegedLauncher:
+                    description: PrivilegedLauncher configures launcher containers
+                      as privileged.
+                    type: boolean
+                type: object
+              expose:
+                description: Expose holds configurations relevant to how Nodes using
+                  this profile are exposed.
+                properties:
+                  disableAutoExpose:
+                    description: DisableAutoExpose disables automatic exposure of
+                      the default port list.
+                    type: boolean
+                  disableExpose:
+                    description: DisableExpose indicates if exposing Nodes via a Service
+                      should be disabled.
+                    type: boolean
+                  exposeType:
+                    description: ExposeType configures the Service type used for exposing
+                      Nodes.
+                    enum:
+                    - None
+                    - ClusterIP
+                    - Headless
+                    - LoadBalancer
+                    type: string
+                  useNodeMgmtIpv4Address:
+                    description: UseNodeMgmtIpv4Address assigns a Node's management
+                      IPv4 address as its LoadBalancerIP.
+                    type: boolean
+                  useNodeMgmtIpv6Address:
+                    description: UseNodeMgmtIpv6Address assigns a Node's management
+                      IPv6 address as its LoadBalancerIP.
+                    type: boolean
+                type: object
+              imagePull:
+                description: ImagePull holds configurations relevant to how launcher
+                  Pods handle pulling images.
+                properties:
+                  dockerConfig:
+                    description: DockerConfig names the Secret containing config.json.
+                    type: string
+                  dockerDaemonConfig:
+                    description: DockerDaemonConfig names the Secret containing daemon.json.
+                    type: string
+                  insecureRegistries:
+                    description: InsecureRegistries is a slice of insecure registries
+                      to configure in launcher Pods.
+                    items:
+                      type: string
+                    type: array
+                  pullSecrets:
+                    description: PullSecrets provides Secrets to use when pulling
+                      images.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  pullThroughOverride:
+                    description: PullThroughOverride overrides the image pull-through
+                      mode.
+                    enum:
+                    - auto
+                    - always
+                    - never
+                    type: string
+                type: object
+              mgmt:
+                description: |-
+                  Mgmt temporarily retains shared containerlab management network settings for Topology
+                  compatibility. Its final ownership is intentionally deferred.
+                properties:
+                  external-access:
+                    description: ExternalAccess enables (or disables) external access
+                      to the management network.
+                    type: boolean
+                  ipv4-gw:
+                    description: IPv4Gw is the IPv4 gateway of the management network.
+                    type: string
+                  ipv4-range:
+                    description: IPv4Range is the IPv4 range of the management network.
+                    type: string
+                  ipv4-subnet:
+                    description: IPv4Subnet is the IPv4 subnet of the management network.
+                    type: string
+                  ipv6-gw:
+                    description: IPv6Gw is the IPv6 gateway of the management network.
+                    type: string
+                  ipv6-range:
+                    description: IPv6Range is the IPv6 range of the management network.
+                    type: string
+                  ipv6-subnet:
+                    description: IPv6Subnet is the IPv6 subnet of the management network.
+                    type: string
+                  mtu:
+                    description: MTU is the MTU of the management network.
+                    type: integer
+                  network:
+                    description: Network is the name of the docker network to use
+                      for the management network.
+                    type: string
+                type: object
+              resources:
+                description: Resources holds the Kubernetes resource requirements
+                  for launcher Pods.
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This field depends on the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+              scheduling:
+                description: Scheduling holds launcher Pod scheduling settings.
+                properties:
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      NodeSelector sets the node selector that will be configured on all launcher pods for this
+                      Topology.
+                    type: object
+                  tolerations:
+                    description: Tolerations is a list of Tolerations that will be
+                      set on the launcher pod spec.
+                    items:
+                      description: |-
+                        The pod this Toleration is attached to tolerates any taint that matches
+                        the triple <key,value,effect> using the matching operator <operator>.
+                      properties:
+                        effect:
+                          description: |-
+                            Effect indicates the taint effect to match. Empty means match all taint effects.
+                            When specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.
+                          type: string
+                        key:
+                          description: |-
+                            Key is the taint key that the toleration applies to. Empty means match all taint keys.
+                            If the key is empty, operator must be Exists; this combination means to match all values and all keys.
+                          type: string
+                        operator:
+                          description: |-
+                            Operator represents a key's relationship to the value.
+                            Valid operators are Exists, Equal, Lt, and Gt. Defaults to Equal.
+                            Exists is equivalent to wildcard for value, so that a pod can
+                            tolerate all taints of a particular category.
+                            Lt and Gt perform numeric comparisons (requires feature gate TaintTolerationComparisonOperators).
+                          type: string
+                        tolerationSeconds:
+                          description: |-
+                            TolerationSeconds represents the period of time the toleration (which must be
+                            of effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,
+                            it is not set, which means tolerate the taint forever (do not evict). Zero and
+                            negative values will be treated as 0 (evict immediately) by the system.
+                          format: int64
+                          type: integer
+                        value:
+                          description: |-
+                            Value is the taint value the toleration matches to.
+                            If the operator is Exists, the value should be empty, otherwise just a regular string.
+                          type: string
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+              statusProbes:
+                description: StatusProbes holds the configurations used to check and
+                  report Node status.
+                properties:
+                  enabled:
+                    default: true
+                    description: |-
+                      Enabled sets the status probes to enabled (or obviously disabled). Note that if the probes
+                      are enabled and the health condition fails due to configuring the node the cluster will
+                      restart the node. So, if you plan on being destructive with the node config (probably because
+                      you will have exec'd onto the node) then you may want to disable this!
+                    type: boolean
+                  excludedNodes:
+                    description: |-
+                      ExcludedNodes is a set of nodes to be excluded from status probe checking. It may be
+                      desirable to exclude some node(s) from status checking due to them not having an easy way
+                      for clabernetes to check the state of the node. The node names here should match the name of
+                      the nodes in the containerlab sub-topology.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  nodeProbeConfigurations:
+                    additionalProperties:
+                      description: |-
+                        ProbeConfiguration holds information about how to probe a (containerlab) node in a Topology. If
+                        both style probes are configured, both will be used and both must succeed in order to report
+                        healthy.
+                      properties:
+                        sshProbeConfiguration:
+                          description: SSHProbeConfiguration defines an SSH probe.
+                          properties:
+                            password:
+                              description: Password is the password to use for auth.
+                              type: string
+                            port:
+                              description: Port is an optional override (of course
+                                default is 22).
+                              type: integer
+                            username:
+                              description: Username is the username to use for auth.
+                              type: string
+                          required:
+                          - password
+                          - username
+                          type: object
+                        startupSeconds:
+                          description: |-
+                            StartupSeconds is the total amount of seconds to allow for the node to start. This defaults
+                            to ~13 minutes to hopefully account for slow to boot nodes. Note that there is also a 60
+                            initial delay configured, so technically the default is ~14-15 minutes. Be careful with this
+                            delay as there must be time for c9s to (via whatever means) pull the image and load it into
+                            docker on the launcher and this can take a bit! Having this be bigger than you think you need
+                            is generally better since if the startup probe succeeds ever then the readiness probe takes
+                            over anyway.
+                          type: integer
+                        tcpProbeConfiguration:
+                          description: TCPProbeConfiguration defines a TCP probe.
+                          properties:
+                            port:
+                              description: |-
+                                Port defines the port to try to open a TCP connection to. When using TCP probe setup this
+                                connection happens inside the launcher rather than the "normal" k8s style probes. This style
+                                probe behaves like a k8s style probe though in that it is "successful" whenever a TCP
+                                connection to this port can be opened successfully.
+                              type: integer
+                          required:
+                          - port
+                          type: object
+                      type: object
+                    description: |-
+                      NodeProbeConfigurations is a map of node specific probe configurations -- if you only need
+                      a simple ssh or tcp connect style setup that works on all node types in the topology you can
+                      ignore this and just configure ProbeConfiguration.
+                    type: object
+                  probeConfiguration:
+                    description: ProbeConfiguration is the default probe configuration
+                      for the Topology.
+                    properties:
+                      sshProbeConfiguration:
+                        description: SSHProbeConfiguration defines an SSH probe.
+                        properties:
+                          password:
+                            description: Password is the password to use for auth.
+                            type: string
+                          port:
+                            description: Port is an optional override (of course default
+                              is 22).
+                            type: integer
+                          username:
+                            description: Username is the username to use for auth.
+                            type: string
+                        required:
+                        - password
+                        - username
+                        type: object
+                      startupSeconds:
+                        description: |-
+                          StartupSeconds is the total amount of seconds to allow for the node to start. This defaults
+                          to ~13 minutes to hopefully account for slow to boot nodes. Note that there is also a 60
+                          initial delay configured, so technically the default is ~14-15 minutes. Be careful with this
+                          delay as there must be time for c9s to (via whatever means) pull the image and load it into
+                          docker on the launcher and this can take a bit! Having this be bigger than you think you need
+                          is generally better since if the startup probe succeeds ever then the readiness probe takes
+                          over anyway.
+                        type: integer
+                      tcpProbeConfiguration:
+                        description: TCPProbeConfiguration defines a TCP probe.
+                        properties:
+                          port:
+                            description: |-
+                              Port defines the port to try to open a TCP connection to. When using TCP probe setup this
+                              connection happens inside the launcher rather than the "normal" k8s style probes. This style
+                              probe behaves like a k8s style probe though in that it is "successful" whenever a TCP
+                              connection to this port can be opened successfully.
+                            type: integer
+                        required:
+                        - port
+                        type: object
+                    type: object
+                type: object
+            type: object
+          status:
+            description: LauncherProfileStatus is the status for a LauncherProfile
+              resource.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

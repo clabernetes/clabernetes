@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  labels:
+    app.kubernetes.io/name: srl2
+    clabernetes/app: clabernetes
+    clabernetes/name: srl2
+    clabernetes/topologyNode: srl2
+    clabernetes/topologyOwner: topology-basic
+  name: srl2
+  namespace: NAMESPACE
+  ownerReferences:
+    - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      kind: Node
+      name: srl2
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: srl2
+      clabernetes/app: clabernetes
+      clabernetes/name: srl2
+      clabernetes/topologyNode: srl2
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        clabernetes/linkAttachmentsDigest: d5356ec192a38f2106fb899d77a779db35dad64271ba3fb903dce1e3640cdf3a
+        clabernetes/nodeConfigDigest: 581b4e19255efe4e2722d63475149cf22026975b81bd644ca36742cabb26ba45
+      labels:
+        app.kubernetes.io/name: srl2
+        clabernetes/app: clabernetes
+        clabernetes/name: srl2
+        clabernetes/topologyNode: srl2
+        clabernetes/topologyOwner: topology-basic
+    spec:
+      containers:
+        - command:
+            - /clabernetes/manager
+            - launch
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: APP_NAME
+              value: clabernetes
+            - name: MANAGER_NAMESPACE
+              value: clabernetes
+            - name: LAUNCHER_IMAGE_PULL_THROUGH_MODE
+              value: auto
+            - name: LAUNCHER_LOGGER_LEVEL
+              value: debug
+            - name: LAUNCHER_NODE_NAME
+              value: srl2
+            - name: LAUNCHER_NODE_IMAGE
+              value: ghcr.io/nokia/srlinux
+            - name: LAUNCHER_IN_CLUSTER_DNS_SUFFIX
+              value: svc.cluster.local
+            - name: LAUNCHER_CONTAINERLAB_VERSION
+            - name: LAUNCHER_CONTAINERLAB_TIMEOUT
+            - name: LAUNCHER_PRIVILEGED
+              value: "true"
+          imagePullPolicy: IfNotPresent
+          name: srl2
+          ports:
+            - containerPort: 14789
+              name: vxlan
+              protocol: UDP
+            - containerPort: 4799
+              name: slurpeeth
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /var/lib/docker
+              name: docker
+            - mountPath: /clabernetes/podinfo
+              name: podinfo
+              readOnly: true
+          workingDir: /clabernetes
+      dnsPolicy: ClusterFirst
+      hostname: srl2
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: clabernetes-launcher-service-account
+      serviceAccountName: clabernetes-launcher-service-account
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - emptyDir: {}
+          name: docker
+        - downwardAPI:
+            defaultMode: 292
+            items:
+              - fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.annotations[clabernetes/linkAttachmentsDigest]
+                path: link-attachments-digest
+          name: podinfo
+status: {}

@@ -1,0 +1,10 @@
+---
+connectivity: slurpeeth
+deployment:
+  resources:
+    default:
+      requests:
+        memory: 1Gi
+    srl2:
+      requests:
+        memory: 2Gi
