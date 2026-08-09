@@ -7,9 +7,15 @@ import {
   Scripts,
   ScrollRestoration,
 } from 'react-router';
+import c9sLogo from '@/assets/c9s-logo-clean.png';
 import StaticSearchDialog from '@/components/static-search';
 import type { Route } from './+types/root';
 import './app.css';
+
+export const links: Route.LinksFunction = () => [
+  { rel: 'icon', href: c9sLogo, type: 'image/png' },
+  { rel: 'apple-touch-icon', href: c9sLogo, type: 'image/png' },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
