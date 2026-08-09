@@ -125,7 +125,7 @@ flowchart TB
 ```tsx
 tabs={[
   { title: 'Guide', description: 'Install, concepts, and operations', url: '/docs' },
-  { title: 'CRD Reference', description: 'Custom resource field schemas', url: '/docs/crd' },
+  { title: 'CRD Reference', description: 'Custom resource definitions reference', url: '/docs/crd' },
 ]}
 ```
 

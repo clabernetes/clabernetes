@@ -1,6 +1,6 @@
 {
   "title": "CRD Reference",
-  "description": "Custom resource field schemas",
+  "description": "Custom resource definitions reference",
   "icon": "Braces",
   "root": true,
   "pages": [

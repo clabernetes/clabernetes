@@ -12,7 +12,7 @@ const DOCUMENTATION_TAB: LayoutTab = {
 
 const CRD_REFERENCE_TAB: LayoutTab = {
   title: 'CRD Reference',
-  description: 'Custom resource field schemas',
+  description: 'Custom resource definitions reference',
   url: '/docs/crd',
   icon: layoutTabIcon('Braces'),
 };
