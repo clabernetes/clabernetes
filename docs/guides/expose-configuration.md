@@ -1,4 +1,7 @@
-# Service Exposure Configuration Guide
+---
+title: Service exposure
+description: Configure how Clabernetes exposes network nodes through Kubernetes Services.
+---
 
 This guide explains how to configure Clabernetes service exposure for your network topologies.
 
@@ -31,11 +34,13 @@ spec:
 ```
 
 **Effects:**
+
 - No services are created for any node
 - Nodes can still communicate with each other via VXLAN tunnels
 - No external access to nodes
 
 **Use cases:**
+
 - Automated testing pipelines where nodes only need internal connectivity
 - Resource-constrained clusters where LoadBalancers are expensive
 - Security-sensitive environments
@@ -66,13 +71,14 @@ spec:
 ```
 
 **Effects:**
+
 - Only ports explicitly defined in the containerlab topology are exposed
 - Automatic port list is not added
 
 **Auto-exposed ports (when disabled, these are NOT exposed):**
 
 | Port | Protocol | Service |
-|------|----------|---------|
+| ------ | ---------- | --------- |
 | 21 | TCP | FTP |
 | 22 | TCP | SSH |
 | 23 | TCP | Telnet |
@@ -101,6 +107,7 @@ spec:
 ```
 
 **Characteristics:**
+
 - Provisions a cloud LoadBalancer (or MetalLB in bare-metal clusters)
 - Each node gets an external IP address
 - Ports are accessible from outside the cluster
@@ -116,6 +123,7 @@ spec:
 ```
 
 **Characteristics:**
+
 - No external IP provisioned
 - Access via service name: `<topology>-<node>.<namespace>.svc.cluster.local`
 - Suitable for in-cluster automation and testing
@@ -131,12 +139,14 @@ spec:
 ```
 
 **Characteristics:**
+
 - Creates a headless service (`clusterIP: None`)
 - DNS queries return pod IPs directly instead of a virtual service IP
 - No load balancing or proxying by kube-proxy
 - Useful for StatefulSet-like access patterns where you need direct pod connectivity
 
 **Use cases:**
+
 - Service discovery where clients need to connect directly to specific pods
 - Custom load balancing logic in client applications
 - Integration with external service meshes that handle their own load balancing
@@ -153,6 +163,7 @@ spec:
 ```
 
 **Characteristics:**
+
 - Similar to `disableExpose: true` but the expose configuration is preserved
 - Useful when you might want to enable services later without changing other settings
 
@@ -196,11 +207,13 @@ spec:
 ```
 
 **Requirements:**
+
 - Your cluster must support the specified IP addresses
 - MetalLB or similar must have the IPs in its address pool
 - If the IP is invalid or unavailable, Kubernetes allocates an IP automatically
 
 **Use cases:**
+
 - Consistent IP addressing across topology deployments
 - Integration with external systems expecting specific IPs
 - DNS pre-configuration
@@ -208,7 +221,7 @@ spec:
 ## Examples Comparison
 
 | Configuration | Services Created | External Access | Port Control |
-|--------------|------------------|-----------------|--------------|
+| -------------- | ------------------ | ----------------- | -------------- |
 | Default | LoadBalancer | Yes | Auto + Manual |
 | `disableExpose: true` | None | No | N/A |
 | `disableAutoExpose: true` | LoadBalancer | Yes | Manual only |
@@ -277,5 +290,5 @@ kubectl exec -it deploy/my-topology-srl1 -- sr_cli
 
 ## Related
 
-- [CRD Reference: Expose Fields](../crd-reference.md#expose)
-- [Examples: Expose Configurations](../../examples/expose/)
+- [CRD Reference: Expose Fields](/docs/crd-reference#expose)
+- [Examples: Expose Configurations](https://github.com/clabernetes/clabernetes/tree/main/examples/expose)

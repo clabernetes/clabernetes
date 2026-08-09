@@ -32,6 +32,9 @@ private/
 # coverage
 cover.out
 
+# pnpm cache
+.pnpm-store/
+
 # devspace cache
 *.devspace
 

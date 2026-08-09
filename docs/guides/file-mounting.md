@@ -1,4 +1,7 @@
-# File Mounting Guide
+---
+title: File mounting
+description: Mount configuration, licenses, and other files into network nodes.
+---
 
 This guide explains how to mount external files into Clabernetes topology nodes using ConfigMaps and URLs.
 
@@ -90,7 +93,7 @@ LauncherProfile contains launcher policy only; it does not own per-node files.
 ### FileFromConfigMap Fields
 
 | Field | Required | Description |
-|-------|----------|-------------|
+| ------- | ---------- | ------------- |
 | `filePath` | Yes | Destination path inside the pod |
 | `configMapName` | Yes | Name of the ConfigMap |
 | `configMapPath` | No | Specific key in ConfigMap (mounts entire CM if omitted) |
@@ -160,12 +163,14 @@ spec:
 - Must be accessible from the launcher pod
 
 **Good URLs:**
+
 ```
 https://raw.githubusercontent.com/user/repo/main/config.json
 https://files.example.com/configs/router1.cfg
 ```
 
 **Bad URLs:**
+
 ```
 https://github.com/user/repo/blob/main/config.json  # HTML page
 https://drive.google.com/file/d/xxx               # Requires auth
@@ -251,6 +256,7 @@ spec:
 When using clabverter to convert containerlab topologies, startup-config can be specified in two ways:
 
 **File path reference** (points to external file):
+
 ```yaml
 nodes:
   srl1:
@@ -259,6 +265,7 @@ nodes:
 ```
 
 **Inline configuration** (embedded in YAML):
+
 ```yaml
 nodes:
   srl1:
@@ -333,7 +340,7 @@ spec:
 ## ConfigMap vs URL
 
 | Aspect | ConfigMap | URL |
-|--------|-----------|-----|
+| -------- | ----------- | ----- |
 | Size limit | 1 MB | No limit |
 | Updates | Requires CM update | Re-downloaded on restart |
 | Security | In-cluster secrets | External access needed |
@@ -345,11 +352,13 @@ spec:
 ### File Not Appearing
 
 Check ConfigMap exists:
+
 ```bash
 kubectl get configmap <name>
 ```
 
 Check pod events:
+
 ```bash
 kubectl describe pod <pod-name>
 ```
@@ -357,12 +366,14 @@ kubectl describe pod <pod-name>
 ### Permission Issues
 
 Ensure correct mode:
+
 - Scripts: `mode: execute`
 - Config files: `mode: read` (default)
 
 ### ConfigMap Size Limit
 
 If exceeding 1MB:
+
 - Use URL-based mounting
 - Split into multiple ConfigMaps
 - Compress content
@@ -370,11 +381,13 @@ If exceeding 1MB:
 ### URL Download Failures
 
 Check launcher logs:
+
 ```bash
 kubectl logs -l clabernetes/topologyNode=<node>
 ```
 
 Verify URL accessibility:
+
 ```bash
 kubectl run curl-test --rm -it --image=curlimages/curl -- curl -I <url>
 ```
@@ -389,6 +402,6 @@ kubectl run curl-test --rm -it --image=curlimages/curl -- curl -I <url>
 
 ## Related
 
-- [Example: with-configmap-files.yaml](../../examples/deployment/with-configmap-files.yaml)
-- [CRD Reference: FilesFromConfigMap](../crd-reference.md#filefromconfigmap)
-- [CRD Reference: FilesFromURL](../crd-reference.md#filefromurl)
+- [Example: with-configmap-files.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-configmap-files.yaml)
+- [CRD Reference: FilesFromConfigMap](/docs/crd-reference#filefromconfigmap)
+- [CRD Reference: FilesFromURL](/docs/crd-reference#filefromurl)

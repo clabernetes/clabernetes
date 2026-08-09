@@ -1,4 +1,7 @@
-# Image Pull Configuration Guide
+---
+title: Image pulling
+description: Configure public, private, pull-through, proxied, and air-gapped image workflows.
+---
 
 This guide explains how to configure image pulling in Clabernetes, including private registries, pull secrets, and pull-through modes.
 
@@ -22,6 +25,7 @@ spec:
 ```
 
 **Behavior:**
+
 - Checks if image exists in launcher's Docker
 - If not, requests pull via ImageRequest CRD
 - Controller creates a pull pod on the same node
@@ -38,6 +42,7 @@ spec:
 ```
 
 **Use cases:**
+
 - Private registries requiring cluster credentials
 - Ensuring images are cached at CRI level
 - Consistent behavior across all topologies
@@ -53,6 +58,7 @@ spec:
 ```
 
 **Use cases:**
+
 - Public images that Docker can pull directly
 - When pull-through isn't working
 - Debugging image pull issues
@@ -94,6 +100,7 @@ spec:
 ```
 
 **How it works:**
+
 1. Controller creates ImageRequest for each image
 2. Pull pod is created with the specified pull secrets
 3. Image is pulled to node's CRI
@@ -130,6 +137,7 @@ kubectl create secret generic docker-daemon-config \
 ```
 
 Example daemon.json:
+
 ```json
 {
   "insecure-registries": ["registry.local:5000"],
@@ -192,6 +200,7 @@ spec:
 ```
 
 **How it works:**
+
 - The launcher writes the proxy env vars into its Docker daemon config (`proxies` section), so
   direct Docker pulls go through the proxy.
 - Pull-through mode also works: the pull pod uses the node CRI (configure your CRI for the proxy
@@ -235,6 +244,7 @@ spec:
 ```
 
 Common paths:
+
 - Standard containerd: `/run/containerd/containerd.sock`
 - K3s: `/run/k3s/containerd/containerd.sock`
 - Minikube: `/var/run/containerd/containerd.sock`
@@ -333,12 +343,14 @@ spec:
 ### Image Pull Failures
 
 Check ImageRequest status:
+
 ```bash
 kubectl get imagerequests
 kubectl describe imagerequest <name>
 ```
 
 Check pull pod:
+
 ```bash
 kubectl get pods -l clabernetes/imagePuller=true
 kubectl logs <pull-pod-name>
@@ -347,11 +359,13 @@ kubectl logs <pull-pod-name>
 ### Authentication Issues
 
 Verify secret exists and is correct:
+
 ```bash
 kubectl get secret my-registry-secret -o yaml
 ```
 
 Test manually:
+
 ```bash
 kubectl run test --rm -it --image=<your-image> \
   --overrides='{"spec":{"imagePullSecrets":[{"name":"my-registry-secret"}]}}'
@@ -360,12 +374,14 @@ kubectl run test --rm -it --image=<your-image> \
 ### CRI Socket Issues
 
 Verify socket path:
+
 ```bash
 # On the node
 ls -la /run/containerd/containerd.sock
 ```
 
 Check launcher logs:
+
 ```bash
 kubectl logs -l clabernetes/topologyNode=<node> -c clabernetes-launcher
 ```
@@ -397,6 +413,6 @@ or multi-profile priority chain.
 
 ## Related
 
-- [Example: private-registry.yaml](../../examples/advanced/private-registry.yaml)
-- [CRD Reference: ImagePull](../crd-reference.md#imagepull)
-- [CRD Reference: ImageRequest](../crd-reference.md#imagerequest-crd)
+- [Example: private-registry.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/advanced/private-registry.yaml)
+- [CRD Reference: ImagePull](/docs/crd-reference#imagepull)
+- [CRD Reference: ImageRequest](/docs/crd-reference#imagerequest-crd)

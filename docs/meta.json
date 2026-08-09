@@ -1,0 +1,12 @@
+{
+  "title": "c9s",
+  "pages": [
+    "index",
+    "quickstart",
+    "architecture",
+    "concepts",
+    "guides",
+    "examples",
+    "crd-reference"
+  ]
+}

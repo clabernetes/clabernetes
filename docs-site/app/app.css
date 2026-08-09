@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+@source '../../docs';
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(circle at top,
+      color-mix(in oklab, var(--color-fd-primary) 8%, transparent),
+      transparent 32rem),
+    var(--color-fd-background);
+}
