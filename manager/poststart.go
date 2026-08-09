@@ -3,9 +3,9 @@ package manager
 import (
 	"fmt"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesmanagertypes "github.com/clabernetes/clabernetes/manager/types"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	ctrlruntimeutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"

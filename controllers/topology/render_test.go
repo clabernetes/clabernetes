@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconfig "github.com/srl-labs/clabernetes/config"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetescontrollerstopology "github.com/srl-labs/clabernetes/controllers/topology"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconfig "github.com/clabernetes/clabernetes/config"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	k8scorev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )

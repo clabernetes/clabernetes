@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"sort"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteslauncherconnectivity "github.com/srl-labs/clabernetes/launcher/connectivity"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteslauncherconnectivity "github.com/clabernetes/clabernetes/launcher/connectivity"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
 // materializeTopology builds the containerlab topology this launcher runs from the primary

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetesmanagerelection "github.com/srl-labs/clabernetes/manager/election"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesmanagerelection "github.com/clabernetes/clabernetes/manager/election"
 )
 
 func (c *clabernetes) startInitLeaderElection() {

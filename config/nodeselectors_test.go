@@ -3,8 +3,8 @@ package config_test
 import (
 	"testing"
 
+	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	"github.com/google/go-cmp/cmp"
-	clabernetesconfig "github.com/srl-labs/clabernetes/config"
 )
 
 func TestGetNodeSelectorsByName(t *testing.T) {

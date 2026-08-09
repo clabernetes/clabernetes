@@ -57,11 +57,11 @@ linters:
           alias: apimachineryruntime
         - pkg: k8s.io/apimachinery/pkg/runtime/scheme
           alias: apimachineryruntimescheme
-        - pkg: github.com/srl-labs/clabernetes/(\w+)
+        - pkg: github.com/clabernetes/clabernetes/(\w+)
           alias: clabernetes$1
-        - pkg: github.com/srl-labs/clabernetes/(\w+)/(\w+)
+        - pkg: github.com/clabernetes/clabernetes/(\w+)/(\w+)
           alias: clabernetes$1$2
-        - pkg: github.com/srl-labs/clabernetes/(\w+)/(\w+)/(\w+)
+        - pkg: github.com/clabernetes/clabernetes/(\w+)/(\w+)/(\w+)
           alias: clabernetes$1$2$3
       no-unaliased: true
     lll:

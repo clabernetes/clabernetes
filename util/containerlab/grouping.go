@@ -3,7 +3,7 @@ package containerlab
 import (
 	"sort"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 )
 
 // NodesByName maps clabernetes Node objects by their (containerlab node) name.

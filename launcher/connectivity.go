@@ -1,7 +1,7 @@
 package launcher
 
 import (
-	claberneteslauncherconnectivity "github.com/srl-labs/clabernetes/launcher/connectivity"
+	claberneteslauncherconnectivity "github.com/clabernetes/clabernetes/launcher/connectivity"
 )
 
 func (c *clabernetes) connectivity() {

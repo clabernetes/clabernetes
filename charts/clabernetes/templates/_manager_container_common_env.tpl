@@ -19,8 +19,8 @@
   {{- if .Values.globalConfig.deployment.launcherImage }}
   value: {{ .Values.globalConfig.deployment.launcherImage }}
   {{- else if eq .Chart.Version "0.0.0" }}
-  value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:dev-latest"
+  value: "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:dev-latest"
   {{- else }}
-  value: "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:{{ .Chart.Version }}"
+  value: "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:{{ .Chart.Version }}"
   {{- end }}
 {{- end -}}

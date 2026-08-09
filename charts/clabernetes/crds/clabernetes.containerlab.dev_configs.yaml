@@ -230,7 +230,7 @@ spec:
                     type: array
                     x-kubernetes-list-type: atomic
                   launcherImage:
-                    default: ghcr.io/srl-labs/clabernetes/clabernetes-launcher:latest
+                    default: ghcr.io/clabernetes/clabernetes/clabernetes-launcher:latest
                     description: LauncherImage sets the default launcher image to
                       use when spawning launcher deployments.
                     type: string

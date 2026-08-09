@@ -79,7 +79,7 @@ type ConfigDeployment struct {
 	// +optional
 	ContainerlabVersion string `json:"containerlabVersion,omitempty"`
 	// LauncherImage sets the default launcher image to use when spawning launcher deployments.
-	// +kubebuilder:default="ghcr.io/srl-labs/clabernetes/clabernetes-launcher:latest"
+	// +kubebuilder:default="ghcr.io/clabernetes/clabernetes/clabernetes-launcher:latest"
 	LauncherImage string `json:"launcherImage"`
 	// LauncherImagePullPolicy sets the default launcher image pull policy to use when spawning
 	// launcher deployments.

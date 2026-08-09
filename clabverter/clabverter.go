@@ -11,12 +11,12 @@ import (
 	"strings"
 	"text/template"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
-	clabernetesutilkubernetes "github.com/srl-labs/clabernetes/util/kubernetes"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
+	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	sigsyaml "sigs.k8s.io/yaml"
 )

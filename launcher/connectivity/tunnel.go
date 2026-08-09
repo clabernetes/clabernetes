@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
 // Tunnel holds the *local view* of a tunnel between two interfaces on different launcher pods --

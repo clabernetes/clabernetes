@@ -3,8 +3,8 @@ package link_test
 import (
 	"testing"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetescontrollerslink "github.com/srl-labs/clabernetes/controllers/link"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescontrollerslink "github.com/clabernetes/clabernetes/controllers/link"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

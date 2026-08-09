@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 )
 
 func eventually(

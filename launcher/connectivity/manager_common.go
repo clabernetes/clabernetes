@@ -3,8 +3,8 @@ package connectivity
 import (
 	"context"
 
-	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
 // Manager reconciles all per-Link connectivity flavors terminating on one launcher.

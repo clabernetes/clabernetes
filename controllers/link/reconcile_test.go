@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetescontrollers "github.com/srl-labs/clabernetes/controllers"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"

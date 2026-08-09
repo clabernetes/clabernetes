@@ -5,8 +5,8 @@ package connectivity
 import (
 	"context"
 
-	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
 // NewManager returns a dispatcher. Non-Linux builds retain VXLAN support and report a clear

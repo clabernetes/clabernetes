@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 )
 
 // IsURL returns true if the given path string starts with http or https.

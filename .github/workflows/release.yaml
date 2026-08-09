@@ -96,7 +96,7 @@ jobs:
           make set-chart-versions ${{ needs.prep.outputs.version }}
 
           helm package charts/clicker --version ${{ needs.prep.outputs.version }}
-          helm push clicker-${{ needs.prep.outputs.version }}.tgz oci://ghcr.io/srl-labs/clabernetes
+          helm push clicker-${{ needs.prep.outputs.version }}.tgz oci://ghcr.io/clabernetes/clabernetes
 
           helm package charts/clabernetes --version ${{ needs.prep.outputs.version }}
-          helm push clabernetes-${{ needs.prep.outputs.version }}.tgz oci://ghcr.io/srl-labs/clabernetes
+          helm push clabernetes-${{ needs.prep.outputs.version }}.tgz oci://ghcr.io/clabernetes/clabernetes

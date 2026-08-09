@@ -1,9 +1,9 @@
 package cli
 
 import (
-	clabernetesclabverter "github.com/srl-labs/clabernetes/clabverter"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesclabverter "github.com/clabernetes/clabernetes/clabverter"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	"github.com/urfave/cli/v2"
 )
 

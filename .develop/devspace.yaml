@@ -5,7 +5,7 @@ name: clabernetes
 vars:
   REGISTRY:
     source: env
-    default: ghcr.io/srl-labs/clabernetes
+    default: ghcr.io/clabernetes/clabernetes
 
   # DevSpace runs command-backed variables relative to this config directory. The detector reads
   # node OS/architecture values from the current kubectl context and fails on mixed platforms.

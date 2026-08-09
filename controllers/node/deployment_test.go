@@ -3,11 +3,11 @@ package node_test
 import (
 	"testing"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconfig "github.com/srl-labs/clabernetes/config"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetescontrollersnode "github.com/srl-labs/clabernetes/controllers/node"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconfig "github.com/clabernetes/clabernetes/config"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	k8scorev1 "k8s.io/api/core/v1"
 )
 

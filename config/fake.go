@@ -3,7 +3,7 @@ package config
 import (
 	"maps"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	k8scorev1 "k8s.io/api/core/v1"
 )
 
@@ -98,7 +98,7 @@ func (f fakeManager) GetImagePullThroughMode() string {
 }
 
 func (f fakeManager) GetLauncherImage() string {
-	return "ghcr.io/srl-labs/clabernetes/clabernetes-launcher:latest"
+	return "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:latest"
 }
 
 func (f fakeManager) GetImagePullCriSockOverride() string {

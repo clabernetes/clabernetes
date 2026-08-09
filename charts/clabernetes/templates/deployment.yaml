@@ -90,9 +90,9 @@ spec:
           {{- if .Values.manager.image }}
           image: {{ .Values.manager.image }}
           {{- else if eq .Chart.Version "0.0.0" }}
-          image: "ghcr.io/srl-labs/clabernetes/clabernetes-manager:dev-latest"
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
           {{- else }}
-          image: "ghcr.io/srl-labs/clabernetes/clabernetes-manager:{{ .Chart.Version }}"
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:{{ .Chart.Version }}"
           {{- end }}
           imagePullPolicy: {{ .Values.manager.imagePullPolicy }}
           command: ["/clabernetes/manager", "run", "--initializer"]
@@ -111,9 +111,9 @@ spec:
           {{- if .Values.manager.image }}
           image: {{ .Values.manager.image }}
           {{- else if eq .Chart.Version "0.0.0" }}
-          image: "ghcr.io/srl-labs/clabernetes/clabernetes-manager:dev-latest"
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
           {{- else }}
-          image: "ghcr.io/srl-labs/clabernetes/clabernetes-manager:{{ .Chart.Version }}"
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:{{ .Chart.Version }}"
           {{- end }}
           imagePullPolicy: {{ .Values.manager.imagePullPolicy }}
           command: ["/clabernetes/manager", "run"]
@@ -239,9 +239,9 @@ spec:
           {{- if .Values.ui.image }}
           image: {{ .Values.ui.image }}
           {{- else if eq .Chart.Version "0.0.0" }}
-          image: "ghcr.io/srl-labs/clabernetes/clabernetes-ui:dev-latest"
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-ui:dev-latest"
           {{- else }}
-          image: "ghcr.io/srl-labs/clabernetes/clabernetes-ui:{{ .Chart.Version }}"
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-ui:{{ .Chart.Version }}"
           {{- end }}
           imagePullPolicy: {{ $.Values.ui.imagePullPolicy }}
           resources:

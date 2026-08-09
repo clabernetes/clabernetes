@@ -19,9 +19,9 @@
 package fake
 
 import (
-	clientset "github.com/srl-labs/clabernetes/generated/clientset"
-	clabernetesv1alpha1 "github.com/srl-labs/clabernetes/generated/clientset/typed/apis/v1alpha1"
-	fakeclabernetesv1alpha1 "github.com/srl-labs/clabernetes/generated/clientset/typed/apis/v1alpha1/fake"
+	clientset "github.com/clabernetes/clabernetes/generated/clientset"
+	clabernetesv1alpha1 "github.com/clabernetes/clabernetes/generated/clientset/typed/apis/v1alpha1"
+	fakeclabernetesv1alpha1 "github.com/clabernetes/clabernetes/generated/clientset/typed/apis/v1alpha1/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"

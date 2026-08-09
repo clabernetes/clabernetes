@@ -3,12 +3,12 @@ package topology
 import (
 	"fmt"
 
-	clabernetesapis "github.com/srl-labs/clabernetes/apis"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
-	clabernetesutilkne "github.com/srl-labs/clabernetes/util/kne"
+	clabernetesapis "github.com/clabernetes/clabernetes/apis"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
+	clabernetesutilkne "github.com/clabernetes/clabernetes/util/kne"
 )
 
 // compileKneDefinition compiles a kne topology definition -- kne vendor/model pairs map to

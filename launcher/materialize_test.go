@@ -3,8 +3,8 @@ package launcher //nolint:testpackage // tests exercise the unexported materiali
 import (
 	"testing"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	"gopkg.in/yaml.v3"
 )
 

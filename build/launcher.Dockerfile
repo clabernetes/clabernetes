@@ -22,7 +22,7 @@ RUN TARGET_OS="${TARGETOS:-linux}" && \
     GOOS="${TARGET_OS}" \
     GOARCH="${TARGET_ARCH}" \
     go build \
-    -ldflags "-s -w -X github.com/srl-labs/clabernetes/constants.Version=${VERSION}" \
+    -ldflags "-s -w -X github.com/clabernetes/clabernetes/constants.Version=${VERSION}" \
     -trimpath \
     -a \
     -o \
@@ -30,6 +30,8 @@ RUN TARGET_OS="${TARGETOS:-linux}" && \
     cmd/clabernetes/main.go
 
 FROM debian:bookworm-slim
+
+LABEL org.opencontainers.image.source="https://github.com/clabernetes/clabernetes"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 

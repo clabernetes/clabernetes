@@ -1,11 +1,11 @@
 package topology
 
 import (
-	clabernetesapis "github.com/srl-labs/clabernetes/apis"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconfig "github.com/srl-labs/clabernetes/config"
-	clabernetescontrollers "github.com/srl-labs/clabernetes/controllers"
-	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
+	clabernetesapis "github.com/clabernetes/clabernetes/apis"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconfig "github.com/clabernetes/clabernetes/config"
+	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
+	clabernetesmanagertypes "github.com/clabernetes/clabernetes/manager/types"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"

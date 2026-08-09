@@ -3,8 +3,8 @@ package node_test
 import (
 	"testing"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetescontrollersnode "github.com/srl-labs/clabernetes/controllers/node"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
 )
 
 func TestConfigDigest(t *testing.T) {

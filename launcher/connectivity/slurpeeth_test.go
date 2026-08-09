@@ -5,7 +5,7 @@ package connectivity //nolint:testpackage // tests slurpeeth's practical segment
 import (
 	"testing"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 )
 
 func TestRenderSlurpeethConfigRejectsSegmentOverflow(t *testing.T) {

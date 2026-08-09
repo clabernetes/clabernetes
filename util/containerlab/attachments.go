@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 )
 
 // link attachment materialization modes -- how the launcher realizes a given local interface.

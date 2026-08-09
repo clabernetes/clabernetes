@@ -24,6 +24,8 @@ RUN npm run build
 
 FROM gcr.io/distroless/nodejs22-debian12:nonroot
 
+LABEL org.opencontainers.image.source="https://github.com/clabernetes/clabernetes"
+
 EXPOSE 3000
 ENV PORT=3000
 ENV NODE_ENV=production

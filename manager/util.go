@@ -3,7 +3,7 @@ package manager
 import (
 	"fmt"
 
-	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
+	clabernetesmanagertypes "github.com/clabernetes/clabernetes/manager/types"
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

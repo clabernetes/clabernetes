@@ -10,10 +10,10 @@ import (
 	"strings"
 	"text/template"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
-	clabernetesutilkubernetes "github.com/srl-labs/clabernetes/util/kubernetes"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
+	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	"gopkg.in/yaml.v3"
 )
 

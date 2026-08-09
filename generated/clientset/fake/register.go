@@ -19,7 +19,7 @@
 package fake
 
 import (
-	clabernetesv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
+	clabernetesv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

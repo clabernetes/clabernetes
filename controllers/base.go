@@ -3,11 +3,11 @@ package controllers
 import (
 	"context"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
-	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
-	clabernetesutilkubernetes "github.com/srl-labs/clabernetes/util/kubernetes"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
+	clabernetesmanagertypes "github.com/clabernetes/clabernetes/manager/types"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	clientgorest "k8s.io/client-go/rest"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"

@@ -15,7 +15,6 @@ globalAnnotations: &_globalAnnotations {}
 globalLabels: &_globalLabels {}
 globalTolerations: &globalTolerations []
 
-
 #
 # manager options
 #
@@ -29,7 +28,7 @@ manager:
   podLabels: {}
 
   # defaults to .Chart.Version, if 0.0.0 version defaults to 'dev-latest' tag
-  image: "" # ghcr.io/srl-labs/clabernetes/clabernetes-manager:{{ .Chart.Version }}
+  image: "" # ghcr.io/clabernetes/clabernetes/clabernetes-manager:{{ .Chart.Version }}
   imagePullPolicy: IfNotPresent
 
   replicaCount: 3
@@ -178,14 +177,14 @@ globalConfig:
 ui:
   enabled: true
 
-  deploymentAnnotations: { }
-  deploymentLabels: { }
+  deploymentAnnotations: {}
+  deploymentLabels: {}
   deploymentTolerations: []
-  podAnnotations: { }
-  podLabels: { }
+  podAnnotations: {}
+  podLabels: {}
 
   # defaults to .Chart.Version, if 0.0.0 version defaults to 'dev-latest' tag
-  image: "" # ghcr.io/srl-labs/clabernetes/clabernetes-ui:{{ .Chart.Version }}
+  image: "" # ghcr.io/clabernetes/clabernetes/clabernetes-ui:{{ .Chart.Version }}
   imagePullPolicy: IfNotPresent
 
   replicaCount: 3
@@ -193,9 +192,9 @@ ui:
     requests:
       memory: 128Mi
       cpu: 50m
-    limits: { }
+    limits: {}
 
-  affinity: { }
+  affinity: {}
 
   ingress:
     enabled: true

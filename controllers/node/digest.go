@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 )
 
 // ConfigDigest computes the digest of the launcher-relevant configuration of a launcher

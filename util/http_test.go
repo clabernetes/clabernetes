@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	clabernetestesthelper "github.com/srl-labs/clabernetes/testhelper"
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 )
 
 func TestIsURL(t *testing.T) {
@@ -155,8 +155,8 @@ func TestGitHubGroupAndRepoFromURL(t *testing.T) {
 		},
 		{
 			name:          "clabernetes",
-			in:            "https://github.com/srl-labs/clabernetes",
-			expectedGroup: "srl-labs",
+			in:            "https://github.com/clabernetes/clabernetes",
+			expectedGroup: "clabernetes",
 			expectedRepo:  "clabernetes",
 		},
 	}

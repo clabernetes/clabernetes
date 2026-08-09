@@ -3,8 +3,8 @@ package testhelper
 import (
 	"testing"
 
-	clabernetesutil "github.com/srl-labs/clabernetes/util"
-	clabernetesutilkubernetes "github.com/srl-labs/clabernetes/util/kubernetes"
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 )
 
 const (

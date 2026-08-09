@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sort"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
 const (

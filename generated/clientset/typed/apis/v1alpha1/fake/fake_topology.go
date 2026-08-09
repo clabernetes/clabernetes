@@ -19,8 +19,8 @@
 package fake
 
 import (
-	v1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	apisv1alpha1 "github.com/srl-labs/clabernetes/generated/clientset/typed/apis/v1alpha1"
+	v1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	apisv1alpha1 "github.com/clabernetes/clabernetes/generated/clientset/typed/apis/v1alpha1"
 	gentype "k8s.io/client-go/gentype"
 )
 

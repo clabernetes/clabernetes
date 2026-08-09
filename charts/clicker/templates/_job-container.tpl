@@ -3,9 +3,9 @@
   {{- if .Values.image }}
   image: {{ .Values.image }}
   {{- else if eq .Chart.Version "0.0.0" }}
-  image: "ghcr.io/srl-labs/clabernetes/clabernetes-manager:dev-latest"
+  image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
   {{- else }}
-  image: "ghcr.io/srl-labs/clabernetes/clabernetes-manager:{{ .Chart.Version }}"
+  image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:{{ .Chart.Version }}"
   {{- end }}
   imagePullPolicy: {{ .Values.imagePullPolicy }}
   command: [

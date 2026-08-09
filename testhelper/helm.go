@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 )
 
 const (

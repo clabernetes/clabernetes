@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 )
 
 var onlyOneSignalHandler = make(chan struct{}) //nolint: gochecknoglobals

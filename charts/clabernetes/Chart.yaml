@@ -2,9 +2,17 @@
 apiVersion: v2
 name: clabernetes
 description: Manage containerlab topologies in a kubernetes cluster
-home: https://github.com/srl-labs/clabernetes
+home: https://github.com/clabernetes/clabernetes
 sources:
-  - https://github.com/srl-labs/clabernetes
+  - https://github.com/clabernetes/clabernetes
+annotations:
+  artifacthub.io/category: networking
+  artifacthub.io/license: BSD-3-Clause
+  artifacthub.io/links: |
+    - name: support
+      url: https://github.com/clabernetes/clabernetes/issues
+    - name: documentation
+      url: https://containerlab.dev/manual/clabernetes/
 keywords:
   - network
   - containerlab

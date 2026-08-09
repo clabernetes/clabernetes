@@ -5,8 +5,8 @@ package connectivity
 import (
 	"context"
 
-	clabernetesgeneratedclientset "github.com/srl-labs/clabernetes/generated/clientset"
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
 // NewManager returns a dispatcher that realizes each terminating Link with its own flavor.

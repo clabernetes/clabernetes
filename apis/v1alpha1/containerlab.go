@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 

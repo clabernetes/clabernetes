@@ -1,10 +1,10 @@
 package imagerequest
 
 import (
-	clabernetesapis "github.com/srl-labs/clabernetes/apis"
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetescontrollers "github.com/srl-labs/clabernetes/controllers"
-	clabernetesmanagertypes "github.com/srl-labs/clabernetes/manager/types"
+	clabernetesapis "github.com/clabernetes/clabernetes/apis"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
+	clabernetesmanagertypes "github.com/clabernetes/clabernetes/manager/types"
 	"k8s.io/client-go/kubernetes"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"

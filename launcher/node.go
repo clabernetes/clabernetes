@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
-	claberneteslauncherconnectivity "github.com/srl-labs/clabernetes/launcher/connectivity"
-	clabernetesutilcontainerlab "github.com/srl-labs/clabernetes/util/containerlab"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	claberneteslauncherconnectivity "github.com/clabernetes/clabernetes/launcher/connectivity"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

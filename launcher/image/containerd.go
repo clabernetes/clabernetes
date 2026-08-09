@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	claberneteslogging "github.com/srl-labs/clabernetes/logging"
+	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
 type containerdManager struct {

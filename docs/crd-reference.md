@@ -59,6 +59,7 @@ Holds the underlying topology definition. A Topology must have exactly one defin
 | `kne` | string | A valid KNE topology (alternative to containerlab) |
 
 **Example:**
+
 ```yaml
 spec:
   definition:
@@ -84,6 +85,7 @@ Configures how clabernetes exposes topology nodes via Kubernetes services.
 | `useNodeMgmtIpv6Address` | bool | `false` | Use node's `mgmt-ipv6` address for LoadBalancer IP |
 
 **Auto-Exposed Ports** (when `disableAutoExpose: false`):
+
 - 21/tcp (FTP)
 - 22/tcp (SSH)
 - 23/tcp (Telnet)
@@ -100,6 +102,7 @@ Configures how clabernetes exposes topology nodes via Kubernetes services.
 - 57400/tcp (gNMI - Nokia)
 
 **Example:**
+
 ```yaml
 spec:
   expose:
@@ -136,6 +139,7 @@ Configures deployment-related settings for launcher pods.
 | `storageClassName` | string | - | Storage class name (uses default if empty) |
 
 **Example:**
+
 ```yaml
 spec:
   deployment:
@@ -153,6 +157,7 @@ spec:
 | `tolerations` | []Toleration | Pod tolerations |
 
 **Example:**
+
 ```yaml
 spec:
   deployment:
@@ -177,6 +182,7 @@ spec:
 | `mode` | enum | No | `read` (0o444) or `execute` (0o555), default: `read` |
 
 **Example:**
+
 ```yaml
 spec:
   deployment:
@@ -195,6 +201,7 @@ spec:
 | `url` | string | Yes | URL to download the file from |
 
 **Example:**
+
 ```yaml
 spec:
   deployment:
@@ -259,6 +266,7 @@ Configures health checking for containerlab nodes.
 | `port` | int | Yes | TCP port to probe |
 
 **Example:**
+
 ```yaml
 spec:
   statusProbes:
@@ -286,6 +294,7 @@ Configures image pulling behavior for launcher pods.
 | `dockerConfig` | string | - | Secret name containing config.json |
 
 **Example:**
+
 ```yaml
 spec:
   imagePull:
@@ -592,6 +601,7 @@ Global metadata applied to all clabernetes-created resources.
 | `labels` | map[string]string | Labels for created resources |
 
 **Example:**
+
 ```yaml
 spec:
   metadata:
@@ -618,6 +628,7 @@ Global image pull configuration.
 | `dockerConfig` | string | - | Default docker config secret |
 
 **Example (K3s):**
+
 ```yaml
 spec:
   imagePull:
@@ -637,7 +648,7 @@ Global deployment configuration.
 | `containerlabDebug` | bool | `false` | Default debug logging |
 | `containerlabTimeout` | string | - | Default deploy timeout |
 | `containerlabVersion` | string | - | Override containerlab version |
-| `launcherImage` | string | `ghcr.io/srl-labs/clabernetes/clabernetes-launcher:latest` | Default launcher image |
+| `launcherImage` | string | `ghcr.io/clabernetes/clabernetes/clabernetes-launcher:latest` | Default launcher image |
 | `launcherImagePullPolicy` | enum | `IfNotPresent` | Default pull policy |
 | `launcherLogLevel` | enum | - | Default log level |
 | `extraEnv` | []EnvVar | - | Global environment variables |

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
-	claberneteserrors "github.com/srl-labs/clabernetes/errors"
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 )
 
 // ValidateLink checks the parts of a link spec that the CRD schema cannot express.
