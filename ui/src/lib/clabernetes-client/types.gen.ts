@@ -2125,19 +2125,13 @@ export type C9sRunTopologyV1Alpha1 = {
         connectivity?: 'vxlan' | 'slurpeeth';
         /**
          * Definition defines the actual set of nodes (network ones, not k8s ones!) that this Topology
-         * CR represents. Historically, and probably most often, this means Topology holds a "normal"
-         * containerlab topology file that will be "clabernetsified", however this could also be a "kne"
-         * config, or perhaps others in the future.
+         * CR represents -- a containerlab topology file that will be "clabernetsified".
          */
         definition: {
             /**
              * Containerlab holds a valid containerlab topology.
              */
-            containerlab?: string;
-            /**
-             * Kne holds a valid kne topology.
-             */
-            kne?: string;
+            containerlab: string;
         };
         /**
          * Deployment holds configurations relevant to how clabernetes configures deployments that make
@@ -2511,8 +2505,8 @@ export type C9sRunTopologyV1Alpha1 = {
             /**
              * DisableAutoExpose disables the automagic exposing of ports for a given topology. When this
              * setting is disabled clabernetes will not auto add ports so if you want to expose (via a
-             * load balancer service) you will need to have ports outlined in your containerlab config
-             * (or equivalent for kne). When this is `false` (default), clabernetes will add and expose the
+             * load balancer service) you will need to have ports outlined in your containerlab config.
+             * When this is `false` (default), clabernetes will add and expose the
              * following list of ports to whatever ports you have already defined:
              *
              * 21    - tcp - ftp
@@ -2788,9 +2782,9 @@ export type C9sRunTopologyV1Alpha1 = {
             type: string;
         }>;
         /**
-         * Kind is the topology kind this CR represents -- for example "containerlab".
+         * Kind is the topology kind this CR represents -- "containerlab".
          */
-        kind: 'containerlab' | 'kne';
+        kind: 'containerlab';
         /**
          * LinkCount is the number of links this Topology compiled to.
          */

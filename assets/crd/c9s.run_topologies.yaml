@@ -68,16 +68,13 @@ spec:
               definition:
                 description: |-
                   Definition defines the actual set of nodes (network ones, not k8s ones!) that this Topology
-                  CR represents. Historically, and probably most often, this means Topology holds a "normal"
-                  containerlab topology file that will be "clabernetsified", however this could also be a "kne"
-                  config, or perhaps others in the future.
+                  CR represents -- a containerlab topology file that will be "clabernetsified".
                 properties:
                   containerlab:
                     description: Containerlab holds a valid containerlab topology.
                     type: string
-                  kne:
-                    description: Kne holds a valid kne topology.
-                    type: string
+                required:
+                - containerlab
                 type: object
               deployment:
                 description: |-
@@ -535,8 +532,8 @@ spec:
                     description: |-
                       DisableAutoExpose disables the automagic exposing of ports for a given topology. When this
                       setting is disabled clabernetes will not auto add ports so if you want to expose (via a
-                      load balancer service) you will need to have ports outlined in your containerlab config
-                      (or equivalent for kne). When this is `false` (default), clabernetes will add and expose the
+                      load balancer service) you will need to have ports outlined in your containerlab config.
+                      When this is `false` (default), clabernetes will add and expose the
                       following list of ports to whatever ports you have already defined:
 
                       21    - tcp - ftp
@@ -873,11 +870,9 @@ spec:
                 type: array
                 x-kubernetes-list-type: atomic
               kind:
-                description: Kind is the topology kind this CR represents -- for example
-                  "containerlab".
+                description: Kind is the topology kind this CR represents -- "containerlab".
                 enum:
                 - containerlab
-                - kne
                 type: string
               linkCount:
                 description: LinkCount is the number of links this Topology compiled

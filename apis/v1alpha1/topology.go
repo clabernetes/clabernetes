@@ -75,9 +75,7 @@ type Topology struct {
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.naming) || has(self.naming)", message="naming is required once set"
 type TopologySpec struct {
 	// Definition defines the actual set of nodes (network ones, not k8s ones!) that this Topology
-	// CR represents. Historically, and probably most often, this means Topology holds a "normal"
-	// containerlab topology file that will be "clabernetsified", however this could also be a "kne"
-	// config, or perhaps others in the future.
+	// CR represents -- a containerlab topology file that will be "clabernetsified".
 	Definition Definition `json:"definition"`
 	// Expose holds configurations relevant to how clabernetes exposes a topology.
 	// +optional
@@ -124,8 +122,8 @@ type TopologySpec struct {
 // only aggregates, which keeps its size bounded regardless of how big the topology definition
 // is.
 type TopologyStatus struct {
-	// Kind is the topology kind this CR represents -- for example "containerlab".
-	// +kubebuilder:validation:Enum=containerlab;kne
+	// Kind is the topology kind this CR represents -- "containerlab".
+	// +kubebuilder:validation:Enum=containerlab
 	Kind string `json:"kind"`
 	// NodeCount is the number of (containerlab) nodes this Topology compiled to.
 	// +optional

@@ -5,9 +5,8 @@ go 1.25.0
 require (
 	github.com/carlmontanari/difflibgo v0.0.0-20240227210139-93685b1c22ae
 	github.com/carlmontanari/slurpeeth v0.0.0-20240209224827-246fa87e31f3
-	github.com/openconfig/kne v0.3.1
 	github.com/urfave/cli/v2 v2.27.7
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.4
 	k8s.io/apiextensions-apiserver v0.35.4

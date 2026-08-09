@@ -22,7 +22,7 @@ const (
 	LabelTopologyNode = "clabernetes/topologyNode"
 
 	// LabelTopologyKind is the label indicating the resource *kind* the object is associated with.
-	// For example, a "containerlab" kind, or a "kne" kind.
+	// For example, a "containerlab" kind.
 	LabelTopologyKind = "clabernetes/topologyKind"
 
 	// LabelTopologyServiceType is a label that identifies what flavor of service a given service

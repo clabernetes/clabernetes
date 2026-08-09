@@ -61,11 +61,7 @@ type InsecureRegistries []string
 // one -- and only one -- definition type defined.
 type Definition struct {
 	// Containerlab holds a valid containerlab topology.
-	// +optional
-	Containerlab string `json:"containerlab,omitempty"`
-	// Kne holds a valid kne topology.
-	// +optional
-	Kne string `json:"kne,omitempty"`
+	Containerlab string `json:"containerlab"`
 }
 
 // Expose holds configurations relevant to how clabernetes exposes a topology.
@@ -76,8 +72,8 @@ type Expose struct {
 	DisableExpose bool `json:"disableExpose"`
 	// DisableAutoExpose disables the automagic exposing of ports for a given topology. When this
 	// setting is disabled clabernetes will not auto add ports so if you want to expose (via a
-	// load balancer service) you will need to have ports outlined in your containerlab config
-	// (or equivalent for kne). When this is `false` (default), clabernetes will add and expose the
+	// load balancer service) you will need to have ports outlined in your containerlab config.
+	// When this is `false` (default), clabernetes will add and expose the
 	// following list of ports to whatever ports you have already defined:
 	//
 	// 21    - tcp - ftp

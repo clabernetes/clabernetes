@@ -8,7 +8,7 @@ Define Topology as an optional high-level source that compiles deterministically
 
 ### Requirement: Topology is an auxiliary high-level resource
 
-The system SHALL retain Topology as an auxiliary resource for quickly defining a lab through a supported Containerlab or KNE definition. Its controller SHALL expand that high-level definition into Node, Link, and LauncherProfile resources. Node and Link reconciliation MUST NOT require a Topology resource or distinguish generated resources from equivalent directly authored resources.
+The system SHALL retain Topology as an auxiliary resource for quickly defining a lab through a supported Containerlab definition. Its controller SHALL expand that high-level definition into Node, Link, and LauncherProfile resources. Node and Link reconciliation MUST NOT require a Topology resource or distinguish generated resources from equivalent directly authored resources.
 
 #### Scenario: Define a lab with Topology
 

@@ -21,7 +21,7 @@ This document provides a comprehensive reference for all Custom Resource Definit
 ## Topology CRD
 
 The `Topology` CRD is a supported, backward-compatible auxiliary resource for defining a whole
-containerlab or KNE lab at a high level. Its controller compiles the definition and existing
+containerlab lab at a high level. Its controller compiles the definition and existing
 `connectivity`, `expose`, `deployment`, `imagePull`, and `statusProbes` settings into independently
 reconciled `LauncherProfile`, `Link`, and `Node` resources. `Node` and `Link` are the primary API
 and do not require a Topology.
@@ -54,12 +54,11 @@ spec:
 
 #### definition (required)
 
-Holds the underlying topology definition. A Topology must have exactly one definition type.
+Holds the underlying containerlab topology definition.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `containerlab` | string | A valid containerlab topology in YAML format |
-| `kne` | string | A valid KNE topology (alternative to containerlab) |
 
 **Example:**
 
