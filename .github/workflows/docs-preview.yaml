@@ -1,0 +1,92 @@
+---
+name: docs-preview
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - docs/**
+      - docs-site/**
+      - wrangler.toml
+      - .github/workflows/docs-preview.yaml
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: docs-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
+
+      - name: validate documentation
+        run: make check-docs
+
+      - name: build documentation
+        run: make build-docs
+
+      - name: upload preview version
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            versions upload
+            --preview-alias pr-${{ github.event.pull_request.number }}
+            --message "docs preview for PR #${{ github.event.pull_request.number }} (${{ github.sha }})"
+
+      - name: extract preview urls
+        id: urls
+        env:
+          COMMAND_OUTPUT: ${{ steps.deploy.outputs.command-output }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          commit_url="$(printf '%s\n' "$COMMAND_OUTPUT" | grep -E 'Version Preview URL:' | sed -E 's/.*(https:\/\/[^ ]+).*/\1/' | head -n 1)"
+          alias_url="$(printf '%s\n' "$COMMAND_OUTPUT" | grep -E 'Version Preview Alias URL:' | sed -E 's/.*(https:\/\/[^ ]+).*/\1/' | head -n 1)"
+          if [ -z "$commit_url" ] || [ -z "$alias_url" ]; then
+            echo "failed to parse preview URLs from wrangler output"
+            printf '%s\n' "$COMMAND_OUTPUT"
+            exit 1
+          fi
+          echo "commit_url=$commit_url" >> "$GITHUB_OUTPUT"
+          echo "alias_url=$alias_url" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${HEAD_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: update pull request comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-includes: "<!-- docs-preview -->"
+          body: |
+            <!-- docs-preview -->
+            ## Documentation preview
+
+            | | URL |
+            |---|---|
+            | Commit `${{ steps.urls.outputs.short_sha }}` | ${{ steps.urls.outputs.commit_url }} |
+            | PR #${{ github.event.pull_request.number }} | ${{ steps.urls.outputs.alias_url }} |

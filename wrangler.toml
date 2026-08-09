@@ -1,0 +1,6 @@
+name = "clabernetes"
+compatibility_date = "2025-08-09"
+preview_urls = true
+
+[assets]
+directory = "./docs-site/build/client"

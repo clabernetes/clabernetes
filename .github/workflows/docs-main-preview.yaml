@@ -1,0 +1,56 @@
+---
+name: docs-main-preview
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/**
+      - docs-site/**
+      - wrangler.toml
+      - .github/workflows/docs-main-preview.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-main-preview
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
+
+      - name: validate documentation
+        run: make check-docs
+
+      - name: build documentation
+        run: make build-docs
+
+      - name: upload main preview version
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            versions upload
+            --preview-alias main
+            --message "docs preview for main (${{ github.sha }})"
