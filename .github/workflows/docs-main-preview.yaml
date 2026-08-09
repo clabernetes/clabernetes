@@ -25,7 +25,11 @@ jobs:
       - name: checkout
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          lfs: true
+          fetch-depth: 0
+
+      - name: pull git lfs assets
+        run: git lfs pull
 
       - name: setup pnpm
         uses: pnpm/action-setup@v4
