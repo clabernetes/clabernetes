@@ -69,8 +69,12 @@ only after release lint, test, and image build jobs succeed.
 
 Manual steps in the Cloudflare dashboard:
 
-1. Open the `clabernetes` Worker and attach the custom domain `c9s.run`.
-2. Remove the existing redirect from `c9s.run` to containerlab.dev.
+1. On the `clabernetes` Worker **Domains** tab, ensure **Preview URL** is enabled and set to Public.
+2. Attach the custom domain `c9s.run`.
+3. Remove the existing redirect from `c9s.run` to containerlab.dev.
+
+Preview URLs follow the pattern `pr-42-clabernetes.<subdomain>.workers.dev` and are printed by
+`wrangler versions upload` once preview URLs are enabled in the dashboard.
 
 ### Verification checklist
 

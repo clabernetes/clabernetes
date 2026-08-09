@@ -71,6 +71,7 @@ jobs:
           alias_url="$(printf '%s\n' "$COMMAND_OUTPUT" | grep -E 'Version Preview Alias URL:' | sed -E 's/.*(https:\/\/[^ ]+).*/\1/' | head -n 1)"
           if [ -z "$commit_url" ] || [ -z "$alias_url" ]; then
             echo "failed to parse preview URLs from wrangler output"
+            echo "ensure preview URLs are enabled for the clabernetes worker in the Cloudflare dashboard"
             printf '%s\n' "$COMMAND_OUTPUT"
             exit 1
           fi
