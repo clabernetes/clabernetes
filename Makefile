@@ -140,8 +140,16 @@ run-generate: install-tools install-code-generators run-deepcopy-gen run-generat
 	npm --prefix ui ci
 	$(MAKE) --no-print-directory -C ui regenerate-types
 
-verify-generated: run-generate ## Regenerate all API artifacts and fail if the worktree changes
-	git diff --exit-code
+VERIFY_GENERATED_PATHS := \
+	apis/v1alpha1/zz_generated.deepcopy.go \
+	assets/crd \
+	charts/clabernetes/crds \
+	generated \
+	ui/clabernetes-openapi.json \
+	ui/src/lib/clabernetes-client
+
+verify-generated: run-generate ## Regenerate all API artifacts and fail if generated outputs change
+	git diff --exit-code -- $(VERIFY_GENERATED_PATHS)
 
 delete-generated: ## Deletes all zz_*.go (generated) files, and crds
 	find . -name "zz_*.go" -exec rm {} \;
