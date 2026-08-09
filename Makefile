@@ -38,6 +38,9 @@ DEVSPACE_BIN := $(abspath $(DEVSPACE_TOOLS_DIR))/devspace
 endif
 DEVSPACE_ARGS ?=
 NS ?= clabernetes
+DOCS_SITE_DIR ?= docs-site
+DOCS_HOST ?= 0.0.0.0
+PNPM ?= pnpm
 
 help:
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -46,6 +49,22 @@ help:
 dev: TOOLS_BIN_DIR := $(abspath $(DEVSPACE_TOOLS_DIR))
 dev: install-devspace ## Run the manager from local source in the current Kubernetes context
 	"$(DEVSPACE_BIN)" --namespace "$(NS)" --no-warn run dev --profile auto-run-manager --force-deploy $(DEVSPACE_ARGS)
+
+.PHONY: docs-install serve-docs check-docs build-docs preview-docs
+docs-install: ## Install locked documentation dependencies
+	$(PNPM) --dir $(DOCS_SITE_DIR) install --frozen-lockfile
+
+serve-docs: docs-install ## Run the documentation development server
+	$(PNPM) --dir $(DOCS_SITE_DIR) dev --host "$(DOCS_HOST)"
+
+check-docs: docs-install ## Type-check and validate documentation content
+	$(PNPM) --dir $(DOCS_SITE_DIR) check
+
+build-docs: docs-install ## Build the static documentation site
+	$(PNPM) --dir $(DOCS_SITE_DIR) build
+
+preview-docs: build-docs ## Preview the built static documentation site
+	$(PNPM) --dir $(DOCS_SITE_DIR) preview
 
 fmt: ## Run formatters
 	gofumpt -w -extra .

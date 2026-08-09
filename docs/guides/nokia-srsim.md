@@ -1,4 +1,7 @@
-# Nokia SR-SIM Support Guide
+---
+title: Nokia SR-SIM
+description: Deploy integrated and distributed Nokia SR-SIM systems with Clabernetes.
+---
 
 This guide explains how to deploy Nokia SR-SIM (SR OS Simulator) topologies with Clabernetes, including supported configurations.
 
@@ -294,5 +297,5 @@ Secondary cards (those with `network-mode: container:<primary>`) cannot have the
 
 - [Containerlab SR-SIM Documentation](https://containerlab.dev/manual/kinds/sros/)
 - [SR-SIM Lab Examples](https://github.com/srl-labs/containerlab/tree/main/lab-examples/sr-sim)
-- [File Mounting Guide](./file-mounting.md)
-- [Resource Management Guide](./resource-management.md)
+- [File Mounting Guide](/docs/guides/file-mounting)
+- [Resource Management Guide](/docs/guides/resource-management)

@@ -1,4 +1,7 @@
-# Resource and Scheduling Management Guide
+---
+title: Resources and scheduling
+description: Configure launcher resources, node selection, tolerations, and privileges.
+---
 
 This guide explains how to configure resource limits, requests, node scheduling, and tolerations for Clabernetes topologies.
 
@@ -157,7 +160,7 @@ global Config fields it sets. Omitted profile fields continue to use Config reso
 ## Recommended Resource Values
 
 | Device Type | Memory Request | CPU Request | Notes |
-|-------------|----------------|-------------|-------|
+| ------------- | ---------------- | ------------- | ------- |
 | SR Linux | 4Gi | 2 | Standard variant |
 | SR Linux (IXR-10) | 16Gi | 8 | Large variant |
 | SR OS (vSIM) | 8Gi | 4 | Minimum for boot |
@@ -323,11 +326,13 @@ spec:
 ### Pods Stuck in Pending
 
 Check events:
+
 ```bash
 kubectl describe pod <pod-name>
 ```
 
 Common causes:
+
 - No nodes match selector
 - Insufficient resources
 - Node taints not tolerated
@@ -345,6 +350,7 @@ kubectl describe node <node-name> | grep -A10 "Allocated resources"
 ### Resource Pressure
 
 Check if nodes have capacity:
+
 ```bash
 kubectl top nodes
 kubectl describe node <node-name> | grep -A5 "Allocated"
@@ -372,7 +378,7 @@ spec:
 
 ## Related
 
-- [Example: with-resources.yaml](../../examples/deployment/with-resources.yaml)
-- [Example: with-scheduling.yaml](../../examples/deployment/with-scheduling.yaml)
-- [CRD Reference: Deployment](../crd-reference.md#deployment)
-- [CRD Reference: Scheduling](../crd-reference.md#scheduling)
+- [Example: with-resources.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-resources.yaml)
+- [Example: with-scheduling.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-scheduling.yaml)
+- [CRD Reference: Deployment](/docs/crd-reference#deployment)
+- [CRD Reference: Scheduling](/docs/crd-reference#scheduling)

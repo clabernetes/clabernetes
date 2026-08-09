@@ -1,7 +1,9 @@
-Architecture
-============
+---
+title: Architecture
+description: How Clabernetes controllers, launchers, resources, and connectivity work together.
+---
 
-# Overview
+## Overview
 
 clabernetes is a collection of kubernetes custom resources and controllers that reconcile those
 resources. The ultimate goal of the controllers is to render a network topology in the cluster:
@@ -34,7 +36,6 @@ The model in one picture:
 Everything below the "PRIMARY API" line works identically whether the custom resources
 were written by a person, by tooling, or by the Topology compiler.
 
-
 ## The Primary API: Nodes and Links
 
 A `Node` custom resource represents a single containerlab node -- its spec is simply what a
@@ -62,7 +63,6 @@ controller throughput, and total object count remain finite.
 `connectivity`, `expose`, `deployment`, `imagePull`, and `statusProbes` fields are accepted and
 compiled into primitive resources. Because a Topology still embeds the whole source definition,
 large labs should use clabverter's direct primitive output instead of persisting a Topology.
-
 
 ## Components
 

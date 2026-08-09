@@ -78,6 +78,28 @@ Tear down the e2e cluster with:
 make e2e-clean
 ```
 
+## Documentation development
+
+The Fumadocs site under `docs-site/` renders the repository-owned content in `docs/`. It is an
+isolated pnpm package; the operator UI under `ui/` continues to use npm. Start the Vite development
+server from the repository root:
+
+```bash
+make serve-docs
+```
+
+The target installs the locked documentation dependencies automatically and binds the server to
+`0.0.0.0` so it is reachable from the host. Override the bind address with `DOCS_HOST` when needed.
+
+Edits under `docs/` are reflected by the development server. Additional documentation workflows
+are available from the repository root:
+
+```bash
+make check-docs    # type-check the app and validate documentation links
+make build-docs    # create the static site under docs-site/build/client
+make preview-docs  # build and serve the static output locally
+```
+
 ## Development
 
 To run the manager from the current checkout in an existing Kubernetes cluster, first select the

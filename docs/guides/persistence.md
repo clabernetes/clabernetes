@@ -1,4 +1,7 @@
-# Stateful Topologies with Persistent Storage
+---
+title: Persistent storage
+description: Preserve network-node state across launcher pod restarts with Kubernetes PVCs.
+---
 
 This guide explains how to configure persistent storage for Clabernetes topologies, ensuring node state survives pod restarts.
 
@@ -42,6 +45,7 @@ spec:
 ```
 
 **Size considerations:**
+
 - SR Linux: 5-10Gi typically sufficient
 - SR OS: 10-20Gi recommended for larger VMs
 - Larger topologies with logging: Consider 20Gi+
@@ -58,6 +62,7 @@ spec:
 ```
 
 **Storage class recommendations:**
+
 - Use `ReadWriteOnce` capable storage classes
 - SSD-backed storage for better performance
 - Avoid network-attached storage for latency-sensitive workloads
@@ -191,6 +196,7 @@ kubectl describe pvc <pvc-name>
 ```
 
 Common causes:
+
 - Storage class doesn't exist
 - No available persistent volumes
 - Node selector constraints
@@ -212,6 +218,7 @@ kubectl describe pod <pod-name> | grep -A10 "Volumes"
 ### Slow Performance
 
 Consider:
+
 - Using a faster storage class
 - Reducing claim size to what's actually needed
 - Using local storage for development
@@ -226,5 +233,5 @@ Consider:
 
 ## Related
 
-- [Example: with-persistence.yaml](../../examples/deployment/with-persistence.yaml)
-- [CRD Reference: Persistence](../crd-reference.md#persistence)
+- [Example: with-persistence.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-persistence.yaml)
+- [CRD Reference: Persistence](/docs/crd-reference#persistence)

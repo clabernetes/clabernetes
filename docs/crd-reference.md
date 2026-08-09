@@ -1,4 +1,7 @@
-# Clabernetes CRD Reference
+---
+title: CRD reference
+description: Field reference for Clabernetes custom resources.
+---
 
 This document provides a comprehensive reference for all Custom Resource Definitions (CRDs) in Clabernetes.
 
@@ -77,7 +80,7 @@ spec:
 Configures how clabernetes exposes topology nodes via Kubernetes services.
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+| ------- | ------ | --------- | ------------- |
 | `disableExpose` | bool | `false` | Completely disables service creation for all nodes |
 | `disableAutoExpose` | bool | `false` | Disables automatic port exposure (see auto-exposed ports below) |
 | `exposeType` | enum | `LoadBalancer` | Service type: `None`, `ClusterIP`, or `LoadBalancer` |
@@ -115,7 +118,7 @@ spec:
 Configures deployment-related settings for launcher pods.
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+| ------- | ------ | --------- | ------------- |
 | `resources` | map[string]ResourceRequirements | - | Resource limits per node (or "default") |
 | `scheduling` | Scheduling | - | Node selector and tolerations |
 | `privilegedLauncher` | *bool | `true` | Run launcher pods in privileged mode |
@@ -133,7 +136,7 @@ Configures deployment-related settings for launcher pods.
 ##### Persistence
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+| ------- | ------ | --------- | ------------- |
 | `enabled` | bool | `false` | Enable persistent storage for lab directory |
 | `claimSize` | string | `5Gi` | PVC size (e.g., "10Gi") |
 | `storageClassName` | string | - | Storage class name (uses default if empty) |
@@ -175,7 +178,7 @@ spec:
 ##### FileFromConfigMap
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `filePath` | string | Yes | Destination path in the pod |
 | `configMapName` | string | Yes | Name of the ConfigMap |
 | `configMapPath` | string | No | Specific key in ConfigMap to mount |
@@ -237,7 +240,7 @@ spec:
 Configures health checking for containerlab nodes.
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+| ------- | ------ | --------- | ------------- |
 | `enabled` | bool | `true` | Enable status probes |
 | `excludedNodes` | []string | - | Nodes to exclude from probing |
 | `probeConfiguration` | ProbeConfiguration | - | Default probe settings |
@@ -246,7 +249,7 @@ Configures health checking for containerlab nodes.
 ##### ProbeConfiguration
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+| ------- | ------ | --------- | ------------- |
 | `startupSeconds` | int | ~780 (13min) | Startup probe timeout |
 | `sshProbeConfiguration` | SSHProbeConfiguration | - | SSH-based probe |
 | `tcpProbeConfiguration` | TCPProbeConfiguration | - | TCP-based probe |
@@ -254,7 +257,7 @@ Configures health checking for containerlab nodes.
 ##### SSHProbeConfiguration
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `username` | string | Yes | SSH username |
 | `password` | string | Yes | SSH password |
 | `port` | int | No | SSH port (default: 22) |
@@ -286,7 +289,7 @@ spec:
 Configures image pulling behavior for launcher pods.
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+| ------- | ------ | --------- | ------------- |
 | `insecureRegistries` | []string | - | List of insecure registries |
 | `pullThroughOverride` | enum | - | `auto`, `always`, or `never` |
 | `pullSecrets` | []string | - | Secret names for private registries |
@@ -336,7 +339,7 @@ The current lifecycle state of the topology. Visible as the **State** column in
 `kubectl get topologies`.
 
 | Value | Description |
-|-------|-------------|
+| ------- | ------------- |
 | `deploying` | Resources are being created/updated; not all nodes have reported ready yet. |
 | `deployfailed` | One or more nodes entered a terminal failure (CrashLoopBackOff / pod Failed) before the topology ever reached `running`. |
 | `running` | All nodes have reported ready. The topology is fully operational. |
@@ -344,7 +347,7 @@ The current lifecycle state of the topology. Visible as the **State** column in
 | `destroying` | A delete request has been received. The controller holds this state for ~5 s so external watchers can observe the transition. |
 | `destroyfailed` | The finalizer removal patch failed during deletion. The object remains until the issue is resolved. |
 
-See the [Topology Lifecycle guide](guides/topology-lifecycle.md) for the full state machine
+See the [Topology concept guide](/docs/concepts/topology) for the full state machine
 diagram and troubleshooting steps.
 
 #### topologyReady
@@ -427,7 +430,7 @@ The spec is flat containerlab vocabulary (`kind`, `image`, `startup-config`, `po
 plus these Clabernetes fields:
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `launcherProfileRef` | LocalObjectReference | Optional explicit same-namespace LauncherProfile reference (`name`) |
 | `filesFromConfigMap` | []FileFromConfigMap | ConfigMap-backed payload files mounted for this Node |
 | `filesFromURL` | []FileFromURL | Files the launcher fetches from a URL before launching the node (`filePath` + `url`) |
@@ -452,7 +455,7 @@ Notable properties:
 ### NodeStatus Fields
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `readiness` | string | `ready`, `notready` or `unknown` -- as reported by the launcher deployment |
 | `probeStatuses` | NodeProbeStatuses | Per-probe (startup/readiness/liveness) statuses |
 | `exposedPorts` | NodeExposedPorts | Expose port allocations (`exposePort`/`destinationPort`/`protocol`) and load balancer address |
@@ -500,7 +503,7 @@ status:
 ### LinkSpec Fields
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `endpointA` | LinkEndpointSpec | The "a" side: `nodeName` + `interfaceName` |
 | `endpointB` | LinkEndpointSpec | The "b" side: `nodeName` + `interfaceName` |
 | `connectivity` | string | Authoritative flavor consumed by both endpoints: `vxlan` (default) or `slurpeeth` |
@@ -550,7 +553,7 @@ spec:
 ### LauncherProfileSpec Fields
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `expose` | LauncherProfileExpose | `disableExpose`, `disableAutoExpose`, `exposeType`, `useNodeMgmtIpv4Address`, `useNodeMgmtIpv6Address` |
 | `imagePull` | LauncherProfileImagePull | `insecureRegistries`, `pullThroughOverride`, `pullSecrets`, `dockerDaemonConfig`, `dockerConfig` |
 | `resources` | ResourceRequirements | Launcher pod resources |
@@ -620,7 +623,7 @@ Override the in-cluster DNS suffix (default: `cluster.local`).
 Global image pull configuration.
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+| ------- | ------ | --------- | ------------- |
 | `pullThroughOverride` | enum | `auto` | `auto`, `always`, or `never` |
 | `criSockOverride` | string | - | Override CRI socket path (e.g., for K3s) |
 | `criKindOverride` | enum | - | Override CRI type: `containerd` |
@@ -640,7 +643,7 @@ spec:
 Global deployment configuration.
 
 | Field | Type | Default | Description |
-|-------|------|---------|-------------|
+| ------- | ------ | --------- | ------------- |
 | `resourcesDefault` | ResourceRequirements | - | Default resources for all pods |
 | `resourcesByContainerlabKind` | map | - | Resources by kind/type |
 | `nodeSelectorsByImage` | map | - | Node selectors by image pattern |
@@ -730,7 +733,7 @@ status:
 ### ImageRequestSpec Fields
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `topologyName` | string | Name of the requesting Topology |
 | `topologyNodeName` | string | Node name in the topology |
 | `kubernetesNode` | string | K8s node where image is needed |
