@@ -11,6 +11,10 @@ html {
 }
 
 body {
+  background: var(--color-fd-background);
+}
+
+.c9s-home {
   background:
     radial-gradient(circle at top,
       color-mix(in oklab, var(--color-fd-primary) 8%, transparent),
