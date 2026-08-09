@@ -1,4 +1,4 @@
-import { use } from 'react';
+import { use, useMemo } from 'react';
 import { useFumadocsLoader } from 'fumadocs-core/source/client';
 import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import {
@@ -8,6 +8,7 @@ import {
   DocsTitle,
 } from 'fumadocs-ui/layouts/docs/page';
 import { getMDXComponents } from '@/components/mdx';
+import { getDocsTabs } from '@/lib/docs-tabs';
 import { baseOptions } from '@/lib/layout.shared';
 import { docs, source } from '@/lib/source';
 import type { Route } from './+types/docs';
@@ -57,9 +58,14 @@ export default function DocumentationPage({
   loaderData,
 }: Route.ComponentProps) {
   const { path, pageTree } = useFumadocsLoader(loaderData);
+  const tabs = useMemo(() => getDocsTabs(pageTree), [pageTree]);
 
   return (
-    <DocsLayout {...baseOptions()} tree={pageTree}>
+    <DocsLayout
+      {...baseOptions()}
+      tree={pageTree}
+      tabs={tabs}
+    >
       <Content path={path} />
     </DocsLayout>
   );

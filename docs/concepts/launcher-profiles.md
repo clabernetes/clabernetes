@@ -1,6 +1,7 @@
 ---
 title: Launcher profiles
 description: Reusable Kubernetes and launcher policy referenced explicitly by network Nodes.
+icon: Settings2
 ---
 
 A `LauncherProfile` contains policy for the launcher workload that realizes one or more Nodes. It
@@ -60,4 +61,4 @@ dedicated profile rather than a partial child profile.
 
 - [Resource and scheduling guide](/docs/guides/resource-management)
 - [Image pull guide](/docs/guides/image-pull)
-- [LauncherProfile reference](/docs/crd-reference#launcherprofile-crd)
+- [LauncherProfile reference](/docs/crd/launcher-profile)

@@ -380,5 +380,5 @@ spec:
 
 - [Example: with-resources.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-resources.yaml)
 - [Example: with-scheduling.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-scheduling.yaml)
-- [CRD Reference: Deployment](/docs/crd-reference#deployment)
-- [CRD Reference: Scheduling](/docs/crd-reference#scheduling)
+- [CRD Reference: Deployment](/docs/crd/topology)
+- [CRD Reference: Scheduling](/docs/guides/resource-management)

@@ -1,5 +1,6 @@
 {
   "title": "Guides",
+  "icon": "Map",
   "pages": [
     "expose-configuration",
     "file-mounting",

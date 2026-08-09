@@ -1,6 +1,7 @@
 ---
 title: Nodes and Links
 description: The primary Clabernetes API for describing network nodes and point-to-point wires.
+icon: Cable
 ---
 
 `Node` and `Link` resources form the primary c9s API. A Node contains one containerlab node
@@ -68,5 +69,5 @@ The
 [individual-resource SR Linux and multitool example](https://github.com/clabernetes/clabernetes/tree/main/examples/basic/individual-resources/srl-multitool)
 contains a LauncherProfile, two Nodes, and one Link.
 
-See the [Node reference](/docs/crd-reference#node-crd) and
-[Link reference](/docs/crd-reference#link-crd) for all fields.
+See the [Node reference](/docs/crd/node) and
+[Link reference](/docs/crd/link) for all fields.

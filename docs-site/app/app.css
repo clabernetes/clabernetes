@@ -4,6 +4,8 @@
 
 @source '../../docs';
 
+@import './lib/crd-viewer/crd-viewer.css';
+
 html {
   scroll-behavior: smooth;
 }

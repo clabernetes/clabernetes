@@ -1,6 +1,7 @@
 ---
 title: Topology
 description: The supported higher-level compiler from containerlab definitions to primitive resources.
+icon: Network
 ---
 
 `Topology` is a supported auxiliary resource for authors who want to submit a complete containerlab
@@ -66,4 +67,4 @@ clabverter --emit-crs <topology-file>
 
 This emits LauncherProfile, Node, and Link manifests without persisting an aggregate Topology.
 
-See the [Topology reference](/docs/crd-reference#topology-crd) for all fields.
+See the [Topology reference](/docs/crd/topology) for all fields.

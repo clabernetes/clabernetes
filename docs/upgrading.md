@@ -1,6 +1,7 @@
 ---
 title: Upgrading
 description: Breaking changes and upgrade steps for c9s releases.
+icon: ArrowUpCircle
 ---
 
 ## API group renamed to `c9s.run`

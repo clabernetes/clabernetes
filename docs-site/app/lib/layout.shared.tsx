@@ -11,6 +11,7 @@ export function baseOptions(): BaseLayoutProps {
         text: 'Documentation',
         url: '/docs',
         active: 'nested-url',
+        on: 'nav',
       },
     ],
     githubUrl: 'https://github.com/clabernetes/clabernetes',

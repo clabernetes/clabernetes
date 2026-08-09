@@ -4,12 +4,14 @@
   "type": "module",
   "packageManager": "pnpm@11.17.0",
   "scripts": {
-    "dev": "react-router dev",
-    "build": "pnpm check && react-router build",
-    "check": "pnpm typecheck && pnpm check:links",
+    "dev": "pnpm generate:crd-views && react-router dev",
+    "build": "pnpm generate:crd-views && pnpm check && react-router build",
+    "check": "pnpm generate:crd-views && pnpm typecheck && pnpm test && pnpm check:links",
     "check:links": "tsx scripts/check-links.ts",
+    "generate:crd-views": "tsx scripts/generate-crd-views.ts",
     "preview": "vite preview",
-    "typecheck": "react-router typegen && tsc --noEmit"
+    "test": "vitest run",
+    "typecheck": "pnpm generate:crd-views && react-router typegen && tsc --noEmit"
   },
   "dependencies": {
     "@react-router/node": "7.16.0",
@@ -20,7 +22,8 @@
     "lucide-react": "^1.30.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-router": "7.16.0"
+    "react-router": "7.16.0",
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@react-router/dev": "7.16.0",
@@ -37,6 +40,7 @@
     "typescript": "^6.0.3",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
-    "vite": "7.3.6"
+    "vite": "7.3.6",
+    "vitest": "^3.2.4"
   }
 }
