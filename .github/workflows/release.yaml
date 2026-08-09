@@ -43,44 +43,14 @@ jobs:
     needs:
       - lint
       - test
-      - images
-    runs-on: ubuntu-24.04
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.release.tag_name }}
-          lfs: true
-          fetch-depth: 0
-
-      - name: pull git lfs assets
-        run: git lfs pull
-
-      - name: setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
-
-      - name: setup node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: docs-site/pnpm-lock.yaml
-
-      - name: validate documentation
-        run: make check-docs
-
-      - name: build documentation
-        run: make build-docs
-
-      - name: deploy production documentation
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4"
-          command: deploy --message "docs production for ${{ github.event.release.tag_name }}"
+    concurrency:
+      group: docs-production-deploy
+      cancel-in-progress: false
+    uses: ./.github/workflows/docs-deploy.yaml
+    with:
+      ref: ${{ github.event.release.tag_name }}
+      deploy-message: "docs production for ${{ github.event.release.tag_name }}"
+    secrets: inherit
 
   release:
     needs:
