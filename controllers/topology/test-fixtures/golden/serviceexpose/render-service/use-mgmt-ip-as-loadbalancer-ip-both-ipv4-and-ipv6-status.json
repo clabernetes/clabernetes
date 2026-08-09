@@ -1,7 +1,0 @@
-{
-    "node1": {
-        "loadBalancerAddress": "",
-        "tcpPorts": [],
-        "udpPorts": []
-    }
-}

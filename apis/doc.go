@@ -16,6 +16,12 @@ const (
 	// ImageRequest is the Kind of the ImageRequest custom resource.
 	ImageRequest = "imageRequest"
 
-	// Connectivity is the Kind of the Connectivity custom resource.
-	Connectivity = "connectivity"
+	// Node is the Kind of the Node custom resource.
+	Node = "node"
+
+	// Link is the Kind of the Link custom resource.
+	Link = "link"
+
+	// LauncherProfile is the Kind of the LauncherProfile custom resource.
+	LauncherProfile = "launcherProfile"
 )

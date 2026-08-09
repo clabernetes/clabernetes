@@ -10,6 +10,7 @@ import (
 	"github.com/carlmontanari/slurpeeth/slurpeeth"
 	clabernetesapisv1alpha1 "github.com/srl-labs/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
+	claberneteserrors "github.com/srl-labs/clabernetes/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,16 +21,17 @@ const (
 
 type slurpeethManager struct {
 	*common
-
-	cancelChan chan bool
 }
 
-func (m *slurpeethManager) Run() {
+func (m *slurpeethManager) start(initialTunnels []*Tunnel) error {
 	m.logger.Info(
-		"containerlab started, connectivity mode is 'slurpeeth', initializing slurpeeth manager...",
+		"initializing slurpeeth for terminating Links...",
 	)
 
-	m.renderSlurpeethConfig(m.initialTunnels)
+	err := m.renderSlurpeethConfig(initialTunnels)
+	if err != nil {
+		return fmt.Errorf("rendering initial slurpeeth config: %w", err)
+	}
 
 	sm, err := slurpeeth.GetManager(
 		slurpeeth.WithConfigFile(slurpeethConfigPath),
@@ -43,10 +45,7 @@ func (m *slurpeethManager) Run() {
 		slurpeeth.WithWorkerRetry(true),
 	)
 	if err != nil {
-		m.logger.Fatalf(
-			"failed creating slurpeeth manager, error: %s",
-			err,
-		)
+		return fmt.Errorf("creating slurpeeth manager: %w", err)
 	}
 
 	exitErr := make(chan bool)
@@ -54,10 +53,7 @@ func (m *slurpeethManager) Run() {
 
 	err = sm.RunDaemon(exitErr, exitDone)
 	if err != nil {
-		m.logger.Fatalf(
-			"failed starting slurpeeth, error: %s",
-			err,
-		)
+		return fmt.Errorf("starting slurpeeth daemon: %w", err)
 	}
 
 	// watch the exit channels for slurpeeth in background, if they exit we can signal to the main
@@ -69,7 +65,7 @@ func (m *slurpeethManager) Run() {
 				"received exit signal from slurpeeth (non-error), sending done signal",
 			)
 
-			m.cancelChan <- true
+			m.signalCancel()
 
 			return
 		case <-exitErr:
@@ -77,32 +73,48 @@ func (m *slurpeethManager) Run() {
 				"received exit signal from slurpeeth (error), sending done signal",
 			)
 
-			m.cancelChan <- true
+			m.signalCancel()
 
 			return
 		}
 	}()
 
-	m.logger.Debug("initial slurpeeth tunnel creation complete")
-
-	m.logger.Debug("start connectivity custom resource watch...")
-
-	go watchConnectivity(
-		m.ctx,
-		m.logger,
-		m.clabernetesClient,
-		m.renderSlurpeethConfig,
-	)
-
 	m.logger.Debug("slurpeeth connectivity setup complete")
+
+	return nil
+}
+
+func (m *slurpeethManager) reconcile(tunnels []*Tunnel) error {
+	return m.renderSlurpeethConfig(tunnels)
+}
+
+func (m *slurpeethManager) signalCancel() {
+	if m.cancelChan == nil {
+		return
+	}
+
+	select {
+	case m.cancelChan <- true:
+	case <-m.ctx.Done():
+	}
 }
 
 func (m *slurpeethManager) renderSlurpeethConfig(
-	tunnels []*clabernetesapisv1alpha1.PointToPointTunnel,
-) {
+	tunnels []*Tunnel,
+) error {
 	slurpeethConfig := slurpeeth.Config{}
 
 	for _, tunnel := range tunnels {
+		if tunnel.TunnelID < 1 ||
+			tunnel.TunnelID > clabernetesapisv1alpha1.SlurpeethMaxSegmentID {
+			return fmt.Errorf(
+				"%w: slurpeeth segment id %d is outside range 1-%d",
+				claberneteserrors.ErrConnectivity,
+				tunnel.TunnelID,
+				clabernetesapisv1alpha1.SlurpeethMaxSegmentID,
+			)
+		}
+
 		slurpeethConfig.Segments = append(
 			slurpeethConfig.Segments,
 			slurpeeth.Segment{
@@ -112,7 +124,7 @@ func (m *slurpeethManager) renderSlurpeethConfig(
 					tunnel.RemoteNode,
 					tunnel.RemoteInterface,
 				),
-				ID: uint16(tunnel.TunnelID), //nolint:gosec
+				ID: uint16(tunnel.TunnelID),
 				Interfaces: []string{
 					fmt.Sprintf("%s-%s", tunnel.LocalNode, tunnel.LocalInterface),
 				},
@@ -123,10 +135,7 @@ func (m *slurpeethManager) renderSlurpeethConfig(
 
 	slurpeethConfigYAML, err := yaml.Marshal(slurpeethConfig)
 	if err != nil {
-		m.logger.Fatalf(
-			"failed marshalling slurpeeth config, error: %s",
-			err,
-		)
+		return fmt.Errorf("failed marshalling slurpeeth config: %w", err)
 	}
 
 	err = os.WriteFile(
@@ -135,9 +144,8 @@ func (m *slurpeethManager) renderSlurpeethConfig(
 		clabernetesconstants.PermissionsEveryoneReadWriteOwnerExecute,
 	)
 	if err != nil {
-		m.logger.Fatalf(
-			"failed writing slurpeeth config to disk, error: %s",
-			err,
-		)
+		return fmt.Errorf("failed writing slurpeeth config to disk: %w", err)
 	}
+
+	return nil
 }

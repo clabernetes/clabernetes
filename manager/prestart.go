@@ -36,7 +36,38 @@ func (c *clabernetes) preStart() {
 
 	c.logger.Debug("cri sameness check complete...")
 
+	c.logger.Info("verifying link field selector support...")
+
+	err = preStartLinkFieldSelectors(c)
+	if err != nil {
+		c.logger.Fatalf(
+			"the api server rejected the link endpoint field selectors -- clabernetes requires"+
+				" kubernetes 1.31+ (crd selectable fields) since launchers select their links"+
+				" server side, err: %s",
+			err,
+		)
+	}
+
+	c.logger.Debug("link field selector support verified...")
+
 	c.logger.Debug("pre-start complete...")
+}
+
+// preStartLinkFieldSelectors probes the api server with the same field selectors launchers (and
+// controllers) use to select links -- on clusters older than 1.31 (no crd selectable fields)
+// the probe fails, and clabernetes cannot function without it.
+func preStartLinkFieldSelectors(c clabernetesmanagertypes.Clabernetes) error {
+	ctx, ctxCancel := c.NewContextWithTimeout()
+	defer ctxCancel()
+
+	_, err := c.GetKubeClabernetesClient().ClabernetesV1alpha1().
+		Links(c.GetNamespace()).
+		List(ctx, metav1.ListOptions{
+			FieldSelector: "spec.endpointA.nodeName=clabernetes-field-selector-probe",
+			Limit:         1,
+		})
+
+	return err
 }
 
 // config initializes the config manager singleton.

@@ -1,0 +1,21 @@
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Link
+metadata:
+  annotations: {}
+  name: srl1-e1-1-srl2-e1-1
+  namespace: NAMESPACE
+spec:
+  connectivity: vxlan
+  endpointA:
+    interfaceName: e1-1
+    nodeName: srl1
+  endpointB:
+    interfaceName: e1-1
+    nodeName: srl2
+status:
+  resolvedEndpoints:
+    endpointA:
+      nodeName: srl1
+    endpointB:
+      nodeName: srl2
+  tunnelID: 1

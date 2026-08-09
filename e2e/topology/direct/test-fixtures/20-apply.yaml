@@ -1,0 +1,12 @@
+---
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Link
+metadata:
+  name: srl1-e1-1-srl2-e1-1
+spec:
+  endpointA:
+    nodeName: srl1
+    interfaceName: e1-1
+  endpointB:
+    nodeName: srl2
+    interfaceName: e1-2

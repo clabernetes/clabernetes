@@ -60,6 +60,33 @@ spec:
             image: ghcr.io/nokia/srlinux:latest
 ```
 
+Topology remains a supported auxiliary input. The compiler moves each map entry onto the
+corresponding generated Node; it does not create a one-off LauncherProfile just to carry payload.
+
+### Mounting on a Direct Node
+
+For directly authored primitive resources, payload attachments live in the Node spec:
+
+```yaml
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+spec:
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+  filesFromConfigMap:
+    - filePath: /opt/srlinux/etc/license.key
+      configMapName: srl-license
+      configMapPath: license.key
+      mode: read
+  filesFromURL:
+    - filePath: /tmp/bootstrap.json
+      url: https://example.com/bootstrap/srl1.json
+```
+
+LauncherProfile contains launcher policy only; it does not own per-node files.
+
 ### FileFromConfigMap Fields
 
 | Field | Required | Description |

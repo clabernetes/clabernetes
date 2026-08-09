@@ -45,13 +45,10 @@ const (
 // NodeProbeStatuses holds the individual probe statuses for a single node.
 type NodeProbeStatuses struct {
 	// StartupProbe is the status of the node's startup probe.
-	// +kubebuilder:validation:Enum=passing;failing;unknown;disabled
 	StartupProbe NodeProbeStatus `json:"startupProbe"`
 	// ReadinessProbe is the status of the node's readiness probe.
-	// +kubebuilder:validation:Enum=passing;failing;unknown;disabled
 	ReadinessProbe NodeProbeStatus `json:"readinessProbe"`
 	// LivenessProbe is the status of the node's liveness probe.
-	// +kubebuilder:validation:Enum=passing;failing;unknown;disabled
 	LivenessProbe NodeProbeStatus `json:"livenessProbe"`
 }
 
@@ -122,39 +119,29 @@ type TopologySpec struct {
 	Connectivity string `json:"connectivity,omitempty"`
 }
 
-// TopologyStatus is the status for a Topology resource.
+// TopologyStatus is the status for a Topology resource. Note that all *per node* (and per link)
+// state lives on the emitted Node and Link custom resources rather than here -- the Topology
+// only aggregates, which keeps its size bounded regardless of how big the topology definition
+// is.
 type TopologyStatus struct {
 	// Kind is the topology kind this CR represents -- for example "containerlab".
 	// +kubebuilder:validation:Enum=containerlab;kne
 	Kind string `json:"kind"`
-	// RemoveTopologyPrefix holds the "resolved" value of the RemoveTopologyPrefix field -- that is
-	// if it is unset (nil) when a Topology is created, the controller will use the default global
-	// config value (false); if the field is non-nil, this status field will hold the non-nil value.
-	RemoveTopologyPrefix *bool `json:"removeTopologyPrefix"`
-	// ReconcileHashes holds the hashes form the last reconciliation run.
-	ReconcileHashes ReconcileHashes `json:"reconcileHashes"`
-	// Configs is a map of node name -> containerlab config -- in other words, this is the original
-	// Topology.Spec.Definition converted to containerlab "sub-topologies" The actual
-	// "sub-topologies"/"sub-configs" are stored as a string -- this is the actual containerlab
-	// topology that gets mounted in the launcher pod.
-	Configs map[string]string `json:"configs"`
-	// ExposedPorts holds a map of (containerlab not k8s!) nodes and their exposed ports
-	// (via load balancer).
-	ExposedPorts map[string]*ExposedPorts `json:"exposedPorts"`
-	// NodeReadiness is a map of nodename to readiness status. The readiness status is as reported
-	// by the k8s startup/readiness probe (which is in turn managed by the status probe
-	// configuration of the topology). The possible values are "notready" and "ready", "unknown".
-	NodeReadiness map[string]string `json:"nodeReadiness"`
+	// NodeCount is the number of (containerlab) nodes this Topology compiled to.
+	// +optional
+	NodeCount int `json:"nodeCount,omitempty"`
+	// ReadyNodeCount is the number of nodes of this Topology that currently report ready.
+	// +optional
+	ReadyNodeCount int `json:"readyNodeCount,omitempty"`
+	// LinkCount is the number of links this Topology compiled to.
+	// +optional
+	LinkCount int `json:"linkCount,omitempty"`
 	// TopologyReady indicates if all nodes in the topology have reported ready. This is duplicated
 	// from the conditions so we can easily snag it for print columns!
 	TopologyReady bool `json:"topologyReady"`
 	// TopologyState is the high-level lifecycle state of the topology.
-	// +kubebuilder:validation:Enum=deploying;running;degraded;deployfailed
 	// +optional
 	TopologyState TopologyState `json:"topologyState,omitempty"`
-	// NodeProbeStatuses is a map of node name to per-probe status information.
-	// +optional
-	NodeProbeStatuses map[string]NodeProbeStatuses `json:"nodeProbeStatuses,omitempty"`
 	// Conditions is a list of conditions for the topology custom resource.
 	// +listType=atomic
 	Conditions []metav1.Condition `json:"conditions"`

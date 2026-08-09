@@ -100,10 +100,6 @@ const (
 	// LauncherCRIKindEnv env var tells the launcher what CRI sock is mounted in it (if configured).
 	LauncherCRIKindEnv = "LAUNCHER_CRI_KIND"
 
-	// LauncherTopologyNameEnv is the env var that holds the name of the topology that a given
-	// launcher is responsible for.
-	LauncherTopologyNameEnv = "LAUNCHER_TOPOLOGY_NAME"
-
 	// LauncherNodeNameEnv is the env var that holds the name of the node in the original topology
 	// that a given launcher is responsible for.
 	LauncherNodeNameEnv = "LAUNCHER_NODE_NAME"
@@ -111,10 +107,6 @@ const (
 	// LauncherNodeImageEnv is the env var that holds the image name of the node in the original
 	// topology that a given launcher is responsible for.
 	LauncherNodeImageEnv = "LAUNCHER_NODE_IMAGE"
-
-	// LauncherConnectivityKind is the env var that holds the flavor cf connectivity the launcher
-	// should run (vxlan/slurpeeth).
-	LauncherConnectivityKind = "LAUNCHER_CONNECTIVITY_KIND"
 
 	// LauncherContainerlabVersion is the env var that holds the possibly user specified version of
 	// containerlab to download and use in the launcher.
@@ -135,6 +127,23 @@ const (
 	// LauncherSSHProbePassword is the env var that holds the password to use in the ssh probe (if
 	// configured).
 	LauncherSSHProbePassword = "LAUNCHER_SSH_PROBE_PASSWORD" //nolint:gosec
+
+	// LauncherGroupMembersEnv is the env var that holds the (comma separated, sorted) names of
+	// the *other* (containerlab) nodes hosted by this launcher pod -- that is, the nodes grouped
+	// onto this launcher via `network-mode: container:<this launcher's node>`.
+	LauncherGroupMembersEnv = "LAUNCHER_GROUP_MEMBERS"
+
+	// LauncherMgmtNetworkEnv is the env var that holds the (json encoded) containerlab management
+	// network settings the launcher should render into its topology file (if any).
+	LauncherMgmtNetworkEnv = "LAUNCHER_MGMT_NETWORK"
+
+	// LauncherPullSecretsEnv is the env var that holds the (comma separated) secret names the
+	// launcher may use when pulling images via the cluster CRI.
+	LauncherPullSecretsEnv = "LAUNCHER_PULL_SECRETS" //nolint:gosec
+
+	// LauncherInClusterDNSSuffixEnv is the env var that holds the in cluster dns suffix the
+	// launcher uses when deriving tunnel destinations (fabric service names).
+	LauncherInClusterDNSSuffixEnv = "LAUNCHER_IN_CLUSTER_DNS_SUFFIX"
 )
 
 const (

@@ -1,7 +1,6 @@
 package testhelper
 
 import (
-	"regexp"
 	"testing"
 
 	clabernetesutil "github.com/srl-labs/clabernetes/util"
@@ -74,19 +73,6 @@ func NormalizeKubernetesObject(t *testing.T, object []byte) []byte {
 func NormalizeTopology(t *testing.T, objectData []byte) []byte {
 	t.Helper()
 
-	// unfortunately we need to remove the hash bits since any cluster may have no lb or get a
-	// different lb address assigned than what we have stored in golden file(s)
-	objectData = YQCommand(
-		t,
-		objectData,
-		"del(.status.reconcileHashes.exposedPorts)",
-	)
-	objectData = YQCommand(
-		t,
-		objectData,
-		"del(.status.exposedPorts[].loadBalancerAddress)",
-	)
-
 	// we dont want to wait for node statuses/conditions in ci especially since its slooooooow
 	objectData = YQCommand(
 		t,
@@ -96,7 +82,7 @@ func NormalizeTopology(t *testing.T, objectData []byte) []byte {
 	objectData = YQCommand(
 		t,
 		objectData,
-		"del(.status.nodeReadiness)",
+		"del(.status.readyNodeCount)",
 	)
 	objectData = YQCommand(
 		t,
@@ -107,11 +93,6 @@ func NormalizeTopology(t *testing.T, objectData []byte) []byte {
 		t,
 		objectData,
 		"del(.status.topologyState)",
-	)
-	objectData = YQCommand(
-		t,
-		objectData,
-		"del(.status.nodeProbeStatuses)",
 	)
 
 	return objectData
@@ -171,6 +152,23 @@ func NormalizeDeployment(t *testing.T, objectData []byte) []byte {
 
 	// we dont care about testing that the image was set "right" really, so just remove it
 	objectData = YQCommand(t, objectData, "del(.spec.template.spec.containers[0].image)")
+	// CRI discovery and socket paths vary by cluster runtime. They are covered by focused unit
+	// tests, while these e2e goldens assert the runtime-independent launcher Deployment shape.
+	objectData = YQCommand(
+		t,
+		objectData,
+		`del(.spec.template.spec.containers[].env[] | select(.name == "LAUNCHER_CRI_KIND"))`,
+	)
+	objectData = YQCommand(
+		t,
+		objectData,
+		`del(.spec.template.spec.containers[].volumeMounts[] | select(.name == "cri-sock"))`,
+	)
+	objectData = YQCommand(
+		t,
+		objectData,
+		`del(.spec.template.spec.volumes[] | select(.name == "cri-sock"))`,
+	)
 	// these fields are defaulted differently across Kubernetes versions
 	objectData = YQCommand(t, objectData, "del(.spec.template.metadata.creationTimestamp)")
 	objectData = YQCommand(t, objectData, ".status = {}")
@@ -178,13 +176,28 @@ func NormalizeDeployment(t *testing.T, objectData []byte) []byte {
 	return objectData
 }
 
-// NormalizeConnectivity normalizes a connectivity cr between ci and local or other folks
-// machines/clusters -- so we can compare results more easily. For now this is just replacing the
-// namespace in the destinations since those will be random(ish) per test run.
-func NormalizeConnectivity(t *testing.T, objectData []byte) []byte {
+// NormalizeNode normalizes a clabernetes node cr between ci and local or other folks
+// machines/clusters -- so we can compare results more easily. The load balancer address (if
+// any) obviously differs per cluster, and readiness/probe statuses are timing dependent.
+func NormalizeNode(t *testing.T, objectData []byte) []byte {
 	t.Helper()
 
-	// replace the namespace in the connectivity destinations
-	return regexp.MustCompile(`\..*\.svc.cluster.local`).
-		ReplaceAll(objectData, []byte(".NAMESPACE.svc.cluster.local"))
+	objectData = YQCommand(t, objectData, "del(.status.exposedPorts.loadBalancerAddress)")
+	objectData = YQCommand(t, objectData, "del(.status.readiness)")
+	objectData = YQCommand(t, objectData, "del(.status.probeStatuses)")
+	objectData = YQCommand(t, objectData, "del(.status.appliedLauncherProfile.uid)")
+	objectData = YQCommand(t, objectData, "del(.status.appliedLauncherProfile.generation)")
+
+	return objectData
+}
+
+// NormalizeLink removes cluster-assigned endpoint UIDs while preserving the endpoint names that
+// demonstrate the Link controller has bound the Link to both Node identities.
+func NormalizeLink(t *testing.T, objectData []byte) []byte {
+	t.Helper()
+
+	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointA.uid)")
+	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointB.uid)")
+
+	return objectData
 }

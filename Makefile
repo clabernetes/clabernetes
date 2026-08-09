@@ -1,5 +1,16 @@
 .DEFAULT_GOAL := help
 
+USE_UV ?= true
+CRDS_TO_OPENAPI_REQUIREMENTS := build/crds-to-openapi/requirements.txt
+
+ifeq ($(USE_UV),true)
+CRDS_TO_OPENAPI_PYTHON := uv run --with-requirements $(CRDS_TO_OPENAPI_REQUIREMENTS)
+else ifeq ($(USE_UV),false)
+CRDS_TO_OPENAPI_PYTHON := venv/bin/python
+else
+$(error USE_UV must be either true or false)
+endif
+
 ifeq (set-chart-versions,$(firstword $(MAKECMDGOALS)))
   # use the rest as arguments for "set-chart-versions" directive
   BUMP_CHART_VERSION_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
@@ -19,13 +30,27 @@ LAUNCHER_IMAGE ?= $(IMAGE_BASE)/clabernetes-launcher
 UI_IMAGE ?= $(IMAGE_BASE)/clabernetes-ui
 CLABVERTER_IMAGE ?= $(IMAGE_BASE)/clabverter
 
+DEVSPACE_TOOLS_DIR ?= build/dev/bin
+DEVSPACE_BIN ?= $(shell command -v devspace 2>/dev/null)
+DEVSPACE_INSTALL_DEP :=
+ifeq ($(strip $(DEVSPACE_BIN)),)
+DEVSPACE_BIN := $(abspath $(DEVSPACE_TOOLS_DIR))/devspace
+endif
+DEVSPACE_ARGS ?=
+NS ?= clabernetes
+
 help:
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: dev
+dev: TOOLS_BIN_DIR := $(abspath $(DEVSPACE_TOOLS_DIR))
+dev: install-devspace ## Run the manager from local source in the current Kubernetes context
+	"$(DEVSPACE_BIN)" --namespace "$(NS)" --no-warn run dev --profile auto-run-manager --force-deploy $(DEVSPACE_ARGS)
 
 fmt: ## Run formatters
 	gofumpt -w -extra .
 	gci write --skip-generated .
-	golines --base-formatter="gofmt" -w .
+	golines --base-formatter="gofmt" --no-reformat-tags -w .
 
 lint: fmt ## Run linters
 	golangci-lint run
@@ -47,11 +72,16 @@ cov:  ## Produce html coverage report; removes all the generated bits for sanity
 
 install-tools: install-gofumpt install-gci install-golines install-gotestsum ## Install pinned lint/test tools (versions from .github/vars.env)
 
-install-code-generators: ## Install latest code-generator tools
-	go install k8s.io/code-generator/cmd/deepcopy-gen@latest
-	go install k8s.io/kube-openapi/cmd/openapi-gen@latest
-	go install k8s.io/code-generator/cmd/client-gen@latest
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+install-code-generators: ## Install pinned code-generator tools and Python dependencies
+	@set -a; . $(C9S_VARS_ENV); set +a; \
+	go install k8s.io/code-generator/cmd/deepcopy-gen@$$K8S_CODE_GENERATOR_VERSION && \
+	go install k8s.io/kube-openapi/cmd/openapi-gen@$$KUBE_OPENAPI_VERSION && \
+	go install k8s.io/code-generator/cmd/client-gen@$$K8S_CODE_GENERATOR_VERSION && \
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@$$CONTROLLER_TOOLS_VERSION
+ifeq ($(USE_UV),false)
+	python3 -m venv venv
+	venv/bin/pip install --disable-pip-version-check --requirement $(CRDS_TO_OPENAPI_REQUIREMENTS)
+endif
 
 run-deepcopy-gen: ## Run deepcopy-gen
 	deepcopy-gen \
@@ -66,7 +96,7 @@ run-openapi-gen: ## Run openapi-gen
 	--output-file openapi_generated.go \
 	--output-pkg github.com/srl-labs/clabernetes/generated/openapi \
 	github.com/srl-labs/clabernetes/apis/...
-	venv/bin/python build/crds-to-openapi/crds-to-openapi.py && \
+	$(CRDS_TO_OPENAPI_PYTHON) build/crds-to-openapi/crds-to-openapi.py && \
 	cp generated/openapi/openapi.json ui/clabernetes-openapi.json
 
 run-client-gen: ## Run client-gen
@@ -78,11 +108,21 @@ run-client-gen: ## Run client-gen
 	--output-pkg github.com/srl-labs/clabernetes/generated \
 	--clientset-name clientset
 
+# allowDangerousTypes: the Node spec mirrors containerlab vocabulary and containerlab types
+# `cpu` as a float, so the crd has to carry it as a number
 run-generate-crds: ## Run controller-gen for crds
-	controller-gen crd paths=./apis/... output:crd:dir=./charts/clabernetes/crds/
-
-run-generate: install-code-generators run-deepcopy-gen run-openapi-gen run-client-gen run-generate-crds fmt ## Run all code gen tasks
+	controller-gen crd:allowDangerousTypes=true paths=./apis/... output:crd:dir=./charts/clabernetes/crds/
 	cp charts/clabernetes/crds/*.yaml assets/crd/
+
+# note: crds must be generated (and synced into assets/crd/, which is what crds-to-openapi
+# reads) *before* openapi-gen -- the openapi json (and from it the ui client types) is derived
+# from the crd yamls, so any other order needs two passes to converge
+run-generate: install-tools install-code-generators run-deepcopy-gen run-generate-crds run-openapi-gen run-client-gen fmt ## Run all code gen tasks
+	npm --prefix ui ci
+	$(MAKE) --no-print-directory -C ui regenerate-types
+
+verify-generated: run-generate ## Regenerate all API artifacts and fail if the worktree changes
+	git diff --exit-code
 
 delete-generated: ## Deletes all zz_*.go (generated) files, and crds
 	find . -name "zz_*.go" -exec rm {} \;

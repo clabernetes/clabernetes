@@ -25,12 +25,6 @@ const (
 	// naming field of a Topology.
 	NamingModeGlobal = "global"
 
-	// ConnectivityVXLAN is a constant for the vxlan connectivity flavor.
-	ConnectivityVXLAN = "vxlan"
-
-	// ConnectivitySlurpeeth is a constant for the slurpeeth connectivity flavor.
-	ConnectivitySlurpeeth = "slurpeeth"
-
 	// NodeStatusFile is the file we write the node status to for launchers -- this is also used
 	// by the deployment for startup/liveness probes.
 	NodeStatusFile = "/clabernetes/.nodestatus"

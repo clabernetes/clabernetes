@@ -6,6 +6,8 @@ import (
 	clabernetesconstants "github.com/srl-labs/clabernetes/constants"
 	clabernetescontrollers "github.com/srl-labs/clabernetes/controllers"
 	clabernetescontrollersimagerequest "github.com/srl-labs/clabernetes/controllers/imagerequest"
+	clabernetescontrollerslink "github.com/srl-labs/clabernetes/controllers/link"
+	clabernetescontrollersnode "github.com/srl-labs/clabernetes/controllers/node"
 	clabernetescontrollerstopology "github.com/srl-labs/clabernetes/controllers/topology"
 	clabernetesutil "github.com/srl-labs/clabernetes/util"
 )
@@ -42,6 +44,8 @@ func (c *clabernetes) startLeading(ctx context.Context) {
 
 	controllersToRegisterFuncs := []clabernetescontrollers.NewController{
 		clabernetescontrollerstopology.NewController,
+		clabernetescontrollersnode.NewController,
+		clabernetescontrollerslink.NewController,
 		clabernetescontrollersimagerequest.NewController,
 	}
 

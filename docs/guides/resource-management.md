@@ -60,6 +60,40 @@ spec:
           cpu: "250m"
 ```
 
+For a Topology, the compiler emits one shared LauncherProfile for the default policy and a
+complete dedicated LauncherProfile only for a Node whose resource policy differs. Every emitted
+Node receives an explicit `launcherProfileRef`; profiles do not inherit from one another.
+
+### Direct Node and LauncherProfile Resources
+
+When authoring the primary API directly, put launcher resources on a LauncherProfile and reference
+it explicitly from each intended Node:
+
+```yaml
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: LauncherProfile
+metadata:
+  name: high-capacity
+spec:
+  resources:
+    requests:
+      memory: "16Gi"
+      cpu: "8"
+---
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Node
+metadata:
+  name: core-router
+spec:
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+  launcherProfileRef:
+    name: high-capacity
+```
+
+The reference is same-namespace and singular. LauncherProfiles are never selected by labels or
+merged by priority.
+
 ### Global Resources (Config CRD)
 
 Set default resources globally:
@@ -112,13 +146,13 @@ spec:
 
 ### Resource Priority
 
-Resources are resolved in this order (highest priority first):
+The effective LauncherProfile (explicitly authored or generated from Topology policy) overrides
+global Config fields it sets. Omitted profile fields continue to use Config resolution:
 
-1. Topology-level per-node resources (`spec.deployment.resources.<node>`)
-2. Topology-level default resources (`spec.deployment.resources.default`)
-3. Global kind/type resources (`config.deployment.resourcesByContainerlabKind.<kind>.<type>`)
-4. Global kind default resources (`config.deployment.resourcesByContainerlabKind.<kind>.default`)
-5. Global default resources (`config.deployment.resourcesDefault`)
+1. Referenced/generated LauncherProfile resources
+2. Global kind/type resources (`config.deployment.resourcesByContainerlabKind.<kind>.<type>`)
+3. Global kind default resources (`config.deployment.resourcesByContainerlabKind.<kind>.default`)
+4. Global default resources (`config.deployment.resourcesDefault`)
 
 ## Recommended Resource Values
 

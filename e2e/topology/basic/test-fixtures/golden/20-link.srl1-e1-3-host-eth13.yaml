@@ -1,0 +1,30 @@
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: Link
+metadata:
+  labels:
+    clabernetes/app: clabernetes
+    clabernetes/name: srl1-e1-3-host-eth13
+    clabernetes/topologyKind: containerlab
+    clabernetes/topologyOwner: topology-basic
+  name: srl1-e1-3-host-eth13
+  namespace: NAMESPACE
+  ownerReferences:
+    - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Topology
+      name: topology-basic
+spec:
+  connectivity: vxlan
+  endpointA:
+    interfaceName: e1-3
+    nodeName: srl1
+  endpointB:
+    interfaceName: eth13
+    nodeName: host
+status:
+  resolvedEndpoints:
+    endpointA:
+      nodeName: srl1
+    endpointB:
+      nodeName: host

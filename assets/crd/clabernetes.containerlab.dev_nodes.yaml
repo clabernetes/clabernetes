@@ -1,0 +1,649 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: nodes.clabernetes.containerlab.dev
+spec:
+  group: clabernetes.containerlab.dev
+  names:
+    kind: Node
+    listKind: NodeList
+    plural: nodes
+    shortNames:
+    - c9snode
+    singular: node
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.kind
+      name: Kind
+      type: string
+    - jsonPath: .spec.image
+      name: Image
+      type: string
+    - jsonPath: .status.readiness
+      name: Readiness
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Node represents a single containerlab node ("device") and is realized as a single launcher
+          pod. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by
+          the (optional) Topology compiler, or created by any other machinery (i.e. a containerlab
+          runtime); the node controller treats all of these identically. The object name *is* the
+          containerlab node name -- the launcher pod hostname and the node's services (`<name>` for
+          exposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the
+          namespace is the topology boundary. The spec is simply what a human would write for the node
+          in a containerlab topology file (plus per-node payload and launcherProfileRef); wiring lives
+          exclusively on Link objects and everything operational is stamped by the controller into
+          status.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
+              verbatim containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields
+              and an optional LauncherProfile reference. The definition must be self-contained: expanding
+              topology defaults/kinds into the node is the emitter's job (the Topology compiler and
+              clabverter do this for you). Anything that is deployment *policy* rather than node payload --
+              expose behavior, image pull config, launcher resources, scheduling, privileges -- lives on
+              LauncherProfile objects explicitly referenced by Nodes. Unknown (i.e. newer containerlab
+              vocabulary) fields are preserved by the api server but are not (yet) interpreted by
+              clabernetes.
+            properties:
+              SANs:
+                description: SANs is the list of subject alternative names to be added
+                  to the node's certificate.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              aliases:
+                description: Aliases is a list of network aliases for the node.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              auto-remove:
+                description: AutoRemove enables the auto removal of the node's container
+                  when it stops.
+                type: boolean
+              binds:
+                description: Binds is a list of bind (mount) compatible strings.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              certificate:
+                description: Certificate holds the TLS certificate configuration for
+                  the node.
+                properties:
+                  issue:
+                    description: |-
+                      Issue indicates if the node should have a certificate issued -- the default false value
+                      indicates that the node does not use TLS.
+                    type: boolean
+                type: object
+              cmd:
+                description: Cmd overrides the container command.
+                type: string
+              components:
+                description: Components holds the hardware component (i.e. SR-OS card/mda)
+                  configuration for the node.
+                items:
+                  description: Component holds a hardware component configuration
+                    (i.e. an SR-OS card or mda).
+                  properties:
+                    env:
+                      additionalProperties:
+                        type: string
+                      description: Env holds environment variables for the component.
+                      type: object
+                    mda:
+                      description: MDA holds the mda configuration of the component.
+                      items:
+                        description: MDA holds a single mda configuration of a hardware
+                          component.
+                        properties:
+                          slot:
+                            description: Slot is the slot of the mda.
+                            type: integer
+                          type:
+                            description: Type is the type of the mda.
+                            type: string
+                        type: object
+                      type: array
+                    sfm:
+                      description: SFM is the SFM (switch fabric module) of the component.
+                      type: string
+                    slot:
+                      description: Slot is the slot identifier of the component.
+                      type: string
+                    type:
+                      description: Type is the type of the component.
+                      type: string
+                    xiom:
+                      description: XIOM holds the xiom configuration of the component.
+                      items:
+                        description: XIOM holds a single xiom configuration of a hardware
+                          component.
+                        properties:
+                          mda:
+                            description: MDA holds the mda configuration of the xiom.
+                            items:
+                              description: MDA holds a single mda configuration of
+                                a hardware component.
+                              properties:
+                                slot:
+                                  description: Slot is the slot of the mda.
+                                  type: integer
+                                type:
+                                  description: Type is the type of the mda.
+                                  type: string
+                              type: object
+                            type: array
+                          slot:
+                            description: Slot is the slot of the xiom.
+                            type: integer
+                          type:
+                            description: Type is the type of the xiom.
+                            type: string
+                        type: object
+                      type: array
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              config:
+                description: Config holds containerlab config engine settings for
+                  the node.
+                properties:
+                  vars:
+                    additionalProperties:
+                      x-kubernetes-preserve-unknown-fields: true
+                    description: Vars holds the variables for the config engine.
+                    type: object
+                type: object
+              cpu:
+                description: |-
+                  CPU is the node CPU limit (cgroup or hypervisor) -- note that this is the *containerlab*
+                  (docker) cpu setting, launcher pod resources are LauncherProfile territory.
+                type: number
+              cpu-set:
+                description: CPUSet is the set of CPUs the node can use.
+                type: string
+              dns:
+                description: DNS holds the DNS configuration for the node.
+                properties:
+                  options:
+                    description: Options is a list of DNS options.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  search:
+                    description: Search is a list of DNS search domains.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  servers:
+                    description: Servers is a list of DNS servers.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+              enforce-startup-config:
+                description: EnforceStartupConfig enforces the startup config even
+                  if the node has a saved config.
+                type: boolean
+              entrypoint:
+                description: Entrypoint overrides the container entrypoint.
+                type: string
+              env:
+                additionalProperties:
+                  type: string
+                description: Env holds the environment variables for the node's container.
+                type: object
+              env-files:
+                description: EnvFiles is a list of external files containing environment
+                  variables for the node.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              exec:
+                description: Exec is a list of commands to run in the node's container
+                  once it is started.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              extras:
+                description: Extras holds extra, possibly kind specific, node parameters.
+                properties:
+                  ceos-copy-to-flash:
+                    description: CeosCopyToFlash is a list of paths to files which
+                      are to be copied to the ceos flash dir.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  mysocket-proxy:
+                    description: MysocketProxy is the proxy address that mysocketctl
+                      will use.
+                    type: string
+                  srl-agents:
+                    description: SRLAgents is a list of Nokia SR Linux agents (spec
+                      files) to install on the node.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+              filesFromConfigMap:
+                description: |-
+                  FilesFromConfigMap holds files mounted from ConfigMaps into the launcher responsible for
+                  this Node.
+                items:
+                  description: |-
+                    FileFromConfigMap represents a file that you would like to mount (from a configmap) in the
+                    launcher pod for a given node.
+                  properties:
+                    configMapName:
+                      description: ConfigMapName is the name of the configmap to mount.
+                      type: string
+                    configMapPath:
+                      description: |-
+                        ConfigMapPath is the path/key in the configmap to mount, if not specified the configmap will
+                        be mounted without a sub-path.
+                      type: string
+                    filePath:
+                      description: FilePath is the path to mount the file.
+                      type: string
+                    mode:
+                      default: read
+                      description: |-
+                        Mode sets the file permissions when mounting the configmap. Since the configmap will be read
+                        only filesystem anyway, we basically just want to expose if the file should be mounted as
+                        executable or not. So, default permissions would be 0o444 (read) and execute would be 0o555.
+                      enum:
+                      - read
+                      - execute
+                      type: string
+                  required:
+                  - configMapName
+                  - filePath
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              filesFromURL:
+                description: |-
+                  FilesFromURL holds any files that the launcher for this node should fetch from a URL prior
+                  to launching the node.
+                items:
+                  description: |-
+                    FileFromURL represents a file that you would like to mount from a URL in the launcher pod for
+                    a given node.
+                  properties:
+                    filePath:
+                      description: FilePath is the path to mount the file.
+                      type: string
+                    url:
+                      description: |-
+                        URL is the url to fetch and mount at the provided FilePath. This URL must be a url that can
+                        be simply downloaded and dumped to disk -- meaning a normal file server type endpoint or if
+                        using GitHub or similar a "raw" path.
+                      type: string
+                  required:
+                  - filePath
+                  - url
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              group:
+                description: Group is the (containerlab) group of the node.
+                type: string
+              healthcheck:
+                description: Healthcheck holds the healthcheck configuration for the
+                  node.
+                properties:
+                  interval:
+                    description: Interval is the time interval between the health
+                      checks in seconds.
+                    type: integer
+                  retries:
+                    description: |-
+                      Retries is the number of consecutive healthcheck failures needed to report the container
+                      as unhealthy.
+                    type: integer
+                  start-period:
+                    description: |-
+                      StartPeriod is the time in seconds to wait for the container to bootstrap before running
+                      the first health check.
+                    type: integer
+                  test:
+                    description: Test is the command to run to check the health of
+                      the container.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  timeout:
+                    description: Timeout is the time in seconds to wait for a single
+                      health check operation to complete.
+                    type: integer
+                type: object
+              image:
+                description: Image is the container image for the node.
+                type: string
+              image-pull-policy:
+                description: ImagePullPolicy is the (containerlab, so docker) image
+                  pull policy for the node.
+                type: string
+              kernel:
+                description: Kernel is the ignite kernel image name.
+                type: string
+              kind:
+                description: Kind is the containerlab kind of the node -- i.e. nokia_srlinux.
+                type: string
+              labels:
+                additionalProperties:
+                  type: string
+                description: Labels holds the container labels for the node.
+                type: object
+              launcherProfileRef:
+                description: |-
+                  LauncherProfileRef optionally names the same-namespace LauncherProfile supplying launcher
+                  policy. When omitted, global Config defaults are used.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              license:
+                description: License is the path to the license file for the node.
+                type: string
+              memory:
+                description: |-
+                  Memory is the node memory limit (cgroup or hypervisor) -- as with CPU this is the
+                  *containerlab* (docker) setting, not the launcher pod resources.
+                type: string
+              mgmt-ipv4:
+                description: MgmtIPv4 is the user-defined IPv4 address of the node
+                  in the management network.
+                type: string
+              mgmt-ipv6:
+                description: MgmtIPv6 is the user-defined IPv6 address of the node
+                  in the management network.
+                type: string
+              network-mode:
+                description: |-
+                  NetworkMode is the container networking mode. `container:<name>` expresses that this node
+                  shares the network namespace of another node -- clabernetes derives node "grouping" (nodes
+                  co-located in one launcher pod) from exactly this containerlab-native field.
+                type: string
+              ports:
+                description: |-
+                  Ports is a list of (docker style) port bindings for the node. Ports listed here are also
+                  what feeds the clabernetes expose machinery -- the allocated (load balancer) port set ends
+                  up in the Node status.
+                  note: no yaml omitempty -- historically we always render the (possibly empty) list so that
+                  rendered topology comparisons never see nil vs empty slice differences.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              position:
+                description: Position is the position of the node (used by graphing
+                  tooling).
+                type: string
+              publish:
+                description: Publish is a list of ports to publish with mysocketctl.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              runtime:
+                description: Runtime overrides the container runtime for the node.
+                type: string
+              sandbox:
+                description: Sandbox is the ignite sandbox image name.
+                type: string
+              startup-config:
+                description: |-
+                  StartupConfig is the startup configuration for the node -- either a path or an inline
+                  (multiline string) config.
+                type: string
+              startup-delay:
+                description: StartupDelay is the delay (in seconds) to wait before
+                  starting the node.
+                type: integer
+              sysctls:
+                additionalProperties:
+                  type: string
+                description: Sysctls holds sysctl settings for the node.
+                type: object
+              type:
+                description: Type is the type of the node -- i.e. ixrd2.
+                type: string
+              user:
+                description: User is the linux user to use in the node's container.
+                type: string
+              wait-for:
+                description: WaitFor is a list of node names to wait for before starting
+                  this particular node.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: |-
+              NodeStatus is the status for a Node resource. Everything in here is an *allocation* or an
+              *observation* made by the controller -- user intent never lives in the status.
+            properties:
+              appliedLauncherProfile:
+                description: |-
+                  AppliedLauncherProfile identifies the LauncherProfile successfully applied to the launcher
+                  workload. It is nil when the Node uses only global Config defaults.
+                properties:
+                  generation:
+                    description: Generation is the applied LauncherProfile generation.
+                    format: int64
+                    type: integer
+                  name:
+                    description: Name is the LauncherProfile name.
+                    type: string
+                  uid:
+                    description: UID distinguishes replacement profiles that reuse
+                      a name.
+                    type: string
+                required:
+                - generation
+                - name
+                - uid
+                type: object
+              conditions:
+                description: Conditions contains the current conditions for this Node.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              exposedPorts:
+                description: |-
+                  ExposedPorts holds the expose port *allocations* for this node -- the controller assigns
+                  an expose port for every (spec or auto-expose default) port and programs the node's expose
+                  service from this very field; the launcher reads it to publish the ports on the pod.
+                properties:
+                  loadBalancerAddress:
+                    description: |-
+                      LoadBalancerAddress is the address of the load balancer exposing the node's ports (if the
+                      expose service is of the LoadBalancer flavor).
+                    type: string
+                  ports:
+                    description: Ports holds the individual port allocations for the
+                      node.
+                    items:
+                      description: NodeExposedPort holds a single expose port allocation
+                        for a Node.
+                      properties:
+                        destinationPort:
+                          description: |-
+                            DestinationPort is the port on the (containerlab) node itself -- this is the port the
+                            expose service listens on.
+                          type: integer
+                        exposePort:
+                          description: |-
+                            ExposePort is the allocated (or user provided) port published on the launcher pod (and
+                            targeted by the expose service).
+                          type: integer
+                        protocol:
+                          description: Protocol is the protocol of the port -- TCP
+                            or UDP.
+                          enum:
+                          - TCP
+                          - UDP
+                          type: string
+                      required:
+                      - destinationPort
+                      - exposePort
+                      - protocol
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                type: object
+              probeStatuses:
+                description: ProbeStatuses holds the per-probe status information
+                  for this node.
+                properties:
+                  livenessProbe:
+                    description: LivenessProbe is the status of the node's liveness
+                      probe.
+                    enum:
+                    - passing
+                    - failing
+                    - unknown
+                    - disabled
+                    type: string
+                  readinessProbe:
+                    description: ReadinessProbe is the status of the node's readiness
+                      probe.
+                    enum:
+                    - passing
+                    - failing
+                    - unknown
+                    - disabled
+                    type: string
+                  startupProbe:
+                    description: StartupProbe is the status of the node's startup
+                      probe.
+                    enum:
+                    - passing
+                    - failing
+                    - unknown
+                    - disabled
+                    type: string
+                required:
+                - livenessProbe
+                - readinessProbe
+                - startupProbe
+                type: object
+              readiness:
+                description: |-
+                  Readiness is the readiness of this node as reported by its launcher deployment -- one of
+                  "ready", "notready" or "unknown".
+                enum:
+                - ready
+                - notready
+                - unknown
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}

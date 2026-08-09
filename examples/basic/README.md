@@ -2,6 +2,11 @@
 
 This directory contains minimal examples to get started with Clabernetes.
 
+These examples use the backward-compatible auxiliary `Topology` resource for convenience. The
+controller compiles each file into explicitly referenced LauncherProfile, Link, and Node
+resources. For direct primitive manifests (and large labs that should avoid persisting one
+aggregate source object), use `clabverter --emit-crs`.
+
 ## Examples
 
 ### simple-srl.yaml
@@ -93,8 +98,12 @@ kubectl get topologies
 Check node readiness:
 
 ```bash
-kubectl get topology <name> -o jsonpath='{.status.nodeReadiness}'
+kubectl get nodes.clabernetes.containerlab.dev
+kubectl get node.clabernetes.containerlab.dev <node-name> -o yaml
 ```
+
+Node readiness, probe observations, exposed ports, and the applied LauncherProfile identity are
+resource-local Node status. Link tunnel allocation and errors are resource-local Link status.
 
 ## Cleanup
 

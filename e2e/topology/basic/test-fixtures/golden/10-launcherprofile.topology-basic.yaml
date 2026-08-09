@@ -1,0 +1,28 @@
+apiVersion: clabernetes.containerlab.dev/v1alpha1
+kind: LauncherProfile
+metadata:
+  labels:
+    clabernetes/app: clabernetes
+    clabernetes/name: topology-basic
+    clabernetes/topologyKind: containerlab
+    clabernetes/topologyOwner: topology-basic
+  name: topology-basic
+  namespace: NAMESPACE
+  ownerReferences:
+    - apiVersion: clabernetes.containerlab.dev/v1alpha1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Topology
+      name: topology-basic
+spec:
+  expose:
+    disableAutoExpose: false
+    disableExpose: false
+    exposeType: LoadBalancer
+    useNodeMgmtIpv4Address: false
+    useNodeMgmtIpv6Address: false
+  statusProbes:
+    enabled: false
+    probeConfiguration:
+      startupSeconds: 0
+status: {}

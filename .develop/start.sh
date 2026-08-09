@@ -8,6 +8,15 @@ RUN_CMD="go run cmd/clabernetes/main.go run"
 
 go mod tidy
 
+if [[ "${1:-}" == "--run" ]]; then
+    # The chart initializer runs before DevSpace syncs the working tree, so its embedded CRDs may
+    # come from an older cached image. Re-run initialization from the synchronized source to ensure
+    # the development manager starts against the CRDs from this checkout.
+    go run cmd/clabernetes/main.go run --initializer || exit $?
+
+    exec go run cmd/clabernetes/main.go run
+fi
+
 echo -e "${COLOR_RED}
  _______  ___      _______  _______  _______  ______    __    _  _______  _______  _______  _______
 |       ||   |    |   _   ||  _    ||       ||    _ |  |  |  | ||       ||       ||       ||       |

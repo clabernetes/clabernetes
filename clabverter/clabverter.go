@@ -53,6 +53,9 @@ type Clabverter struct {
 
 	disableExpose bool
 
+	// emitCRs renders LauncherProfile/Node/Link manifests directly instead of a Topology manifest
+	emitCRs bool
+
 	topologyPath       string
 	topologyPathParent string
 	isRemotePath       bool
@@ -97,6 +100,7 @@ func MustNewClabverter(
 	insecureRegistries string,
 	imagePullSecrets string,
 	disableExpose,
+	emitCRs,
 	debug,
 	quiet,
 	stdout bool,
@@ -158,6 +162,7 @@ func MustNewClabverter(
 		outputDirectory:         outputDirectory,
 		stdout:                  stdout,
 		disableExpose:           disableExpose,
+		emitCRs:                 emitCRs,
 		destinationNamespace:    destinationNamespace,
 		insecureRegistries:      insecureRegistriesArr,
 		imagePullSecrets:        imagePullSecretsArr,
@@ -213,7 +218,12 @@ func (c *Clabverter) Clabvert() error {
 		return err
 	}
 
-	err = c.handleManifest()
+	if c.emitCRs {
+		err = c.handleCRManifests()
+	} else {
+		err = c.handleManifest()
+	}
+
 	if err != nil {
 		return err
 	}
