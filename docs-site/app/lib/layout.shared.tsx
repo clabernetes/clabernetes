@@ -3,7 +3,7 @@ import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
-      title: 'c9s',
+      title: <span className="c9s-gradient-text">c9s</span>,
       url: '/',
     },
     links: [
