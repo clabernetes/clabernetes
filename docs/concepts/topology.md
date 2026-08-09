@@ -19,7 +19,7 @@ The generated resources are reconciled by the same controllers as directly autho
 ## Example
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: two-nodes

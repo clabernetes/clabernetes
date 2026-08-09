@@ -1,5 +1,5 @@
 # One Nokia SR Linux node connected to a network multitool host.
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srl-multitool

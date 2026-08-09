@@ -98,8 +98,8 @@ kubectl get topologies
 Check node readiness:
 
 ```bash
-kubectl get nodes.clabernetes.containerlab.dev
-kubectl get node.clabernetes.containerlab.dev <node-name> -o yaml
+kubectl get nodes.c9s.run
+kubectl get node.c9s.run <node-name> -o yaml
 ```
 
 Node readiness, probe observations, exposed ports, and the applied LauncherProfile identity are

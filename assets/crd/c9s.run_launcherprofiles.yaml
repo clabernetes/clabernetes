@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: launcherprofiles.clabernetes.containerlab.dev
+  name: launcherprofiles.c9s.run
 spec:
-  group: clabernetes.containerlab.dev
+  group: c9s.run
   names:
     kind: LauncherProfile
     listKind: LauncherProfileList

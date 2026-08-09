@@ -14,7 +14,7 @@ By default, Clabernetes launcher pods use ephemeral storage. When a pod restarts
 ### Basic Configuration
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: persistent-lab

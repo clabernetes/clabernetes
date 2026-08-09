@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table.tsx";
 import { listTopologies } from "@/lib/kubernetes.ts";
-import type { ClabernetesContainerlabDevTopologyV1Alpha1 } from "@/lib/clabernetes-client";
+import type { C9sRunTopologyV1Alpha1 } from "@/lib/clabernetes-client";
 import { Actions } from "@/components/topologies-table/actions.tsx";
 import { Expand } from "@/components/topologies-table/expand.tsx";
 import {
@@ -66,10 +66,10 @@ export function getExpandCollapseIcon(isExpanded: boolean | undefined): ReactEle
 }
 
 function renderRow(
-  columns: ColumnDef<ClabernetesContainerlabDevTopologyV1Alpha1>[],
+  columns: ColumnDef<C9sRunTopologyV1Alpha1>[],
   expandedRows: Record<string, boolean>,
-  getRowModel: () => RowModel<ClabernetesContainerlabDevTopologyV1Alpha1>,
-  setCurrentRow: (value: Row<ClabernetesContainerlabDevTopologyV1Alpha1>) => void,
+  getRowModel: () => RowModel<C9sRunTopologyV1Alpha1>,
+  setCurrentRow: (value: Row<C9sRunTopologyV1Alpha1>) => void,
   setIsDeleteDialogOpen: (value: boolean) => void,
   setExpandedRows: (value: Record<string, boolean>) => void,
 ): ReactElement | ReactElement[] {
@@ -170,7 +170,7 @@ export function TopologiesTable(): ReactElement {
 
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [currentRow, setCurrentRow] = useState<Row<ClabernetesContainerlabDevTopologyV1Alpha1>>();
+  const [currentRow, setCurrentRow] = useState<Row<C9sRunTopologyV1Alpha1>>();
 
   const { isPending, isError, data, error } = useQuery({
     enabled: true,

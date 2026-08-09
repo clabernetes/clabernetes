@@ -21,7 +21,7 @@ import type { Row } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import { type ReactElement, useRef, useState } from "react";
 import type { editor } from "monaco-editor";
-import type { ClabernetesContainerlabDevTopologyV1Alpha1 } from "@/lib/clabernetes-client";
+import type { C9sRunTopologyV1Alpha1 } from "@/lib/clabernetes-client";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { useTheme } from "next-themes";
 import { getQueryClient } from "@/lib/get-query-client.ts";
@@ -40,8 +40,8 @@ function getEditorTheme(resolvedTheme: string | undefined): string {
 }
 
 interface ActionsProps {
-  readonly row: Row<ClabernetesContainerlabDevTopologyV1Alpha1>;
-  readonly setCurrentRow: (value: Row<ClabernetesContainerlabDevTopologyV1Alpha1>) => void;
+  readonly row: Row<C9sRunTopologyV1Alpha1>;
+  readonly setCurrentRow: (value: Row<C9sRunTopologyV1Alpha1>) => void;
   readonly setIsDeleteDialogOpen: (value: boolean) => void;
 }
 

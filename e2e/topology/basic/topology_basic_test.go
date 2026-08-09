@@ -37,7 +37,7 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 				},
-				"node.clabernetes.containerlab.dev": {
+				"node.c9s.run": {
 					{
 						Name: "srl1",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
@@ -88,7 +88,7 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 				},
-				"node.clabernetes.containerlab.dev": {
+				"node.c9s.run": {
 					{
 						Name: "srl1",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{

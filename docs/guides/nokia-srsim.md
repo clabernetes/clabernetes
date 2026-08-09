@@ -31,7 +31,7 @@ Integrated SR-SIM systems run as a single container:
 **Example topology:**
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srsim-integrated
@@ -78,7 +78,7 @@ Clabernetes automatically detects containers with `network-mode: container:<prim
 **Example distributed topology:**
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srsim-distributed
@@ -194,7 +194,7 @@ links:
 SR-SIM nodes are resource-intensive. Configure appropriate resource limits:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srsim-with-resources
@@ -247,7 +247,7 @@ data:
     # Your license content here
 
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srsim-with-license

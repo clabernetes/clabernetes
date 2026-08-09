@@ -2,9 +2,9 @@ import { Button } from "@/components/ui/button";
 import type { Column, ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown } from "lucide-react";
 import type { ReactElement } from "react";
-import type { ClabernetesContainerlabDevTopologyV1Alpha1 } from "@/lib/clabernetes-client";
+import type { C9sRunTopologyV1Alpha1 } from "@/lib/clabernetes-client";
 
-export const columns: ColumnDef<ClabernetesContainerlabDevTopologyV1Alpha1>[] = [
+export const columns: ColumnDef<C9sRunTopologyV1Alpha1>[] = [
   {
     header: "Expand",
     id: "expand",
@@ -13,7 +13,7 @@ export const columns: ColumnDef<ClabernetesContainerlabDevTopologyV1Alpha1>[] = 
     accessorKey: "metadata.namespace",
     header: ({
       column,
-    }: { column: Column<ClabernetesContainerlabDevTopologyV1Alpha1> }): ReactElement => {
+    }: { column: Column<C9sRunTopologyV1Alpha1> }): ReactElement => {
       return (
         <Button
           onClick={(): void => {
@@ -32,7 +32,7 @@ export const columns: ColumnDef<ClabernetesContainerlabDevTopologyV1Alpha1>[] = 
     accessorKey: "metadata.name",
     header: ({
       column,
-    }: { column: Column<ClabernetesContainerlabDevTopologyV1Alpha1> }): ReactElement => {
+    }: { column: Column<C9sRunTopologyV1Alpha1> }): ReactElement => {
       return (
         <Button
           onClick={(): void => {

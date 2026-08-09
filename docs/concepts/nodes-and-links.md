@@ -15,7 +15,7 @@ The Node name is the containerlab node name. Its specification uses containerlab
 fields such as `kind`, `image`, `type`, `startup-config`, and `exec`.
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   name: srl1
@@ -35,7 +35,7 @@ defaults apply. An explicit reference that does not exist prevents the Node from
 A Link declares exactly two endpoints and the connectivity mechanism used to join them.
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Link
 metadata:
   name: srl1-e1-1-multitool-eth1

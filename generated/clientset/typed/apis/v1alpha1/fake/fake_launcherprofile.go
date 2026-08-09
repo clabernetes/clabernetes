@@ -27,11 +27,11 @@ import (
 // fakeLauncherProfiles implements LauncherProfileInterface
 type fakeLauncherProfiles struct {
 	*gentype.FakeClientWithList[*v1alpha1.LauncherProfile, *v1alpha1.LauncherProfileList]
-	Fake *FakeClabernetesV1alpha1
+	Fake *FakeC9sV1alpha1
 }
 
 func newFakeLauncherProfiles(
-	fake *FakeClabernetesV1alpha1,
+	fake *FakeC9sV1alpha1,
 	namespace string,
 ) apisv1alpha1.LauncherProfileInterface {
 	return &fakeLauncherProfiles{

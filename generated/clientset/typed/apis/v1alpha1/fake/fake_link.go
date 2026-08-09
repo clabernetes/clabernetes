@@ -27,10 +27,10 @@ import (
 // fakeLinks implements LinkInterface
 type fakeLinks struct {
 	*gentype.FakeClientWithList[*v1alpha1.Link, *v1alpha1.LinkList]
-	Fake *FakeClabernetesV1alpha1
+	Fake *FakeC9sV1alpha1
 }
 
-func newFakeLinks(fake *FakeClabernetesV1alpha1, namespace string) apisv1alpha1.LinkInterface {
+func newFakeLinks(fake *FakeC9sV1alpha1, namespace string) apisv1alpha1.LinkInterface {
 	return &fakeLinks{
 		gentype.NewFakeClientWithList[*v1alpha1.Link, *v1alpha1.LinkList](
 			fake.Fake,

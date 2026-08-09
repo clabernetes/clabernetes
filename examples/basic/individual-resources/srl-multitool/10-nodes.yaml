@@ -1,5 +1,5 @@
 # Nokia SR Linux node.
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   name: srl1
@@ -20,7 +20,7 @@ spec:
     set / network-instance default interface ethernet-1/1.0
 ---
 # Linux network multitool node.
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   name: multitool

@@ -1,6 +1,6 @@
 # Topology with persistent storage enabled
 # Node state survives pod restarts
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: persistent-topology

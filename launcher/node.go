@@ -93,7 +93,7 @@ func (c *clabernetes) getNodeResources(
 	for nodeName := range localNodes {
 		ctx, cancel := context.WithTimeout(c.ctx, clientDefaultTimeout)
 
-		node, err := c.kubeClabernetesClient.ClabernetesV1alpha1().
+		node, err := c.kubeClabernetesClient.C9sV1alpha1().
 			Nodes(namespace).
 			Get(ctx, nodeName, metav1.GetOptions{})
 

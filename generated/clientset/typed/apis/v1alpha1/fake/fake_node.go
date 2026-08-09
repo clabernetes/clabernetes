@@ -27,10 +27,10 @@ import (
 // fakeNodes implements NodeInterface
 type fakeNodes struct {
 	*gentype.FakeClientWithList[*v1alpha1.Node, *v1alpha1.NodeList]
-	Fake *FakeClabernetesV1alpha1
+	Fake *FakeC9sV1alpha1
 }
 
-func newFakeNodes(fake *FakeClabernetesV1alpha1, namespace string) apisv1alpha1.NodeInterface {
+func newFakeNodes(fake *FakeC9sV1alpha1, namespace string) apisv1alpha1.NodeInterface {
 	return &fakeNodes{
 		gentype.NewFakeClientWithList[*v1alpha1.Node, *v1alpha1.NodeList](
 			fake.Fake,

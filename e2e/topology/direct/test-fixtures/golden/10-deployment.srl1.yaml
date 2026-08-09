@@ -10,7 +10,7 @@ metadata:
   name: srl1
   namespace: NAMESPACE
   ownerReferences:
-    - apiVersion: clabernetes.containerlab.dev/v1alpha1
+    - apiVersion: c9s.run/v1alpha1
       kind: Node
       name: srl1
 spec:

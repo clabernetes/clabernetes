@@ -60,7 +60,7 @@ func preStartLinkFieldSelectors(c clabernetesmanagertypes.Clabernetes) error {
 	ctx, ctxCancel := c.NewContextWithTimeout()
 	defer ctxCancel()
 
-	_, err := c.GetKubeClabernetesClient().ClabernetesV1alpha1().
+	_, err := c.GetKubeClabernetesClient().C9sV1alpha1().
 		Links(c.GetNamespace()).
 		List(ctx, metav1.ListOptions{
 			FieldSelector: "spec.endpointA.nodeName=clabernetes-field-selector-probe",

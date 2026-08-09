@@ -75,7 +75,7 @@ type launcherProfiles struct {
 }
 
 // newLauncherProfiles returns a LauncherProfiles
-func newLauncherProfiles(c *ClabernetesV1alpha1Client, namespace string) *launcherProfiles {
+func newLauncherProfiles(c *C9sV1alpha1Client, namespace string) *launcherProfiles {
 	return &launcherProfiles{
 		gentype.NewClientWithList[*apisv1alpha1.LauncherProfile, *apisv1alpha1.LauncherProfileList](
 			"launcherprofiles",

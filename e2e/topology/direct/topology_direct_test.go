@@ -36,7 +36,7 @@ func TestNodeLinkDirect(t *testing.T) {
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
 					},
 				},
-				"node.clabernetes.containerlab.dev": {
+				"node.c9s.run": {
 					{
 						Name: "srl1",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{

@@ -1,5 +1,5 @@
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: LauncherProfile
 metadata:
   labels:
@@ -30,7 +30,7 @@ spec:
     probeConfiguration:
       startupSeconds: 0
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: LauncherProfile
 metadata:
   labels:
@@ -61,7 +61,7 @@ spec:
     probeConfiguration:
       startupSeconds: 0
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Link
 metadata:
   labels:
@@ -80,7 +80,7 @@ spec:
     interfaceName: e1-1
     nodeName: srl2
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   labels:
@@ -109,7 +109,7 @@ spec:
   startup-config: srl1.cfg
 
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   labels:
@@ -149,7 +149,7 @@ spec:
   startup-config: srl2.cfg
 
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   labels:
@@ -173,7 +173,7 @@ spec:
   license: taco/srl1.license
 
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   labels:

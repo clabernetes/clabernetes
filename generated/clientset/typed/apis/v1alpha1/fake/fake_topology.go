@@ -27,13 +27,10 @@ import (
 // fakeTopologies implements TopologyInterface
 type fakeTopologies struct {
 	*gentype.FakeClientWithList[*v1alpha1.Topology, *v1alpha1.TopologyList]
-	Fake *FakeClabernetesV1alpha1
+	Fake *FakeC9sV1alpha1
 }
 
-func newFakeTopologies(
-	fake *FakeClabernetesV1alpha1,
-	namespace string,
-) apisv1alpha1.TopologyInterface {
+func newFakeTopologies(fake *FakeC9sV1alpha1, namespace string) apisv1alpha1.TopologyInterface {
 	return &fakeTopologies{
 		gentype.NewFakeClientWithList[*v1alpha1.Topology, *v1alpha1.TopologyList](
 			fake.Fake,

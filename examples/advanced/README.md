@@ -101,7 +101,7 @@ Experimental TCP tunnel mode instead of VXLAN.
 Multiple features can be combined:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: production-like

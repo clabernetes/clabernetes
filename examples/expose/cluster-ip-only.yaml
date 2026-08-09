@@ -1,7 +1,7 @@
 # Topology with ClusterIP services only (no LoadBalancer)
 # Use this for internal-only access within the cluster
 # Reduces external attack surface and avoids LB provisioning
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: cluster-ip-only

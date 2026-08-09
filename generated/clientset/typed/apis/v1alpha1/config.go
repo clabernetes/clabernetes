@@ -75,7 +75,7 @@ type configs struct {
 }
 
 // newConfigs returns a Configs
-func newConfigs(c *ClabernetesV1alpha1Client, namespace string) *configs {
+func newConfigs(c *C9sV1alpha1Client, namespace string) *configs {
 	return &configs{
 		gentype.NewClientWithList[*apisv1alpha1.Config, *apisv1alpha1.ConfigList](
 			"configs",

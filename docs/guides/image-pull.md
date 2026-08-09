@@ -80,7 +80,7 @@ kubectl create secret docker-registry my-registry-secret \
 Reference in your topology:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: private-images
@@ -187,7 +187,7 @@ spec:
 Or for all topologies via the Config CRD (or the `globalConfig.deployment.extraEnv` helm value):
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Config
 metadata:
   name: clabernetes
@@ -218,7 +218,7 @@ if `dockerDaemonConfig` is set (configure `proxies` in your daemon.json instead)
 Set defaults in the Config CRD:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Config
 metadata:
   name: clabernetes
@@ -254,7 +254,7 @@ Common paths:
 ### Public Registry
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: public-images
@@ -274,7 +274,7 @@ spec:
 ### Private Registry with Pull Secrets
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: enterprise
@@ -296,7 +296,7 @@ spec:
 ### Insecure Local Registry
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: local-dev
@@ -318,7 +318,7 @@ spec:
 ### Air-Gapped Environment
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: airgapped

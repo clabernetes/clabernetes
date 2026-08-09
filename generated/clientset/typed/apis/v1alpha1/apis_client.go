@@ -26,7 +26,7 @@ import (
 	rest "k8s.io/client-go/rest"
 )
 
-type ClabernetesV1alpha1Interface interface {
+type C9sV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ConfigsGetter
 	ImageRequestsGetter
@@ -36,39 +36,39 @@ type ClabernetesV1alpha1Interface interface {
 	TopologiesGetter
 }
 
-// ClabernetesV1alpha1Client is used to interact with features provided by the clabernetes.containerlab.dev group.
-type ClabernetesV1alpha1Client struct {
+// C9sV1alpha1Client is used to interact with features provided by the c9s.run group.
+type C9sV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *ClabernetesV1alpha1Client) Configs(namespace string) ConfigInterface {
+func (c *C9sV1alpha1Client) Configs(namespace string) ConfigInterface {
 	return newConfigs(c, namespace)
 }
 
-func (c *ClabernetesV1alpha1Client) ImageRequests(namespace string) ImageRequestInterface {
+func (c *C9sV1alpha1Client) ImageRequests(namespace string) ImageRequestInterface {
 	return newImageRequests(c, namespace)
 }
 
-func (c *ClabernetesV1alpha1Client) LauncherProfiles(namespace string) LauncherProfileInterface {
+func (c *C9sV1alpha1Client) LauncherProfiles(namespace string) LauncherProfileInterface {
 	return newLauncherProfiles(c, namespace)
 }
 
-func (c *ClabernetesV1alpha1Client) Links(namespace string) LinkInterface {
+func (c *C9sV1alpha1Client) Links(namespace string) LinkInterface {
 	return newLinks(c, namespace)
 }
 
-func (c *ClabernetesV1alpha1Client) Nodes(namespace string) NodeInterface {
+func (c *C9sV1alpha1Client) Nodes(namespace string) NodeInterface {
 	return newNodes(c, namespace)
 }
 
-func (c *ClabernetesV1alpha1Client) Topologies(namespace string) TopologyInterface {
+func (c *C9sV1alpha1Client) Topologies(namespace string) TopologyInterface {
 	return newTopologies(c, namespace)
 }
 
-// NewForConfig creates a new ClabernetesV1alpha1Client for the given config.
+// NewForConfig creates a new C9sV1alpha1Client for the given config.
 // NewForConfig is equivalent to NewForConfigAndClient(c, httpClient),
 // where httpClient was generated with rest.HTTPClientFor(c).
-func NewForConfig(c *rest.Config) (*ClabernetesV1alpha1Client, error) {
+func NewForConfig(c *rest.Config) (*C9sV1alpha1Client, error) {
 	config := *c
 	setConfigDefaults(&config)
 	httpClient, err := rest.HTTPClientFor(&config)
@@ -78,21 +78,21 @@ func NewForConfig(c *rest.Config) (*ClabernetesV1alpha1Client, error) {
 	return NewForConfigAndClient(&config, httpClient)
 }
 
-// NewForConfigAndClient creates a new ClabernetesV1alpha1Client for the given config and http client.
+// NewForConfigAndClient creates a new C9sV1alpha1Client for the given config and http client.
 // Note the http client provided takes precedence over the configured transport values.
-func NewForConfigAndClient(c *rest.Config, h *http.Client) (*ClabernetesV1alpha1Client, error) {
+func NewForConfigAndClient(c *rest.Config, h *http.Client) (*C9sV1alpha1Client, error) {
 	config := *c
 	setConfigDefaults(&config)
 	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
 	}
-	return &ClabernetesV1alpha1Client{client}, nil
+	return &C9sV1alpha1Client{client}, nil
 }
 
-// NewForConfigOrDie creates a new ClabernetesV1alpha1Client for the given config and
+// NewForConfigOrDie creates a new C9sV1alpha1Client for the given config and
 // panics if there is an error in the config.
-func NewForConfigOrDie(c *rest.Config) *ClabernetesV1alpha1Client {
+func NewForConfigOrDie(c *rest.Config) *C9sV1alpha1Client {
 	client, err := NewForConfig(c)
 	if err != nil {
 		panic(err)
@@ -100,9 +100,9 @@ func NewForConfigOrDie(c *rest.Config) *ClabernetesV1alpha1Client {
 	return client
 }
 
-// New creates a new ClabernetesV1alpha1Client for the given RESTClient.
-func New(c rest.Interface) *ClabernetesV1alpha1Client {
-	return &ClabernetesV1alpha1Client{c}
+// New creates a new C9sV1alpha1Client for the given RESTClient.
+func New(c rest.Interface) *C9sV1alpha1Client {
+	return &C9sV1alpha1Client{c}
 }
 
 func setConfigDefaults(config *rest.Config) {
@@ -119,7 +119,7 @@ func setConfigDefaults(config *rest.Config) {
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *ClabernetesV1alpha1Client) RESTClient() rest.Interface {
+func (c *C9sV1alpha1Client) RESTClient() rest.Interface {
 	if c == nil {
 		return nil
 	}

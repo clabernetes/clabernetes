@@ -8,7 +8,7 @@
 # 2. Replace images with your private registry images
 # 3. Uncomment pullSecrets configuration
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: private-registry
@@ -43,7 +43,7 @@ spec:
 # kubectl create secret generic docker-config \
 #   --from-file=config.json=/path/to/config.json
 ---
-# apiVersion: clabernetes.containerlab.dev/v1alpha1
+# apiVersion: c9s.run/v1alpha1
 # kind: Topology
 # metadata:
 #   name: private-with-docker-config

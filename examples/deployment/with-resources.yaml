@@ -1,6 +1,6 @@
 # Topology with explicit resource limits per node
 # Useful for controlling resource consumption and ensuring QoS
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: with-resources

@@ -27,10 +27,10 @@ import (
 // fakeConfigs implements ConfigInterface
 type fakeConfigs struct {
 	*gentype.FakeClientWithList[*v1alpha1.Config, *v1alpha1.ConfigList]
-	Fake *FakeClabernetesV1alpha1
+	Fake *FakeC9sV1alpha1
 }
 
-func newFakeConfigs(fake *FakeClabernetesV1alpha1, namespace string) apisv1alpha1.ConfigInterface {
+func newFakeConfigs(fake *FakeC9sV1alpha1, namespace string) apisv1alpha1.ConfigInterface {
 	return &fakeConfigs{
 		gentype.NewFakeClientWithList[*v1alpha1.Config, *v1alpha1.ConfigList](
 			fake.Fake,

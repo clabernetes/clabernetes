@@ -56,7 +56,7 @@ func ListNodeLinks(
 	links := make([]clabernetesapisv1alpha1.Link, 0)
 
 	for _, selector := range NodeLinkFieldSelectors(localNodes) {
-		selectorLinks, err := clabernetesClient.ClabernetesV1alpha1().
+		selectorLinks, err := clabernetesClient.C9sV1alpha1().
 			Links(namespace).
 			List(ctx, metav1.ListOptions{FieldSelector: selector})
 		if err != nil {
@@ -220,7 +220,7 @@ func watchLinksSession(
 	linkEvents chan<- struct{},
 	reconnectDelay time.Duration,
 ) bool {
-	links, err := clabernetesClient.ClabernetesV1alpha1().
+	links, err := clabernetesClient.C9sV1alpha1().
 		Links(namespace).
 		List(ctx, metav1.ListOptions{FieldSelector: selector})
 	if err != nil {
@@ -241,7 +241,7 @@ func watchLinksSession(
 	// this resource version then closes the gap between this list and watch creation.
 	signalLinkRefresh(linkEvents)
 
-	linkWatch, err := clabernetesClient.ClabernetesV1alpha1().
+	linkWatch, err := clabernetesClient.C9sV1alpha1().
 		Links(namespace).
 		Watch(ctx, metav1.ListOptions{
 			FieldSelector:       selector,
