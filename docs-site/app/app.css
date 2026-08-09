@@ -99,20 +99,9 @@ body {
   stroke-dasharray: 0.055 0.025;
   vector-effect: non-scaling-stroke;
   opacity: 0.68;
-  animation: c9s-fabric-flow 7s linear infinite;
-}
-
-@keyframes c9s-fabric-flow {
-  to {
-    stroke-dashoffset: -1;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .c9s-fabric-link {
-    animation: none;
-  }
-
   .c9s-fabric-node {
     transition: none;
   }
