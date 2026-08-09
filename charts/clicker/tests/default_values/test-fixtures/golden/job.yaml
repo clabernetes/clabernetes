@@ -29,7 +29,10 @@ spec:
         - name: clicker
           image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
           imagePullPolicy: IfNotPresent
-          command: ["/clabernetes/manager", "clicker"]
+          command: [
+            "/clabernetes/manager",
+            "clicker",
+          ]
           env:
             - name: APP_NAME
               value: clabernetes

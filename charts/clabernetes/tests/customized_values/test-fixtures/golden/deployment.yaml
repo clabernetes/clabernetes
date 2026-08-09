@@ -122,8 +122,8 @@ spec:
               cpu: 100m
               memory: 256Mi
           ports:
-            - name: http
-              containerPort: 10443
+          - name: http
+            containerPort: 10443
           livenessProbe:
             httpGet:
               path: /alive
