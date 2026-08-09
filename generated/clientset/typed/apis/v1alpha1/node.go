@@ -75,7 +75,7 @@ type nodes struct {
 }
 
 // newNodes returns a Nodes
-func newNodes(c *ClabernetesV1alpha1Client, namespace string) *nodes {
+func newNodes(c *C9sV1alpha1Client, namespace string) *nodes {
 	return &nodes{
 		gentype.NewClientWithList[*apisv1alpha1.Node, *apisv1alpha1.NodeList](
 			"nodes",

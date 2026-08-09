@@ -41,7 +41,7 @@ kubectl create configmap srl-license --from-file=license.key=/path/to/license.ke
 Reference the ConfigMap in your topology:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: with-license
@@ -71,7 +71,7 @@ corresponding generated Node; it does not create a one-off LauncherProfile just 
 For directly authored primitive resources, payload attachments live in the Node spec:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   name: srl1
@@ -202,7 +202,7 @@ data:
   sros-license.txt: |
     <license-content>
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 spec:
   deployment:

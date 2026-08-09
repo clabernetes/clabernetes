@@ -34,7 +34,7 @@ they do not promise arbitrary runtime scale.
 ### Basic Structure
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: my-topology
@@ -386,7 +386,7 @@ the **namespace is the topology boundary** -- run one topology per namespace.
 ### Basic Structure
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   name: srl1
@@ -483,7 +483,7 @@ No labels are required, and no launcher watches more than its own links.
 ### Basic Structure
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Link
 metadata:
   name: srl1-e1-1-srl2-e1-1     # any name; deterministic when compiler emitted
@@ -533,7 +533,7 @@ inherit global [Config](#config-crd) defaults.
 ### Basic Structure
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: LauncherProfile
 metadata:
   name: my-lab
@@ -581,7 +581,7 @@ The `Config` CRD holds global clabernetes configuration. There must be exactly o
 ### Basic Structure
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Config
 metadata:
   name: clabernetes  # Must be named "clabernetes"
@@ -714,7 +714,7 @@ The `ImageRequest` CRD is automatically managed by clabernetes to coordinate ima
 ### Basic Structure
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: ImageRequest
 metadata:
   name: my-topology-srl1-abc123
@@ -754,7 +754,7 @@ status:
 ### Minimal Topology
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: minimal
@@ -772,7 +772,7 @@ spec:
 ### Production Topology
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: production

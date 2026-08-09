@@ -1,5 +1,5 @@
 "use server";
-import { listClabernetesContainerlabDevV1Alpha1NamespacedLink } from "@/lib/clabernetes-client";
+import { listC9sRunV1Alpha1NamespacedLink } from "@/lib/clabernetes-client";
 import {
   AppsV1Api,
   CoreV1Api,
@@ -66,7 +66,7 @@ export async function visualizeTopology(namespace: string, name: string): Promis
 
   const services = await servicesByOwner(namespace, name);
 
-  const links = await listClabernetesContainerlabDevV1Alpha1NamespacedLink({
+  const links = await listC9sRunV1Alpha1NamespacedLink({
     path: { namespace: namespace },
     query: { labelSelector: `clabernetes/topologyOwner=${name}` },
   }).catch((error: unknown) => {

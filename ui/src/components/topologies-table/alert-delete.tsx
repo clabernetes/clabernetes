@@ -13,10 +13,10 @@ import { deleteTopology } from "@/lib/kubernetes";
 import type { ReactElement } from "react";
 import type React from "react";
 import type { Row } from "@tanstack/react-table";
-import type { ClabernetesContainerlabDevTopologyV1Alpha1 } from "@/lib/clabernetes-client";
+import type { C9sRunTopologyV1Alpha1 } from "@/lib/clabernetes-client";
 
 interface AlertDeleteProps {
-  readonly row: Row<ClabernetesContainerlabDevTopologyV1Alpha1> | undefined;
+  readonly row: Row<C9sRunTopologyV1Alpha1> | undefined;
   readonly isDeleteDialogOpen: boolean;
   readonly setIsDeleteDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }

@@ -1,6 +1,6 @@
 # Topology with custom status probe configuration
 # Demonstrates health checking for different node types
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: with-probes

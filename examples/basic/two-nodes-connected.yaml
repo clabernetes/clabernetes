@@ -1,7 +1,7 @@
 # Two Nokia SR Linux nodes connected via a point-to-point link
 # Demonstrates basic multi-node topology with connectivity and startup configs
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: two-nodes

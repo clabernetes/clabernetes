@@ -1,6 +1,6 @@
 # Topology with node scheduling constraints
 # Control which Kubernetes nodes run the topology pods
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: scheduled-topology

@@ -3,7 +3,7 @@
 # Note: Currently, explicit containerlab port definitions are also cleared
 # This effectively makes the node unexposed (similar to exposeType: None)
 # Future versions may allow explicit port definitions with disableAutoExpose
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: no-auto-expose

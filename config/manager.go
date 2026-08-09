@@ -180,7 +180,7 @@ func (m *manager) Start() error {
 
 	found := true
 
-	config, err := m.kubeClabernetesClient.ClabernetesV1alpha1().
+	config, err := m.kubeClabernetesClient.C9sV1alpha1().
 		Configs(m.namespace).
 		Get(m.ctx, clabernetesconstants.Clabernetes, metav1.GetOptions{})
 	if err != nil {
@@ -259,7 +259,7 @@ func (m *manager) watchConfig() {
 		Watch:         true,
 	}
 
-	watch, err := m.kubeClabernetesClient.ClabernetesV1alpha1().
+	watch, err := m.kubeClabernetesClient.C9sV1alpha1().
 		Configs(m.namespace).
 		Watch(m.ctx, listOptions)
 	if err != nil {

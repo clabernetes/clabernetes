@@ -1,10 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ReactElement, useState } from "react";
 import type {
-  ClabernetesContainerlabDevLauncherprofileV1Alpha1,
-  ClabernetesContainerlabDevLinkV1Alpha1,
-  ClabernetesContainerlabDevNodeV1Alpha1,
-  ClabernetesContainerlabDevTopologyV1Alpha1,
+  C9sRunLauncherprofileV1Alpha1,
+  C9sRunLinkV1Alpha1,
+  C9sRunNodeV1Alpha1,
+  C9sRunTopologyV1Alpha1,
 } from "@/lib/clabernetes-client";
 import type { Row } from "@tanstack/react-table";
 import { CircleAlert, CircleCheck, CircleHelp } from "lucide-react";
@@ -64,7 +64,7 @@ function getPorts(nodeName: string, ports: number[], expandedPorts: string[]): R
 }
 
 function getTopologyNodeCard(
-  node: ClabernetesContainerlabDevNodeV1Alpha1,
+  node: C9sRunNodeV1Alpha1,
   expandedTcpPorts: string[],
   setExpandedTcpPorts: (expandedPorts: string[]) => void,
   expandedUdpPorts: string[],
@@ -179,7 +179,7 @@ function getTopologyNodeCard(
 }
 
 interface ExpandProps {
-  readonly row: Row<ClabernetesContainerlabDevTopologyV1Alpha1>;
+  readonly row: Row<C9sRunTopologyV1Alpha1>;
 }
 
 export function Expand(props: ExpandProps): ReactElement {
@@ -195,10 +195,10 @@ export function Expand(props: ExpandProps): ReactElement {
 
   const { data: objNodes } = useQuery({
     enabled: true,
-    queryFn: async (): Promise<ClabernetesContainerlabDevNodeV1Alpha1[]> => {
+    queryFn: async (): Promise<C9sRunNodeV1Alpha1[]> => {
       const response = await listTopologyNodes(namespace, name);
 
-      return JSON.parse(response) as ClabernetesContainerlabDevNodeV1Alpha1[];
+      return JSON.parse(response) as C9sRunNodeV1Alpha1[];
     },
     queryKey: ["topology-nodes", { name: name, namespace: namespace }],
     retry: true,
@@ -206,10 +206,10 @@ export function Expand(props: ExpandProps): ReactElement {
   });
   const { data: objLinks } = useQuery({
     enabled: true,
-    queryFn: async (): Promise<ClabernetesContainerlabDevLinkV1Alpha1[]> => {
+    queryFn: async (): Promise<C9sRunLinkV1Alpha1[]> => {
       const response = await listTopologyLinks(namespace, name);
 
-      return JSON.parse(response) as ClabernetesContainerlabDevLinkV1Alpha1[];
+      return JSON.parse(response) as C9sRunLinkV1Alpha1[];
     },
     queryKey: ["topology-links", { name: name, namespace: namespace }],
     retry: true,
@@ -217,10 +217,10 @@ export function Expand(props: ExpandProps): ReactElement {
   });
   const { data: objProfiles } = useQuery({
     enabled: true,
-    queryFn: async (): Promise<ClabernetesContainerlabDevLauncherprofileV1Alpha1[]> => {
+    queryFn: async (): Promise<C9sRunLauncherprofileV1Alpha1[]> => {
       const response = await listTopologyLauncherProfiles(namespace, name);
 
-      return JSON.parse(response) as ClabernetesContainerlabDevLauncherprofileV1Alpha1[];
+      return JSON.parse(response) as C9sRunLauncherprofileV1Alpha1[];
     },
     queryKey: ["topology-launcher-profiles", { name: name, namespace: namespace }],
     retry: true,

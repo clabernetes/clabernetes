@@ -396,7 +396,7 @@
                 "format": "date-time",
                 "type": "string"
             },
-            "clabernetes-containerlab-dev.config.v1alpha1": {
+            "c9s-run.config.v1alpha1": {
                 "description": "Config is an object that holds global clabernetes config information. Note that this CR is\nexpected to effectively be a global singleton -- that is, there should be only *one* of these,\nand it *must* be named `clabernetes` -- CRD metadata spec will enforce this (via x-validation\nrules).",
                 "properties": {
                     "apiVersion": {
@@ -838,13 +838,13 @@
                 },
                 "type": "object",
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "config"
                 }
             },
-            "clabernetes-containerlab-dev.configList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.config.v1alpha1 resources",
+            "c9s-run.configList.v1alpha1": {
+                "description": "a list of c9s-run.config.v1alpha1 resources",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -853,7 +853,7 @@
                     "items": {
                         "description": "List of configs. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
                         "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                            "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                         },
                         "type": "array"
                     },
@@ -875,12 +875,12 @@
                     "items"
                 ],
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "configList"
                 }
             },
-            "clabernetes-containerlab-dev.imagerequest.v1alpha1": {
+            "c9s-run.imagerequest.v1alpha1": {
                 "description": "ImageRequest is an object that represents a request (from a launcher pod) to pull an image on a\ngiven kubernetes node such that the image can be \"pulled through\" into the launcher docker\ndaemon.",
                 "properties": {
                     "apiVersion": {
@@ -951,13 +951,13 @@
                 },
                 "type": "object",
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "imagerequest"
                 }
             },
-            "clabernetes-containerlab-dev.imagerequestList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.imagerequest.v1alpha1 resources",
+            "c9s-run.imagerequestList.v1alpha1": {
+                "description": "a list of c9s-run.imagerequest.v1alpha1 resources",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -966,7 +966,7 @@
                     "items": {
                         "description": "List of imagerequests. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
                         "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                            "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                         },
                         "type": "array"
                     },
@@ -988,12 +988,12 @@
                     "items"
                 ],
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "imagerequestList"
                 }
             },
-            "clabernetes-containerlab-dev.launcherprofile.v1alpha1": {
+            "c9s-run.launcherprofile.v1alpha1": {
                 "description": "LauncherProfile holds reusable Kubernetes and launcher realization policy for Nodes. A Node\napplies at most one LauncherProfile through spec.launcherProfileRef; fields omitted from the\nprofile inherit the global Config defaults.",
                 "properties": {
                     "apiVersion": {
@@ -1572,13 +1572,13 @@
                 },
                 "type": "object",
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "launcherprofile"
                 }
             },
-            "clabernetes-containerlab-dev.launcherprofileList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.launcherprofile.v1alpha1 resources",
+            "c9s-run.launcherprofileList.v1alpha1": {
+                "description": "a list of c9s-run.launcherprofile.v1alpha1 resources",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -1587,7 +1587,7 @@
                     "items": {
                         "description": "List of launcherprofiles. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
                         "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                            "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                         },
                         "type": "array"
                     },
@@ -1609,12 +1609,12 @@
                     "items"
                 ],
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "launcherprofileList"
                 }
             },
-            "clabernetes-containerlab-dev.link.v1alpha1": {
+            "c9s-run.link.v1alpha1": {
                 "description": "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a\nprimary clabernetes API -- like Nodes they can be created by users directly or emitted by the\n(optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints\n(Node object names in the same namespace plus interface names), connectivity flavor, and an\noptional mtu. The link controller allocates a tunnel id into the status for links that cross\nlauncher pods; links between nodes co-located in one launcher pod and links to the reserved\n`host` node need no tunnel and are materialized directly by the owning launcher. Launchers\nselect only the links terminating on their nodes with *field selectors* on the endpoint node\nnames (which requires kubernetes 1.31+) -- no labels are required, ever, and no launcher\nwatches more than its own\nlinks. Storing one object per wire keeps every persisted object O(1) regardless of topology\nsize.",
                 "properties": {
                     "apiVersion": {
@@ -1754,13 +1754,13 @@
                 },
                 "type": "object",
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "link"
                 }
             },
-            "clabernetes-containerlab-dev.linkList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.link.v1alpha1 resources",
+            "c9s-run.linkList.v1alpha1": {
+                "description": "a list of c9s-run.link.v1alpha1 resources",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -1769,7 +1769,7 @@
                     "items": {
                         "description": "List of links. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
                         "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                            "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                         },
                         "type": "array"
                     },
@@ -1791,12 +1791,12 @@
                     "items"
                 ],
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "linkList"
                 }
             },
-            "clabernetes-containerlab-dev.node.v1alpha1": {
+            "c9s-run.node.v1alpha1": {
                 "description": "Node represents a single containerlab node (\"device\") and is realized as a single launcher\npod. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by\nthe (optional) Topology compiler, or created by any other machinery (i.e. a containerlab\nruntime); the node controller treats all of these identically. The object name *is* the\ncontainerlab node name -- the launcher pod hostname and the node's services (`<name>` for\nexposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the\nnamespace is the topology boundary. The spec is simply what a human would write for the node\nin a containerlab topology file (plus per-node payload and launcherProfileRef); wiring lives\nexclusively on Link objects and everything operational is stamped by the controller into\nstatus.",
                 "properties": {
                     "apiVersion": {
@@ -2442,13 +2442,13 @@
                 },
                 "type": "object",
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "node"
                 }
             },
-            "clabernetes-containerlab-dev.nodeList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.node.v1alpha1 resources",
+            "c9s-run.nodeList.v1alpha1": {
+                "description": "a list of c9s-run.node.v1alpha1 resources",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -2457,7 +2457,7 @@
                     "items": {
                         "description": "List of nodes. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
                         "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                            "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                         },
                         "type": "array"
                     },
@@ -2479,12 +2479,12 @@
                     "items"
                 ],
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "nodeList"
                 }
             },
-            "clabernetes-containerlab-dev.topology.v1alpha1": {
+            "c9s-run.topology.v1alpha1": {
                 "description": "Topology is an object that holds information about a clabernetes Topology -- that is, a valid\ntopology file (ex: containerlab topology), and any associated configurations.",
                 "properties": {
                     "apiVersion": {
@@ -3235,13 +3235,13 @@
                 },
                 "type": "object",
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "topology"
                 }
             },
-            "clabernetes-containerlab-dev.topologyList.v1alpha1": {
-                "description": "a list of clabernetes-containerlab-dev.topology.v1alpha1 resources",
+            "c9s-run.topologyList.v1alpha1": {
+                "description": "a list of c9s-run.topology.v1alpha1 resources",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -3250,7 +3250,7 @@
                     "items": {
                         "description": "List of topologies. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md",
                         "items": {
-                            "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                            "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                         },
                         "type": "array"
                     },
@@ -3272,7 +3272,7 @@
                     "items"
                 ],
                 "x-kubernetes-gvk": {
-                    "group": "clabernetes-containerlab-dev",
+                    "group": "c9s-run",
                     "version": "v1alpha1",
                     "kind": "topologyList"
                 }
@@ -3280,21 +3280,21 @@
         }
     },
     "paths": {
-        "/apis/clabernetes.containerlab.dev/v1alpha1/configs": {
+        "/apis/c9s.run/v1alpha1/configs": {
             "get": {
                 "description": "list objects of kind Config",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1ConfigForAllNamespaces",
+                "operationId": "listC9SRunV1Alpha1ConfigForAllNamespaces",
                 "responses": {
                     "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.configList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.configList.v1alpha1"
                                 }
                             }
                         },
@@ -3399,10 +3399,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/configs": {
             "delete": {
                 "description": "delete collection of Config",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfig",
+                "operationId": "deleteC9SRunV1Alpha1CollectionNamespacedConfig",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -3510,7 +3510,7 @@
             },
             "get": {
                 "description": "list objects of kind Config",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "operationId": "listC9SRunV1Alpha1NamespacedConfig",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -3599,12 +3599,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.configList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.configList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.configList.v1alpha1"
                                 }
                             }
                         },
@@ -3618,7 +3618,7 @@
             },
             "post": {
                 "description": "create a Config",
-                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "operationId": "createC9SRunV1Alpha1NamespacedConfig",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -3652,12 +3652,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                             }
                         }
                     }
@@ -3667,12 +3667,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             }
                         },
@@ -3682,12 +3682,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             }
                         },
@@ -3697,12 +3697,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             }
                         },
@@ -3736,10 +3736,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs/{name}": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/configs/{name}": {
             "delete": {
                 "description": "delete a Config",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "operationId": "deleteC9SRunV1Alpha1NamespacedConfig",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -3831,7 +3831,7 @@
             },
             "get": {
                 "description": "read the specified Config",
-                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "operationId": "readC9SRunV1Alpha1NamespacedConfig",
                 "parameters": [
                     {
                         "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
@@ -3848,12 +3848,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             }
                         },
@@ -3867,7 +3867,7 @@
             },
             "patch": {
                 "description": "partially update the specified Config",
-                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "operationId": "patchC9SRunV1Alpha1NamespacedConfig",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -3921,12 +3921,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             }
                         },
@@ -3940,7 +3940,7 @@
             },
             "put": {
                 "description": "replace the specified Config",
-                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedConfig",
+                "operationId": "replaceC9SRunV1Alpha1NamespacedConfig",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -3974,12 +3974,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                             }
                         }
                     }
@@ -3989,12 +3989,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             }
                         },
@@ -4004,12 +4004,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.config.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.config.v1alpha1"
                                 }
                             }
                         },
@@ -4053,21 +4053,21 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/imagerequests": {
+        "/apis/c9s.run/v1alpha1/imagerequests": {
             "get": {
                 "description": "list objects of kind Imagerequest",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1ImagerequestForAllNamespaces",
+                "operationId": "listC9SRunV1Alpha1ImagerequestForAllNamespaces",
                 "responses": {
                     "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequestList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequestList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequestList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequestList.v1alpha1"
                                 }
                             }
                         },
@@ -4172,10 +4172,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/imagerequests": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/imagerequests": {
             "delete": {
                 "description": "delete collection of Imagerequest",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedImagerequest",
+                "operationId": "deleteC9SRunV1Alpha1CollectionNamespacedImagerequest",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -4283,7 +4283,7 @@
             },
             "get": {
                 "description": "list objects of kind Imagerequest",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedImagerequest",
+                "operationId": "listC9SRunV1Alpha1NamespacedImagerequest",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -4372,12 +4372,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequestList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequestList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequestList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequestList.v1alpha1"
                                 }
                             }
                         },
@@ -4391,7 +4391,7 @@
             },
             "post": {
                 "description": "create a Imagerequest",
-                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedImagerequest",
+                "operationId": "createC9SRunV1Alpha1NamespacedImagerequest",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -4425,12 +4425,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                             }
                         }
                     }
@@ -4440,12 +4440,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             }
                         },
@@ -4455,12 +4455,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             }
                         },
@@ -4470,12 +4470,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             }
                         },
@@ -4509,10 +4509,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/imagerequests/{name}": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/imagerequests/{name}": {
             "delete": {
                 "description": "delete a Imagerequest",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedImagerequest",
+                "operationId": "deleteC9SRunV1Alpha1NamespacedImagerequest",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -4604,7 +4604,7 @@
             },
             "get": {
                 "description": "read the specified Imagerequest",
-                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedImagerequest",
+                "operationId": "readC9SRunV1Alpha1NamespacedImagerequest",
                 "parameters": [
                     {
                         "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
@@ -4621,12 +4621,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             }
                         },
@@ -4640,7 +4640,7 @@
             },
             "patch": {
                 "description": "partially update the specified Imagerequest",
-                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedImagerequest",
+                "operationId": "patchC9SRunV1Alpha1NamespacedImagerequest",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -4694,12 +4694,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             }
                         },
@@ -4713,7 +4713,7 @@
             },
             "put": {
                 "description": "replace the specified Imagerequest",
-                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedImagerequest",
+                "operationId": "replaceC9SRunV1Alpha1NamespacedImagerequest",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -4747,12 +4747,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                             }
                         }
                     }
@@ -4762,12 +4762,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             }
                         },
@@ -4777,12 +4777,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.imagerequest.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.imagerequest.v1alpha1"
                                 }
                             }
                         },
@@ -4826,21 +4826,21 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/launcherprofiles": {
+        "/apis/c9s.run/v1alpha1/launcherprofiles": {
             "get": {
                 "description": "list objects of kind Launcherprofile",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1LauncherprofileForAllNamespaces",
+                "operationId": "listC9SRunV1Alpha1LauncherprofileForAllNamespaces",
                 "responses": {
                     "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofileList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofileList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofileList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofileList.v1alpha1"
                                 }
                             }
                         },
@@ -4945,10 +4945,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/launcherprofiles": {
             "delete": {
                 "description": "delete collection of Launcherprofile",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLauncherprofile",
+                "operationId": "deleteC9SRunV1Alpha1CollectionNamespacedLauncherprofile",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -5056,7 +5056,7 @@
             },
             "get": {
                 "description": "list objects of kind Launcherprofile",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "operationId": "listC9SRunV1Alpha1NamespacedLauncherprofile",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -5145,12 +5145,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofileList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofileList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofileList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofileList.v1alpha1"
                                 }
                             }
                         },
@@ -5164,7 +5164,7 @@
             },
             "post": {
                 "description": "create a Launcherprofile",
-                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "operationId": "createC9SRunV1Alpha1NamespacedLauncherprofile",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -5198,12 +5198,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                             }
                         }
                     }
@@ -5213,12 +5213,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             }
                         },
@@ -5228,12 +5228,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             }
                         },
@@ -5243,12 +5243,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             }
                         },
@@ -5282,10 +5282,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}": {
             "delete": {
                 "description": "delete a Launcherprofile",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "operationId": "deleteC9SRunV1Alpha1NamespacedLauncherprofile",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -5377,7 +5377,7 @@
             },
             "get": {
                 "description": "read the specified Launcherprofile",
-                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "operationId": "readC9SRunV1Alpha1NamespacedLauncherprofile",
                 "parameters": [
                     {
                         "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
@@ -5394,12 +5394,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             }
                         },
@@ -5413,7 +5413,7 @@
             },
             "patch": {
                 "description": "partially update the specified Launcherprofile",
-                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "operationId": "patchC9SRunV1Alpha1NamespacedLauncherprofile",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -5467,12 +5467,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             }
                         },
@@ -5486,7 +5486,7 @@
             },
             "put": {
                 "description": "replace the specified Launcherprofile",
-                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile",
+                "operationId": "replaceC9SRunV1Alpha1NamespacedLauncherprofile",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -5520,12 +5520,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                             }
                         }
                     }
@@ -5535,12 +5535,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             }
                         },
@@ -5550,12 +5550,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.launcherprofile.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.launcherprofile.v1alpha1"
                                 }
                             }
                         },
@@ -5599,21 +5599,21 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/links": {
+        "/apis/c9s.run/v1alpha1/links": {
             "get": {
                 "description": "list objects of kind Link",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1LinkForAllNamespaces",
+                "operationId": "listC9SRunV1Alpha1LinkForAllNamespaces",
                 "responses": {
                     "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.linkList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.linkList.v1alpha1"
                                 }
                             }
                         },
@@ -5718,10 +5718,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/links": {
             "delete": {
                 "description": "delete collection of Link",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLink",
+                "operationId": "deleteC9SRunV1Alpha1CollectionNamespacedLink",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -5829,7 +5829,7 @@
             },
             "get": {
                 "description": "list objects of kind Link",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedLink",
+                "operationId": "listC9SRunV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -5918,12 +5918,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.linkList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.linkList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.linkList.v1alpha1"
                                 }
                             }
                         },
@@ -5937,7 +5937,7 @@
             },
             "post": {
                 "description": "create a Link",
-                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedLink",
+                "operationId": "createC9SRunV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -5971,12 +5971,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                             }
                         }
                     }
@@ -5986,12 +5986,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             }
                         },
@@ -6001,12 +6001,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             }
                         },
@@ -6016,12 +6016,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             }
                         },
@@ -6055,10 +6055,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/links/{name}": {
             "delete": {
                 "description": "delete a Link",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedLink",
+                "operationId": "deleteC9SRunV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -6150,7 +6150,7 @@
             },
             "get": {
                 "description": "read the specified Link",
-                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedLink",
+                "operationId": "readC9SRunV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
@@ -6167,12 +6167,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             }
                         },
@@ -6186,7 +6186,7 @@
             },
             "patch": {
                 "description": "partially update the specified Link",
-                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedLink",
+                "operationId": "patchC9SRunV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -6240,12 +6240,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             }
                         },
@@ -6259,7 +6259,7 @@
             },
             "put": {
                 "description": "replace the specified Link",
-                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedLink",
+                "operationId": "replaceC9SRunV1Alpha1NamespacedLink",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -6293,12 +6293,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                             }
                         }
                     }
@@ -6308,12 +6308,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             }
                         },
@@ -6323,12 +6323,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.link.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.link.v1alpha1"
                                 }
                             }
                         },
@@ -6372,21 +6372,21 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/nodes": {
+        "/apis/c9s.run/v1alpha1/nodes": {
             "get": {
                 "description": "list objects of kind Node",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NodeForAllNamespaces",
+                "operationId": "listC9SRunV1Alpha1NodeForAllNamespaces",
                 "responses": {
                     "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.nodeList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.nodeList.v1alpha1"
                                 }
                             }
                         },
@@ -6491,10 +6491,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/nodes": {
             "delete": {
                 "description": "delete collection of Node",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNode",
+                "operationId": "deleteC9SRunV1Alpha1CollectionNamespacedNode",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -6602,7 +6602,7 @@
             },
             "get": {
                 "description": "list objects of kind Node",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedNode",
+                "operationId": "listC9SRunV1Alpha1NamespacedNode",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -6691,12 +6691,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.nodeList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.nodeList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.nodeList.v1alpha1"
                                 }
                             }
                         },
@@ -6710,7 +6710,7 @@
             },
             "post": {
                 "description": "create a Node",
-                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedNode",
+                "operationId": "createC9SRunV1Alpha1NamespacedNode",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -6744,12 +6744,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                             }
                         }
                     }
@@ -6759,12 +6759,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             }
                         },
@@ -6774,12 +6774,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             }
                         },
@@ -6789,12 +6789,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             }
                         },
@@ -6828,10 +6828,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes/{name}": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/nodes/{name}": {
             "delete": {
                 "description": "delete a Node",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedNode",
+                "operationId": "deleteC9SRunV1Alpha1NamespacedNode",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -6923,7 +6923,7 @@
             },
             "get": {
                 "description": "read the specified Node",
-                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedNode",
+                "operationId": "readC9SRunV1Alpha1NamespacedNode",
                 "parameters": [
                     {
                         "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
@@ -6940,12 +6940,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             }
                         },
@@ -6959,7 +6959,7 @@
             },
             "patch": {
                 "description": "partially update the specified Node",
-                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedNode",
+                "operationId": "patchC9SRunV1Alpha1NamespacedNode",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -7013,12 +7013,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             }
                         },
@@ -7032,7 +7032,7 @@
             },
             "put": {
                 "description": "replace the specified Node",
-                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedNode",
+                "operationId": "replaceC9SRunV1Alpha1NamespacedNode",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -7066,12 +7066,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                             }
                         }
                     }
@@ -7081,12 +7081,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             }
                         },
@@ -7096,12 +7096,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.node.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.node.v1alpha1"
                                 }
                             }
                         },
@@ -7145,21 +7145,21 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/topologies": {
+        "/apis/c9s.run/v1alpha1/topologies": {
             "get": {
                 "description": "list objects of kind Topology",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1TopologyForAllNamespaces",
+                "operationId": "listC9SRunV1Alpha1TopologyForAllNamespaces",
                 "responses": {
                     "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topologyList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topologyList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topologyList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topologyList.v1alpha1"
                                 }
                             }
                         },
@@ -7264,10 +7264,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/topologies": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/topologies": {
             "delete": {
                 "description": "delete collection of Topology",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedTopology",
+                "operationId": "deleteC9SRunV1Alpha1CollectionNamespacedTopology",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -7375,7 +7375,7 @@
             },
             "get": {
                 "description": "list objects of kind Topology",
-                "operationId": "listClabernetesContainerlabDevV1Alpha1NamespacedTopology",
+                "operationId": "listC9SRunV1Alpha1NamespacedTopology",
                 "parameters": [
                     {
                         "description": "allowWatchBookmarks requests watch events with type \"BOOKMARK\". Servers that do not implement bookmarks may ignore this flag and bookmarks are sent at the server's discretion. Clients should not assume bookmarks are returned at any specific interval, nor may they assume the server will send any BOOKMARK event during a session. If this is not a watch, this field is ignored.",
@@ -7464,12 +7464,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topologyList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topologyList.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topologyList.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topologyList.v1alpha1"
                                 }
                             }
                         },
@@ -7483,7 +7483,7 @@
             },
             "post": {
                 "description": "create a Topology",
-                "operationId": "createClabernetesContainerlabDevV1Alpha1NamespacedTopology",
+                "operationId": "createC9SRunV1Alpha1NamespacedTopology",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -7517,12 +7517,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                             }
                         }
                     }
@@ -7532,12 +7532,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             }
                         },
@@ -7547,12 +7547,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             }
                         },
@@ -7562,12 +7562,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             }
                         },
@@ -7601,10 +7601,10 @@
                 }
             ]
         },
-        "/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/topologies/{name}": {
+        "/apis/c9s.run/v1alpha1/namespaces/{namespace}/topologies/{name}": {
             "delete": {
                 "description": "delete a Topology",
-                "operationId": "deleteClabernetesContainerlabDevV1Alpha1NamespacedTopology",
+                "operationId": "deleteC9SRunV1Alpha1NamespacedTopology",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -7696,7 +7696,7 @@
             },
             "get": {
                 "description": "read the specified Topology",
-                "operationId": "readClabernetesContainerlabDevV1Alpha1NamespacedTopology",
+                "operationId": "readC9SRunV1Alpha1NamespacedTopology",
                 "parameters": [
                     {
                         "description": "resourceVersion sets a constraint on what resource versions a request may be served from. See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for details.\n\nDefaults to unset",
@@ -7713,12 +7713,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             }
                         },
@@ -7732,7 +7732,7 @@
             },
             "patch": {
                 "description": "partially update the specified Topology",
-                "operationId": "patchClabernetesContainerlabDevV1Alpha1NamespacedTopology",
+                "operationId": "patchC9SRunV1Alpha1NamespacedTopology",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -7786,12 +7786,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             }
                         },
@@ -7805,7 +7805,7 @@
             },
             "put": {
                 "description": "replace the specified Topology",
-                "operationId": "replaceClabernetesContainerlabDevV1Alpha1NamespacedTopology",
+                "operationId": "replaceC9SRunV1Alpha1NamespacedTopology",
                 "parameters": [
                     {
                         "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
@@ -7839,12 +7839,12 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                             }
                         },
                         "application/yaml": {
                             "schema": {
-                                "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                             }
                         }
                     }
@@ -7854,12 +7854,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             }
                         },
@@ -7869,12 +7869,12 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             },
                             "application/yaml": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/clabernetes-containerlab-dev.topology.v1alpha1"
+                                    "$ref": "#/components/schemas/c9s-run.topology.v1alpha1"
                                 }
                             }
                         },

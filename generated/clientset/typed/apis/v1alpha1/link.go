@@ -75,7 +75,7 @@ type links struct {
 }
 
 // newLinks returns a Links
-func newLinks(c *ClabernetesV1alpha1Client, namespace string) *links {
+func newLinks(c *C9sV1alpha1Client, namespace string) *links {
 	return &links{
 		gentype.NewClientWithList[*apisv1alpha1.Link, *apisv1alpha1.LinkList](
 			"links",

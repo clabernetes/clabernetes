@@ -3,18 +3,18 @@ import "../fetch.config";
 import { CoreV1Api, KubeConfig } from "@kubernetes/client-node";
 
 import {
-  createClabernetesContainerlabDevV1Alpha1NamespacedTopology,
-  deleteClabernetesContainerlabDevV1Alpha1NamespacedTopology,
-  listClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile,
-  listClabernetesContainerlabDevV1Alpha1NamespacedLink,
-  listClabernetesContainerlabDevV1Alpha1NamespacedNode,
-  listClabernetesContainerlabDevV1Alpha1NamespacedTopology,
-  listClabernetesContainerlabDevV1Alpha1TopologyForAllNamespaces,
-  replaceClabernetesContainerlabDevV1Alpha1NamespacedTopology,
+  createC9sRunV1Alpha1NamespacedTopology,
+  deleteC9sRunV1Alpha1NamespacedTopology,
+  listC9sRunV1Alpha1NamespacedLauncherprofile,
+  listC9sRunV1Alpha1NamespacedLink,
+  listC9sRunV1Alpha1NamespacedNode,
+  listC9sRunV1Alpha1NamespacedTopology,
+  listC9sRunV1Alpha1TopologyForAllNamespaces,
+  replaceC9sRunV1Alpha1NamespacedTopology,
 } from "@/lib/clabernetes-client";
 
 export async function listTopologies(): Promise<string> {
-  const response = await listClabernetesContainerlabDevV1Alpha1TopologyForAllNamespaces().catch(
+  const response = await listC9sRunV1Alpha1TopologyForAllNamespaces().catch(
     (error: unknown) => {
       throw error;
     },
@@ -24,7 +24,7 @@ export async function listTopologies(): Promise<string> {
 }
 
 export async function listNamespacedTopologies(namespace: string): Promise<string> {
-  const response = await listClabernetesContainerlabDevV1Alpha1NamespacedTopology({
+  const response = await listC9sRunV1Alpha1NamespacedTopology({
     path: { namespace: namespace },
   }).catch((error: unknown) => {
     throw error;
@@ -38,7 +38,7 @@ export async function listNamespacedTopologies(namespace: string): Promise<strin
 }
 
 export async function listTopologyNodes(namespace: string, topologyName: string): Promise<string> {
-  const response = await listClabernetesContainerlabDevV1Alpha1NamespacedNode({
+  const response = await listC9sRunV1Alpha1NamespacedNode({
     path: { namespace: namespace },
     query: { labelSelector: `clabernetes/topologyOwner=${topologyName}` },
   }).catch((error: unknown) => {
@@ -49,7 +49,7 @@ export async function listTopologyNodes(namespace: string, topologyName: string)
 }
 
 export async function listTopologyLinks(namespace: string, topologyName: string): Promise<string> {
-  const response = await listClabernetesContainerlabDevV1Alpha1NamespacedLink({
+  const response = await listC9sRunV1Alpha1NamespacedLink({
     path: { namespace: namespace },
     query: { labelSelector: `clabernetes/topologyOwner=${topologyName}` },
   }).catch((error: unknown) => {
@@ -60,7 +60,7 @@ export async function listTopologyLinks(namespace: string, topologyName: string)
 }
 
 export async function listTopologyLauncherProfiles(namespace: string, topologyName: string): Promise<string> {
-  const response = await listClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofile({
+  const response = await listC9sRunV1Alpha1NamespacedLauncherprofile({
     path: { namespace: namespace },
     query: { labelSelector: `clabernetes/topologyOwner=${topologyName}` },
   }).catch((error: unknown) => {
@@ -71,7 +71,7 @@ export async function listTopologyLauncherProfiles(namespace: string, topologyNa
 }
 
 export async function deleteTopology(namespace: string, name: string): Promise<string> {
-  const response = await deleteClabernetesContainerlabDevV1Alpha1NamespacedTopology({
+  const response = await deleteC9sRunV1Alpha1NamespacedTopology({
     path: { name: name, namespace: namespace },
   });
 
@@ -83,7 +83,7 @@ export async function updateTopology(
   name: string,
   body: string,
 ): Promise<string> {
-  const response = await replaceClabernetesContainerlabDevV1Alpha1NamespacedTopology({
+  const response = await replaceC9sRunV1Alpha1NamespacedTopology({
     body: JSON.parse(body),
     path: { name: name, namespace: namespace },
   });
@@ -111,7 +111,7 @@ export async function listNamespaces(): Promise<string> {
 }
 
 export async function createTopology(namespace: string, body: string): Promise<string> {
-  const response = await createClabernetesContainerlabDevV1Alpha1NamespacedTopology({
+  const response = await createC9sRunV1Alpha1NamespacedTopology({
     body: JSON.parse(body),
     path: { namespace: namespace },
   });

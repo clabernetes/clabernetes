@@ -1,7 +1,7 @@
 # Topology using slurpeeth connectivity mode (experimental)
 # Uses TCP tunnels instead of VXLAN for inter-node connectivity
 # Avoids VXLAN MTU and fragmentation issues
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: slurpeeth-topo

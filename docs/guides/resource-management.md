@@ -20,7 +20,7 @@ Clabernetes allows fine-grained control over:
 Set resources at the topology level:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: with-resources
@@ -73,7 +73,7 @@ When authoring the primary API directly, put launcher resources on a LauncherPro
 it explicitly from each intended Node:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: LauncherProfile
 metadata:
   name: high-capacity
@@ -83,7 +83,7 @@ spec:
       memory: "16Gi"
       cpu: "8"
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   name: core-router
@@ -102,7 +102,7 @@ merged by priority.
 Set default resources globally:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Config
 metadata:
   name: clabernetes
@@ -119,7 +119,7 @@ spec:
 Set resources based on containerlab kind and type:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Config
 metadata:
   name: clabernetes
@@ -201,7 +201,7 @@ kubectl get nodes --show-labels
 In the Config CRD, map node selectors to image patterns:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Config
 metadata:
   name: clabernetes
@@ -280,7 +280,7 @@ kubectl taint nodes worker-1 dedicated=network-lab:NoSchedule-
 Comprehensive scheduling configuration:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: production-lab

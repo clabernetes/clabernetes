@@ -88,7 +88,7 @@ func initConfigGetConfigCR(
 	defer ctxCancel()
 
 	configCR, err := c.GetKubeClabernetesClient().
-		ClabernetesV1alpha1().
+		C9sV1alpha1().
 		Configs(c.GetNamespace()).
 		Get(
 			ctx,
@@ -142,7 +142,7 @@ func initConfigCreateOrUpdateConfig(
 
 	if configCRExists {
 		_, err = c.GetKubeClabernetesClient().
-			ClabernetesV1alpha1().
+			C9sV1alpha1().
 			Configs(c.GetNamespace()).
 			Update(
 				ctx,
@@ -153,7 +153,7 @@ func initConfigCreateOrUpdateConfig(
 			return err
 		}
 	} else {
-		_, err = c.GetKubeClabernetesClient().ClabernetesV1alpha1().Configs(c.GetNamespace()).
+		_, err = c.GetKubeClabernetesClient().C9sV1alpha1().Configs(c.GetNamespace()).
 			Create(
 				ctx,
 				configCR,

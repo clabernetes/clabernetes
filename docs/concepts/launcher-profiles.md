@@ -20,7 +20,7 @@ Typical profile settings include:
 A Node references at most one LauncherProfile in the same namespace:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: LauncherProfile
 metadata:
   name: lab-policy
@@ -32,7 +32,7 @@ spec:
   statusProbes:
     enabled: true
 ---
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   name: srl1

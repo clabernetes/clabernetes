@@ -337,7 +337,7 @@ export type IoK8sApimachineryPkgApisMetaV1Time = string;
  * and it *must* be named `clabernetes` -- CRD metadata spec will enforce this (via x-validation
  * rules).
  */
-export type ClabernetesContainerlabDevConfigV1Alpha1 = {
+export type C9sRunConfigV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object.
      * Servers should convert recognized schemas to the latest internal value, and
@@ -750,9 +750,9 @@ export type ClabernetesContainerlabDevConfigV1Alpha1 = {
 };
 
 /**
- * a list of clabernetes-containerlab-dev.config.v1alpha1 resources
+ * a list of c9s-run.config.v1alpha1 resources
  */
-export type ClabernetesContainerlabDevConfigListV1Alpha1 = {
+export type C9sRunConfigListV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
      */
@@ -760,7 +760,7 @@ export type ClabernetesContainerlabDevConfigListV1Alpha1 = {
     /**
      * List of configs. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
      */
-    items: Array<ClabernetesContainerlabDevConfigV1Alpha1>;
+    items: Array<C9sRunConfigV1Alpha1>;
     /**
      * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
      */
@@ -776,7 +776,7 @@ export type ClabernetesContainerlabDevConfigListV1Alpha1 = {
  * given kubernetes node such that the image can be "pulled through" into the launcher docker
  * daemon.
  */
-export type ClabernetesContainerlabDevImagerequestV1Alpha1 = {
+export type C9sRunImagerequestV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object.
      * Servers should convert recognized schemas to the latest internal value, and
@@ -842,9 +842,9 @@ export type ClabernetesContainerlabDevImagerequestV1Alpha1 = {
 };
 
 /**
- * a list of clabernetes-containerlab-dev.imagerequest.v1alpha1 resources
+ * a list of c9s-run.imagerequest.v1alpha1 resources
  */
-export type ClabernetesContainerlabDevImagerequestListV1Alpha1 = {
+export type C9sRunImagerequestListV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
      */
@@ -852,7 +852,7 @@ export type ClabernetesContainerlabDevImagerequestListV1Alpha1 = {
     /**
      * List of imagerequests. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
      */
-    items: Array<ClabernetesContainerlabDevImagerequestV1Alpha1>;
+    items: Array<C9sRunImagerequestV1Alpha1>;
     /**
      * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
      */
@@ -868,7 +868,7 @@ export type ClabernetesContainerlabDevImagerequestListV1Alpha1 = {
  * applies at most one LauncherProfile through spec.launcherProfileRef; fields omitted from the
  * profile inherit the global Config defaults.
  */
-export type ClabernetesContainerlabDevLauncherprofileV1Alpha1 = {
+export type C9sRunLauncherprofileV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object.
      * Servers should convert recognized schemas to the latest internal value, and
@@ -1384,9 +1384,9 @@ export type ClabernetesContainerlabDevLauncherprofileV1Alpha1 = {
 };
 
 /**
- * a list of clabernetes-containerlab-dev.launcherprofile.v1alpha1 resources
+ * a list of c9s-run.launcherprofile.v1alpha1 resources
  */
-export type ClabernetesContainerlabDevLauncherprofileListV1Alpha1 = {
+export type C9sRunLauncherprofileListV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
      */
@@ -1394,7 +1394,7 @@ export type ClabernetesContainerlabDevLauncherprofileListV1Alpha1 = {
     /**
      * List of launcherprofiles. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
      */
-    items: Array<ClabernetesContainerlabDevLauncherprofileV1Alpha1>;
+    items: Array<C9sRunLauncherprofileV1Alpha1>;
     /**
      * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
      */
@@ -1419,7 +1419,7 @@ export type ClabernetesContainerlabDevLauncherprofileListV1Alpha1 = {
  * links. Storing one object per wire keeps every persisted object O(1) regardless of topology
  * size.
  */
-export type ClabernetesContainerlabDevLinkV1Alpha1 = {
+export type C9sRunLinkV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object.
      * Servers should convert recognized schemas to the latest internal value, and
@@ -1538,9 +1538,9 @@ export type ClabernetesContainerlabDevLinkV1Alpha1 = {
 };
 
 /**
- * a list of clabernetes-containerlab-dev.link.v1alpha1 resources
+ * a list of c9s-run.link.v1alpha1 resources
  */
-export type ClabernetesContainerlabDevLinkListV1Alpha1 = {
+export type C9sRunLinkListV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
      */
@@ -1548,7 +1548,7 @@ export type ClabernetesContainerlabDevLinkListV1Alpha1 = {
     /**
      * List of links. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
      */
-    items: Array<ClabernetesContainerlabDevLinkV1Alpha1>;
+    items: Array<C9sRunLinkV1Alpha1>;
     /**
      * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
      */
@@ -1571,7 +1571,7 @@ export type ClabernetesContainerlabDevLinkListV1Alpha1 = {
  * exclusively on Link objects and everything operational is stamped by the controller into
  * status.
  */
-export type ClabernetesContainerlabDevNodeV1Alpha1 = {
+export type C9sRunNodeV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object.
      * Servers should convert recognized schemas to the latest internal value, and
@@ -2068,9 +2068,9 @@ export type ClabernetesContainerlabDevNodeV1Alpha1 = {
 };
 
 /**
- * a list of clabernetes-containerlab-dev.node.v1alpha1 resources
+ * a list of c9s-run.node.v1alpha1 resources
  */
-export type ClabernetesContainerlabDevNodeListV1Alpha1 = {
+export type C9sRunNodeListV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
      */
@@ -2078,7 +2078,7 @@ export type ClabernetesContainerlabDevNodeListV1Alpha1 = {
     /**
      * List of nodes. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
      */
-    items: Array<ClabernetesContainerlabDevNodeV1Alpha1>;
+    items: Array<C9sRunNodeV1Alpha1>;
     /**
      * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
      */
@@ -2093,7 +2093,7 @@ export type ClabernetesContainerlabDevNodeListV1Alpha1 = {
  * Topology is an object that holds information about a clabernetes Topology -- that is, a valid
  * topology file (ex: containerlab topology), and any associated configurations.
  */
-export type ClabernetesContainerlabDevTopologyV1Alpha1 = {
+export type C9sRunTopologyV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object.
      * Servers should convert recognized schemas to the latest internal value, and
@@ -2816,9 +2816,9 @@ export type ClabernetesContainerlabDevTopologyV1Alpha1 = {
 };
 
 /**
- * a list of clabernetes-containerlab-dev.topology.v1alpha1 resources
+ * a list of c9s-run.topology.v1alpha1 resources
  */
-export type ClabernetesContainerlabDevTopologyListV1Alpha1 = {
+export type C9sRunTopologyListV1Alpha1 = {
     /**
      * APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
      */
@@ -2826,7 +2826,7 @@ export type ClabernetesContainerlabDevTopologyListV1Alpha1 = {
     /**
      * List of topologies. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md
      */
-    items: Array<ClabernetesContainerlabDevTopologyV1Alpha1>;
+    items: Array<C9sRunTopologyV1Alpha1>;
     /**
      * Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
      */
@@ -2837,7 +2837,7 @@ export type ClabernetesContainerlabDevTopologyListV1Alpha1 = {
     metadata?: IoK8sApimachineryPkgApisMetaV1ListMeta;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1ConfigForAllNamespacesData = {
+export type ListC9sRunV1Alpha1ConfigForAllNamespacesData = {
     body?: never;
     path?: never;
     query?: {
@@ -2890,26 +2890,26 @@ export type ListClabernetesContainerlabDevV1Alpha1ConfigForAllNamespacesData = {
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/configs';
+    url: '/apis/c9s.run/v1alpha1/configs';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1ConfigForAllNamespacesErrors = {
+export type ListC9sRunV1Alpha1ConfigForAllNamespacesErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1ConfigForAllNamespacesResponses = {
+export type ListC9sRunV1Alpha1ConfigForAllNamespacesResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevConfigListV1Alpha1;
+    200: C9sRunConfigListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1ConfigForAllNamespacesResponse = ListClabernetesContainerlabDevV1Alpha1ConfigForAllNamespacesResponses[keyof ListClabernetesContainerlabDevV1Alpha1ConfigForAllNamespacesResponses];
+export type ListC9sRunV1Alpha1ConfigForAllNamespacesResponse = ListC9sRunV1Alpha1ConfigForAllNamespacesResponses[keyof ListC9sRunV1Alpha1ConfigForAllNamespacesResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfigData = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedConfigData = {
     body?: never;
     path: {
         /**
@@ -2967,26 +2967,26 @@ export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfigDa
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/configs';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfigErrors = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedConfigErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfigResponses = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedConfigResponses = {
     /**
      * OK
      */
     200: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfigResponse = DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfigResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedConfigResponses];
+export type DeleteC9sRunV1Alpha1CollectionNamespacedConfigResponse = DeleteC9sRunV1Alpha1CollectionNamespacedConfigResponses[keyof DeleteC9sRunV1Alpha1CollectionNamespacedConfigResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
+export type ListC9sRunV1Alpha1NamespacedConfigData = {
     body?: never;
     path: {
         /**
@@ -3044,27 +3044,27 @@ export type ListClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/configs';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedConfigErrors = {
+export type ListC9sRunV1Alpha1NamespacedConfigErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses = {
+export type ListC9sRunV1Alpha1NamespacedConfigResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevConfigListV1Alpha1;
+    200: C9sRunConfigListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedConfigResponse = ListClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses[keyof ListClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses];
+export type ListC9sRunV1Alpha1NamespacedConfigResponse = ListC9sRunV1Alpha1NamespacedConfigResponses[keyof ListC9sRunV1Alpha1NamespacedConfigResponses];
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
-    body?: ClabernetesContainerlabDevConfigV1Alpha1;
+export type CreateC9sRunV1Alpha1NamespacedConfigData = {
+    body?: C9sRunConfigV1Alpha1;
     path: {
         /**
          * object name and auth scope, such as for teams and projects
@@ -3089,34 +3089,34 @@ export type CreateClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/configs';
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedConfigErrors = {
+export type CreateC9sRunV1Alpha1NamespacedConfigErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses = {
+export type CreateC9sRunV1Alpha1NamespacedConfigResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevConfigV1Alpha1;
+    200: C9sRunConfigV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevConfigV1Alpha1;
+    201: C9sRunConfigV1Alpha1;
     /**
      * Accepted
      */
-    202: ClabernetesContainerlabDevConfigV1Alpha1;
+    202: C9sRunConfigV1Alpha1;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedConfigResponse = CreateClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses[keyof CreateClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses];
+export type CreateC9sRunV1Alpha1NamespacedConfigResponse = CreateC9sRunV1Alpha1NamespacedConfigResponses[keyof CreateC9sRunV1Alpha1NamespacedConfigResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
+export type DeleteC9sRunV1Alpha1NamespacedConfigData = {
     body?: IoK8sApimachineryPkgApisMetaV1DeleteOptions;
     path: {
         /**
@@ -3150,17 +3150,17 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
          */
         propagationPolicy?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/configs/{name}';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedConfigErrors = {
+export type DeleteC9sRunV1Alpha1NamespacedConfigErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses = {
+export type DeleteC9sRunV1Alpha1NamespacedConfigResponses = {
     /**
      * OK
      */
@@ -3171,9 +3171,9 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses = 
     202: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedConfigResponse = DeleteClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses];
+export type DeleteC9sRunV1Alpha1NamespacedConfigResponse = DeleteC9sRunV1Alpha1NamespacedConfigResponses[keyof DeleteC9sRunV1Alpha1NamespacedConfigResponses];
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
+export type ReadC9sRunV1Alpha1NamespacedConfigData = {
     body?: never;
     path: {
         /**
@@ -3197,76 +3197,27 @@ export type ReadClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
          */
         resourceVersion?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/configs/{name}';
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedConfigErrors = {
+export type ReadC9sRunV1Alpha1NamespacedConfigErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses = {
+export type ReadC9sRunV1Alpha1NamespacedConfigResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevConfigV1Alpha1;
+    200: C9sRunConfigV1Alpha1;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedConfigResponse = ReadClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses[keyof ReadClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses];
+export type ReadC9sRunV1Alpha1NamespacedConfigResponse = ReadC9sRunV1Alpha1NamespacedConfigResponses[keyof ReadC9sRunV1Alpha1NamespacedConfigResponses];
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
+export type PatchC9sRunV1Alpha1NamespacedConfigData = {
     body?: IoK8sApimachineryPkgApisMetaV1Patch;
-    path: {
-        /**
-         * name of the Config
-         */
-        name: string;
-        /**
-         * object name and auth scope, such as for teams and projects
-         */
-        namespace: string;
-    };
-    query?: {
-        /**
-         * If 'true', then the output is pretty printed.
-         */
-        pretty?: string;
-        /**
-         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
-         */
-        dryRun?: string;
-        /**
-         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
-         */
-        fieldManager?: string;
-        /**
-         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
-         */
-        fieldValidation?: string;
-    };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs/{name}';
-};
-
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedConfigErrors = {
-    /**
-     * Unauthorized
-     */
-    401: unknown;
-};
-
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses = {
-    /**
-     * OK
-     */
-    200: ClabernetesContainerlabDevConfigV1Alpha1;
-};
-
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedConfigResponse = PatchClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses[keyof PatchClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses];
-
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
-    body?: ClabernetesContainerlabDevConfigV1Alpha1;
     path: {
         /**
          * name of the Config
@@ -3295,30 +3246,79 @@ export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/configs/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/configs/{name}';
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigErrors = {
+export type PatchC9sRunV1Alpha1NamespacedConfigErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses = {
+export type PatchC9sRunV1Alpha1NamespacedConfigResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevConfigV1Alpha1;
+    200: C9sRunConfigV1Alpha1;
+};
+
+export type PatchC9sRunV1Alpha1NamespacedConfigResponse = PatchC9sRunV1Alpha1NamespacedConfigResponses[keyof PatchC9sRunV1Alpha1NamespacedConfigResponses];
+
+export type ReplaceC9sRunV1Alpha1NamespacedConfigData = {
+    body?: C9sRunConfigV1Alpha1;
+    path: {
+        /**
+         * name of the Config
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/configs/{name}';
+};
+
+export type ReplaceC9sRunV1Alpha1NamespacedConfigErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ReplaceC9sRunV1Alpha1NamespacedConfigResponses = {
+    /**
+     * OK
+     */
+    200: C9sRunConfigV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevConfigV1Alpha1;
+    201: C9sRunConfigV1Alpha1;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedConfigResponses];
+export type ReplaceC9sRunV1Alpha1NamespacedConfigResponse = ReplaceC9sRunV1Alpha1NamespacedConfigResponses[keyof ReplaceC9sRunV1Alpha1NamespacedConfigResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1ImagerequestForAllNamespacesData = {
+export type ListC9sRunV1Alpha1ImagerequestForAllNamespacesData = {
     body?: never;
     path?: never;
     query?: {
@@ -3371,26 +3371,26 @@ export type ListClabernetesContainerlabDevV1Alpha1ImagerequestForAllNamespacesDa
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/imagerequests';
+    url: '/apis/c9s.run/v1alpha1/imagerequests';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1ImagerequestForAllNamespacesErrors = {
+export type ListC9sRunV1Alpha1ImagerequestForAllNamespacesErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1ImagerequestForAllNamespacesResponses = {
+export type ListC9sRunV1Alpha1ImagerequestForAllNamespacesResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevImagerequestListV1Alpha1;
+    200: C9sRunImagerequestListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1ImagerequestForAllNamespacesResponse = ListClabernetesContainerlabDevV1Alpha1ImagerequestForAllNamespacesResponses[keyof ListClabernetesContainerlabDevV1Alpha1ImagerequestForAllNamespacesResponses];
+export type ListC9sRunV1Alpha1ImagerequestForAllNamespacesResponse = ListC9sRunV1Alpha1ImagerequestForAllNamespacesResponses[keyof ListC9sRunV1Alpha1ImagerequestForAllNamespacesResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedImagerequestData = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedImagerequestData = {
     body?: never;
     path: {
         /**
@@ -3448,26 +3448,26 @@ export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedImagereq
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/imagerequests';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/imagerequests';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedImagerequestErrors = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedImagerequestErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedImagerequestResponses = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedImagerequestResponses = {
     /**
      * OK
      */
     200: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedImagerequestResponse = DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedImagerequestResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedImagerequestResponses];
+export type DeleteC9sRunV1Alpha1CollectionNamespacedImagerequestResponse = DeleteC9sRunV1Alpha1CollectionNamespacedImagerequestResponses[keyof DeleteC9sRunV1Alpha1CollectionNamespacedImagerequestResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData = {
+export type ListC9sRunV1Alpha1NamespacedImagerequestData = {
     body?: never;
     path: {
         /**
@@ -3525,27 +3525,27 @@ export type ListClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData = {
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/imagerequests';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/imagerequests';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedImagerequestErrors = {
+export type ListC9sRunV1Alpha1NamespacedImagerequestErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses = {
+export type ListC9sRunV1Alpha1NamespacedImagerequestResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevImagerequestListV1Alpha1;
+    200: C9sRunImagerequestListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponse = ListClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses[keyof ListClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses];
+export type ListC9sRunV1Alpha1NamespacedImagerequestResponse = ListC9sRunV1Alpha1NamespacedImagerequestResponses[keyof ListC9sRunV1Alpha1NamespacedImagerequestResponses];
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData = {
-    body?: ClabernetesContainerlabDevImagerequestV1Alpha1;
+export type CreateC9sRunV1Alpha1NamespacedImagerequestData = {
+    body?: C9sRunImagerequestV1Alpha1;
     path: {
         /**
          * object name and auth scope, such as for teams and projects
@@ -3570,34 +3570,34 @@ export type CreateClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData =
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/imagerequests';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/imagerequests';
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedImagerequestErrors = {
+export type CreateC9sRunV1Alpha1NamespacedImagerequestErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses = {
+export type CreateC9sRunV1Alpha1NamespacedImagerequestResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevImagerequestV1Alpha1;
+    200: C9sRunImagerequestV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevImagerequestV1Alpha1;
+    201: C9sRunImagerequestV1Alpha1;
     /**
      * Accepted
      */
-    202: ClabernetesContainerlabDevImagerequestV1Alpha1;
+    202: C9sRunImagerequestV1Alpha1;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponse = CreateClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses[keyof CreateClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses];
+export type CreateC9sRunV1Alpha1NamespacedImagerequestResponse = CreateC9sRunV1Alpha1NamespacedImagerequestResponses[keyof CreateC9sRunV1Alpha1NamespacedImagerequestResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData = {
+export type DeleteC9sRunV1Alpha1NamespacedImagerequestData = {
     body?: IoK8sApimachineryPkgApisMetaV1DeleteOptions;
     path: {
         /**
@@ -3631,17 +3631,17 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData =
          */
         propagationPolicy?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/imagerequests/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/imagerequests/{name}';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedImagerequestErrors = {
+export type DeleteC9sRunV1Alpha1NamespacedImagerequestErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses = {
+export type DeleteC9sRunV1Alpha1NamespacedImagerequestResponses = {
     /**
      * OK
      */
@@ -3652,9 +3652,9 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedImagerequestRespon
     202: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponse = DeleteClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses];
+export type DeleteC9sRunV1Alpha1NamespacedImagerequestResponse = DeleteC9sRunV1Alpha1NamespacedImagerequestResponses[keyof DeleteC9sRunV1Alpha1NamespacedImagerequestResponses];
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData = {
+export type ReadC9sRunV1Alpha1NamespacedImagerequestData = {
     body?: never;
     path: {
         /**
@@ -3678,76 +3678,27 @@ export type ReadClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData = {
          */
         resourceVersion?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/imagerequests/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/imagerequests/{name}';
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedImagerequestErrors = {
+export type ReadC9sRunV1Alpha1NamespacedImagerequestErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses = {
+export type ReadC9sRunV1Alpha1NamespacedImagerequestResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevImagerequestV1Alpha1;
+    200: C9sRunImagerequestV1Alpha1;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponse = ReadClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses[keyof ReadClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses];
+export type ReadC9sRunV1Alpha1NamespacedImagerequestResponse = ReadC9sRunV1Alpha1NamespacedImagerequestResponses[keyof ReadC9sRunV1Alpha1NamespacedImagerequestResponses];
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData = {
+export type PatchC9sRunV1Alpha1NamespacedImagerequestData = {
     body?: IoK8sApimachineryPkgApisMetaV1Patch;
-    path: {
-        /**
-         * name of the Imagerequest
-         */
-        name: string;
-        /**
-         * object name and auth scope, such as for teams and projects
-         */
-        namespace: string;
-    };
-    query?: {
-        /**
-         * If 'true', then the output is pretty printed.
-         */
-        pretty?: string;
-        /**
-         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
-         */
-        dryRun?: string;
-        /**
-         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
-         */
-        fieldManager?: string;
-        /**
-         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
-         */
-        fieldValidation?: string;
-    };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/imagerequests/{name}';
-};
-
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedImagerequestErrors = {
-    /**
-     * Unauthorized
-     */
-    401: unknown;
-};
-
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses = {
-    /**
-     * OK
-     */
-    200: ClabernetesContainerlabDevImagerequestV1Alpha1;
-};
-
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponse = PatchClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses[keyof PatchClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses];
-
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData = {
-    body?: ClabernetesContainerlabDevImagerequestV1Alpha1;
     path: {
         /**
          * name of the Imagerequest
@@ -3776,30 +3727,79 @@ export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedImagerequestData 
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/imagerequests/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/imagerequests/{name}';
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedImagerequestErrors = {
+export type PatchC9sRunV1Alpha1NamespacedImagerequestErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses = {
+export type PatchC9sRunV1Alpha1NamespacedImagerequestResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevImagerequestV1Alpha1;
+    200: C9sRunImagerequestV1Alpha1;
+};
+
+export type PatchC9sRunV1Alpha1NamespacedImagerequestResponse = PatchC9sRunV1Alpha1NamespacedImagerequestResponses[keyof PatchC9sRunV1Alpha1NamespacedImagerequestResponses];
+
+export type ReplaceC9sRunV1Alpha1NamespacedImagerequestData = {
+    body?: C9sRunImagerequestV1Alpha1;
+    path: {
+        /**
+         * name of the Imagerequest
+         */
+        name: string;
+        /**
+         * object name and auth scope, such as for teams and projects
+         */
+        namespace: string;
+    };
+    query?: {
+        /**
+         * If 'true', then the output is pretty printed.
+         */
+        pretty?: string;
+        /**
+         * When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed
+         */
+        dryRun?: string;
+        /**
+         * fieldManager is a name associated with the actor or entity that is making these changes. The value must be less than or 128 characters long, and only contain printable characters, as defined by https://golang.org/pkg/unicode/#IsPrint.
+         */
+        fieldManager?: string;
+        /**
+         * fieldValidation instructs the server on how to handle objects in the request (POST/PUT/PATCH) containing unknown or duplicate fields, provided that the `ServerSideFieldValidation` feature gate is also enabled. Valid values are: - Ignore: This will ignore any unknown fields that are silently dropped from the object, and will ignore all but the last duplicate field that the decoder encounters. This is the default behavior prior to v1.23 and is the default behavior when the `ServerSideFieldValidation` feature gate is disabled. - Warn: This will send a warning via the standard warning response header for each unknown field that is dropped from the object, and for each duplicate field that is encountered. The request will still succeed if there are no other errors, and will only persist the last of any duplicate fields. This is the default when the `ServerSideFieldValidation` feature gate is enabled. - Strict: This will fail the request with a BadRequest error if any unknown fields would be dropped from the object, or if any duplicate fields are present. The error returned from the server will contain all unknown and duplicate fields encountered.
+         */
+        fieldValidation?: string;
+    };
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/imagerequests/{name}';
+};
+
+export type ReplaceC9sRunV1Alpha1NamespacedImagerequestErrors = {
+    /**
+     * Unauthorized
+     */
+    401: unknown;
+};
+
+export type ReplaceC9sRunV1Alpha1NamespacedImagerequestResponses = {
+    /**
+     * OK
+     */
+    200: C9sRunImagerequestV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevImagerequestV1Alpha1;
+    201: C9sRunImagerequestV1Alpha1;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedImagerequestResponses];
+export type ReplaceC9sRunV1Alpha1NamespacedImagerequestResponse = ReplaceC9sRunV1Alpha1NamespacedImagerequestResponses[keyof ReplaceC9sRunV1Alpha1NamespacedImagerequestResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1LauncherprofileForAllNamespacesData = {
+export type ListC9sRunV1Alpha1LauncherprofileForAllNamespacesData = {
     body?: never;
     path?: never;
     query?: {
@@ -3852,26 +3852,26 @@ export type ListClabernetesContainerlabDevV1Alpha1LauncherprofileForAllNamespace
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/launcherprofiles';
+    url: '/apis/c9s.run/v1alpha1/launcherprofiles';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1LauncherprofileForAllNamespacesErrors = {
+export type ListC9sRunV1Alpha1LauncherprofileForAllNamespacesErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1LauncherprofileForAllNamespacesResponses = {
+export type ListC9sRunV1Alpha1LauncherprofileForAllNamespacesResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLauncherprofileListV1Alpha1;
+    200: C9sRunLauncherprofileListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1LauncherprofileForAllNamespacesResponse = ListClabernetesContainerlabDevV1Alpha1LauncherprofileForAllNamespacesResponses[keyof ListClabernetesContainerlabDevV1Alpha1LauncherprofileForAllNamespacesResponses];
+export type ListC9sRunV1Alpha1LauncherprofileForAllNamespacesResponse = ListC9sRunV1Alpha1LauncherprofileForAllNamespacesResponses[keyof ListC9sRunV1Alpha1LauncherprofileForAllNamespacesResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLauncherprofileData = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedLauncherprofileData = {
     body?: never;
     path: {
         /**
@@ -3929,26 +3929,26 @@ export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLauncher
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/launcherprofiles';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLauncherprofileErrors = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedLauncherprofileErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLauncherprofileResponses = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedLauncherprofileResponses = {
     /**
      * OK
      */
     200: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLauncherprofileResponse = DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLauncherprofileResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLauncherprofileResponses];
+export type DeleteC9sRunV1Alpha1CollectionNamespacedLauncherprofileResponse = DeleteC9sRunV1Alpha1CollectionNamespacedLauncherprofileResponses[keyof DeleteC9sRunV1Alpha1CollectionNamespacedLauncherprofileResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileData = {
+export type ListC9sRunV1Alpha1NamespacedLauncherprofileData = {
     body?: never;
     path: {
         /**
@@ -4006,27 +4006,27 @@ export type ListClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileData 
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/launcherprofiles';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileErrors = {
+export type ListC9sRunV1Alpha1NamespacedLauncherprofileErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses = {
+export type ListC9sRunV1Alpha1NamespacedLauncherprofileResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLauncherprofileListV1Alpha1;
+    200: C9sRunLauncherprofileListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponse = ListClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses[keyof ListClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses];
+export type ListC9sRunV1Alpha1NamespacedLauncherprofileResponse = ListC9sRunV1Alpha1NamespacedLauncherprofileResponses[keyof ListC9sRunV1Alpha1NamespacedLauncherprofileResponses];
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileData = {
-    body?: ClabernetesContainerlabDevLauncherprofileV1Alpha1;
+export type CreateC9sRunV1Alpha1NamespacedLauncherprofileData = {
+    body?: C9sRunLauncherprofileV1Alpha1;
     path: {
         /**
          * object name and auth scope, such as for teams and projects
@@ -4051,34 +4051,34 @@ export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileDat
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/launcherprofiles';
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileErrors = {
+export type CreateC9sRunV1Alpha1NamespacedLauncherprofileErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses = {
+export type CreateC9sRunV1Alpha1NamespacedLauncherprofileResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLauncherprofileV1Alpha1;
+    200: C9sRunLauncherprofileV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevLauncherprofileV1Alpha1;
+    201: C9sRunLauncherprofileV1Alpha1;
     /**
      * Accepted
      */
-    202: ClabernetesContainerlabDevLauncherprofileV1Alpha1;
+    202: C9sRunLauncherprofileV1Alpha1;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponse = CreateClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses[keyof CreateClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses];
+export type CreateC9sRunV1Alpha1NamespacedLauncherprofileResponse = CreateC9sRunV1Alpha1NamespacedLauncherprofileResponses[keyof CreateC9sRunV1Alpha1NamespacedLauncherprofileResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileData = {
+export type DeleteC9sRunV1Alpha1NamespacedLauncherprofileData = {
     body?: IoK8sApimachineryPkgApisMetaV1DeleteOptions;
     path: {
         /**
@@ -4112,17 +4112,17 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileDat
          */
         propagationPolicy?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileErrors = {
+export type DeleteC9sRunV1Alpha1NamespacedLauncherprofileErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses = {
+export type DeleteC9sRunV1Alpha1NamespacedLauncherprofileResponses = {
     /**
      * OK
      */
@@ -4133,9 +4133,9 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileRes
     202: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponse = DeleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses];
+export type DeleteC9sRunV1Alpha1NamespacedLauncherprofileResponse = DeleteC9sRunV1Alpha1NamespacedLauncherprofileResponses[keyof DeleteC9sRunV1Alpha1NamespacedLauncherprofileResponses];
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileData = {
+export type ReadC9sRunV1Alpha1NamespacedLauncherprofileData = {
     body?: never;
     path: {
         /**
@@ -4159,26 +4159,26 @@ export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileData 
          */
         resourceVersion?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}';
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileErrors = {
+export type ReadC9sRunV1Alpha1NamespacedLauncherprofileErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses = {
+export type ReadC9sRunV1Alpha1NamespacedLauncherprofileResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLauncherprofileV1Alpha1;
+    200: C9sRunLauncherprofileV1Alpha1;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponse = ReadClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses[keyof ReadClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses];
+export type ReadC9sRunV1Alpha1NamespacedLauncherprofileResponse = ReadC9sRunV1Alpha1NamespacedLauncherprofileResponses[keyof ReadC9sRunV1Alpha1NamespacedLauncherprofileResponses];
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileData = {
+export type PatchC9sRunV1Alpha1NamespacedLauncherprofileData = {
     body?: IoK8sApimachineryPkgApisMetaV1Patch;
     path: {
         /**
@@ -4208,27 +4208,27 @@ export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileData
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}';
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileErrors = {
+export type PatchC9sRunV1Alpha1NamespacedLauncherprofileErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses = {
+export type PatchC9sRunV1Alpha1NamespacedLauncherprofileResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLauncherprofileV1Alpha1;
+    200: C9sRunLauncherprofileV1Alpha1;
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponse = PatchClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses[keyof PatchClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses];
+export type PatchC9sRunV1Alpha1NamespacedLauncherprofileResponse = PatchC9sRunV1Alpha1NamespacedLauncherprofileResponses[keyof PatchC9sRunV1Alpha1NamespacedLauncherprofileResponses];
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileData = {
-    body?: ClabernetesContainerlabDevLauncherprofileV1Alpha1;
+export type ReplaceC9sRunV1Alpha1NamespacedLauncherprofileData = {
+    body?: C9sRunLauncherprofileV1Alpha1;
     path: {
         /**
          * name of the Launcherprofile
@@ -4257,30 +4257,30 @@ export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileDa
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/launcherprofiles/{name}';
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileErrors = {
+export type ReplaceC9sRunV1Alpha1NamespacedLauncherprofileErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses = {
+export type ReplaceC9sRunV1Alpha1NamespacedLauncherprofileResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLauncherprofileV1Alpha1;
+    200: C9sRunLauncherprofileV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevLauncherprofileV1Alpha1;
+    201: C9sRunLauncherprofileV1Alpha1;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLauncherprofileResponses];
+export type ReplaceC9sRunV1Alpha1NamespacedLauncherprofileResponse = ReplaceC9sRunV1Alpha1NamespacedLauncherprofileResponses[keyof ReplaceC9sRunV1Alpha1NamespacedLauncherprofileResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesData = {
+export type ListC9sRunV1Alpha1LinkForAllNamespacesData = {
     body?: never;
     path?: never;
     query?: {
@@ -4333,26 +4333,26 @@ export type ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesData = {
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/links';
+    url: '/apis/c9s.run/v1alpha1/links';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesErrors = {
+export type ListC9sRunV1Alpha1LinkForAllNamespacesErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesResponses = {
+export type ListC9sRunV1Alpha1LinkForAllNamespacesResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLinkListV1Alpha1;
+    200: C9sRunLinkListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesResponse = ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesResponses[keyof ListClabernetesContainerlabDevV1Alpha1LinkForAllNamespacesResponses];
+export type ListC9sRunV1Alpha1LinkForAllNamespacesResponse = ListC9sRunV1Alpha1LinkForAllNamespacesResponses[keyof ListC9sRunV1Alpha1LinkForAllNamespacesResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkData = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedLinkData = {
     body?: never;
     path: {
         /**
@@ -4410,26 +4410,26 @@ export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkData
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/links';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkErrors = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedLinkErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkResponses = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedLinkResponses = {
     /**
      * OK
      */
     200: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkResponse = DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedLinkResponses];
+export type DeleteC9sRunV1Alpha1CollectionNamespacedLinkResponse = DeleteC9sRunV1Alpha1CollectionNamespacedLinkResponses[keyof DeleteC9sRunV1Alpha1CollectionNamespacedLinkResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+export type ListC9sRunV1Alpha1NamespacedLinkData = {
     body?: never;
     path: {
         /**
@@ -4487,27 +4487,27 @@ export type ListClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/links';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+export type ListC9sRunV1Alpha1NamespacedLinkErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+export type ListC9sRunV1Alpha1NamespacedLinkResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLinkListV1Alpha1;
+    200: C9sRunLinkListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = ListClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof ListClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+export type ListC9sRunV1Alpha1NamespacedLinkResponse = ListC9sRunV1Alpha1NamespacedLinkResponses[keyof ListC9sRunV1Alpha1NamespacedLinkResponses];
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
-    body?: ClabernetesContainerlabDevLinkV1Alpha1;
+export type CreateC9sRunV1Alpha1NamespacedLinkData = {
+    body?: C9sRunLinkV1Alpha1;
     path: {
         /**
          * object name and auth scope, such as for teams and projects
@@ -4532,34 +4532,34 @@ export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/links';
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+export type CreateC9sRunV1Alpha1NamespacedLinkErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+export type CreateC9sRunV1Alpha1NamespacedLinkResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLinkV1Alpha1;
+    200: C9sRunLinkV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevLinkV1Alpha1;
+    201: C9sRunLinkV1Alpha1;
     /**
      * Accepted
      */
-    202: ClabernetesContainerlabDevLinkV1Alpha1;
+    202: C9sRunLinkV1Alpha1;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof CreateClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+export type CreateC9sRunV1Alpha1NamespacedLinkResponse = CreateC9sRunV1Alpha1NamespacedLinkResponses[keyof CreateC9sRunV1Alpha1NamespacedLinkResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+export type DeleteC9sRunV1Alpha1NamespacedLinkData = {
     body?: IoK8sApimachineryPkgApisMetaV1DeleteOptions;
     path: {
         /**
@@ -4593,17 +4593,17 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
          */
         propagationPolicy?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/links/{name}';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+export type DeleteC9sRunV1Alpha1NamespacedLinkErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+export type DeleteC9sRunV1Alpha1NamespacedLinkResponses = {
     /**
      * OK
      */
@@ -4614,9 +4614,9 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
     202: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+export type DeleteC9sRunV1Alpha1NamespacedLinkResponse = DeleteC9sRunV1Alpha1NamespacedLinkResponses[keyof DeleteC9sRunV1Alpha1NamespacedLinkResponses];
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+export type ReadC9sRunV1Alpha1NamespacedLinkData = {
     body?: never;
     path: {
         /**
@@ -4640,26 +4640,26 @@ export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
          */
         resourceVersion?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/links/{name}';
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+export type ReadC9sRunV1Alpha1NamespacedLinkErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+export type ReadC9sRunV1Alpha1NamespacedLinkResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLinkV1Alpha1;
+    200: C9sRunLinkV1Alpha1;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof ReadClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+export type ReadC9sRunV1Alpha1NamespacedLinkResponse = ReadC9sRunV1Alpha1NamespacedLinkResponses[keyof ReadC9sRunV1Alpha1NamespacedLinkResponses];
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
+export type PatchC9sRunV1Alpha1NamespacedLinkData = {
     body?: IoK8sApimachineryPkgApisMetaV1Patch;
     path: {
         /**
@@ -4689,27 +4689,27 @@ export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/links/{name}';
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+export type PatchC9sRunV1Alpha1NamespacedLinkErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+export type PatchC9sRunV1Alpha1NamespacedLinkResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLinkV1Alpha1;
+    200: C9sRunLinkV1Alpha1;
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof PatchClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+export type PatchC9sRunV1Alpha1NamespacedLinkResponse = PatchC9sRunV1Alpha1NamespacedLinkResponses[keyof PatchC9sRunV1Alpha1NamespacedLinkResponses];
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
-    body?: ClabernetesContainerlabDevLinkV1Alpha1;
+export type ReplaceC9sRunV1Alpha1NamespacedLinkData = {
+    body?: C9sRunLinkV1Alpha1;
     path: {
         /**
          * name of the Link
@@ -4738,30 +4738,30 @@ export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/links/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/links/{name}';
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkErrors = {
+export type ReplaceC9sRunV1Alpha1NamespacedLinkErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses = {
+export type ReplaceC9sRunV1Alpha1NamespacedLinkResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevLinkV1Alpha1;
+    200: C9sRunLinkV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevLinkV1Alpha1;
+    201: C9sRunLinkV1Alpha1;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedLinkResponses];
+export type ReplaceC9sRunV1Alpha1NamespacedLinkResponse = ReplaceC9sRunV1Alpha1NamespacedLinkResponses[keyof ReplaceC9sRunV1Alpha1NamespacedLinkResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesData = {
+export type ListC9sRunV1Alpha1NodeForAllNamespacesData = {
     body?: never;
     path?: never;
     query?: {
@@ -4814,26 +4814,26 @@ export type ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesData = {
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/nodes';
+    url: '/apis/c9s.run/v1alpha1/nodes';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesErrors = {
+export type ListC9sRunV1Alpha1NodeForAllNamespacesErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesResponses = {
+export type ListC9sRunV1Alpha1NodeForAllNamespacesResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevNodeListV1Alpha1;
+    200: C9sRunNodeListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesResponse = ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesResponses[keyof ListClabernetesContainerlabDevV1Alpha1NodeForAllNamespacesResponses];
+export type ListC9sRunV1Alpha1NodeForAllNamespacesResponse = ListC9sRunV1Alpha1NodeForAllNamespacesResponses[keyof ListC9sRunV1Alpha1NodeForAllNamespacesResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeData = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedNodeData = {
     body?: never;
     path: {
         /**
@@ -4891,26 +4891,26 @@ export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeData
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/nodes';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeErrors = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedNodeErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeResponses = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedNodeResponses = {
     /**
      * OK
      */
     200: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeResponse = DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedNodeResponses];
+export type DeleteC9sRunV1Alpha1CollectionNamespacedNodeResponse = DeleteC9sRunV1Alpha1CollectionNamespacedNodeResponses[keyof DeleteC9sRunV1Alpha1CollectionNamespacedNodeResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+export type ListC9sRunV1Alpha1NamespacedNodeData = {
     body?: never;
     path: {
         /**
@@ -4968,27 +4968,27 @@ export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/nodes';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+export type ListC9sRunV1Alpha1NamespacedNodeErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+export type ListC9sRunV1Alpha1NamespacedNodeResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevNodeListV1Alpha1;
+    200: C9sRunNodeListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = ListClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof ListClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+export type ListC9sRunV1Alpha1NamespacedNodeResponse = ListC9sRunV1Alpha1NamespacedNodeResponses[keyof ListC9sRunV1Alpha1NamespacedNodeResponses];
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
-    body?: ClabernetesContainerlabDevNodeV1Alpha1;
+export type CreateC9sRunV1Alpha1NamespacedNodeData = {
+    body?: C9sRunNodeV1Alpha1;
     path: {
         /**
          * object name and auth scope, such as for teams and projects
@@ -5013,34 +5013,34 @@ export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/nodes';
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+export type CreateC9sRunV1Alpha1NamespacedNodeErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+export type CreateC9sRunV1Alpha1NamespacedNodeResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevNodeV1Alpha1;
+    200: C9sRunNodeV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevNodeV1Alpha1;
+    201: C9sRunNodeV1Alpha1;
     /**
      * Accepted
      */
-    202: ClabernetesContainerlabDevNodeV1Alpha1;
+    202: C9sRunNodeV1Alpha1;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof CreateClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+export type CreateC9sRunV1Alpha1NamespacedNodeResponse = CreateC9sRunV1Alpha1NamespacedNodeResponses[keyof CreateC9sRunV1Alpha1NamespacedNodeResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+export type DeleteC9sRunV1Alpha1NamespacedNodeData = {
     body?: IoK8sApimachineryPkgApisMetaV1DeleteOptions;
     path: {
         /**
@@ -5074,17 +5074,17 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
          */
         propagationPolicy?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/nodes/{name}';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+export type DeleteC9sRunV1Alpha1NamespacedNodeErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+export type DeleteC9sRunV1Alpha1NamespacedNodeResponses = {
     /**
      * OK
      */
@@ -5095,9 +5095,9 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
     202: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+export type DeleteC9sRunV1Alpha1NamespacedNodeResponse = DeleteC9sRunV1Alpha1NamespacedNodeResponses[keyof DeleteC9sRunV1Alpha1NamespacedNodeResponses];
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+export type ReadC9sRunV1Alpha1NamespacedNodeData = {
     body?: never;
     path: {
         /**
@@ -5121,26 +5121,26 @@ export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
          */
         resourceVersion?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/nodes/{name}';
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+export type ReadC9sRunV1Alpha1NamespacedNodeErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+export type ReadC9sRunV1Alpha1NamespacedNodeResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevNodeV1Alpha1;
+    200: C9sRunNodeV1Alpha1;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof ReadClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+export type ReadC9sRunV1Alpha1NamespacedNodeResponse = ReadC9sRunV1Alpha1NamespacedNodeResponses[keyof ReadC9sRunV1Alpha1NamespacedNodeResponses];
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
+export type PatchC9sRunV1Alpha1NamespacedNodeData = {
     body?: IoK8sApimachineryPkgApisMetaV1Patch;
     path: {
         /**
@@ -5170,27 +5170,27 @@ export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/nodes/{name}';
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+export type PatchC9sRunV1Alpha1NamespacedNodeErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+export type PatchC9sRunV1Alpha1NamespacedNodeResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevNodeV1Alpha1;
+    200: C9sRunNodeV1Alpha1;
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof PatchClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+export type PatchC9sRunV1Alpha1NamespacedNodeResponse = PatchC9sRunV1Alpha1NamespacedNodeResponses[keyof PatchC9sRunV1Alpha1NamespacedNodeResponses];
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
-    body?: ClabernetesContainerlabDevNodeV1Alpha1;
+export type ReplaceC9sRunV1Alpha1NamespacedNodeData = {
+    body?: C9sRunNodeV1Alpha1;
     path: {
         /**
          * name of the Node
@@ -5219,30 +5219,30 @@ export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/nodes/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/nodes/{name}';
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeErrors = {
+export type ReplaceC9sRunV1Alpha1NamespacedNodeErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses = {
+export type ReplaceC9sRunV1Alpha1NamespacedNodeResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevNodeV1Alpha1;
+    200: C9sRunNodeV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevNodeV1Alpha1;
+    201: C9sRunNodeV1Alpha1;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedNodeResponses];
+export type ReplaceC9sRunV1Alpha1NamespacedNodeResponse = ReplaceC9sRunV1Alpha1NamespacedNodeResponses[keyof ReplaceC9sRunV1Alpha1NamespacedNodeResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1TopologyForAllNamespacesData = {
+export type ListC9sRunV1Alpha1TopologyForAllNamespacesData = {
     body?: never;
     path?: never;
     query?: {
@@ -5295,26 +5295,26 @@ export type ListClabernetesContainerlabDevV1Alpha1TopologyForAllNamespacesData =
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/topologies';
+    url: '/apis/c9s.run/v1alpha1/topologies';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1TopologyForAllNamespacesErrors = {
+export type ListC9sRunV1Alpha1TopologyForAllNamespacesErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1TopologyForAllNamespacesResponses = {
+export type ListC9sRunV1Alpha1TopologyForAllNamespacesResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevTopologyListV1Alpha1;
+    200: C9sRunTopologyListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1TopologyForAllNamespacesResponse = ListClabernetesContainerlabDevV1Alpha1TopologyForAllNamespacesResponses[keyof ListClabernetesContainerlabDevV1Alpha1TopologyForAllNamespacesResponses];
+export type ListC9sRunV1Alpha1TopologyForAllNamespacesResponse = ListC9sRunV1Alpha1TopologyForAllNamespacesResponses[keyof ListC9sRunV1Alpha1TopologyForAllNamespacesResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedTopologyData = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedTopologyData = {
     body?: never;
     path: {
         /**
@@ -5372,26 +5372,26 @@ export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedTopology
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/topologies';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/topologies';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedTopologyErrors = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedTopologyErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedTopologyResponses = {
+export type DeleteC9sRunV1Alpha1CollectionNamespacedTopologyResponses = {
     /**
      * OK
      */
     200: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedTopologyResponse = DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedTopologyResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1CollectionNamespacedTopologyResponses];
+export type DeleteC9sRunV1Alpha1CollectionNamespacedTopologyResponse = DeleteC9sRunV1Alpha1CollectionNamespacedTopologyResponses[keyof DeleteC9sRunV1Alpha1CollectionNamespacedTopologyResponses];
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
+export type ListC9sRunV1Alpha1NamespacedTopologyData = {
     body?: never;
     path: {
         /**
@@ -5449,27 +5449,27 @@ export type ListClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
          */
         watch?: boolean;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/topologies';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/topologies';
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedTopologyErrors = {
+export type ListC9sRunV1Alpha1NamespacedTopologyErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses = {
+export type ListC9sRunV1Alpha1NamespacedTopologyResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevTopologyListV1Alpha1;
+    200: C9sRunTopologyListV1Alpha1;
 };
 
-export type ListClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponse = ListClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses[keyof ListClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses];
+export type ListC9sRunV1Alpha1NamespacedTopologyResponse = ListC9sRunV1Alpha1NamespacedTopologyResponses[keyof ListC9sRunV1Alpha1NamespacedTopologyResponses];
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
-    body?: ClabernetesContainerlabDevTopologyV1Alpha1;
+export type CreateC9sRunV1Alpha1NamespacedTopologyData = {
+    body?: C9sRunTopologyV1Alpha1;
     path: {
         /**
          * object name and auth scope, such as for teams and projects
@@ -5494,34 +5494,34 @@ export type CreateClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/topologies';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/topologies';
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedTopologyErrors = {
+export type CreateC9sRunV1Alpha1NamespacedTopologyErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses = {
+export type CreateC9sRunV1Alpha1NamespacedTopologyResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevTopologyV1Alpha1;
+    200: C9sRunTopologyV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevTopologyV1Alpha1;
+    201: C9sRunTopologyV1Alpha1;
     /**
      * Accepted
      */
-    202: ClabernetesContainerlabDevTopologyV1Alpha1;
+    202: C9sRunTopologyV1Alpha1;
 };
 
-export type CreateClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponse = CreateClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses[keyof CreateClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses];
+export type CreateC9sRunV1Alpha1NamespacedTopologyResponse = CreateC9sRunV1Alpha1NamespacedTopologyResponses[keyof CreateC9sRunV1Alpha1NamespacedTopologyResponses];
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
+export type DeleteC9sRunV1Alpha1NamespacedTopologyData = {
     body?: IoK8sApimachineryPkgApisMetaV1DeleteOptions;
     path: {
         /**
@@ -5555,17 +5555,17 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
          */
         propagationPolicy?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/topologies/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/topologies/{name}';
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedTopologyErrors = {
+export type DeleteC9sRunV1Alpha1NamespacedTopologyErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses = {
+export type DeleteC9sRunV1Alpha1NamespacedTopologyResponses = {
     /**
      * OK
      */
@@ -5576,9 +5576,9 @@ export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses 
     202: IoK8sApimachineryPkgApisMetaV1Status;
 };
 
-export type DeleteClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponse = DeleteClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses[keyof DeleteClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses];
+export type DeleteC9sRunV1Alpha1NamespacedTopologyResponse = DeleteC9sRunV1Alpha1NamespacedTopologyResponses[keyof DeleteC9sRunV1Alpha1NamespacedTopologyResponses];
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
+export type ReadC9sRunV1Alpha1NamespacedTopologyData = {
     body?: never;
     path: {
         /**
@@ -5602,26 +5602,26 @@ export type ReadClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
          */
         resourceVersion?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/topologies/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/topologies/{name}';
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedTopologyErrors = {
+export type ReadC9sRunV1Alpha1NamespacedTopologyErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses = {
+export type ReadC9sRunV1Alpha1NamespacedTopologyResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevTopologyV1Alpha1;
+    200: C9sRunTopologyV1Alpha1;
 };
 
-export type ReadClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponse = ReadClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses[keyof ReadClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses];
+export type ReadC9sRunV1Alpha1NamespacedTopologyResponse = ReadC9sRunV1Alpha1NamespacedTopologyResponses[keyof ReadC9sRunV1Alpha1NamespacedTopologyResponses];
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
+export type PatchC9sRunV1Alpha1NamespacedTopologyData = {
     body?: IoK8sApimachineryPkgApisMetaV1Patch;
     path: {
         /**
@@ -5651,27 +5651,27 @@ export type PatchClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/topologies/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/topologies/{name}';
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedTopologyErrors = {
+export type PatchC9sRunV1Alpha1NamespacedTopologyErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses = {
+export type PatchC9sRunV1Alpha1NamespacedTopologyResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevTopologyV1Alpha1;
+    200: C9sRunTopologyV1Alpha1;
 };
 
-export type PatchClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponse = PatchClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses[keyof PatchClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses];
+export type PatchC9sRunV1Alpha1NamespacedTopologyResponse = PatchC9sRunV1Alpha1NamespacedTopologyResponses[keyof PatchC9sRunV1Alpha1NamespacedTopologyResponses];
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
-    body?: ClabernetesContainerlabDevTopologyV1Alpha1;
+export type ReplaceC9sRunV1Alpha1NamespacedTopologyData = {
+    body?: C9sRunTopologyV1Alpha1;
     path: {
         /**
          * name of the Topology
@@ -5700,28 +5700,28 @@ export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyData = {
          */
         fieldValidation?: string;
     };
-    url: '/apis/clabernetes.containerlab.dev/v1alpha1/namespaces/{namespace}/topologies/{name}';
+    url: '/apis/c9s.run/v1alpha1/namespaces/{namespace}/topologies/{name}';
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyErrors = {
+export type ReplaceC9sRunV1Alpha1NamespacedTopologyErrors = {
     /**
      * Unauthorized
      */
     401: unknown;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses = {
+export type ReplaceC9sRunV1Alpha1NamespacedTopologyResponses = {
     /**
      * OK
      */
-    200: ClabernetesContainerlabDevTopologyV1Alpha1;
+    200: C9sRunTopologyV1Alpha1;
     /**
      * Created
      */
-    201: ClabernetesContainerlabDevTopologyV1Alpha1;
+    201: C9sRunTopologyV1Alpha1;
 };
 
-export type ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponse = ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses[keyof ReplaceClabernetesContainerlabDevV1Alpha1NamespacedTopologyResponses];
+export type ReplaceC9sRunV1Alpha1NamespacedTopologyResponse = ReplaceC9sRunV1Alpha1NamespacedTopologyResponses[keyof ReplaceC9sRunV1Alpha1NamespacedTopologyResponses];
 
 export type ClientOptions = {
     baseUrl: `${string}://clabernetes-openapi.json` | (string & {});

@@ -75,7 +75,7 @@ type imageRequests struct {
 }
 
 // newImageRequests returns a ImageRequests
-func newImageRequests(c *ClabernetesV1alpha1Client, namespace string) *imageRequests {
+func newImageRequests(c *C9sV1alpha1Client, namespace string) *imageRequests {
 	return &imageRequests{
 		gentype.NewClientWithList[*apisv1alpha1.ImageRequest, *apisv1alpha1.ImageRequestList](
 			"imagerequests",

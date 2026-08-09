@@ -1,6 +1,6 @@
 # Data center spine-leaf topology
 # Two spines, four leaves in a fully meshed Clos architecture
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: spine-leaf

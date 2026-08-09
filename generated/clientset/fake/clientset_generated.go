@@ -20,8 +20,8 @@ package fake
 
 import (
 	clientset "github.com/clabernetes/clabernetes/generated/clientset"
-	clabernetesv1alpha1 "github.com/clabernetes/clabernetes/generated/clientset/typed/apis/v1alpha1"
-	fakeclabernetesv1alpha1 "github.com/clabernetes/clabernetes/generated/clientset/typed/apis/v1alpha1/fake"
+	c9sv1alpha1 "github.com/clabernetes/clabernetes/generated/clientset/typed/apis/v1alpha1"
+	fakec9sv1alpha1 "github.com/clabernetes/clabernetes/generated/clientset/typed/apis/v1alpha1/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -98,7 +98,7 @@ var (
 	_ testing.FakeClient  = &Clientset{}
 )
 
-// ClabernetesV1alpha1 retrieves the ClabernetesV1alpha1Client
-func (c *Clientset) ClabernetesV1alpha1() clabernetesv1alpha1.ClabernetesV1alpha1Interface {
-	return &fakeclabernetesv1alpha1.FakeClabernetesV1alpha1{Fake: &c.Fake}
+// C9sV1alpha1 retrieves the C9sV1alpha1Client
+func (c *Clientset) C9sV1alpha1() c9sv1alpha1.C9sV1alpha1Interface {
+	return &fakec9sv1alpha1.FakeC9sV1alpha1{Fake: &c.Fake}
 }

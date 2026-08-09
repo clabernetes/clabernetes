@@ -1,4 +1,4 @@
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Link
 metadata:
   labels:
@@ -9,7 +9,7 @@ metadata:
   name: srl1-e1-1-srl2-e1-1
   namespace: NAMESPACE
   ownerReferences:
-    - apiVersion: clabernetes.containerlab.dev/v1alpha1
+    - apiVersion: c9s.run/v1alpha1
       blockOwnerDeletion: true
       controller: true
       kind: Topology

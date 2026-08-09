@@ -1,7 +1,7 @@
 # Topology with Headless services (clusterIP: None)
 # Use this when you need DNS-based pod discovery without load balancing
 # DNS queries return pod IPs directly instead of a virtual service IP
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: headless

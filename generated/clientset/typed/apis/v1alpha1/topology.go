@@ -75,7 +75,7 @@ type topologies struct {
 }
 
 // newTopologies returns a Topologies
-func newTopologies(c *ClabernetesV1alpha1Client, namespace string) *topologies {
+func newTopologies(c *C9sV1alpha1Client, namespace string) *topologies {
 	return &topologies{
 		gentype.NewClientWithList[*apisv1alpha1.Topology, *apisv1alpha1.TopologyList](
 			"topologies",

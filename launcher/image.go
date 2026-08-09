@@ -223,7 +223,7 @@ func (c *clabernetes) createImageRequestCR(
 	ctx, cancel := context.WithTimeout(c.ctx, clientDefaultTimeout)
 	defer cancel()
 
-	_, err := c.kubeClabernetesClient.ClabernetesV1alpha1().
+	_, err := c.kubeClabernetesClient.C9sV1alpha1().
 		ImageRequests(os.Getenv(clabernetesconstants.PodNamespaceEnv)).
 		Create(
 			ctx,
@@ -270,7 +270,7 @@ func (c *clabernetes) waitImageRequestCRAccepted(imageRequestCRName string) erro
 
 		ctx, cancel := context.WithTimeout(c.ctx, clientDefaultTimeout)
 
-		imageRequestCR, err := c.kubeClabernetesClient.ClabernetesV1alpha1().
+		imageRequestCR, err := c.kubeClabernetesClient.C9sV1alpha1().
 			ImageRequests(os.Getenv(clabernetesconstants.PodNamespaceEnv)).
 			Get(
 				ctx,

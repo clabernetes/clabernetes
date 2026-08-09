@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: imagerequests.clabernetes.containerlab.dev
+  name: imagerequests.c9s.run
 spec:
-  group: clabernetes.containerlab.dev
+  group: c9s.run
   names:
     kind: ImageRequest
     listKind: ImageRequestList

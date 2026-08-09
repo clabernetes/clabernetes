@@ -17,7 +17,7 @@ kubectl apply -n srl-multitool -f examples/individual-resources/
 Inspect its resources:
 
 ```bash
-kubectl get -n srl-multitool launcherprofiles,nodes.clabernetes.containerlab.dev,links
+kubectl get -n srl-multitool launcherprofiles,nodes.c9s.run,links
 ```
 
 Delete the example:

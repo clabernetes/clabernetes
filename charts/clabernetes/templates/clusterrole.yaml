@@ -20,7 +20,7 @@ metadata:
   name: "{{ .Values.appName }}-cluster-role"
 rules:
   - apiGroups:
-      - clabernetes.containerlab.dev
+      - c9s.run
     resources:
       - "*"
     verbs:
@@ -130,14 +130,14 @@ metadata:
   name: "{{ .Values.appName }}-launcher-role"
 rules:
   - apiGroups:
-      - clabernetes.containerlab.dev
+      - c9s.run
     resources:
       - imagerequests
     verbs:
       - get
       - create
   - apiGroups:
-      - clabernetes.containerlab.dev
+      - c9s.run
     resources:
       - nodes
       - links

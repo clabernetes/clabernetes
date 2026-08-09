@@ -123,7 +123,7 @@ func (c *Clabverter) handleCRManifests() error {
 	return nil
 }
 
-const manifestAPIVersion = "clabernetes.containerlab.dev/v1alpha1"
+const manifestAPIVersion = "c9s.run/v1alpha1"
 
 func appendManifest(content []byte, manifest any) ([]byte, error) {
 	manifestBytes, err := sigsyaml.Marshal(manifest)

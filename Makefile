@@ -85,6 +85,33 @@ test-race: ## Run unit tests with race flag
 test-e2e: ## Run e2e tests
 	gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
 
+C9S_NAMESPACE ?= clabernetes
+C9S_HELM_RELEASE ?= clabernetes
+C9S_KUBECTL ?= kubectl
+C9S_HELM ?= helm
+
+.PHONY: uninstall-c9s
+uninstall-c9s: ## Uninstall the c9s Helm release, delete all c9s CRDs, and remove the namespace
+	@echo "--> C9S: uninstalling Helm release $(C9S_HELM_RELEASE) from namespace $(C9S_NAMESPACE)"
+	@if $(C9S_HELM) status $(C9S_HELM_RELEASE) -n $(C9S_NAMESPACE) >/dev/null 2>&1; then \
+		$(C9S_HELM) uninstall $(C9S_HELM_RELEASE) -n $(C9S_NAMESPACE); \
+	else \
+		echo "--> C9S: Helm release $(C9S_HELM_RELEASE) not found in namespace $(C9S_NAMESPACE)"; \
+	fi
+	@echo "--> C9S: deleting c9s CRDs (this removes all custom resource instances cluster-wide)"
+	@crds=$$($(C9S_KUBECTL) get crd -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | \
+		grep -E '\.(c9s\.run|clabernetes\.containerlab\.dev)$$' || true); \
+	if [ -z "$$crds" ]; then \
+		echo "--> C9S: no c9s CRDs found"; \
+	else \
+		for crd in $$crds; do \
+			echo "--> C9S: deleting CRD $$crd"; \
+			$(C9S_KUBECTL) delete crd "$$crd" --ignore-not-found=true; \
+		done; \
+	fi
+	@echo "--> C9S: deleting namespace $(C9S_NAMESPACE)"
+	@$(C9S_KUBECTL) delete namespace $(C9S_NAMESPACE) --ignore-not-found=true
+
 cov:  ## Produce html coverage report; removes all the generated bits for sanity reasons
 	cat cover.out | grep -v "/generated/" | grep -v "zz_generated.deepcopy.go" > cover.out.clean && rm cover.out && mv cover.out.clean cover.out
 	go tool cover -html=cover.out

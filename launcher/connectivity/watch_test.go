@@ -49,13 +49,13 @@ func (h *initialListWatchGapHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 		resourceVersion = "2"
 
 		if strings.Contains(selector, "endpointA") {
-			items = `{"apiVersion":"clabernetes.containerlab.dev/v1alpha1","kind":"Link","metadata":{"name":"link-1"},"spec":{"endpointA":{"nodeName":"r1","interfaceName":"e1"},"endpointB":{"nodeName":"r2","interfaceName":"e1"}},"status":{"tunnelID":1}}`
+			items = `{"apiVersion":"c9s.run/v1alpha1","kind":"Link","metadata":{"name":"link-1"},"spec":{"endpointA":{"nodeName":"r1","interfaceName":"e1"},"endpointB":{"nodeName":"r2","interfaceName":"e1"}},"status":{"tunnelID":1}}`
 		}
 	}
 
 	_, _ = fmt.Fprintf(
 		w,
-		`{"apiVersion":"clabernetes.containerlab.dev/v1alpha1","kind":"LinkList","metadata":{"resourceVersion":%q},"items":[%s]}`,
+		`{"apiVersion":"c9s.run/v1alpha1","kind":"LinkList","metadata":{"resourceVersion":%q},"items":[%s]}`,
 		resourceVersion,
 		items,
 	)
@@ -149,7 +149,7 @@ func TestClosedLinkWatchRelistsWithBackoff(t *testing.T) {
 
 			_, _ = fmt.Fprintln(
 				w,
-				`{"type":"BOOKMARK","object":{"apiVersion":"clabernetes.containerlab.dev/v1alpha1","kind":"Link","metadata":{"name":"link","resourceVersion":"1"}}}`,
+				`{"type":"BOOKMARK","object":{"apiVersion":"c9s.run/v1alpha1","kind":"Link","metadata":{"name":"link","resourceVersion":"1"}}}`,
 			)
 
 			return
@@ -159,7 +159,7 @@ func TestClosedLinkWatchRelistsWithBackoff(t *testing.T) {
 
 		_, _ = fmt.Fprintf(
 			w,
-			`{"apiVersion":"clabernetes.containerlab.dev/v1alpha1","kind":"LinkList","metadata":{"resourceVersion":%q},"items":[]}`,
+			`{"apiVersion":"c9s.run/v1alpha1","kind":"LinkList","metadata":{"resourceVersion":%q},"items":[]}`,
 			strconv.FormatInt(requestNumber, 10),
 		)
 	}))

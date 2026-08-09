@@ -41,8 +41,8 @@ The exact load balancer address depends on the local cluster configuration.
 
 ```bash
 kubectl get pods --all-namespaces
-kubectl get nodes.clabernetes.containerlab.dev --all-namespaces
-kubectl get links.clabernetes.containerlab.dev --all-namespaces
+kubectl get nodes.c9s.run --all-namespaces
+kubectl get links.c9s.run --all-namespaces
 kubectl get services --all-namespaces
 ```
 

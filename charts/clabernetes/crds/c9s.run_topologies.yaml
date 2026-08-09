@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: topologies.clabernetes.containerlab.dev
+  name: topologies.c9s.run
 spec:
-  group: clabernetes.containerlab.dev
+  group: c9s.run
   names:
     kind: Topology
     listKind: TopologyList

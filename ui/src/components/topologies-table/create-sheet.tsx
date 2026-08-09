@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input.tsx";
 import { NamespaceSelector } from "@/components/namespace-selector.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { getQueryClient } from "@/lib/get-query-client.ts";
-import type { ClabernetesContainerlabDevTopologyV1Alpha1 } from "@/lib/clabernetes-client";
+import type { C9sRunTopologyV1Alpha1 } from "@/lib/clabernetes-client";
 import { createTopology } from "@/lib/kubernetes.ts";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import {
@@ -295,7 +295,7 @@ export function CreateSheet(): ReactElement {
     }
 
     const obj = {
-      apiVersion: "clabernetes.containerlab.dev/v1alpha1",
+      apiVersion: "c9s.run/v1alpha1",
       kind: "Topology",
       metadata: {
         name: values.name,
@@ -324,7 +324,7 @@ export function CreateSheet(): ReactElement {
         },
         naming: "global",
       },
-    } as ClabernetesContainerlabDevTopologyV1Alpha1;
+    } as C9sRunTopologyV1Alpha1;
 
     const response = await createTopology(values.namespace, JSON.stringify(obj));
 

@@ -24,39 +24,37 @@ import (
 	testing "k8s.io/client-go/testing"
 )
 
-type FakeClabernetesV1alpha1 struct {
+type FakeC9sV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeClabernetesV1alpha1) Configs(namespace string) v1alpha1.ConfigInterface {
+func (c *FakeC9sV1alpha1) Configs(namespace string) v1alpha1.ConfigInterface {
 	return newFakeConfigs(c, namespace)
 }
 
-func (c *FakeClabernetesV1alpha1) ImageRequests(namespace string) v1alpha1.ImageRequestInterface {
+func (c *FakeC9sV1alpha1) ImageRequests(namespace string) v1alpha1.ImageRequestInterface {
 	return newFakeImageRequests(c, namespace)
 }
 
-func (c *FakeClabernetesV1alpha1) LauncherProfiles(
-	namespace string,
-) v1alpha1.LauncherProfileInterface {
+func (c *FakeC9sV1alpha1) LauncherProfiles(namespace string) v1alpha1.LauncherProfileInterface {
 	return newFakeLauncherProfiles(c, namespace)
 }
 
-func (c *FakeClabernetesV1alpha1) Links(namespace string) v1alpha1.LinkInterface {
+func (c *FakeC9sV1alpha1) Links(namespace string) v1alpha1.LinkInterface {
 	return newFakeLinks(c, namespace)
 }
 
-func (c *FakeClabernetesV1alpha1) Nodes(namespace string) v1alpha1.NodeInterface {
+func (c *FakeC9sV1alpha1) Nodes(namespace string) v1alpha1.NodeInterface {
 	return newFakeNodes(c, namespace)
 }
 
-func (c *FakeClabernetesV1alpha1) Topologies(namespace string) v1alpha1.TopologyInterface {
+func (c *FakeC9sV1alpha1) Topologies(namespace string) v1alpha1.TopologyInterface {
 	return newFakeTopologies(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *FakeClabernetesV1alpha1) RESTClient() rest.Interface {
+func (c *FakeC9sV1alpha1) RESTClient() rest.Interface {
 	var ret *rest.RESTClient
 	return ret
 }

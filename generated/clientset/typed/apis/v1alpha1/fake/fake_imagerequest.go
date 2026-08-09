@@ -27,11 +27,11 @@ import (
 // fakeImageRequests implements ImageRequestInterface
 type fakeImageRequests struct {
 	*gentype.FakeClientWithList[*v1alpha1.ImageRequest, *v1alpha1.ImageRequestList]
-	Fake *FakeClabernetesV1alpha1
+	Fake *FakeC9sV1alpha1
 }
 
 func newFakeImageRequests(
-	fake *FakeClabernetesV1alpha1,
+	fake *FakeC9sV1alpha1,
 	namespace string,
 ) apisv1alpha1.ImageRequestInterface {
 	return &fakeImageRequests{

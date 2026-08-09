@@ -16,7 +16,7 @@ By default, Clabernetes creates LoadBalancer services for each node in your topo
 When you don't need any Kubernetes services for your topology nodes:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: internal-only
@@ -50,7 +50,7 @@ spec:
 Control exactly which ports are exposed:
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: minimal-ports
@@ -174,7 +174,7 @@ You can assign specific IPs to LoadBalancer services based on the node's managem
 ### IPv4 Management IP
 
 ```yaml
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: static-ips

@@ -14,7 +14,7 @@ metadata:
   name: "clabernetes-cluster-role"
 rules:
   - apiGroups:
-      - clabernetes.containerlab.dev
+      - c9s.run
     resources:
       - "*"
     verbs:
@@ -102,14 +102,14 @@ metadata:
   name: "clabernetes-launcher-role"
 rules:
   - apiGroups:
-      - clabernetes.containerlab.dev
+      - c9s.run
     resources:
       - imagerequests
     verbs:
       - get
       - create
   - apiGroups:
-      - clabernetes.containerlab.dev
+      - c9s.run
     resources:
       - nodes
       - links

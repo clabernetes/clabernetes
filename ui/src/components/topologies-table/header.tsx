@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
 import type { Column } from "@tanstack/react-table";
 import type { ReactElement } from "react";
-import type { ClabernetesContainerlabDevTopologyV1Alpha1 } from "@/lib/clabernetes-client";
+import type { C9sRunTopologyV1Alpha1 } from "@/lib/clabernetes-client";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet.tsx";
 import { CirclePlus } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
@@ -10,7 +10,7 @@ import { CreateSheet } from "@/components/topologies-table/create-sheet.tsx";
 interface HeaderProps {
   readonly getColumn: (
     columnId: string,
-  ) => Column<ClabernetesContainerlabDevTopologyV1Alpha1> | undefined;
+  ) => Column<C9sRunTopologyV1Alpha1> | undefined;
 }
 
 export function Header(props: HeaderProps): ReactElement {

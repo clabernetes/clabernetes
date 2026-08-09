@@ -13,7 +13,7 @@
 # - A valid SR-SIM license is required
 # - The SR-SIM image must be loaded into your container runtime
 # - Distributed chassis requires more resources than integrated systems
-apiVersion: clabernetes.containerlab.dev/v1alpha1
+apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: nokia-srsim-distributed
