@@ -206,6 +206,45 @@ describe('renderCrdViewer', () => {
     expect(html).toContain('&lt;key&gt;');
   });
 
+  it('renders markdown in descriptions', () => {
+    const tmp = makeTmpDir();
+    const source = path.join(tmp, 'links.yaml');
+    writeFile(
+      source,
+      `
+      apiVersion: apiextensions.k8s.io/v1
+      kind: CustomResourceDefinition
+      metadata:
+        name: links.example.com
+      spec:
+        group: example.com
+        names:
+          kind: Link
+          plural: links
+        versions:
+          - name: v1
+            served: true
+            storage: true
+            schema:
+              openAPIV3Schema:
+                type: object
+                properties:
+                  spec:
+                    type: object
+                    description: Use the reserved name \`host\` for host links.
+                    properties:
+                      endpoint:
+                        type: string
+                        description: Node name or \`host\`.
+      `,
+    );
+
+    const html = renderCrdViewer(tmp, 'links.yaml');
+
+    expect(html).toContain('<code>host</code>');
+    expect(html).not.toContain('`host`');
+  });
+
   it('renders scalar arrays inline', () => {
     const tmp = makeTmpDir();
     const source = path.join(tmp, 'example.yaml');

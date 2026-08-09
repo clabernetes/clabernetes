@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseAllDocuments } from 'yaml';
+import { renderDescriptionMarkdown } from './markdown';
 
 export class CrdRenderError extends Error {
   constructor(message: string) {
@@ -54,6 +55,10 @@ function escapeHtml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function renderDescriptionHtml(text: string, className: string): string {
+  return `<div class="${className}">${renderDescriptionMarkdown(text)}</div>`;
 }
 
 function parseCrdDocuments(content: string): SchemaDict[] {
@@ -513,7 +518,7 @@ function renderView(
 
 function renderSection(viewerId: string, section: Section): string {
   const descriptionHtml = section.description
-    ? `<p class="crd-viewer__section-description">${escapeHtml(section.description)}</p>`
+    ? renderDescriptionHtml(section.description, 'crd-viewer__section-description')
     : '';
   const childrenHtml = section.children
     .map((node) => renderNode(viewerId, node))
@@ -542,7 +547,7 @@ function renderNode(viewerId: string, node: FieldNode): string {
   const anchorHtml = `<a class="crd-viewer__anchor" href="#${nodeId}" aria-label="Link to ${label}">#</a>`;
   const factsHtml = renderFacts(node);
   const descriptionHtml = node.description
-    ? `<p class="crd-viewer__description">${escapeHtml(node.description)}</p>`
+    ? renderDescriptionHtml(node.description, 'crd-viewer__description')
     : '';
 
   let bodyHtml = '';

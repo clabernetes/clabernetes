@@ -361,6 +361,27 @@
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
 }
 
+.crd-viewer__section-description p,
+.crd-viewer__description p {
+  margin: 0;
+}
+
+.crd-viewer__section-description p+p,
+.crd-viewer__description p+p {
+  margin-top: 0.5rem;
+}
+
+.crd-viewer__section-description code,
+.crd-viewer__description code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: var(--crd-radius-sm);
+  background: var(--crd-chip-bg);
+  border: 1px solid var(--crd-chip-border);
+  color: var(--crd-chip-text);
+}
+
 .crd-viewer__facts {
   display: flex;
   flex-wrap: wrap;
