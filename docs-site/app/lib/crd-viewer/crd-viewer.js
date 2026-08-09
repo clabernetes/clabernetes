@@ -133,9 +133,18 @@
     syncButton(viewer);
   }
 
+  function clearHighlights(viewer) {
+    viewer.querySelectorAll(".crd-viewer__row--highlight").forEach(function (row) {
+      row.classList.remove("crd-viewer__row--highlight");
+    });
+  }
+
   function navigateToHash() {
     var hash = location.hash;
-    if (!hash || hash.length < 2) return;
+    if (!hash || hash.length < 2) {
+      document.querySelectorAll("[data-crd-viewer-root]").forEach(clearHighlights);
+      return;
+    }
 
     var target;
     try {
@@ -169,18 +178,13 @@
 
     target.scrollIntoView({ behavior: "smooth", block: "center" });
 
+    clearHighlights(viewer);
+
     var row =
       target.querySelector(":scope > .crd-viewer__node > .crd-viewer__row") ||
       target.querySelector(":scope > .crd-viewer__row");
     if (row) {
       row.classList.add("crd-viewer__row--highlight");
-      function clearHighlight(e) {
-        if (e.target.closest(".crd-viewer__row") && e.target.closest(".crd-viewer__row") !== row) {
-          row.classList.remove("crd-viewer__row--highlight");
-          viewer.removeEventListener("mouseover", clearHighlight);
-        }
-      }
-      viewer.addEventListener("mouseover", clearHighlight);
     }
   }
 
@@ -201,25 +205,31 @@
 
   document.addEventListener("click", function (e) {
     var anchor = e.target.closest(".crd-viewer__anchor");
-    if (!anchor) return;
-    var href = anchor.getAttribute("href");
-    if (!href || href.charAt(0) !== "#") return;
-    e.preventDefault();
-    history.replaceState(null, "", href);
-    navigateToHash();
+    if (anchor) {
+      var href = anchor.getAttribute("href");
+      if (!href || href.charAt(0) !== "#") return;
+      e.preventDefault();
+      history.replaceState(null, "", href);
+      navigateToHash();
 
-    var url = location.origin + location.pathname + href;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url);
-    } else {
-      var ta = document.createElement("textarea");
-      ta.value = url;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
+      var url = location.origin + location.pathname + href;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url);
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = url;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      }
+      return;
+    }
+
+    if (!e.target.closest("[data-crd-viewer-root]")) {
+      document.querySelectorAll("[data-crd-viewer-root]").forEach(clearHighlights);
     }
   });
 

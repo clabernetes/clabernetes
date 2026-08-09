@@ -204,6 +204,8 @@ describe('renderCrdViewer', () => {
     expect(html).toContain('Selected size.');
     expect(html).toContain('enum');
     expect(html).toContain('&lt;key&gt;');
+    expect(html).toContain('href="#spec-size"');
+    expect(html).not.toContain('href="#crd-viewer-');
   });
 
   it('renders markdown in descriptions', () => {

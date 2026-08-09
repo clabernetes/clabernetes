@@ -537,7 +537,7 @@ function renderSection(viewerId: string, section: Section): string {
 }
 
 function renderNode(viewerId: string, node: FieldNode): string {
-  const nodeId = nodeIdFor(viewerId, node.path);
+  const nodeId = nodeIdFor(node.path);
   const contentId = `${nodeId}-content`;
   const label = escapeHtml(node.label);
   const requiredHtml = node.required
@@ -648,13 +648,12 @@ function viewerIdFor(view: CrdView, sequence: number): string {
   return `crd-viewer-${digest}`;
 }
 
-function nodeIdFor(viewerId: string, fieldPath: string): string {
+function nodeIdFor(fieldPath: string): string {
   const normalized = fieldPath
     .replace(/\[\]/g, '-items')
     .replace(/\.\*/g, '-key');
-  const slug = normalized
+  return normalized
     .replace(/[^a-zA-Z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .toLowerCase();
-  return `${viewerId}-${slug}`;
 }
