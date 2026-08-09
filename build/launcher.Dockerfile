@@ -31,6 +31,8 @@ RUN TARGET_OS="${TARGETOS:-linux}" && \
 
 FROM debian:bookworm-slim
 
+LABEL org.opencontainers.image.source="https://github.com/clabernetes/clabernetes"
+
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG TARGETARCH

@@ -117,7 +117,7 @@ func (c *clabernetes) installContainerlabVersion(version string) error {
 	err = clabernetesutil.WriteHTTPContentsFromPath(
 		context.Background(),
 		fmt.Sprintf(
-			"https://github.com/clabernetes/containerlab/releases/download/v%s/%s",
+			"https://github.com/srl-labs/containerlab/releases/download/v%s/%s",
 			version,
 			tarName,
 		),

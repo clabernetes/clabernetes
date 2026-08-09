@@ -56,7 +56,7 @@ spec:
 Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single chassis using multiple containers—one for each card slot (CPM-A, CPM-B, IOMs). These containers share a network namespace via the `network-mode: container:<name>` directive.
 
 | Platform Type | Description |
-|---------------|-------------|
+| --------------- | ------------- |
 | `sr-2s` | SR-2s chassis system |
 | `sr-2se` | SR-2se chassis system |
 | `sr-7` | SR-7 chassis system |
@@ -293,6 +293,6 @@ Secondary cards (those with `network-mode: container:<primary>`) cannot have the
 ## Related Resources
 
 - [Containerlab SR-SIM Documentation](https://containerlab.dev/manual/kinds/sros/)
-- [SR-SIM Lab Examples](https://github.com/clabernetes/containerlab/tree/main/lab-examples/sr-sim)
+- [SR-SIM Lab Examples](https://github.com/srl-labs/containerlab/tree/main/lab-examples/sr-sim)
 - [File Mounting Guide](./file-mounting.md)
 - [Resource Management Guide](./resource-management.md)

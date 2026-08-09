@@ -28,187 +28,187 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.AppliedLauncherProfileStatus": schema_srl_labs_clabernetes_apis_v1alpha1_AppliedLauncherProfileStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.AppliedLauncherProfileStatus": schema_clabernetes_clabernetes_apis_v1alpha1_AppliedLauncherProfileStatus(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig": schema_srl_labs_clabernetes_apis_v1alpha1_CertificateConfig(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig": schema_clabernetes_clabernetes_apis_v1alpha1_CertificateConfig(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Component": schema_srl_labs_clabernetes_apis_v1alpha1_Component(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Component": schema_clabernetes_clabernetes_apis_v1alpha1_Component(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Config": schema_srl_labs_clabernetes_apis_v1alpha1_Config(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Config": schema_clabernetes_clabernetes_apis_v1alpha1_Config(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDeployment(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigDeployment(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDispatcher(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigDispatcher(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigImagePull": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigImagePull(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigImagePull": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigImagePull(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigList": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigList": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigList(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigMetadata(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigMetadata(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigSpec": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigSpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigSpec": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ConfigStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigStatus": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigStatus(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig": schema_srl_labs_clabernetes_apis_v1alpha1_DNSConfig(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig": schema_clabernetes_clabernetes_apis_v1alpha1_DNSConfig(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition": schema_srl_labs_clabernetes_apis_v1alpha1_Definition(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition": schema_clabernetes_clabernetes_apis_v1alpha1_Definition(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Deployment": schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Deployment": schema_clabernetes_clabernetes_apis_v1alpha1_Deployment(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Expose": schema_srl_labs_clabernetes_apis_v1alpha1_Expose(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Expose": schema_clabernetes_clabernetes_apis_v1alpha1_Expose(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Extras": schema_srl_labs_clabernetes_apis_v1alpha1_Extras(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Extras": schema_clabernetes_clabernetes_apis_v1alpha1_Extras(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap": schema_srl_labs_clabernetes_apis_v1alpha1_FileFromConfigMap(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap": schema_clabernetes_clabernetes_apis_v1alpha1_FileFromConfigMap(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL": schema_srl_labs_clabernetes_apis_v1alpha1_FileFromURL(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL": schema_clabernetes_clabernetes_apis_v1alpha1_FileFromURL(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig": schema_srl_labs_clabernetes_apis_v1alpha1_HealthcheckConfig(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig": schema_clabernetes_clabernetes_apis_v1alpha1_HealthcheckConfig(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull": schema_srl_labs_clabernetes_apis_v1alpha1_ImagePull(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull": schema_clabernetes_clabernetes_apis_v1alpha1_ImagePull(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequest": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequest(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequest": schema_clabernetes_clabernetes_apis_v1alpha1_ImageRequest(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestList": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestList": schema_clabernetes_clabernetes_apis_v1alpha1_ImageRequestList(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestSpec": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestSpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestSpec": schema_clabernetes_clabernetes_apis_v1alpha1_ImageRequestSpec(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestStatus": schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImageRequestStatus": schema_clabernetes_clabernetes_apis_v1alpha1_ImageRequestStatus(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfile": schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfile(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfile": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfile(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileDeployment": schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileDeployment(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileDeployment": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileDeployment(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileExpose": schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileExpose(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileExpose": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileExpose(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileImagePull": schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileImagePull(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileImagePull": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileImagePull(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileList": schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileList": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileList(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileSpec": schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileSpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileSpec": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileSpec(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileStatus": schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileStatus": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileStatus(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Link": schema_srl_labs_clabernetes_apis_v1alpha1_Link(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Link": schema_clabernetes_clabernetes_apis_v1alpha1_Link(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkEndpointSpec": schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpointSpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkEndpointSpec": schema_clabernetes_clabernetes_apis_v1alpha1_LinkEndpointSpec(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkList": schema_srl_labs_clabernetes_apis_v1alpha1_LinkList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkList": schema_clabernetes_clabernetes_apis_v1alpha1_LinkList(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkResolvedEndpointStatus": schema_srl_labs_clabernetes_apis_v1alpha1_LinkResolvedEndpointStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkResolvedEndpointStatus": schema_clabernetes_clabernetes_apis_v1alpha1_LinkResolvedEndpointStatus(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkResolvedEndpointsStatus": schema_srl_labs_clabernetes_apis_v1alpha1_LinkResolvedEndpointsStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkResolvedEndpointsStatus": schema_clabernetes_clabernetes_apis_v1alpha1_LinkResolvedEndpointsStatus(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkSpec": schema_srl_labs_clabernetes_apis_v1alpha1_LinkSpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkSpec": schema_clabernetes_clabernetes_apis_v1alpha1_LinkSpec(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkStatus": schema_srl_labs_clabernetes_apis_v1alpha1_LinkStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkStatus": schema_clabernetes_clabernetes_apis_v1alpha1_LinkStatus(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.MDA": schema_srl_labs_clabernetes_apis_v1alpha1_MDA(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.MDA": schema_clabernetes_clabernetes_apis_v1alpha1_MDA(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.MgmtNet": schema_srl_labs_clabernetes_apis_v1alpha1_MgmtNet(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.MgmtNet": schema_clabernetes_clabernetes_apis_v1alpha1_MgmtNet(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Node": schema_srl_labs_clabernetes_apis_v1alpha1_Node(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Node": schema_clabernetes_clabernetes_apis_v1alpha1_Node(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeDefinition": schema_srl_labs_clabernetes_apis_v1alpha1_NodeDefinition(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeDefinition": schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeExposedPort": schema_srl_labs_clabernetes_apis_v1alpha1_NodeExposedPort(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeExposedPort": schema_clabernetes_clabernetes_apis_v1alpha1_NodeExposedPort(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeExposedPorts": schema_srl_labs_clabernetes_apis_v1alpha1_NodeExposedPorts(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeExposedPorts": schema_clabernetes_clabernetes_apis_v1alpha1_NodeExposedPorts(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeList": schema_srl_labs_clabernetes_apis_v1alpha1_NodeList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeList": schema_clabernetes_clabernetes_apis_v1alpha1_NodeList(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProbeStatuses": schema_srl_labs_clabernetes_apis_v1alpha1_NodeProbeStatuses(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProbeStatuses": schema_clabernetes_clabernetes_apis_v1alpha1_NodeProbeStatuses(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeSpec": schema_srl_labs_clabernetes_apis_v1alpha1_NodeSpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeSpec": schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeStatus": schema_srl_labs_clabernetes_apis_v1alpha1_NodeStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeStatus": schema_clabernetes_clabernetes_apis_v1alpha1_NodeStatus(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence": schema_srl_labs_clabernetes_apis_v1alpha1_Persistence(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence": schema_clabernetes_clabernetes_apis_v1alpha1_Persistence(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.ProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ProbeConfiguration": schema_clabernetes_clabernetes_apis_v1alpha1_ProbeConfiguration(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.SSHProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.SSHProbeConfiguration": schema_clabernetes_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling": schema_srl_labs_clabernetes_apis_v1alpha1_Scheduling(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling": schema_clabernetes_clabernetes_apis_v1alpha1_Scheduling(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes": schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes": schema_clabernetes_clabernetes_apis_v1alpha1_StatusProbes(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.TCPProbeConfiguration": schema_srl_labs_clabernetes_apis_v1alpha1_TCPProbeConfiguration(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TCPProbeConfiguration": schema_clabernetes_clabernetes_apis_v1alpha1_TCPProbeConfiguration(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.Topology": schema_srl_labs_clabernetes_apis_v1alpha1_Topology(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.Topology": schema_clabernetes_clabernetes_apis_v1alpha1_Topology(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyList": schema_srl_labs_clabernetes_apis_v1alpha1_TopologyList(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyList": schema_clabernetes_clabernetes_apis_v1alpha1_TopologyList(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologySpec": schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologySpec": schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyStatus": schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyStatus": schema_clabernetes_clabernetes_apis_v1alpha1_TopologyStatus(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.XIOM": schema_srl_labs_clabernetes_apis_v1alpha1_XIOM(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.XIOM": schema_clabernetes_clabernetes_apis_v1alpha1_XIOM(
 			ref,
 		),
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_AppliedLauncherProfileStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_AppliedLauncherProfileStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -248,7 +248,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_AppliedLauncherProfileStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_CertificateConfig(
+func schema_clabernetes_clabernetes_apis_v1alpha1_CertificateConfig(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -270,7 +270,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_CertificateConfig(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Component(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Component(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -353,7 +353,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Component(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Config(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Config(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -406,7 +406,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Config(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDeployment(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigDeployment(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -549,7 +549,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDeployment(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDispatcher(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigDispatcher(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -582,7 +582,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigDispatcher(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigImagePull(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigImagePull(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -632,7 +632,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigImagePull(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigList(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigList(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -684,7 +684,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigList(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigMetadata(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigMetadata(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -729,7 +729,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigMetadata(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigSpec(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -788,7 +788,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigSpec(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -801,7 +801,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ConfigStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_DNSConfig(
+func schema_clabernetes_clabernetes_apis_v1alpha1_DNSConfig(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -873,7 +873,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_DNSConfig(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Definition(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Definition(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -902,7 +902,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Definition(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Deployment(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1065,7 +1065,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Deployment(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Expose(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Expose(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1117,7 +1117,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Expose(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Extras(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Extras(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1177,7 +1177,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Extras(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_FileFromConfigMap(
+func schema_clabernetes_clabernetes_apis_v1alpha1_FileFromConfigMap(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1224,7 +1224,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_FileFromConfigMap(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_FileFromURL(
+func schema_clabernetes_clabernetes_apis_v1alpha1_FileFromURL(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1256,7 +1256,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_FileFromURL(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_HealthcheckConfig(
+func schema_clabernetes_clabernetes_apis_v1alpha1_HealthcheckConfig(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1318,7 +1318,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_HealthcheckConfig(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ImagePull(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ImagePull(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1387,7 +1387,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImagePull(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequest(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ImageRequest(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1440,7 +1440,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequest(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestList(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ImageRequestList(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1492,7 +1492,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestList(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestSpec(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ImageRequestSpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1564,7 +1564,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestSpec(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ImageRequestStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1596,7 +1596,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ImageRequestStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfile(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfile(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1649,7 +1649,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfile(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileDeployment(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileDeployment(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1741,7 +1741,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileDeployment(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileExpose(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileExpose(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1791,7 +1791,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileExpose(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileImagePull(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileImagePull(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1860,7 +1860,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileImagePull(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileList(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileList(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1912,7 +1912,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileList(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileSpec(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileSpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1983,7 +1983,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileSpec(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1996,7 +1996,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LauncherProfileStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Link(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Link(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2028,7 +2028,9 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Link(
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/clabernetes/clabernetes/apis/v1alpha1.LinkSpec"),
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkSpec",
+							),
 						},
 					},
 					"status": {
@@ -2047,7 +2049,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Link(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpointSpec(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LinkEndpointSpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2079,7 +2081,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkEndpointSpec(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LinkList(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LinkList(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2131,7 +2133,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkList(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LinkResolvedEndpointStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LinkResolvedEndpointStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2162,7 +2164,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkResolvedEndpointStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LinkResolvedEndpointsStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LinkResolvedEndpointsStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2198,7 +2200,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkResolvedEndpointsStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LinkSpec(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LinkSpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2248,7 +2250,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkSpec(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_LinkStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_LinkStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2287,7 +2289,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_LinkStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_MDA(
+func schema_clabernetes_clabernetes_apis_v1alpha1_MDA(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2316,7 +2318,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_MDA(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_MgmtNet(
+func schema_clabernetes_clabernetes_apis_v1alpha1_MgmtNet(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2394,7 +2396,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_MgmtNet(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Node(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Node(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2426,7 +2428,9 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Node(
 					"spec": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
-							Ref:     ref("github.com/clabernetes/clabernetes/apis/v1alpha1.NodeSpec"),
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeSpec",
+							),
 						},
 					},
 					"status": {
@@ -2445,7 +2449,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Node(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_NodeDefinition(
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2880,7 +2884,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_NodeDefinition(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_NodeExposedPort(
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeExposedPort(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2920,7 +2924,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_NodeExposedPort(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_NodeExposedPorts(
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeExposedPorts(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -2964,7 +2968,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_NodeExposedPorts(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_NodeList(
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeList(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3016,7 +3020,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_NodeList(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_NodeProbeStatuses(
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProbeStatuses(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3056,7 +3060,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_NodeProbeStatuses(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_NodeSpec(
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3537,7 +3541,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_NodeSpec(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_NodeStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3606,7 +3610,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_NodeStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Persistence(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Persistence(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3644,7 +3648,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Persistence(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
+func schema_clabernetes_clabernetes_apis_v1alpha1_ProbeConfiguration(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3685,7 +3689,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_ProbeConfiguration(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
+func schema_clabernetes_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3725,7 +3729,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Scheduling(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Scheduling(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3775,7 +3779,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Scheduling(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
+func schema_clabernetes_clabernetes_apis_v1alpha1_StatusProbes(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3844,7 +3848,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_StatusProbes(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_TCPProbeConfiguration(
+func schema_clabernetes_clabernetes_apis_v1alpha1_TCPProbeConfiguration(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3868,7 +3872,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TCPProbeConfiguration(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_Topology(
+func schema_clabernetes_clabernetes_apis_v1alpha1_Topology(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3921,7 +3925,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_Topology(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyList(
+func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyList(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -3973,7 +3977,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyList(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
+func schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -4051,7 +4055,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologySpec(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -4131,7 +4135,7 @@ func schema_srl_labs_clabernetes_apis_v1alpha1_TopologyStatus(
 	}
 }
 
-func schema_srl_labs_clabernetes_apis_v1alpha1_XIOM(
+func schema_clabernetes_clabernetes_apis_v1alpha1_XIOM(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{

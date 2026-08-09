@@ -39,6 +39,8 @@ RUN TARGET_OS="${TARGETOS:-linux}" && \
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
+LABEL org.opencontainers.image.source="https://github.com/clabernetes/clabernetes"
+
 WORKDIR /clabernetes
 COPY --from=builder --chown=nonroot:nonroot /clabernetes/certificates /clabernetes/certificates
 COPY --from=builder /clabernetes/build/manager .

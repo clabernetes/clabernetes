@@ -20,7 +20,7 @@ func TestRegexStringSubmatchToMap(t *testing.T) {
 			p: regexp.MustCompile(
 				`(?mi)https?:\/\/(?:www\.)?github\.com\/(?P<GroupRepo>.*?\/.*?)\/(?:(blob)|(tree))(?P<Path>.*)`,
 			),
-			in: "https://github.com/clabernetes/containerlab/tree/main/lab-examples/srl02",
+			in: "https://github.com/srl-labs/containerlab/tree/main/lab-examples/srl02",
 			expected: map[string]string{
 				"GroupRepo": "srl-labs/containerlab",
 				"Path":      "/main/lab-examples/srl02",

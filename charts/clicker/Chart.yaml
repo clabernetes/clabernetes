@@ -5,6 +5,12 @@ description: Cl(abernetes t)ick(l)er! For "clicking" on some nodes to perform cl
 home: https://github.com/clabernetes/clabernetes
 sources:
   - https://github.com/clabernetes/clabernetes
+annotations:
+  artifacthub.io/category: networking
+  artifacthub.io/license: BSD-3-Clause
+  artifacthub.io/links: |
+    - name: support
+      url: https://github.com/clabernetes/clabernetes/issues
 keywords:
   - network
   - containerlab
