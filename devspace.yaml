@@ -5,7 +5,7 @@ vars:
     source: env
     default: clabernetes
 commands:
-  dev: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace dev -n ${NS} --profile dev --profile debug --profile single-manager --profile single-ui $@"
+  dev: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace dev -n ${NS} --profile debug --profile single-manager $@"
   deploy: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace deploy -n ${NS} $@"
   build: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace build -n ${NS} $@"
   purge: "DEVSPACE_CONFIG=./.develop/devspace.yaml devspace purge -n ${NS} $@"
