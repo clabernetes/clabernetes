@@ -47,35 +47,29 @@ Default `REGISTRY`: `ghcr.io/clabernetes/clabernetes`.
 
 ## In-cluster registry (default on remote clusters)
 
-The `local-registry` DevSpace profile enables:
+The `local-registry` profile uses a registry managed by this project. DevSpace's `localRegistry`
+feature remains disabled because custom BuildKit builds run before that feature bootstraps its
+registry. `make dev` then:
 
-```yaml
-localRegistry:
-  enabled: true
-  localbuild: true
-```
-
-DevSpace then:
-
-1. Deploys `registry:2.8.1` in the dev namespace (NodePort)
-2. Port-forwards `localhost:<nodePort>` → registry
-3. Rewrites all image URLs to `localhost:<nodePort>/...` (Helm, dev pod, etc.)
-4. Builds on your machine and pushes into that registry
+1. Ensures a `registry:2.8.1` Deployment and NodePort Service exist in the dev namespace
+2. Builds with `docker buildx build --load` on the host (optional `--secret` for Zscaler)
+3. Port-forwards and `docker push`es into that registry
+4. Passes explicit `localhost:<nodePort>/...:dev-latest` refs to Helm and the dev pod
 
 ### Why `localhost:<port>` in image URLs?
 
-Image pulls are done by the **kubelet on the worker node**, not the pod. DevSpace uses NodePort
-so nodes pull via `localhost:<nodePort>` on whichever node schedules the pod. Your laptop pushes
-through the same port via DevSpace's port-forward.
+Image pulls are done by the **kubelet on the worker node**, not the pod. The project-managed
+registry uses a NodePort so nodes pull via `localhost:<nodePort>` on whichever node schedules the
+pod. Your laptop pushes through the same port via the project-managed port-forward.
 
 ### Platform-aware builds
 
 [`target-platform.sh`](target-platform.sh) inspects node `operatingSystem` and `architecture` in
-the current kubectl context and sets `TARGET_PLATFORM` (for example `linux/arm64`). DevSpace
-passes that to builds as:
+the current kubectl context and sets `TARGET_PLATFORM` (for example `linux/amd64`). The development
+flow passes that to builds as:
 
-- `docker buildx --platform=${TARGET_PLATFORM}` when pushing to an external registry
-- `BUILDPLATFORM=${TARGET_PLATFORM}` build-arg when using the local-registry engine (`docker build`)
+- `docker buildx --platform=${TARGET_PLATFORM}` when pushing to an external registry (`LOCAL_REGISTRY=0`)
+- `build-for-local-registry.sh` (`docker buildx --load` + host `docker push`) for the in-cluster registry path
 
 Dockerfiles default `BUILDPLATFORM` for the local-registry path:
 
@@ -90,6 +84,21 @@ Override detection explicitly on mixed-platform clusters:
 TARGET_PLATFORM=linux/amd64 make dev
 ```
 
+## Build hosts behind Zscaler
+
+Launcher builds can pass the host trust bundle via BuildKit `--secret`. The Dockerfile uses the
+secret only as a temporary CA file for `apt` and `curl`; it never copies it into the image
+filesystem. Runtime CA should still come from a Kubernetes Secret on launcher pods:
+
+- **In-cluster registry path:** the launcher build uses
+  `/etc/ssl/certs/ca-certificates.crt` by default; override it with
+  `LOCAL_REGISTRY_BUILD_SECRET=/path/to/ca-bundle.crt`
+- **External registry path (`LOCAL_REGISTRY=0`):** `buildKit.args` `--secret=id=host_ca,...` in
+  `devspace.yaml`
+
+The release workflow does not provide `host_ca`, and a build without the secret uses the standard
+public CA bundle. `required=false` keeps the secret optional.
+
 ## Image tags
 
 Development builds tag images with `dev-latest` and the current git commit hash. Helm and the dev
@@ -99,7 +108,7 @@ pod use explicit `:dev-latest` refs via `MANAGER_*_TAGGED` variables in `devspac
 
 | Profile | Purpose |
 | --------- | --------- |
-| `local-registry` | Native in-cluster registry + local build (default on remote via Makefile) |
+| `local-registry` | In-cluster registry + buildx custom builds (default on remote via Makefile) |
 | `auto-run-manager` | Run manager automatically instead of interactive shell |
 | `always-pull` | `imagePullPolicy: Always` — use with `LOCAL_REGISTRY=0` on remote clusters |
 | `debug` | Debug log levels |
@@ -108,7 +117,11 @@ pod use explicit `:dev-latest` refs via `MANAGER_*_TAGGED` variables in `devspac
 ## Helper scripts
 
 | Script | Role |
-|--------|------|
+| -------- | ------ |
+| [`build-for-local-registry.sh`](build-for-local-registry.sh) | `docker buildx` build + push to in-cluster registry |
+| [`ensure-local-registry.sh`](ensure-local-registry.sh) | Create the registry Deployment and NodePort Service before custom builds |
+| [`ensure-registry-port-forward.sh`](ensure-registry-port-forward.sh) | `kubectl port-forward` for host `docker push` |
+| [`local-registry-image-ref.sh`](local-registry-image-ref.sh) | Generate explicit `localhost:<nodePort>/...` refs for Helm/dev pod |
 | [`target-platform.sh`](target-platform.sh) | Detect cluster node OS/arch for `TARGET_PLATFORM` |
 | [`start.sh`](start.sh) | Dev container entrypoint |
 
@@ -120,10 +133,22 @@ pod use explicit `:dev-latest` refs via `MANAGER_*_TAGGED` variables in `devspac
 - Private GHCR: use default local registry (`LOCAL_REGISTRY` unset on remote)
 - Wrong tag: pod should show `:dev-latest`, not bare `ghcr.io/...` (resolves to `:latest`)
 
-### `failed to parse platform ""`
+### `failed to parse platform ""` / `--mount requires BuildKit`
 
-Usually means `localbuild` + Dockerfiles without a `BUILDPLATFORM` default. Ensure you are on a
-current checkout with `ARG BUILDPLATFORM=...` in the Dockerfiles.
+The in-cluster registry path must use `build-for-local-registry.sh` (custom buildx). If builds log
+`engine 'localregistry'`, the project-managed registry profile is not being used.
+
+Empty `BUILDPLATFORM` usually means a build without `--platform` / `BUILDPLATFORM` build-arg.
+Ensure Dockerfiles declare `ARG BUILDPLATFORM=...` and builds use buildx.
+
+### `UNAUTHORIZED` pushing to GHCR during `make dev`
+
+The project-managed build script rewrites the logical image reference to the local registry before
+running `docker push`. If GHCR appears in the push target, ensure the `local-registry` profile is
+active and that the custom build command is being used.
+
+If you still see GHCR errors, stale `docker login ghcr.io` credentials can break manifest
+checks — run `docker logout ghcr.io` and retry.
 
 ### Leftover registry after experiments
 

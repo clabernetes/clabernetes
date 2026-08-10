@@ -40,8 +40,16 @@ ARG DOCKER_VERSION="5:28.*"
 ARG CONTAINERLAB_VERSION="0.74.3+"
 ARG NERDCTL_VERSION="2.1.4"
 
-RUN apt-get update && \
-    apt-get install -yq --no-install-recommends \
+# BuildKit mounts the optional host CA only for network operations. It is never copied into the
+# image filesystem, so the final image retains only its normal public CA bundle.
+RUN --mount=type=secret,id=host_ca,target=/run/host_ca,required=false,mode=0444 \
+    set -euo pipefail; \
+    apt_args=(); \
+    if [[ -s /run/host_ca ]]; then \
+      apt_args+=(-o "Acquire::https::CAInfo=/run/host_ca"); \
+    fi; \
+    apt-get "${apt_args[@]}" update && \
+    apt-get "${apt_args[@]}" install -yq --no-install-recommends \
     ca-certificates \
     curl \
     wget \
@@ -55,37 +63,48 @@ RUN apt-get update && \
     inetutils-ping \
     traceroute
 
-# DevSpace can provide the host trust bundle for environments with an intercepting proxy. The
-# secret is optional, so release and other builds continue using the image's standard CA bundle.
-RUN --mount=type=secret,id=host_ca,required=false \
-    if [[ -f /run/secrets/host_ca ]]; then \
-      cp /run/secrets/host_ca /etc/ssl/certs/ca-certificates.crt; \
-    fi
-
 RUN echo "deb [trusted=yes] https://apt.fury.io/netdevops/ /" | \
     tee -a /etc/apt/sources.list.d/netdevops.list
 
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | \
+RUN --mount=type=secret,id=host_ca,target=/run/host_ca,required=false,mode=0444 \
+    set -euo pipefail; \
+    curl_args=(); \
+    if [[ -s /run/host_ca ]]; then \
+      curl_args+=(--cacert /run/host_ca); \
+    fi; \
+    curl "${curl_args[@]}" -fsSL https://download.docker.com/linux/debian/gpg | \
     gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
 RUN echo \
     "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
     $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-RUN apt-get update && \
-    apt-get install -yq --no-install-recommends \
+RUN --mount=type=secret,id=host_ca,target=/run/host_ca,required=false,mode=0444 \
+    set -euo pipefail; \
+    apt_args=(); \
+    if [[ -s /run/host_ca ]]; then \
+      apt_args+=(-o "Acquire::https::CAInfo=/run/host_ca"); \
+    fi; \
+    apt-get "${apt_args[@]}" update && \
+    apt-get "${apt_args[@]}" install -yq --no-install-recommends \
     containerlab=${CONTAINERLAB_VERSION} \
     docker-ce=${DOCKER_VERSION} \
     docker-ce-cli=${DOCKER_VERSION} && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archive/*.deb
 
-RUN TARGET_ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" && \
+RUN --mount=type=secret,id=host_ca,target=/run/host_ca,required=false,mode=0444 \
+    set -euo pipefail; \
+    curl_args=(); \
+    if [[ -s /run/host_ca ]]; then \
+      curl_args+=(--cacert /run/host_ca); \
+    fi; \
+    TARGET_ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" && \
     case "${TARGET_ARCH}" in \
       amd64|arm64) NERDCTL_ARCH="${TARGET_ARCH}" ;; \
       *) echo "unsupported TARGETARCH for nerdctl: ${TARGET_ARCH}" >&2; exit 1 ;; \
     esac && \
-    curl -L "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION}-linux-${NERDCTL_ARCH}.tar.gz" | \
+    curl "${curl_args[@]}" -L "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION}-linux-${NERDCTL_ARCH}.tar.gz" | \
       tar -xz -C /usr/bin/ && \
     rm /usr/bin/containerd-rootless*.sh
 

@@ -13,8 +13,6 @@ RUN apt-get update -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archive/*.deb
 
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
-
 WORKDIR /clabernetes
 
 COPY go.mod go.mod

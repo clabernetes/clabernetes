@@ -20,9 +20,10 @@ RUN mkdir -p certificates/ca && \
     chgrp -R root /clabernetes/certificates && \
     chmod -R 0770 /clabernetes/certificates
 
-COPY . .
-
+COPY go.mod go.sum ./
 RUN go mod download
+
+COPY . .
 
 RUN TARGET_OS="${TARGETOS:-linux}" && \
     TARGET_ARCH="${TARGETARCH:-$(go env GOARCH)}" && \
@@ -32,7 +33,7 @@ RUN TARGET_OS="${TARGETOS:-linux}" && \
     go build \
     -ldflags "-s -w -X github.com/clabernetes/clabernetes/constants.Version=${VERSION}" \
     -trimpath \
-    -a \
+    # -a \
     -o \
     build/manager \
     cmd/clabernetes/main.go

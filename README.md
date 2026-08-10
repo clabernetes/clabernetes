@@ -120,7 +120,7 @@ troubleshooting): [`.develop/README.md`](.develop/README.md).
 
 | Command | Use when |
 | ------- | -------- |
-| `make dev` | Default. Remote clusters → DevSpace native local registry. kind/minikube → push to `REGISTRY`. |
+| `make dev` | Default. Remote clusters → project-managed local registry. kind/minikube → push to `REGISTRY`. |
 | `LOCAL_REGISTRY=0 make dev DEVSPACE_ARGS="--profile always-pull"` | Cluster can pull from GHCR or another external registry. |
 
 Default `REGISTRY` is `ghcr.io/clabernetes/clabernetes`.

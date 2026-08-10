@@ -52,7 +52,27 @@ vars:
     args:
       - -c
       - printf '%s:%s' "${LAUNCHER_IMAGE}" "${DEV_IMAGE_TAG}"
-
+  LOCAL_MANAGER_IMAGE:
+    source: command
+    command: bash
+    args:
+      - local-registry-image-ref.sh
+      - ${MANAGER_IMAGE}
+      - ${DEV_IMAGE_TAG}
+  LOCAL_MANAGER_DEV_IMAGE:
+    source: command
+    command: bash
+    args:
+      - local-registry-image-ref.sh
+      - ${MANAGER_DEV_IMAGE}
+      - ${DEV_IMAGE_TAG}
+  LOCAL_LAUNCHER_IMAGE:
+    source: command
+    command: bash
+    args:
+      - local-registry-image-ref.sh
+      - ${LAUNCHER_IMAGE}
+      - ${DEV_IMAGE_TAG}
   # always build w/ 0.0.0 -- overridden for actual releases by release profile. for "normal" builds
   # (not releases) we'll do VERSION-HASH, for releases we'll just override to have version tag.
   VERSION: 0.0.0
@@ -201,16 +221,54 @@ profiles:
         path: dev.clabernetes.terminal.command
         value: .develop/start.sh --run
 
-  # In-cluster registry: DevSpace deploys registry:2.8.1, rewrites image URLs to
-  # localhost:<nodePort>/..., port-forwards, and builds on the host (localbuild: true).
+  # In-cluster registry: make dev creates the registry before DevSpace starts. Builds use docker
+  # buildx via build-for-local-registry.sh, while the command-backed image refs below point Helm
+  # and the dev pod at the registry managed by this project.
   - name: local-registry
     patches:
       - op: replace
-        path: localRegistry.enabled
+        path: dev.clabernetes.devImage
+        value: ${LOCAL_MANAGER_DEV_IMAGE}
+      - op: replace
+        path: deployments.clabernetes.helm.values.manager.image
+        value: ${LOCAL_MANAGER_IMAGE}
+      - op: replace
+        path: deployments.clabernetes.helm.values.globalConfig.deployment.launcherImage
+        value: ${LOCAL_LAUNCHER_IMAGE}
+      - op: replace
+        path: deployments.clabernetes.helm.values.clicker.image
+        value: ${LOCAL_MANAGER_IMAGE}
+      - op: remove
+        path: images.clabernetes-dev.buildKit
+      - op: add
+        path: images.clabernetes-dev.skipPush
         value: true
       - op: add
-        path: localRegistry.localbuild
+        path: images.clabernetes-dev.custom
+        value:
+          command: LOCAL_REGISTRY_BUILD=1 bash build-for-local-registry.sh ${runtime.images.clabernetes-dev.image} ${runtime.images.clabernetes-dev.tag} .develop/dev.Dockerfile .
+      - op: remove
+        path: images.clabernetes.buildKit
+      - op: remove
+        path: images.clabernetes.buildArgs
+      - op: add
+        path: images.clabernetes.skipPush
         value: true
+      - op: add
+        path: images.clabernetes.custom
+        value:
+          command: LOCAL_REGISTRY_BUILD=1 bash build-for-local-registry.sh ${runtime.images.clabernetes.image} ${runtime.images.clabernetes.tag} build/manager.Dockerfile .
+      - op: remove
+        path: images.clabernetes-launcher.buildKit
+      - op: remove
+        path: images.clabernetes-launcher.buildArgs
+      - op: add
+        path: images.clabernetes-launcher.skipPush
+        value: true
+      - op: add
+        path: images.clabernetes-launcher.custom
+        value:
+          command: LOCAL_REGISTRY_BUILD=1 bash build-for-local-registry.sh ${runtime.images.clabernetes-launcher.image} ${runtime.images.clabernetes-launcher.tag} build/launcher.Dockerfile .
 
   # for development using devspace on "non-local" clusters (meaning *not* kind/docker-desktop/
   # minikube/maybe others) you will want to have Always for image pull so launcher and clicker pick

@@ -61,6 +61,7 @@ install-dev-tools: install-devspace ## Download pinned devspace into DEV_TOOLS_D
 .PHONY: dev
 dev: DEVSPACE_DEV_PROFILES := --profile auto-run-manager$(if $(filter 1 true,$(LOCAL_REGISTRY)), --profile local-registry,)
 dev: install-dev-tools ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1)
+	$(if $(filter 1 true,$(LOCAL_REGISTRY)),bash .develop/ensure-local-registry.sh "$(NS)",:)
 	NS="$(NS)" "$(DEVSPACE)" --namespace "$(NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
 
 .PHONY: purge-dev
