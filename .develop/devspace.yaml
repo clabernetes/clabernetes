@@ -270,6 +270,26 @@ profiles:
         value:
           command: LOCAL_REGISTRY_BUILD=1 bash build-for-local-registry.sh ${runtime.images.clabernetes-launcher.image} ${runtime.images.clabernetes-launcher.tag} build/launcher.Dockerfile .
 
+  # LOCAL_REGISTRY=0: buildx pushes to REGISTRY (e.g. GHCR). Force rebuild/push every run because
+  # ignoreContextChanges would skip builds when images exist locally but not in the remote registry.
+  - name: external-registry
+    patches:
+      - op: replace
+        path: pipelines.dev.run
+        value: |-
+          build_images --force-rebuild clabernetes-dev clabernetes clabernetes-launcher
+          create_deployments --all
+          start_dev --all
+      - op: replace
+        path: deployments.clabernetes.helm.values.manager.imagePullPolicy
+        value: Always
+      - op: replace
+        path: deployments.clabernetes.helm.values.globalConfig.deployment.launcherImagePullPolicy
+        value: Always
+      - op: replace
+        path: deployments.clabernetes.helm.values.clicker.imagePullPolicy
+        value: Always
+
   # for development using devspace on "non-local" clusters (meaning *not* kind/docker-desktop/
   # minikube/maybe others) you will want to have Always for image pull so launcher and clicker pick
   # up the new image -- you may even want always pull on manager so the manager dev image is pulled;

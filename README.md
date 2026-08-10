@@ -121,15 +121,19 @@ troubleshooting): [`.develop/README.md`](.develop/README.md).
 | Command | Use when |
 | ------- | -------- |
 | `make dev` | Default. Remote clusters → project-managed local registry. kind/minikube → push to `REGISTRY`. |
-| `LOCAL_REGISTRY=0 make dev DEVSPACE_ARGS="--profile always-pull"` | Cluster can pull from GHCR or another external registry. |
+| `LOCAL_REGISTRY=0 make dev` | Push dev images to `DEV_REGISTRY` (default GHCR); cluster pulls from there. Requires `docker login`. |
 
-Default `REGISTRY` is `ghcr.io/clabernetes/clabernetes`.
+Default `DEV_REGISTRY` is `ghcr.io/clabernetes/clabernetes`.
 
 ### Common options
 
 ```bash
 # different namespace
 NS=my-clabernetes make dev
+
+```bash
+# push dev images to GHCR (requires docker login ghcr.io)
+LOCAL_REGISTRY=0 make dev
 
 # mixed-platform cluster
 TARGET_PLATFORM=linux/amd64 make dev
@@ -149,5 +153,5 @@ kubectl -n clabernetes rollout status deployment/clabernetes-manager
 ```
 
 ```bash
-make purge-dev   # removes deployment + clabernetes CRDs
+make purge-dev   # removes deployment, clabernetes CRDs, and the dev namespace
 ```

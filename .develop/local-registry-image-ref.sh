@@ -18,11 +18,13 @@ registry_name="${LOCAL_REGISTRY_NAME:-registry}"
 registry_port=$(
     kubectl get svc "${registry_name}" \
         -n "${namespace}" \
-        -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null
+        -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || true
 )
 if [[ -z "${registry_port}" ]]; then
-    echo "failed to discover NodePort for local registry service ${registry_name} in namespace ${namespace}" >&2
-    exit 1
+    # Registry not deployed (purge, partial teardown, or non-local-registry dev). Return the
+    # logical image ref so DevSpace can still evaluate config; purge does not use this value.
+    printf '%s:%s\n' "${image}" "${tag}"
+    exit 0
 fi
 
 if [[ "${image}" =~ ^[^/]+/(.+)$ ]]; then

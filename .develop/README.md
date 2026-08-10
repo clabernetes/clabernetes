@@ -13,7 +13,7 @@ On remote clusters (not kind/minikube/docker-desktop), `make dev` enables DevSpa
 `localRegistry` profile automatically.
 
 ```bash
-make purge-dev   # tear down when done
+make purge-dev   # tear down when done (including the dev namespace)
 ```
 
 Full options: see [Development](../README.md#development) in the root README.
@@ -37,13 +37,47 @@ Each run uses `--force-deploy` and overwrites the global `Config` CR from develo
 
 ```bash
 # external registry (cluster must be able to pull)
-LOCAL_REGISTRY=0 make dev DEVSPACE_ARGS="--profile always-pull"
+LOCAL_REGISTRY=0 make dev
 
 # force in-cluster registry on kind
 LOCAL_REGISTRY=1 make dev
 ```
 
-Default `REGISTRY`: `ghcr.io/clabernetes/clabernetes`.
+Default `DEV_REGISTRY`: `ghcr.io/clabernetes/clabernetes` (override with `DEV_REGISTRY=... make dev`).
+
+### External registry (`LOCAL_REGISTRY=0`)
+
+Use this when you want DevSpace to `docker buildx build --push` all dev images to GHCR (or another
+registry) and have the cluster pull them directly.
+
+Prerequisites:
+
+1. **Docker login on the build host** — `make dev` runs `ensure-registry-auth.sh` and fails fast
+   if the registry host from `REGISTRY` is missing from `~/.docker/config.json`.
+2. **Push permission** to the target namespace (for example `write:packages` on a GitHub PAT when
+   using GHCR).
+3. **Cluster pull access** — GHCR packages must be public, or the cluster needs an `imagePullSecret`
+   that can read from `REGISTRY`.
+
+```bash
+echo "$GITHUB_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
+LOCAL_REGISTRY=0 make dev
+```
+
+DevSpace builds and pushes three images (tags `dev-latest` and the current git commit hash):
+
+- `ghcr.io/clabernetes/clabernetes/clabernetes-manager-dev`
+- `ghcr.io/clabernetes/clabernetes/clabernetes-manager`
+- `ghcr.io/clabernetes/clabernetes/clabernetes-launcher`
+
+The `always-pull` profile is enabled automatically via `external-registry` for this path so nodes pick up freshly pushed
+tags. Override the registry with `DEV_REGISTRY=ghcr.io/my-org/clabernetes make dev` if needed.
+
+Verify a push before debugging `ImagePullBackOff`:
+
+```bash
+docker buildx imagetools inspect ghcr.io/clabernetes/clabernetes/clabernetes-manager-dev:dev-latest
+```
 
 ## In-cluster registry (default on remote clusters)
 
@@ -108,9 +142,10 @@ pod use explicit `:dev-latest` refs via `MANAGER_*_TAGGED` variables in `devspac
 
 | Profile | Purpose |
 | --------- | --------- |
+| `external-registry` | Force build/push to `REGISTRY` + `imagePullPolicy: Always` (`LOCAL_REGISTRY=0`) |
 | `local-registry` | In-cluster registry + buildx custom builds (default on remote via Makefile) |
 | `auto-run-manager` | Run manager automatically instead of interactive shell |
-| `always-pull` | `imagePullPolicy: Always` — use with `LOCAL_REGISTRY=0` on remote clusters |
+| `always-pull` | `imagePullPolicy: Always` only (included in `external-registry`) |
 | `debug` | Debug log levels |
 | `single-manager` | `replicaCount: 1` |
 
@@ -119,6 +154,7 @@ pod use explicit `:dev-latest` refs via `MANAGER_*_TAGGED` variables in `devspac
 | Script | Role |
 | -------- | ------ |
 | [`build-for-local-registry.sh`](build-for-local-registry.sh) | `docker buildx` build + push to in-cluster registry |
+| [`ensure-registry-auth.sh`](ensure-registry-auth.sh) | Fail fast when `LOCAL_REGISTRY=0` but Docker is not logged into `REGISTRY` (uses `uv` from try-c9s tools) |
 | [`ensure-local-registry.sh`](ensure-local-registry.sh) | Create the registry Deployment and NodePort Service before custom builds |
 | [`ensure-registry-port-forward.sh`](ensure-registry-port-forward.sh) | `kubectl port-forward` for host `docker push` |
 | [`local-registry-image-ref.sh`](local-registry-image-ref.sh) | Generate explicit `localhost:<nodePort>/...` refs for Helm/dev pod |
@@ -130,8 +166,38 @@ pod use explicit `:dev-latest` refs via `MANAGER_*_TAGGED` variables in `devspac
 ### `ImagePullBackOff` on `*-manager-dev`
 
 - Stale deployment: `make purge-dev`, then `make dev`
-- Private GHCR: use default local registry (`LOCAL_REGISTRY` unset on remote)
-- Wrong tag: pod should show `:dev-latest`, not bare `ghcr.io/...` (resolves to `:latest`)
+- Image never pushed: confirm the build finished without push errors; inspect with
+  `docker buildx imagetools inspect ghcr.io/clabernetes/clabernetes/clabernetes-manager-dev:dev-latest`
+- Private GHCR package: make `clabernetes-manager-dev` public in GitHub package settings, or use
+  the in-cluster registry (`make dev`)
+- Wrong tag: DevSpace tags images with `dev-latest` and the git commit hash; both must exist in the registry
+
+### Pushed to the wrong GHCR package path
+
+`make dev` passes `DEV_REGISTRY` to DevSpace as `REGISTRY`. The value must be the full GHCR
+repository prefix, for example `ghcr.io/clabernetes/clabernetes` — not just `ghcr.io/clabernetes`.
+A short prefix produces images like `ghcr.io/clabernetes/clabernetes-manager-dev` instead of
+`ghcr.io/clabernetes/clabernetes/clabernetes-manager-dev`, and the cluster will not find them where
+you expect in the org packages UI.
+
+### `Skip building image` with `LOCAL_REGISTRY=0`
+
+DevSpace skips builds when `rebuildStrategy: ignoreContextChanges` and images already exist
+locally — even if they were never pushed to `REGISTRY`. The `external-registry` profile (enabled
+automatically for `LOCAL_REGISTRY=0`) forces `build_images --force-rebuild` on every `make dev`.
+
+`LOCAL_REGISTRY=0` uses your Docker credentials from `~/.docker/config.json`. Log in before
+`make dev`:
+
+```bash
+echo "$GITHUB_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
+```
+
+### `UNAUTHORIZED` pushing to GHCR during `make dev` (local-registry path)
+
+The project-managed build script rewrites the logical image reference to the local registry before
+running `docker push`. If GHCR appears in the push target, ensure the `local-registry` profile is
+active and that the custom build command is being used.
 
 ### `failed to parse platform ""` / `--mount requires BuildKit`
 
@@ -140,15 +206,6 @@ The in-cluster registry path must use `build-for-local-registry.sh` (custom buil
 
 Empty `BUILDPLATFORM` usually means a build without `--platform` / `BUILDPLATFORM` build-arg.
 Ensure Dockerfiles declare `ARG BUILDPLATFORM=...` and builds use buildx.
-
-### `UNAUTHORIZED` pushing to GHCR during `make dev`
-
-The project-managed build script rewrites the logical image reference to the local registry before
-running `docker push`. If GHCR appears in the push target, ensure the `local-registry` profile is
-active and that the custom build command is being used.
-
-If you still see GHCR errors, stale `docker login ghcr.io` credentials can break manifest
-checks — run `docker logout ghcr.io` and retry.
 
 ### Leftover registry after experiments
 
