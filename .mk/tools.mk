@@ -60,6 +60,26 @@ define download-bin-from-archive
 	}
 endef
 
+# $1 - destination path
+# $2 - source zip URL
+# $3 - path of the binary inside the zip
+define download-bin-from-zip
+	{ \
+		if [ ! -f "$(1)" ]; then \
+			echo "--> downloading $(1)"; \
+			archive=$$(mktemp "$(1).archive.XXXXXX"); \
+			binary=$$(mktemp "$(1).binary.XXXXXX"); \
+			trap 'rm -f "$$archive" "$$binary"' EXIT; \
+			$(CURL) --output "$$archive" "$(2)"; \
+			unzip -p "$$archive" "$(3)" > "$$binary"; \
+			chmod +x "$$binary"; \
+			mv "$$binary" "$(1)"; \
+			rm -f "$$archive"; \
+			trap - EXIT; \
+		fi; \
+	}
+endef
+
 ## CI tool installation
 ## ----------------------------------------------------------------------------|
 ## These install the pinned versions from $(C9S_VARS_ENV) onto PATH so the CI
@@ -71,6 +91,19 @@ install-helm: ## Download pinned helm (version from .github/vars.env) into TOOLS
 	@mkdir -p "$(TOOLS_BIN_DIR)"
 	@set -a; . $(C9S_VARS_ENV); set +a; \
 	$(call download-bin-from-archive,$(TOOLS_BIN_DIR)/helm,https://get.helm.sh/helm-$$HELM_VERSION-$(OS)-$(ARCH).tar.gz,$(OS)-$(ARCH)/helm,z)
+
+.PHONY: install-gh
+install-gh: ## Download pinned GitHub CLI (version from .github/vars.env) into TOOLS_BIN_DIR
+	@mkdir -p "$(TOOLS_BIN_DIR)"
+ifeq ($(OS),darwin)
+	@set -a; . $(C9S_VARS_ENV); set +a; \
+	GH_ASSET_VERSION=$${GH_VERSION#v}; \
+	$(call download-bin-from-zip,$(TOOLS_BIN_DIR)/gh,https://github.com/cli/cli/releases/download/$$GH_VERSION/gh_$${GH_ASSET_VERSION}_macOS_$(ARCH).zip,gh_$${GH_ASSET_VERSION}_macOS_$(ARCH)/bin/gh)
+else
+	@set -a; . $(C9S_VARS_ENV); set +a; \
+	GH_ASSET_VERSION=$${GH_VERSION#v}; \
+	$(call download-bin-from-archive,$(TOOLS_BIN_DIR)/gh,https://github.com/cli/cli/releases/download/$$GH_VERSION/gh_$${GH_ASSET_VERSION}_$(OS)_$(ARCH).tar.gz,gh_$${GH_ASSET_VERSION}_$(OS)_$(ARCH)/bin/gh,z)
+endif
 
 .PHONY: install-yq
 install-yq: ## Download pinned yq (version from .github/vars.env) into TOOLS_BIN_DIR
@@ -92,7 +125,7 @@ install-golangci-lint: ## Download pinned golangci-lint (version from .github/va
 		sh -s -- -b $(TOOLS_BIN_DIR) $$GOLANGCI_LINT_VERSION
 
 .PHONY: install-ci-tools
-install-ci-tools: install-helm install-yq install-devspace install-golangci-lint ## Download all pinned CI tools (helm, yq, devspace, golangci-lint) into TOOLS_BIN_DIR
+install-ci-tools: install-gh install-helm install-yq install-devspace install-golangci-lint ## Download all pinned CI tools (gh, helm, yq, devspace, golangci-lint) into TOOLS_BIN_DIR
 
 ## Go-based lint/test tools
 ## ----------------------------------------------------------------------------|
