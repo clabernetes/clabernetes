@@ -12,7 +12,7 @@ fi
 
 image=$1
 tag=${2:-dev-latest}
-namespace="${DEVSPACE_NAMESPACE:-${NS:-clabernetes}}"
+namespace="${DEVSPACE_NAMESPACE:-${NS:-c9s-dev}}"
 registry_name="${LOCAL_REGISTRY_NAME:-registry}"
 
 registry_port=$(

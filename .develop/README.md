@@ -22,7 +22,7 @@ Full options: see [Development](../README.md#development) in the root README.
 
 1. Detect the cluster platform (`linux/amd64` or `linux/arm64`) via [`target-platform.sh`](target-platform.sh)
 2. Build `clabernetes-manager`, `clabernetes-manager-dev`, and `clabernetes-launcher` for that platform
-3. Deploy the Helm chart into namespace `clabernetes` (or `NS=...`)
+3. Deploy the Helm chart into namespace `c9s-dev` (or `DEV_NS=...`)
 4. Sync source into the manager dev pod and run via `.develop/start.sh`
 
 Each run uses `--force-deploy` and overwrites the global `Config` CR from development values.
@@ -210,7 +210,7 @@ Ensure Dockerfiles declare `ARG BUILDPLATFORM=...` and builds use buildx.
 ### Leftover registry after experiments
 
 ```bash
-kubectl -n clabernetes delete deploy,svc registry --ignore-not-found
+kubectl -n c9s-dev delete deploy,svc registry --ignore-not-found
 # or
 make purge-dev
 ```

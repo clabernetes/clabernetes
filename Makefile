@@ -46,7 +46,10 @@ else
 LOCAL_REGISTRY := 0
 endif
 endif
-NS ?= clabernetes
+# NS is the namespace a "real" c9s install lives in; DEV_NS is the one the devspace based
+# dev workflow (make dev/purge-dev) creates and tears down.
+NS ?= c9s
+DEV_NS ?= c9s-dev
 # Image registry prefix passed to DevSpace as REGISTRY (not the generic REGISTRY env var).
 DEV_REGISTRY ?= ghcr.io/clabernetes/clabernetes
 DOCS_SITE_DIR ?= docs-site
@@ -60,24 +63,24 @@ help:
 install-dev-tools: TOOLS_BIN_DIR := $(abspath $(DEV_TOOLS_DIR))
 install-dev-tools: install-devspace $(UV) ## Download pinned devspace and ensure uv is available
 
-.PHONY: $(NS)
-$(NS): $(KUBECTL)
-	@$(KUBECTL) create namespace "$(NS)" --dry-run=client -o yaml | $(KUBECTL) apply -f -
+.PHONY: $(DEV_NS)
+$(DEV_NS): $(KUBECTL)
+	@$(KUBECTL) create namespace "$(DEV_NS)" --dry-run=client -o yaml | $(KUBECTL) apply -f -
 
 .PHONY: dev
 dev: DEVSPACE_DEV_PROFILES := --profile auto-run-manager$(if $(filter 1 true,$(LOCAL_REGISTRY)), --profile local-registry, --profile external-registry)
-dev: install-dev-tools $(NS) ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1)
-	$(if $(filter 1 true,$(LOCAL_REGISTRY)),KUBECTL="$(abspath $(KUBECTL))" bash .develop/ensure-local-registry.sh "$(NS)",REGISTRY="$(DEV_REGISTRY)" UV="$(UV)" bash .develop/ensure-registry-auth.sh)
-	REGISTRY="$(DEV_REGISTRY)" NS="$(NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
+dev: install-dev-tools $(DEV_NS) ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1)
+	$(if $(filter 1 true,$(LOCAL_REGISTRY)),KUBECTL="$(abspath $(KUBECTL))" bash .develop/ensure-local-registry.sh "$(DEV_NS)",REGISTRY="$(DEV_REGISTRY)" UV="$(UV)" bash .develop/ensure-registry-auth.sh)
+	REGISTRY="$(DEV_REGISTRY)" NS="$(DEV_NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(DEV_NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
 
 .PHONY: purge-dev
 purge-dev: install-dev-tools $(KUBECTL) ## Tear down the DevSpace development deployment and delete the namespace
-	@if $(KUBECTL) get namespace "$(NS)" >/dev/null 2>&1; then \
-		NS="$(NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(NS)" --no-warn run purge $(DEVSPACE_ARGS); \
+	@if $(KUBECTL) get namespace "$(DEV_NS)" >/dev/null 2>&1; then \
+		NS="$(DEV_NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(DEV_NS)" --no-warn run purge $(DEVSPACE_ARGS); \
 	fi
 	@crds=$$($(KUBECTL) get crds -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep clabernetes || true); \
 	if [ -n "$$crds" ]; then $(KUBECTL) delete crd $$crds --ignore-not-found=true; fi
-	$(KUBECTL) delete namespace "$(NS)" --ignore-not-found=true
+	$(KUBECTL) delete namespace "$(DEV_NS)" --ignore-not-found=true
 
 .PHONY: docs-install serve-docs check-docs build-docs preview-docs
 docs-install: ## Install locked documentation dependencies
@@ -114,7 +117,7 @@ test-race: ## Run unit tests with race flag
 test-e2e: ## Run e2e tests
 	gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
 
-C9S_NAMESPACE ?= clabernetes
+C9S_NAMESPACE ?= $(NS)
 C9S_HELM_RELEASE ?= clabernetes
 C9S_KUBECTL ?= kubectl
 C9S_HELM ?= helm

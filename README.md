@@ -107,7 +107,7 @@ kubectl config use-context <your-cluster>
 make dev
 ```
 
-DevSpace builds images, deploys the Helm chart into the `clabernetes` namespace, syncs source into
+DevSpace builds images, deploys the Helm chart into the `c9s-dev` namespace, syncs source into
 the manager pod, and starts the manager with debug logging. Each run forces a chart redeploy and
 overwrites the global `Config` CR from development values.
 
@@ -128,10 +128,9 @@ Default `DEV_REGISTRY` is `ghcr.io/clabernetes/clabernetes`.
 ### Common options
 
 ```bash
-# different namespace
-NS=my-clabernetes make dev
+# different namespace (defaults to c9s-dev)
+DEV_NS=my-c9s-dev make dev
 
-```bash
 # push dev images to GHCR (requires docker login ghcr.io)
 LOCAL_REGISTRY=0 make dev
 
@@ -148,8 +147,8 @@ Platform detection: [`.develop/target-platform.sh`](.develop/target-platform.sh)
 ### Verify and clean up
 
 ```bash
-kubectl -n clabernetes get pods
-kubectl -n clabernetes rollout status deployment/clabernetes-manager
+kubectl -n c9s-dev get pods
+kubectl -n c9s-dev rollout status deployment/clabernetes-manager
 ```
 
 ```bash

@@ -5,7 +5,7 @@ TRY_C9S_TOPOLOGY ?= examples/basic/srl-multitool.yaml
 TRY_C9S_TOPOLOGY_NAME ?= srl-multitool
 TRY_C9S_TIMEOUT ?= 600s
 
-TRY_C9S_NAMESPACE := clabernetes
+TRY_C9S_NAMESPACE := c9s
 TRY_C9S_BUILD_DIR := build/try-c9s
 TRY_C9S_STATE_DIR := $(TRY_C9S_BUILD_DIR)/$(TRY_C9S_CLUSTER_NAME)
 TRY_C9S_TOOLS_DIR := $(TRY_C9S_BUILD_DIR)/bin

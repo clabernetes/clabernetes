@@ -33,7 +33,7 @@ repo_root=$(cd "${script_dir}/.." && pwd)
 cd "${repo_root}"
 
 if [[ "${LOCAL_REGISTRY_BUILD:-}" == "1" ]]; then
-    namespace="${DEVSPACE_NAMESPACE:-${NS:-clabernetes}}"
+    namespace="${DEVSPACE_NAMESPACE:-${NS:-c9s-dev}}"
     registry_name="${LOCAL_REGISTRY_NAME:-registry}"
 
     registry_port=$(
