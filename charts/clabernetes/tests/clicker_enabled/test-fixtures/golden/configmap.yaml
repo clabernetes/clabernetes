@@ -10,9 +10,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes-plus-clicker
-    clabernetes/name: "clabernetes-plus-clicker-config"
-    clabernetes/component: config
+    c9s.run/app: clabernetes-plus-clicker
+    c9s.run/name: "clabernetes-plus-clicker-config"
+    c9s.run/component: config
     anotherlabel: anotherlabelvalue
     somelabel: somelabelvalue
   annotations:

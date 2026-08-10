@@ -2,11 +2,11 @@ apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
   labels:
-    clabernetes/app: clabernetes
-    clabernetes/name: srl1
-    clabernetes/topologyKind: containerlab
-    clabernetes/topologyNode: srl1
-    clabernetes/topologyOwner: topology-basic
+    c9s.run/app: clabernetes
+    c9s.run/name: srl1
+    c9s.run/topologyKind: containerlab
+    c9s.run/topologyNode: srl1
+    c9s.run/topologyOwner: topology-basic
   name: srl1
   namespace: NAMESPACE
   ownerReferences:

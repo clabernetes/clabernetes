@@ -4,7 +4,7 @@ kind: Link
 metadata:
   name: srl1-e1-1-multitool-eth1
   labels:
-    clabernetes/example: srl-multitool
+    c9s.run/example: srl-multitool
 spec:
   endpointA:
     nodeName: srl1

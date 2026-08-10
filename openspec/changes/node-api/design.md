@@ -170,10 +170,22 @@ The trade-off is legibility: the alternation is opaque next to the CEL it replac
 Three classes of label are dropped at compile time, each warned by name:
 
 - **Invalid as a Kubernetes label.** Docker label keys and values are far more permissive. An unusable one would otherwise produce an emitted Node the apiserver refuses to create, which is a stuck topology — so this is a trust boundary, validated with `k8svalidation.IsQualifiedName`/`IsValidLabelValue`.
-- **In the `clabernetes/` namespace.** Those labels mean things to the controllers (`clabernetes/ignoreReconcile`, `clabernetes/disableDeployments`), and a lab definition should not be able to set them on its own Nodes.
-- **Controller-owned non-`clabernetes/` keys.** `app.kubernetes.io/name` is part of the launcher selector and `clabernetes` also owns the standard `name`, `app`, topology-owner, topology-kind, and topology-node keys. These exact keys are reserved too; otherwise a valid user label could overwrite a Node metadata invariant while being replaced on the Deployment.
+- **In the `c9s.run/` namespace.** Those labels mean things to the controllers (`c9s.run/ignoreReconcile`, `c9s.run/disableDeployments`), and a lab definition should not be able to set them on its own Nodes.
+- **Controller-owned non-`c9s.run/` keys.** `app.kubernetes.io/name` is part of the launcher selector and `c9s.run` also owns the standard `name`, `app`, topology-owner, topology-kind, and topology-node keys. These exact keys are reserved too; otherwise a valid user label could overwrite a Node metadata invariant while being replaced on the Deployment.
 
-The Deployment propagation deliberately skips the same `clabernetes/` namespace rather than copying every Node label. It keeps the controller-owned labels controller-owned, and it means a lab *without* custom labels renders a byte-identical deployment — no gratuitous pod roll on upgrade. The pod selector is built from a separate map, so none of this can touch that immutable field.
+The Deployment propagation deliberately skips the same `c9s.run/` namespace rather than copying every Node label. It keeps the controller-owned labels controller-owned, and it means a lab *without* custom labels renders a byte-identical deployment — no gratuitous pod roll on upgrade. The pod selector is built from a separate map, so none of this can touch that immutable field.
+
+### 11. Use `c9s.run/` for c9s-owned labels
+
+**Decision:** Rename c9s-owned label keys from `clabernetes/...` to `c9s.run/...`, including the
+direct-resource test marker as `c9s.run/mode: direct`. Keep the existing `clabernetes/...`
+prefix on annotations; this change is label cleanup, not an annotation migration.
+
+**Rationale:** `c9s.run` is the current API identity and gives c9s-owned metadata a clear,
+qualified namespace. The old unqualified-looking `clabernetes/...` keys are ambiguous next to
+the API group's current `c9s.run` identity. Existing resources need the new labels on upgrade
+because the manager's cache and selectors use the renamed keys; the normal uninstall/reinstall
+upgrade path already replaces generated resources.
 
 ## Risks / Trade-offs
 

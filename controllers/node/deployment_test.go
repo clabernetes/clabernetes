@@ -85,7 +85,7 @@ func TestRenderDeployment(t *testing.T) {
 	}
 
 	// a lab author's own labels reach the deployment *and* its pods, which is the point of
-	// carrying containerlab node labels over; clabernetes' own namespace does not tag along, so
+	// carrying containerlab node labels over; c9s' own namespace does not tag along, so
 	// labs without such labels do not get a gratuitous pod roll on upgrade
 	if deployment.Labels["owner"] != "roman" ||
 		deployment.Spec.Template.ObjectMeta.Labels["owner"] != "roman" {
@@ -98,7 +98,7 @@ func TestRenderDeployment(t *testing.T) {
 
 	if _, ok := deployment.Labels[clabernetesconstants.LabelTopologyKind]; ok {
 		t.Fatalf(
-			"expected clabernetes owned labels not to be propagated, got %v",
+			"expected c9s-owned labels not to be propagated, got %v",
 			deployment.Labels,
 		)
 	}

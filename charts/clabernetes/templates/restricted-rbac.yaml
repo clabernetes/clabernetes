@@ -8,9 +8,9 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     revision: "{{ .Release.Revision }}"
-    clabernetes/app: {{ .Values.appName }}
-    clabernetes/name: "{{ .Values.appName }}-restricted-role"
-    clabernetes/component: role
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/name: "{{ .Values.appName }}-restricted-role"
+    c9s.run/component: role
     {{- if .Values.globalLabels }}
 {{ .Values.globalLabels | toYaml | indent 4 }}
     {{- end }}
@@ -74,9 +74,9 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     revision: "{{ .Release.Revision }}"
-    clabernetes/app: {{ .Values.appName }}
-    clabernetes/name: "{{ .Values.appName }}-restricted-role-binding"
-    clabernetes/component: role-binding
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/name: "{{ .Values.appName }}-restricted-role-binding"
+    c9s.run/component: role-binding
     {{- if .Values.globalLabels }}
 {{ .Values.globalLabels | toYaml | indent 4 }}
     {{- end }}
@@ -102,9 +102,9 @@ metadata:
     release: {{ $.Release.Name }}
     heritage: {{ $.Release.Service }}
     revision: "{{ $.Release.Revision }}"
-    clabernetes/app: {{ $.Values.appName }}
-    clabernetes/name: "{{ $.Values.appName }}-launcher-namespace"
-    clabernetes/component: namespace
+    c9s.run/app: {{ $.Values.appName }}
+    c9s.run/name: "{{ $.Values.appName }}-launcher-namespace"
+    c9s.run/component: namespace
     pod-security.kubernetes.io/enforce: privileged
     {{- if $.Values.globalLabels }}
 {{ $.Values.globalLabels | toYaml | indent 4 }}
@@ -123,9 +123,9 @@ metadata:
     release: {{ $.Release.Name }}
     heritage: {{ $.Release.Service }}
     revision: "{{ $.Release.Revision }}"
-    clabernetes/app: {{ $.Values.appName }}
-    clabernetes/name: "{{ $.Values.appName }}-restricted-role"
-    clabernetes/component: role
+    c9s.run/app: {{ $.Values.appName }}
+    c9s.run/name: "{{ $.Values.appName }}-restricted-role"
+    c9s.run/component: role
     {{- if $.Values.globalLabels }}
 {{ $.Values.globalLabels | toYaml | indent 4 }}
     {{- end }}
@@ -189,9 +189,9 @@ metadata:
     release: {{ $.Release.Name }}
     heritage: {{ $.Release.Service }}
     revision: "{{ $.Release.Revision }}"
-    clabernetes/app: {{ $.Values.appName }}
-    clabernetes/name: "{{ $.Values.appName }}-restricted-role-binding"
-    clabernetes/component: role-binding
+    c9s.run/app: {{ $.Values.appName }}
+    c9s.run/name: "{{ $.Values.appName }}-restricted-role-binding"
+    c9s.run/component: role-binding
     {{- if $.Values.globalLabels }}
 {{ $.Values.globalLabels | toYaml | indent 4 }}
     {{- end }}

@@ -10,9 +10,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes-plus-clicker
-    clabernetes/name: "clabernetes-plus-clicker-manager"
-    clabernetes/component: manager-http
+    c9s.run/app: clabernetes-plus-clicker
+    c9s.run/name: "clabernetes-plus-clicker-manager"
+    c9s.run/component: manager-http
 spec:
   type: ClusterIP
   sessionAffinity: None
@@ -22,6 +22,6 @@ spec:
       protocol: TCP
       targetPort: 10443
   selector:
-    clabernetes/app: clabernetes-plus-clicker
-    clabernetes/name: "clabernetes-plus-clicker-manager"
-    clabernetes/component: manager
+    c9s.run/app: clabernetes-plus-clicker
+    c9s.run/name: "clabernetes-plus-clicker-manager"
+    c9s.run/component: manager

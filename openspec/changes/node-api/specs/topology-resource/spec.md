@@ -33,9 +33,9 @@ A definition that is malformed, or that declares a recognized field with an unus
 
 ### Requirement: Containerlab node labels become Kubernetes labels
 
-The compiler SHALL carry Containerlab node labels onto the emitted Node's object metadata, inheriting them from topology defaults and kinds the same way node environment variables are inherited. The Node controller SHALL propagate a Node's labels to the launcher Deployment and its Pods, excluding labels in the reserved `clabernetes/` namespace and controller-owned label keys, without altering the Deployment's Pod selector.
+The compiler SHALL carry Containerlab node labels onto the emitted Node's object metadata, inheriting them from topology defaults and kinds the same way node environment variables are inherited. The Node controller SHALL propagate a Node's labels to the launcher Deployment and its Pods, excluding labels in the reserved `c9s.run/` namespace and controller-owned label keys, without altering the Deployment's Pod selector.
 
-A label that Kubernetes would reject, or that is in the reserved `clabernetes/` namespace or uses a controller-owned label key, MUST be omitted with a warning naming it, so that a definition can neither produce an unacceptable Node nor set labels the controllers act on.
+A label that Kubernetes would reject, or that is in the reserved `c9s.run/` namespace or uses a controller-owned label key, MUST be omitted with a warning naming it, so that a definition can neither produce an unacceptable Node nor set labels the controllers act on.
 
 #### Scenario: Label a lab node
 
@@ -54,7 +54,7 @@ A label that Kubernetes would reject, or that is in the reserved `clabernetes/` 
 
 #### Scenario: Omit a label in the reserved namespace
 
-- **WHEN** a source topology node declares a label in the `clabernetes/` namespace
+- **WHEN** a source topology node declares a label in the `c9s.run/` namespace
 - **THEN** it is omitted with a warning, because those labels carry meaning to the controllers
 
 #### Scenario: Omit a controller-owned label key

@@ -10,9 +10,9 @@ metadata:
     heritage: {{ .Release.Service }}
     revision: "{{ .Release.Revision }}"
     app.kubernetes.io/name: "{{ .Values.appName }}-manager"
-    clabernetes/app: {{ .Values.appName }}
-    clabernetes/name: "{{ .Values.appName }}-manager"
-    clabernetes/component: manager
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/name: "{{ .Values.appName }}-manager"
+    c9s.run/component: manager
     {{- $labels := merge .Values.globalLabels .Values.manager.deploymentLabels }}
       {{- if $labels }}
 {{ toYaml $labels | indent 4 }}
@@ -25,9 +25,9 @@ metadata:
 spec:
   selector:
     matchLabels:
-      clabernetes/app: {{ .Values.appName }}
+      c9s.run/app: {{ .Values.appName }}
       release: {{ .Release.Name }}
-      clabernetes/component: manager
+      c9s.run/component: manager
   replicas: {{ .Values.manager.replicaCount }}
   strategy:
     rollingUpdate:
@@ -46,9 +46,9 @@ spec:
         heritage: {{ .Release.Service }}
         revision: "{{ .Release.Revision }}"
         app.kubernetes.io/name: "{{ .Values.appName }}-manager"
-        clabernetes/app: {{ .Values.appName }}
-        clabernetes/name: "{{ .Values.appName }}-manager"
-        clabernetes/component: manager
+        c9s.run/app: {{ .Values.appName }}
+        c9s.run/name: "{{ .Values.appName }}-manager"
+        c9s.run/component: manager
         {{- $podLabels := merge .Values.globalLabels .Values.manager.podLabels }}
           {{- if $podLabels }}
 {{ toYaml $podLabels | indent 8 }}
@@ -70,17 +70,17 @@ spec:
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    clabernetes/app: {{ .Values.appName }}
-                    clabernetes/name: "{{ .Values.appName }}-manager"
-                    clabernetes/component: manager
+                    c9s.run/app: {{ .Values.appName }}
+                    c9s.run/name: "{{ .Values.appName }}-manager"
+                    c9s.run/component: manager
                 topologyKey: kubernetes.io/hostname
             - weight: 50
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    clabernetes/app: {{ .Values.appName }}
-                    clabernetes/name: "{{ .Values.appName }}-manager"
-                    clabernetes/component: manager
+                    c9s.run/app: {{ .Values.appName }}
+                    c9s.run/name: "{{ .Values.appName }}-manager"
+                    c9s.run/component: manager
                 topologyKey: topology.kubernetes.io/zone
       {{- end }}
       terminationGracePeriodSeconds: 10

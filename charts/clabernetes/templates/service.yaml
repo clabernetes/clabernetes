@@ -9,9 +9,9 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     revision: "{{ .Release.Revision }}"
-    clabernetes/app: {{ .Values.appName }}
-    clabernetes/name: "{{ .Values.appName }}-manager"
-    clabernetes/component: manager-http
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/name: "{{ .Values.appName }}-manager"
+    c9s.run/component: manager-http
 spec:
   type: ClusterIP
   sessionAffinity: None
@@ -21,6 +21,6 @@ spec:
       protocol: TCP
       targetPort: 10443
   selector:
-    clabernetes/app: {{ .Values.appName }}
-    clabernetes/name: "{{ .Values.appName }}-manager"
-    clabernetes/component: manager
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/name: "{{ .Values.appName }}-manager"
+    c9s.run/component: manager

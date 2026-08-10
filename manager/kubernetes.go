@@ -28,13 +28,13 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 			) (ctrlruntimecache.Cache, error) {
 				opts.DefaultLabelSelector = labels.SelectorFromSet(
 					labels.Set{
-						// only cache objects with the "clabernetes/app" label, why would we care
+						// only cache objects with the "c9s.run/app" label, why would we care
 						// about anything else (for now -- and we can override it with opts.ByObject
 						// anyway?! and... who the hell calls their app "clabernetes" so this should
 						// really limit the cache nicely :)
 						// currently this matters for launcher service accounts, role bindings,
 						// services (fabric and expose), and (launcher) deployments
-						"clabernetes/app": appName,
+						"c9s.run/app": appName,
 					},
 				)
 
@@ -56,7 +56,7 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 						},
 					},
 					// nodes/links/launcher profiles are the primary api -- they are created by
-					// users (or tooling) and carry no clabernetes/app label, so they must be
+					// users (or tooling) and carry no c9s.run/app label, so they must be
 					// cached unconditionally
 					&clabernetesapisv1alpha1.Node{}: {
 						Namespaces: map[string]ctrlruntimecache.Config{

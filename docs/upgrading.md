@@ -87,8 +87,13 @@ Deployment and its pods -- so `kubectl get pods -l owner=roman` finds the lab. T
 the node container.
 
 Three kinds of label are dropped, each with a warning naming it: anything Kubernetes would reject as
-a label (docker's keys and values are far more permissive), anything in the `clabernetes/` namespace,
+a label (docker's keys and values are far more permissive), anything in the `c9s.run/` namespace,
 and controller-owned identity or selector keys such as `app.kubernetes.io/name`.
+
+c9s-owned labels now use the qualified `c9s.run/` namespace, for example
+`c9s.run/topologyOwner` and `c9s.run/topologyNode`. Existing resources must be recreated or have
+their labels refreshed during the upgrade; the old `clabernetes/...` label keys are no longer
+written or selected. Annotation keys retain their existing `clabernetes/...` names.
 
 ## API group renamed to `c9s.run`
 

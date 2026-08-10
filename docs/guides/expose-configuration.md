@@ -258,7 +258,7 @@ spec:
 
 ```bash
 # Get service IPs
-kubectl get svc -l clabernetes/topology=my-topology
+kubectl get svc -l c9s.run/topologyOwner=my-topology
 
 # SSH to node
 ssh admin@<EXTERNAL-IP>

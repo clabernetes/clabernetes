@@ -8,9 +8,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes-plus-clicker
-    clabernetes/name: "clabernetes-plus-clicker-cluster-role"
-    clabernetes/component: cluster-role
+    c9s.run/app: clabernetes-plus-clicker
+    c9s.run/name: "clabernetes-plus-clicker-cluster-role"
+    c9s.run/component: cluster-role
     anotherlabel: anotherlabelvalue
     somelabel: somelabelvalue
   annotations:
@@ -101,9 +101,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes-plus-clicker
-    clabernetes/name: "clabernetes-plus-clicker-launcher-role"
-    clabernetes/component: launcher-role
+    c9s.run/app: clabernetes-plus-clicker
+    c9s.run/name: "clabernetes-plus-clicker-launcher-role"
+    c9s.run/component: launcher-role
     anotherlabel: anotherlabelvalue
     somelabel: somelabelvalue
   annotations:

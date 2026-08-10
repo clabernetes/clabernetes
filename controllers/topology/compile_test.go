@@ -52,7 +52,7 @@ topology:
         # own label namespace and controller keys -- all four of these have to be dropped
         not a valid key: x
         bad-value: has spaces and a !
-        clabernetes/ignoreReconcile: "true"
+        c9s.run/ignoreReconcile: "true"
         app.kubernetes.io/name: user-value
     multitool:
       kind: linux
@@ -152,7 +152,7 @@ func TestCompileContainerlabFlattening(t *testing.T) {
 
 // TestCompileContainerlabLabels covers containerlab node labels, which become kubernetes labels on
 // the emitted Node rather than docker labels on the node container. They inherit like env does, and
-// anything kubernetes would reject -- or that sits in clabernetes' own label namespace -- is
+// anything kubernetes would reject -- or that sits in c9s' own label namespace -- is
 // dropped here, since the alternative is an emitted Node the apiserver refuses to create.
 func TestCompileContainerlabLabels(t *testing.T) {
 	compiled := compileFlattenTest(t)

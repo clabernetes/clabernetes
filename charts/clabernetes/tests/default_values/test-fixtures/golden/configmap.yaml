@@ -10,9 +10,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes
-    clabernetes/name: "clabernetes-config"
-    clabernetes/component: config
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-config"
+    c9s.run/component: config
 data:
   mergeMode: merge
   globalAnnotations: |-

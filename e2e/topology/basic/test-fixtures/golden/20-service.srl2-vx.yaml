@@ -2,11 +2,11 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    clabernetes/app: clabernetes
-    clabernetes/name: srl2-vx
-    clabernetes/topologyNode: srl2
-    clabernetes/topologyOwner: topology-basic
-    clabernetes/topologyServiceType: fabric
+    c9s.run/app: clabernetes
+    c9s.run/name: srl2-vx
+    c9s.run/topologyNode: srl2
+    c9s.run/topologyOwner: topology-basic
+    c9s.run/topologyServiceType: fabric
   name: srl2-vx
   namespace: NAMESPACE
   ownerReferences:
@@ -28,9 +28,9 @@ spec:
       protocol: TCP
       targetPort: 4799
   selector:
-    clabernetes/app: clabernetes
-    clabernetes/name: srl2
-    clabernetes/topologyNode: srl2
+    c9s.run/app: clabernetes
+    c9s.run/name: srl2
+    c9s.run/topologyNode: srl2
   sessionAffinity: None
   type: ClusterIP
 status:

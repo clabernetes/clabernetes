@@ -7,9 +7,9 @@ metadata:
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     revision: "{{ .Release.Revision }}"
-    clabernetes/app: {{ .Values.appName }}
-    clabernetes/name: "{{ .Values.appName }}-clicker-cluster-role"
-    clabernetes/component: cluster-role
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/name: "{{ .Values.appName }}-clicker-cluster-role"
+    c9s.run/component: cluster-role
     {{- if .Values.globalLabels }}
 {{ .Values.globalLabels | toYaml | indent 4 }}
     {{- end }}

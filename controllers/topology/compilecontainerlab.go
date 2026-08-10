@@ -108,7 +108,7 @@ func dropUnusableNodeLabels(
 
 		switch {
 		case isReservedNodeLabel(key):
-			reason = "the label is reserved by clabernetes"
+			reason = "the label is reserved by c9s"
 		default:
 			problems := append(
 				k8svalidation.IsQualifiedName(key),
@@ -133,7 +133,7 @@ func dropUnusableNodeLabels(
 }
 
 func isReservedNodeLabel(key string) bool {
-	if strings.HasPrefix(key, clabernetesconstants.Clabernetes+"/") {
+	if strings.HasPrefix(key, clabernetesconstants.LabelPrefix+"/") {
 		return true
 	}
 

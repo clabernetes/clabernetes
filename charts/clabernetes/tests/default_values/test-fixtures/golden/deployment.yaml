@@ -11,15 +11,15 @@ metadata:
     heritage: Helm
     revision: "1"
     app.kubernetes.io/name: "clabernetes-manager"
-    clabernetes/app: clabernetes
-    clabernetes/name: "clabernetes-manager"
-    clabernetes/component: manager
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-manager"
+    c9s.run/component: manager
 spec:
   selector:
     matchLabels:
-      clabernetes/app: clabernetes
+      c9s.run/app: clabernetes
       release: release-name
-      clabernetes/component: manager
+      c9s.run/component: manager
   replicas: 3
   strategy:
     rollingUpdate:
@@ -34,9 +34,9 @@ spec:
         heritage: Helm
         revision: "1"
         app.kubernetes.io/name: "clabernetes-manager"
-        clabernetes/app: clabernetes
-        clabernetes/name: "clabernetes-manager"
-        clabernetes/component: manager
+        c9s.run/app: clabernetes
+        c9s.run/name: "clabernetes-manager"
+        c9s.run/component: manager
     spec:
       affinity:
         podAntiAffinity:
@@ -45,17 +45,17 @@ spec:
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    clabernetes/app: clabernetes
-                    clabernetes/name: "clabernetes-manager"
-                    clabernetes/component: manager
+                    c9s.run/app: clabernetes
+                    c9s.run/name: "clabernetes-manager"
+                    c9s.run/component: manager
                 topologyKey: kubernetes.io/hostname
             - weight: 50
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    clabernetes/app: clabernetes
-                    clabernetes/name: "clabernetes-manager"
-                    clabernetes/component: manager
+                    c9s.run/app: clabernetes
+                    c9s.run/name: "clabernetes-manager"
+                    c9s.run/component: manager
                 topologyKey: topology.kubernetes.io/zone
       terminationGracePeriodSeconds: 10
       serviceAccountName: "clabernetes-service-account"

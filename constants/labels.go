@@ -1,34 +1,37 @@
 package constants
 
 const (
+	// LabelPrefix is the namespace for labels owned by c9s.
+	LabelPrefix = "c9s.run"
+
 	// LabelKubernetesName is the key for the standard kubernetes app.kubernetes.io/name label --
 	// some tools use this label so we want to put it on all the deployments we spawn.
 	LabelKubernetesName = "app.kubernetes.io/name"
 
 	// LabelApp is the label key for the simple app name.
-	LabelApp = "clabernetes/app"
+	LabelApp = LabelPrefix + "/app"
 
 	// LabelName is the label key for the name of the project/application.
-	LabelName = "clabernetes/name"
+	LabelName = LabelPrefix + "/name"
 
 	// LabelComponent is the label key for the component label, it should define the component/tier
 	// in the app, i.e. "manager".
-	LabelComponent = "clabernetes/component"
+	LabelComponent = LabelPrefix + "/component"
 
 	// LabelTopologyOwner is the label indicating the topology that owns the given resource.
-	LabelTopologyOwner = "clabernetes/topologyOwner"
+	LabelTopologyOwner = LabelPrefix + "/topologyOwner"
 
 	// LabelTopologyNode is the label indicating the node the deployment represents in a topology.
-	LabelTopologyNode = "clabernetes/topologyNode"
+	LabelTopologyNode = LabelPrefix + "/topologyNode"
 
 	// LabelTopologyKind is the label indicating the resource *kind* the object is associated with.
 	// For example, a "containerlab" kind.
-	LabelTopologyKind = "clabernetes/topologyKind"
+	LabelTopologyKind = LabelPrefix + "/topologyKind"
 
 	// LabelTopologyServiceType is a label that identifies what flavor of service a given service
 	// is -- that is, it is either a "connectivity" service, or an "expose" service; note that
 	// this is strictly a clabernetes concept, obviously not a kubernetes one!
-	LabelTopologyServiceType = "clabernetes/topologyServiceType"
+	LabelTopologyServiceType = LabelPrefix + "/topologyServiceType"
 )
 
 const (
@@ -61,28 +64,28 @@ const (
 const (
 	// LabelClickerNodeConfigured is a label that is set on nodes that have been tickled via the
 	// clabernetes clicker tool -- the value is the unix timestamp that the node was tickled.
-	LabelClickerNodeConfigured = "clabernetes/clickerNodeConfigured"
+	LabelClickerNodeConfigured = LabelPrefix + "/clickerNodeConfigured"
 	// LabelClickerNodeTarget is the target node for the clicker job.
-	LabelClickerNodeTarget = "clabernetes/clickerNodeTarget"
+	LabelClickerNodeTarget = LabelPrefix + "/clickerNodeTarget"
 )
 
 const (
 	// LabelIgnoreReconcile indicates that controller should ignore reconciling a given topology.
 	// Note that this basically ignored during deletion since our controller doest do anything in
 	// the delete case (owner reference handles clean up).
-	LabelIgnoreReconcile = "clabernetes/ignoreReconcile"
+	LabelIgnoreReconcile = LabelPrefix + "/ignoreReconcile"
 
 	// LabelDisableDeployments indicates that controller should reconcile normally but not create
 	// update or delete any deployments.
-	LabelDisableDeployments = "clabernetes/disableDeployments"
+	LabelDisableDeployments = LabelPrefix + "/disableDeployments"
 )
 
 const (
 	// LabelPullerImageHash is a label that holds the (shortened) hash of the image tag that the
 	// puller is trying to pull onto a node.
-	LabelPullerImageHash = "clabernetes/pullerImageHash"
+	LabelPullerImageHash = LabelPrefix + "/pullerImageHash"
 
 	// LabelPullerNodeTarget is a label that holds the node name that is being targeted by the
 	// puller pod.
-	LabelPullerNodeTarget = "clabernetes/pullerNodeTarget"
+	LabelPullerNodeTarget = LabelPrefix + "/pullerNodeTarget"
 )

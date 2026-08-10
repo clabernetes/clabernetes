@@ -18,6 +18,7 @@ kubectl apply -f simple-srl.yaml
 ```
 
 This creates:
+
 - One launcher pod running the SR Linux container
 - A LoadBalancer service exposing common management ports (SSH, gNMI, etc.)
 
@@ -30,6 +31,7 @@ kubectl apply -f srl-multitool.yaml
 ```
 
 This creates:
+
 - One launcher pod running the SR Linux container
 - One launcher pod running the multitool container
 - A point-to-point link between `srl1:e1-1` and `multitool:eth1`
@@ -45,6 +47,7 @@ kubectl apply -f two-nodes-connected.yaml
 ```
 
 This creates:
+
 - Two launcher pods, one for each SR Linux node
 - VXLAN tunnels between the pods for the `e1-1` interface connection
 - LoadBalancer services for each node
@@ -78,7 +81,7 @@ attempting to read from the filesystem. Both file path references and inline con
 Once deployed, get the service IPs:
 
 ```bash
-kubectl get svc -l clabernetes/topology=<topology-name>
+kubectl get svc -l c9s.run/topologyOwner=<topology-name>
 ```
 
 SSH to a node (default credentials: admin/NokiaSrl1!):

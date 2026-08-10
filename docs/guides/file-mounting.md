@@ -383,7 +383,7 @@ If exceeding 1MB:
 Check launcher logs:
 
 ```bash
-kubectl logs -l clabernetes/topologyNode=<node>
+kubectl logs -l c9s.run/topologyNode=<node>
 ```
 
 Verify URL accessibility:

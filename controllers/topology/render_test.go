@@ -152,7 +152,7 @@ func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
 			)
 		}
 
-		// clabernetes' own labels must still be intact alongside them
+		// c9s' own labels must still be intact alongside them
 		if node.Labels[clabernetesconstants.LabelTopologyOwner] != "render-test" {
 			t.Errorf("expected owner label on node %q, got %v", node.GetName(), node.Labels)
 		}

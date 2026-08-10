@@ -25,7 +25,7 @@ kind: Node
 metadata:
   name: srl1
   labels:
-    c9s: direct
+    c9s.run/mode: direct
 spec:
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux
@@ -37,7 +37,7 @@ kind: Node
 metadata:
   name: srl2
   labels:
-    c9s: direct
+    c9s.run/mode: direct
 spec:
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux

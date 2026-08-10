@@ -68,11 +68,18 @@
 
 - [x] 8c.1 Carry `labels` on `NodeDefinition` as `json:"-" yaml:"labels,omitempty"` -- parseable from a definition, absent from the Node API. Verified the regenerated Node CRD gains no `spec.labels` and the published schema still lists 33 spec properties
 - [x] 8c.2 Merge labels across defaults/kinds/node in the overlay, alongside env and sysctls
-- [x] 8c.3 Drop labels kubernetes would reject, labels in the `clabernetes/` namespace, and controller-owned label keys such as `app.kubernetes.io/name`, warning per label -- an unusable label would otherwise make the emitted Node rejected on create, and controller labels must not be overridden from a lab definition
+- [x] 8c.3 Drop labels kubernetes would reject, labels in the `c9s.run/` namespace, and controller-owned label keys such as `app.kubernetes.io/name`, warning per label -- an unusable label would otherwise make the emitted Node rejected on create, and controller labels must not be overridden from a lab definition
 - [x] 8c.4 Copy the compiled labels onto the emitted Node's `metadata.labels` in `RenderNodes`
-- [x] 8c.5 Propagate a Node's labels to the launcher deployment and its pod template, skipping the `clabernetes/` namespace so an unlabeled lab renders an unchanged deployment. The pod selector is a separate map, so it is untouched (it is immutable once created)
+- [x] 8c.5 Propagate a Node's labels to the launcher deployment and its pod template, skipping the `c9s.run/` namespace so an unlabeled lab renders an unchanged deployment. The pod selector is a separate map, so it is untouched (it is immutable once created)
 - [x] 8c.6 Test all three hops: inheritance and dropping in the compiler, metadata on the rendered Node, and propagation to the deployment/pod template without leaking into the selector
 - [x] 8c.7 Verify end to end with `clabverter --emitCRs`: `labels` no longer warns as unsupported, `owner: roman` appears in the emitted Node's `metadata.labels`, and no `spec.labels` appears anywhere in the manifest
+
+## 8d. Normalize c9s-owned label keys
+
+- [x] 8d.1 Rename c9s-owned label constants and all hard-coded selectors/templates/goldens from `clabernetes/...` to `c9s.run/...`; keep `clabernetes/...` annotation keys unchanged
+- [x] 8d.2 Rename the direct e2e marker to `c9s.run/mode: direct`, retaining it on direct Nodes while excluding the c9s-owned namespace from launcher Deployment and Pod labels
+- [x] 8d.3 Update user-facing selectors and examples to the renamed keys, including topology-owner and image-puller troubleshooting commands
+- [x] 8d.4 Verify no legacy c9s-owned label key remains outside historical archive material
 
 ## 9. Regenerate and document
 
