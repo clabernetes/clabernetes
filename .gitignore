@@ -37,6 +37,7 @@ cover.out
 
 # devspace cache
 *.devspace
+.develop/.registry-port-forward.*
 
 # direnv file
 .envrc

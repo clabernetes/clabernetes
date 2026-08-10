@@ -36,6 +36,21 @@ ifeq ($(strip $(DEVSPACE_BIN)),)
 DEVSPACE_BIN := $(abspath $(DEVSPACE_TOOLS_DIR))/devspace
 endif
 DEVSPACE_ARGS ?=
+# LOCAL_REGISTRY controls where dev images are pushed/pulled from:
+#   auto (default) — in-cluster registry on remote clusters; REGISTRY push on kind/minikube
+#   1            — always use the in-cluster DevSpace registry
+#   0            — always build with buildx and push to REGISTRY (e.g. ghcr.io)
+LOCAL_REGISTRY ?= auto
+KUBE_CONTEXT := $(shell kubectl config current-context 2>/dev/null)
+IS_LOCAL_CLUSTER := $(shell echo '$(KUBE_CONTEXT)' | grep -Eq '^(kind-|docker-desktop|minikube($$|-))' && echo 1 || echo 0)
+ifeq ($(LOCAL_REGISTRY),auto)
+ifeq ($(IS_LOCAL_CLUSTER),0)
+LOCAL_REGISTRY := 1
+else
+LOCAL_REGISTRY := 0
+endif
+endif
+LOCAL_REGISTRY_BUILD := $(if $(filter 1 true,$(LOCAL_REGISTRY)),1,)
 NS ?= clabernetes
 DOCS_SITE_DIR ?= docs-site
 DOCS_HOST ?= 0.0.0.0
@@ -46,8 +61,9 @@ help:
 
 .PHONY: dev
 dev: TOOLS_BIN_DIR := $(abspath $(DEVSPACE_TOOLS_DIR))
-dev: install-devspace ## Run the manager from local source in the current Kubernetes context
-	"$(DEVSPACE_BIN)" --namespace "$(NS)" --no-warn run dev --profile auto-run-manager --force-deploy $(DEVSPACE_ARGS)
+dev: DEVSPACE_DEV_PROFILES := --profile auto-run-manager$(if $(filter 1 true,$(LOCAL_REGISTRY)), --profile local-registry,)
+dev: install-devspace ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1; see README)
+	LOCAL_REGISTRY_BUILD=$(LOCAL_REGISTRY_BUILD) NS="$(NS)" "$(DEVSPACE_BIN)" --namespace "$(NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
 
 .PHONY: docs-install serve-docs check-docs build-docs preview-docs
 docs-install: ## Install locked documentation dependencies
