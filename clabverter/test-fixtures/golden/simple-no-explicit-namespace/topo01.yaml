@@ -34,12 +34,6 @@ spec:
           sros2:
             kind: nokia_sros
             image: nokia_sros:latest
-            healthcheck:
-              start-period: 5
-              interval: 1
-              test:
-                - CMD-SHELL
-                - cat /etc/os-release
 
         links:
           - endpoints: ["srl1:e1-1", "srl2:e1-1"]

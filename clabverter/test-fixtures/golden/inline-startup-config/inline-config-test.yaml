@@ -13,13 +13,13 @@ spec:
           nodes:
               srl1:
                   kind: nokia_srlinux
-                  startup-config: /clabernetes/startup-config
                   image: ghcr.io/nokia/srlinux:latest
+                  startup-config: /clabernetes/startup-config
                   ports: []
               sros1:
                   kind: nokia_srsim
-                  startup-config: /clabernetes/startup-config
                   image: nokia_srsim:latest
+                  startup-config: /clabernetes/startup-config
                   ports: []
           links:
               - endpoints:

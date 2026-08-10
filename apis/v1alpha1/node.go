@@ -40,15 +40,14 @@ type Node struct {
 }
 
 // NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
-// verbatim containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields
-// and an optional LauncherProfile reference. The definition must be self-contained: expanding
-// topology defaults/kinds into the node is the emitter's job (the Topology compiler and
-// clabverter do this for you). Anything that is deployment *policy* rather than node payload --
-// expose behavior, image pull config, launcher resources, scheduling, privileges -- lives on
-// LauncherProfile objects explicitly referenced by Nodes. Unknown (i.e. newer containerlab
-// vocabulary) fields are preserved by the api server but are not (yet) interpreted by
-// clabernetes.
-// +kubebuilder:pruning:PreserveUnknownFields
+// containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an
+// optional LauncherProfile reference. The definition must be self-contained: expanding topology
+// defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
+// this for you). Anything that is deployment *policy* rather than node payload -- expose
+// behavior, image pull config, launcher resources, scheduling, privileges -- lives on
+// LauncherProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
+// curated subset (see NodeDefinition): fields a launcher pod cannot realize are absent, and
+// unknown fields are rejected rather than silently ignored.
 type NodeSpec struct {
 	NodeDefinition `json:",inline" yaml:",inline"`
 

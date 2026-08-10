@@ -190,12 +190,6 @@ spec:
     configMapPath: REPLACED
     filePath: srl2.license
     mode: read
-  healthcheck:
-    interval: 1
-    start-period: 5
-    test:
-    - CMD-SHELL
-    - cat /etc/os-release
   image: nokia_sros:latest
   kind: nokia_sros
   launcherProfileRef:

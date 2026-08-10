@@ -7,10 +7,12 @@ import (
 
 	clabernetesapis "github.com/clabernetes/clabernetes/apis"
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	"gopkg.in/yaml.v3"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
 // compileContainerlabDefinition compiles a containerlab topology definition: every node gets
@@ -20,11 +22,17 @@ func compileContainerlabDefinition(
 	logger claberneteslogging.Instance,
 	definition string,
 ) (*CompiledTopology, error) {
-	containerlabConfig, err := clabernetesutilcontainerlab.LoadContainerlabConfig(definition)
+	containerlabConfig, unknownFields, err := clabernetesutilcontainerlab.LoadContainerlabConfig(
+		definition,
+	)
 	if err != nil {
 		logger.Criticalf("failed parsing containerlab config, error: %s", err)
 
 		return nil, err
+	}
+
+	for _, unknownField := range unknownFields {
+		logger.Warn(unknownField)
 	}
 
 	compiled := &CompiledTopology{
@@ -44,6 +52,9 @@ func compileContainerlabDefinition(
 		if err != nil {
 			return nil, err
 		}
+
+		normalizeNodePorts(logger, nodeName, compiled.Nodes[nodeName])
+		dropUnusableNodeLabels(logger, nodeName, compiled.Nodes[nodeName])
 	}
 
 	compiled.Links, err = compileContainerlabLinks(containerlabConfig)
@@ -56,10 +67,93 @@ func compileContainerlabDefinition(
 	return compiled, nil
 }
 
+// normalizeNodePorts rewrites the docker style "host:container" port entries that pasted
+// containerlab topologies carry into the destination-only form Nodes accept -- the pod side port
+// is an allocation clabernetes owns, so a pinned host side cannot be honored.
+func normalizeNodePorts(
+	logger claberneteslogging.Instance,
+	nodeName string,
+	nodeDefinition *clabernetesutilcontainerlab.NodeDefinition,
+) {
+	for idx, portDefinition := range nodeDefinition.Ports {
+		normalized := clabernetesutilcontainerlab.NormalizePortDefinition(portDefinition)
+		if normalized == portDefinition {
+			continue
+		}
+
+		logger.Warnf(
+			"node %q port %q declares a host side port, which clabernetes allocates itself --"+
+				" using destination port %q instead",
+			nodeName,
+			portDefinition,
+			normalized,
+		)
+
+		nodeDefinition.Ports[idx] = normalized
+	}
+}
+
+// dropUnusableNodeLabels removes containerlab node labels that cannot be carried onto the emitted
+// Node's metadata. containerlab labels become docker labels, which accept far more than a
+// kubernetes label does, so an unusable one has to be dropped here rather than making the Node
+// rejected on create. clabernetes' own namespace and the individual keys its controllers reserve
+// stay off limits too, since those labels carry meaning to reconciliation and selectors.
+func dropUnusableNodeLabels(
+	logger claberneteslogging.Instance,
+	nodeName string,
+	nodeDefinition *clabernetesutilcontainerlab.NodeDefinition,
+) {
+	for key, value := range nodeDefinition.Labels {
+		var reason string
+
+		switch {
+		case isReservedNodeLabel(key):
+			reason = "the label is reserved by clabernetes"
+		default:
+			problems := append(
+				k8svalidation.IsQualifiedName(key),
+				k8svalidation.IsValidLabelValue(value)...,
+			)
+			if len(problems) == 0 {
+				continue
+			}
+
+			reason = strings.Join(problems, "; ")
+		}
+
+		logger.Warnf(
+			"node %q label %q cannot become a kubernetes label and was omitted -- %s",
+			nodeName,
+			key,
+			reason,
+		)
+
+		delete(nodeDefinition.Labels, key)
+	}
+}
+
+func isReservedNodeLabel(key string) bool {
+	if strings.HasPrefix(key, clabernetesconstants.Clabernetes+"/") {
+		return true
+	}
+
+	switch key {
+	case clabernetesconstants.LabelKubernetesName,
+		clabernetesconstants.LabelApp,
+		clabernetesconstants.LabelName,
+		clabernetesconstants.LabelTopologyOwner,
+		clabernetesconstants.LabelTopologyKind,
+		clabernetesconstants.LabelTopologyNode:
+		return true
+	default:
+		return false
+	}
+}
+
 // flattenNodeDefinition merges the topology defaults, the node's kind, and the node's own
 // definition into a single self contained node definition -- following containerlab's own
-// inheritance rules: the most specific value wins for scalar fields, maps (env/labels/sysctls)
-// merge with the most specific entry winning, and binds/ports extend (defaults + kind + node).
+// inheritance rules: the most specific value wins for scalar fields, maps (env/sysctls) merge
+// with the most specific entry winning, and binds/ports extend (defaults + kind + node).
 func flattenNodeDefinition(
 	topology *clabernetesutilcontainerlab.Topology,
 	nodeName string,
@@ -103,14 +197,14 @@ func flattenNodeDefinition(
 // vocabulary, the layer is marshaled and unmarshaled *onto* the base -- yaml unmarshal only
 // touches fields present in the layer, which gives exactly the "most specific value wins"
 // semantic for scalars and pointers. The map/extend style fields containerlab merges rather
-// than replaces (env, labels, sysctls, binds, ports) are handled explicitly.
+// than replaces (env, sysctls, labels, binds, ports) are handled explicitly.
 func overlayNodeDefinition(
 	base,
 	layer *clabernetesutilcontainerlab.NodeDefinition,
 ) error {
 	mergedEnv := mergeMaps(base.Env, layer.Env)
-	mergedLabels := mergeMaps(base.Labels, layer.Labels)
 	mergedSysctls := mergeMaps(base.Sysctls, layer.Sysctls)
+	mergedLabels := mergeMaps(base.Labels, layer.Labels)
 	mergedBinds := mergeSlices(base.Binds, layer.Binds)
 	mergedPorts := mergeSlices(base.Ports, layer.Ports)
 
@@ -125,8 +219,8 @@ func overlayNodeDefinition(
 	}
 
 	base.Env = mergedEnv
-	base.Labels = mergedLabels
 	base.Sysctls = mergedSysctls
+	base.Labels = mergedLabels
 	base.Binds = mergedBinds
 	base.Ports = mergedPorts
 

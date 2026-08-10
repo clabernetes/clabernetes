@@ -1,8 +1,8 @@
 # Topology with auto-expose disabled
-# When disableAutoExpose is true, no services are created for nodes
-# Note: Currently, explicit containerlab port definitions are also cleared
-# This effectively makes the node unexposed (similar to exposeType: None)
-# Future versions may allow explicit port definitions with disableAutoExpose
+# With disableAutoExpose, the default management port list is not added, so a node is reachable
+# on exactly the ports it declares -- and a node declaring none is not exposed at all.
+# Ports are destination ports (the port the node listens on) with an optional protocol;
+# clabernetes allocates the pod-side port carrying each one and records both in the Node status.
 apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
@@ -21,12 +21,12 @@ spec:
             kind: nokia_srlinux
             image: ghcr.io/nokia/srlinux:latest
             ports:
-              - "22:22"
-              - "57400:57400"
+              - "22/tcp"
+              - "57400/tcp"
           srl2:
             kind: nokia_srlinux
             image: ghcr.io/nokia/srlinux:latest
             ports:
-              - "22:22"
+              - "22/tcp"
         links:
           - endpoints: ["srl1:e1-1", "srl2:e1-1"]

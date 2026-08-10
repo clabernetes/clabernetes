@@ -64,34 +64,24 @@ spec:
           spec:
             description: |-
               NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
-              verbatim containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields
-              and an optional LauncherProfile reference. The definition must be self-contained: expanding
-              topology defaults/kinds into the node is the emitter's job (the Topology compiler and
-              clabverter do this for you). Anything that is deployment *policy* rather than node payload --
-              expose behavior, image pull config, launcher resources, scheduling, privileges -- lives on
-              LauncherProfile objects explicitly referenced by Nodes. Unknown (i.e. newer containerlab
-              vocabulary) fields are preserved by the api server but are not (yet) interpreted by
-              clabernetes.
+              containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an
+              optional LauncherProfile reference. The definition must be self-contained: expanding topology
+              defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
+              this for you). Anything that is deployment *policy* rather than node payload -- expose
+              behavior, image pull config, launcher resources, scheduling, privileges -- lives on
+              LauncherProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
+              curated subset (see NodeDefinition): fields a launcher pod cannot realize are absent, and
+              unknown fields are rejected rather than silently ignored.
             properties:
-              SANs:
-                description: SANs is the list of subject alternative names to be added
-                  to the node's certificate.
-                items:
-                  type: string
-                type: array
-                x-kubernetes-list-type: atomic
-              aliases:
-                description: Aliases is a list of network aliases for the node.
-                items:
-                  type: string
-                type: array
-                x-kubernetes-list-type: atomic
-              auto-remove:
-                description: AutoRemove enables the auto removal of the node's container
-                  when it stops.
-                type: boolean
               binds:
                 description: Binds is a list of bind (mount) compatible strings.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              cap-add:
+                description: CapAdd is a list of linux capabilities to add to the
+                  node's container.
                 items:
                   type: string
                 type: array
@@ -102,9 +92,25 @@ spec:
                 properties:
                   issue:
                     description: |-
-                      Issue indicates if the node should have a certificate issued -- the default false value
-                      indicates that the node does not use TLS.
+                      Issue indicates if the node should have a certificate issued -- when unset the node does
+                      not use TLS.
                     type: boolean
+                  key-size:
+                    description: KeySize is the size of the certificate key in bits.
+                    type: integer
+                  sans:
+                    description: SANs is the list of subject alternative names to
+                      add to the node's certificate.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  validity-duration:
+                    description: |-
+                      ValidityDuration is how long the issued certificate is valid for, as a Go duration --
+                      i.e. 8760h for a year.
+                    pattern: ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$
+                    type: string
                 type: object
               cmd:
                 description: Cmd overrides the container command.
@@ -185,14 +191,13 @@ spec:
                     description: Vars holds the variables for the config engine.
                     type: object
                 type: object
-              cpu:
-                description: |-
-                  CPU is the node CPU limit (cgroup or hypervisor) -- note that this is the *containerlab*
-                  (docker) cpu setting, launcher pod resources are LauncherProfile territory.
-                type: number
-              cpu-set:
-                description: CPUSet is the set of CPUs the node can use.
-                type: string
+              devices:
+                description: Devices is a list of host devices to map into the node's
+                  container.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
               dns:
                 description: DNS holds the DNS configuration for the node.
                 properties:
@@ -216,8 +221,9 @@ spec:
                     x-kubernetes-list-type: atomic
                 type: object
               enforce-startup-config:
-                description: EnforceStartupConfig enforces the startup config even
-                  if the node has a saved config.
+                description: |-
+                  EnforceStartupConfig makes the node boot from StartupConfig even when it already has a
+                  saved (persisted) configuration.
                 type: boolean
               entrypoint:
                 description: Entrypoint overrides the container entrypoint.
@@ -251,10 +257,6 @@ spec:
                       type: string
                     type: array
                     x-kubernetes-list-type: atomic
-                  mysocket-proxy:
-                    description: MysocketProxy is the proxy address that mysocketctl
-                      will use.
-                    type: string
                   srl-agents:
                     description: SRLAgents is a list of Nokia SR Linux agents (spec
                       files) to install on the node.
@@ -323,57 +325,12 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
-              group:
-                description: Group is the (containerlab) group of the node.
-                type: string
-              healthcheck:
-                description: Healthcheck holds the healthcheck configuration for the
-                  node.
-                properties:
-                  interval:
-                    description: Interval is the time interval between the health
-                      checks in seconds.
-                    type: integer
-                  retries:
-                    description: |-
-                      Retries is the number of consecutive healthcheck failures needed to report the container
-                      as unhealthy.
-                    type: integer
-                  start-period:
-                    description: |-
-                      StartPeriod is the time in seconds to wait for the container to bootstrap before running
-                      the first health check.
-                    type: integer
-                  test:
-                    description: Test is the command to run to check the health of
-                      the container.
-                    items:
-                      type: string
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  timeout:
-                    description: Timeout is the time in seconds to wait for a single
-                      health check operation to complete.
-                    type: integer
-                type: object
               image:
                 description: Image is the container image for the node.
-                type: string
-              image-pull-policy:
-                description: ImagePullPolicy is the (containerlab, so docker) image
-                  pull policy for the node.
-                type: string
-              kernel:
-                description: Kernel is the ignite kernel image name.
                 type: string
               kind:
                 description: Kind is the containerlab kind of the node -- i.e. nokia_srlinux.
                 type: string
-              labels:
-                additionalProperties:
-                  type: string
-                description: Labels holds the container labels for the node.
-                type: object
               launcherProfileRef:
                 description: |-
                   LauncherProfileRef optionally names the same-namespace LauncherProfile supplying launcher
@@ -393,11 +350,6 @@ spec:
               license:
                 description: License is the path to the license file for the node.
                 type: string
-              memory:
-                description: |-
-                  Memory is the node memory limit (cgroup or hypervisor) -- as with CPU this is the
-                  *containerlab* (docker) setting, not the launcher pod resources.
-                type: string
               mgmt-ipv4:
                 description: MgmtIPv4 is the user-defined IPv4 address of the node
                   in the management network.
@@ -408,50 +360,66 @@ spec:
                 type: string
               network-mode:
                 description: |-
-                  NetworkMode is the container networking mode. `container:<name>` expresses that this node
-                  shares the network namespace of another node -- clabernetes derives node "grouping" (nodes
-                  co-located in one launcher pod) from exactly this containerlab-native field.
+                  NetworkMode declares that this node shares the network namespace -- and therefore the
+                  launcher pod -- of the named primary node. `container:<primary node name>` is the only
+                  accepted value: clabernetes derives node "grouping" (nodes co-located in one launcher pod,
+                  i.e. the cards of a distributed chassis) from exactly this containerlab-native field, and
+                  the other containerlab network modes have no meaning inside a launcher pod.
+                maxLength: 73
                 type: string
+                x-kubernetes-validations:
+                - message: network-mode must be container:<primary node name> -- it
+                    declares that this node shares its launcher pod with the named
+                    primary node
+                  rule: self.matches('^container:[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
               ports:
                 description: |-
-                  Ports is a list of (docker style) port bindings for the node. Ports listed here are also
-                  what feeds the clabernetes expose machinery -- the allocated (load balancer) port set ends
-                  up in the Node status.
-                  note: no yaml omitempty -- historically we always render the (possibly empty) list so that
-                  rendered topology comparisons never see nil vs empty slice differences.
+                  Ports lists additional ports to expose on this node. Each entry is a destination port
+                  between 1 and 65535 with an optional protocol -- "8080" or "5201/udp" -- meaning the port
+                  the node itself listens on. clabernetes allocates the pod side port that carries it and
+                  records both in the Node status, so docker style "host:container" bindings are rejected
+                  here. Unless auto expose is disabled, the default set of management ports is exposed in
+                  addition to these.
+                items:
+                  pattern: ^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])(/(tcp|udp|TCP|UDP))?$
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
+              privileged:
+                description: Privileged runs the node's container in privileged mode.
+                type: boolean
+              security-opts:
+                description: |-
+                  SecurityOpts is a list of security options (i.e. seccomp or apparmor settings) to apply to
+                  the node's container.
                 items:
                   type: string
                 type: array
                 x-kubernetes-list-type: atomic
-              position:
-                description: Position is the position of the node (used by graphing
-                  tooling).
-                type: string
-              publish:
-                description: Publish is a list of ports to publish with mysocketctl.
-                items:
-                  type: string
-                type: array
-                x-kubernetes-list-type: atomic
-              runtime:
-                description: Runtime overrides the container runtime for the node.
-                type: string
-              sandbox:
-                description: Sandbox is the ignite sandbox image name.
+              shm-size:
+                description: ShmSize is the shared memory size allocated to the node's
+                  container -- i.e. 256m.
                 type: string
               startup-config:
                 description: |-
                   StartupConfig is the startup configuration for the node -- either a path or an inline
                   (multiline string) config.
                 type: string
-              startup-delay:
-                description: StartupDelay is the delay (in seconds) to wait before
-                  starting the node.
-                type: integer
+              suppress-startup-config:
+                description: |-
+                  SuppressStartupConfig boots the node with its factory configuration -- containerlab
+                  generates and mounts no startup config at all.
+                type: boolean
               sysctls:
                 additionalProperties:
                   type: string
                 description: Sysctls holds sysctl settings for the node.
+                type: object
+              tmpfs:
+                additionalProperties:
+                  type: string
+                description: Tmpfs holds tmpfs mounts for the node's container, keyed
+                  by destination path.
                 type: object
               type:
                 description: Type is the type of the node -- i.e. ixrd2.
@@ -459,15 +427,7 @@ spec:
               user:
                 description: User is the linux user to use in the node's container.
                 type: string
-              wait-for:
-                description: WaitFor is a list of node names to wait for before starting
-                  this particular node.
-                items:
-                  type: string
-                type: array
-                x-kubernetes-list-type: atomic
             type: object
-            x-kubernetes-preserve-unknown-fields: true
           status:
             description: |-
               NodeStatus is the status for a Node resource. Everything in here is an *allocation* or an

@@ -160,9 +160,13 @@ func TestMaterializeTopology(t *testing.T) {
 		t.Fatalf("failed marshaling materialized config: %s", err)
 	}
 
-	_, err = clabernetesutilcontainerlab.LoadContainerlabConfig(string(configBytes))
+	_, unknownFields, err := clabernetesutilcontainerlab.LoadContainerlabConfig(string(configBytes))
 	if err != nil {
 		t.Fatalf("materialized config does not load as a containerlab config: %s", err)
+	}
+
+	if len(unknownFields) != 0 {
+		t.Fatalf("materialized config carries fields the loader does not know: %q", unknownFields)
 	}
 }
 

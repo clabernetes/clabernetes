@@ -141,8 +141,8 @@ spec:
             kind: nokia_srlinux
             image: registry.example.com/nokia/srlinux:latest
             ports:
-              - 22:22/tcp
-              - 57400:57400/tcp
+              - 22/tcp
+              - 57400/tcp
 ```
 
 ## Related

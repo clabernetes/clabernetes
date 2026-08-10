@@ -46,6 +46,31 @@ spec:
 Existing Topology settings for connectivity, exposure, deployment, image pulling, and status
 probes are translated into the generated primitive resources and launcher policy.
 
+### Native definition vocabulary
+
+The embedded `containerlab` definition remains native containerlab YAML. Fields that c9s does not
+implement are omitted from generated resources and reported as warnings with their source line;
+they do not make the Topology fail. Malformed YAML and recognized fields with invalid value types
+still fail compilation.
+
+Containerlab node labels have a Kubernetes-native destination:
+
+```yaml
+topology:
+  nodes:
+    srl1:
+      kind: nokia_srlinux
+      labels:
+        owner: roman
+```
+
+The compiler carries these labels onto the generated Node's `metadata.labels`, then the Node
+controller copies them to the launcher Deployment and its Pods. They inherit from `defaults` and
+`kinds` like `env`, so Pods can be selected with `kubectl get pods -l owner=roman`. There is no
+`Node.spec.labels`; labels in the embedded definition are converted to Kubernetes metadata.
+Invalid Kubernetes labels and c9s-owned namespaces or identity/selector keys are omitted with a
+warning.
+
 ## Reconciliation lifecycle
 
 The compiler:

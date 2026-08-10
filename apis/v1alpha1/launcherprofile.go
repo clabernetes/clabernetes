@@ -104,7 +104,10 @@ type LauncherProfileDeployment struct {
 	// ContainerlabTimeout sets the containerlab --timeout flag.
 	// +optional
 	ContainerlabTimeout *string `json:"containerlabTimeout,omitempty"`
-	// ContainerlabVersion selects a custom containerlab version.
+	// ContainerlabVersion selects a custom containerlab version, downloaded by the launcher at
+	// startup in place of the one baked into the image. 0.78.0 is the floor: the Node spec
+	// vocabulary includes fields (i.e. privileged, tmpfs, security-opts) that older containerlab
+	// releases reject outright, so pinning further back makes those nodes fail to deploy.
 	// +optional
 	ContainerlabVersion *string `json:"containerlabVersion,omitempty"`
 	// LauncherImage selects the launcher image.

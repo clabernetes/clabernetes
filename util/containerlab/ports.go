@@ -2,26 +2,22 @@ package containerlab
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 )
 
-const expectedNonFullPortElementCount = 2
-
-var (
-	portPattern     *regexp.Regexp //nolint:gochecknoglobals
-	portPatternOnce sync.Once      //nolint:gochecknoglobals
-)
+// maxPort is the highest valid tcp/udp port number.
+const maxPort = 65535
 
 // TypedPort holds typed data about a containerlab port entry.
 type TypedPort struct {
-	Protocol        string
+	Protocol string
+	// ExposePort is the pod side port carrying the destination port. ProcessPortDefinition never
+	// sets it -- clabernetes allocates it -- so it is only meaningful on values built from a
+	// node's status allocations.
 	ExposePort      int64
 	DestinationPort int64
 }
@@ -31,97 +27,66 @@ func (t *TypedPort) AsContainerlabPortDefinition() string {
 	return fmt.Sprintf("%d:%d/%s", t.ExposePort, t.DestinationPort, strings.ToLower(t.Protocol))
 }
 
-// GetPortPattern returns a compiled regex to parse containerlab port definitions.
-func GetPortPattern() *regexp.Regexp {
-	portPatternOnce.Do(func() {
-		portPattern = regexp.MustCompile(
-			`(?P<exposePort>\d+):(?P<destinationPort>\d+)/?(?P<protocol>(TCP)|(UDP))?`,
-		)
-	})
-
-	return portPattern
+// NormalizePortDefinition reduces a docker style port definition -- "21022:22/tcp" or
+// "1.2.3.4:8080:80" -- to the destination port (and protocol) clabernetes accepts, by dropping
+// everything left of the last colon. Definitions that are already destination-only are returned
+// unchanged. Pasted containerlab topologies routinely carry the two sided form, so the Topology
+// compiler normalizes rather than rejects it; the dropped host side is a port clabernetes
+// allocates itself.
+func NormalizePortDefinition(portDefinition string) string {
+	return portDefinition[strings.LastIndex(portDefinition, ":")+1:]
 }
 
-func processPortDefinitionFull(re *regexp.Regexp, portDefinition string) (*TypedPort, error) {
-	paramsMap := clabernetesutil.RegexStringSubMatchToMap(re, portDefinition)
-
-	protocol := clabernetesconstants.TCP
-	if paramsMap["protocol"] == clabernetesconstants.UDP {
-		protocol = clabernetesconstants.UDP
-	}
-
-	var retErr error
-
-	exposePortAsInt, err := strconv.ParseInt(paramsMap["exposePort"], 10, 32)
-	if err != nil || exposePortAsInt == 0 {
-		retErr = fmt.Errorf(
-			"%w: failed converting exposed port to integer, full port string '%s', parsed port "+
-				"'%s'",
-			claberneteserrors.ErrParse,
-			portDefinition,
-			paramsMap["exposePort"],
-		)
-	}
-
-	destinationPortAsInt, err := strconv.ParseInt(paramsMap["destinationPort"], 10, 32)
-	if err != nil || destinationPortAsInt == 0 {
-		retErr = fmt.Errorf(
-			"%w: failed converting destination port to integer, full port string '%s', parsed "+
-				"port '%s'",
-			claberneteserrors.ErrParse,
-			portDefinition,
-			paramsMap["destinationPort"],
-		)
-	}
-
-	return &TypedPort{
-		Protocol:        protocol,
-		ExposePort:      exposePortAsInt,
-		DestinationPort: destinationPortAsInt,
-	}, retErr
-}
-
-// ProcessPortDefinition accepts a "portDefinition" from a containerlab topology and returns a
-// `TypedPort` object. It returns an error if it cannot cast a port value to an integer.
+// ProcessPortDefinition accepts a clabernetes node port definition -- a destination port with an
+// optional protocol, i.e. "22" or "5201/udp" -- and returns a `TypedPort` object. The docker
+// style "host:container" form is rejected: the pod side port is an allocation clabernetes owns,
+// so pinning it here cannot work.
 func ProcessPortDefinition(portDefinition string) (*TypedPort, error) {
-	re := GetPortPattern()
-
-	portDefinition = strings.ToUpper(portDefinition)
-
-	if re.MatchString(portDefinition) {
-		// "fully" defined pattern -- meaning "port:port" with optional protocol
-		return processPortDefinitionFull(re, portDefinition)
-	}
-
-	// not "full", so it could just be a port, or it could be a port/protocol
-
-	portDefinitionSplit := strings.Split(portDefinition, "/")
-
-	var retErr error
+	portDefinition = strings.TrimSpace(portDefinition)
 
 	protocol := clabernetesconstants.TCP
 
-	if len(portDefinitionSplit) == expectedNonFullPortElementCount {
-		userProtocol := strings.ToUpper(portDefinitionSplit[1])
+	destinationPort, protocolPart, hasProtocol := strings.Cut(portDefinition, "/")
 
-		if userProtocol == clabernetesconstants.UDP {
+	if hasProtocol {
+		switch strings.ToUpper(protocolPart) {
+		case clabernetesconstants.TCP:
+			protocol = clabernetesconstants.TCP
+		case clabernetesconstants.UDP:
 			protocol = clabernetesconstants.UDP
+		default:
+			return nil, fmt.Errorf(
+				"%w: port definition %q declares unsupported protocol %q, expected tcp or udp",
+				claberneteserrors.ErrParse,
+				portDefinition,
+				protocolPart,
+			)
 		}
 	}
 
-	destinationPortAsInt, err := strconv.ParseInt(portDefinitionSplit[0], 10, 32)
-	if err != nil || destinationPortAsInt == 0 {
-		retErr = fmt.Errorf(
-			"%w: failed converting destination port to integer, full port string '%s', parsed "+
-				"port '%s'",
+	if strings.Contains(destinationPort, ":") {
+		return nil, fmt.Errorf(
+			"%w: port definition %q looks like a docker style host:container binding -- declare"+
+				" only the destination port (the port the node listens on), clabernetes allocates"+
+				" the pod side port itself",
 			claberneteserrors.ErrParse,
 			portDefinition,
-			portDefinitionSplit[0],
+		)
+	}
+
+	destinationPortAsInt, err := strconv.Atoi(destinationPort)
+	if err != nil || destinationPortAsInt < 1 || destinationPortAsInt > maxPort {
+		return nil, fmt.Errorf(
+			"%w: port definition %q is invalid, expected a destination port between 1 and %d with"+
+				" an optional protocol, i.e. \"22\" or \"5201/udp\"",
+			claberneteserrors.ErrParse,
+			portDefinition,
+			maxPort,
 		)
 	}
 
 	return &TypedPort{
 		Protocol:        protocol,
-		DestinationPort: destinationPortAsInt,
-	}, retErr
+		DestinationPort: int64(destinationPortAsInt),
+	}, nil
 }
