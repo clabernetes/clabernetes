@@ -59,7 +59,7 @@ spec:
             - name: APP_NAME
               value: clabernetes
             - name: MANAGER_NAMESPACE
-              value: clabernetes
+              value: c9s
             - name: LAUNCHER_IMAGE_PULL_THROUGH_MODE
               value: auto
             - name: LAUNCHER_LOGGER_LEVEL
