@@ -21,13 +21,19 @@ jobs:
   lint:
     uses: ./.github/workflows/lint.yaml
 
-  test:
-    uses: ./.github/workflows/test.yaml
+  unit:
+    uses: ./.github/workflows/unit.yaml
 
+  e2e:
+    needs: unit
+    uses: ./.github/workflows/e2e.yaml
+
+  # only computes outputs, so it is deliberately not gated on e2e -- that lets the pr image builds
+  # start alongside e2e while the publishing path below still waits for it.
   prep:
     needs:
       - lint
-      - test
+      - unit
     runs-on: ubuntu-24.04
     outputs:
       push: ${{ steps.ctx.outputs.push }}
@@ -50,8 +56,26 @@ jobs:
           esac
           echo "push=$push" >> "$GITHUB_OUTPUT"
 
+  # prs never push images, so build them alongside e2e purely to prove the builds still work. amd64
+  # alone is enough of a smoke test there -- arm64 builds are much slower and get covered on merge.
   images:
+    if: ${{ github.event_name == 'pull_request' }}
     needs: prep
+    uses: ./.github/workflows/images.yaml
+    with:
+      push: false
+      amd64-only: true
+      build-version: 0.0.0-${{ needs.prep.outputs.short_sha }}
+    secrets: inherit
+
+  # everywhere else the images land in ghcr, so they wait for e2e. e2e skips itself when not
+  # on/targeting main (ie a dispatch from a feature branch) and a skipped need would skip this job
+  # too, hence spelling out the needs results instead of relying on the implicit success gate.
+  images-publish:
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.prep.result == 'success' && needs.e2e.result != 'failure' }}
+    needs:
+      - prep
+      - e2e
     uses: ./.github/workflows/images.yaml
     with:
       push: ${{ needs.prep.outputs.push == 'true' }}
@@ -62,7 +86,7 @@ jobs:
     if: ${{ github.event_name == 'push' }}
     needs:
       - prep
-      - images
+      - images-publish
     runs-on: ubuntu-24.04
     steps:
       - name: checkout
@@ -98,7 +122,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && needs.prep.outputs.push == 'true' }}
     needs:
       - prep
-      - images
+      - images-publish
     runs-on: ubuntu-24.04
     steps:
       - name: checkout

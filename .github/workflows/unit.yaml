@@ -1,0 +1,38 @@
+---
+name: unit
+
+on:
+  workflow_call:
+    inputs:
+      debug:
+        description: "start tmate before unit tests"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: load env vars for workflow run
+        run: cat .github/vars.env >> "$GITHUB_ENV"
+
+      - name: set up go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: install test tools
+        run: make install-test-tools
+
+      - name: setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ inputs.debug }}
+
+      - name: run the unit tests
+        run: make test-race

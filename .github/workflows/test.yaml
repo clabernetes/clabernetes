@@ -1,6 +1,8 @@
 ---
 name: test
 
+# runs unit then e2e as a single gate. cicd calls unit.yaml/e2e.yaml directly so that pr image
+# builds can run alongside e2e; everything else wants both together.
 on:
   workflow_call: {}
   workflow_dispatch:
@@ -18,82 +20,12 @@ on:
 
 jobs:
   unit:
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 1
-
-      - name: load env vars for workflow run
-        run: cat .github/vars.env >> "$GITHUB_ENV"
-
-      - name: set up go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: install test tools
-        run: make install-test-tools
-
-      - name: setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_unit }}
-
-      - name: run the unit tests
-        run: make test-race
+    uses: ./.github/workflows/unit.yaml
+    with:
+      debug: ${{ inputs.debug_unit || false }}
 
   e2e:
-    runs-on: ubuntu-latest
-    needs:
-      - unit
-    # run e2e on main or prs pointing to main
-    if: (github.ref_name == 'main' || github.base_ref == 'main') || (github.event_name == 'workflow_dispatch' && inputs.debug_e2e)
-    steps:
-      - name: checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          lfs: true
-
-      - name: pull git lfs assets
-        run: git lfs pull
-
-      - name: load env vars for workflow run
-        run: cat .github/vars.env >> "$GITHUB_ENV"
-
-      - name: set up go
-        uses: actions/setup-go@v7
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      # download pinned tools, create the kind cluster, build the clabernetes
-      # images natively, load them into kind, and install the local helm chart.
-      # these are the exact same make targets developers run locally via
-      # `make test-e2e-local`, so CI and local cannot drift.
-      - name: build images, create kind cluster, and deploy clabernetes
-        run: make e2e-tools e2e-cluster e2e-images e2e-deploy
-
-      # actions seem to be running out of disk for e2e -- probably due to all the image build stuff
-      # floating around, all the junk runners get pre-built with, and runners not being super beefy
-      # lets just system prune all the docker stuff to get rid of some junk we dont need. This is a
-      # ci-only disk hack so it is deliberately kept out of the make targets (it would nuke a
-      # developer's local image cache). the cluster already has the images loaded by this point.
-      - name: docker system prune
-        run: docker system prune -a -f
-
-      - name: setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_e2e }}
-
-      - name: run the e2e tests
-        id: run-the-e2e-tests
-        run: make e2e-test
-        continue-on-error: true
-
-      - name: dump logs from controller if tests fail
-        if: steps.run-the-e2e-tests.outcome != 'success'
-        run: |
-          set -x
-          make e2e-debug-dump
-          exit 1
+    needs: unit
+    uses: ./.github/workflows/e2e.yaml
+    with:
+      debug: ${{ inputs.debug_e2e || false }}

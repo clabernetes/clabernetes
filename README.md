@@ -68,7 +68,7 @@ make e2e-test
 otherwise reuses the existing cluster.
 
 CI runs the exact same `e2e-*` make targets (see
-[.github/workflows/test.yaml](.github/workflows/test.yaml)), so local and CI
+[.github/workflows/e2e.yaml](.github/workflows/e2e.yaml)), so local and CI
 share all of the setup code.
 
 Tear down the e2e cluster with:
