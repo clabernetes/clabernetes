@@ -1,8 +1,8 @@
 ---
 name: test
 
-# runs unit then e2e as a single gate. cicd calls unit.yaml/e2e.yaml directly so
-# that image builds can run alongside e2e; everything else wants both together.
+# runs unit then e2e as a single gate. cicd calls unit.yaml/e2e.yaml directly so that pr image
+# builds can run alongside e2e; everything else wants both together.
 on:
   workflow_call: {}
   workflow_dispatch:

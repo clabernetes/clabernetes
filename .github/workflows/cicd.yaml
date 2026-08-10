@@ -56,13 +56,15 @@ jobs:
           esac
           echo "push=$push" >> "$GITHUB_OUTPUT"
 
-  # prs never push images, so build them alongside e2e purely to prove the builds still work.
+  # prs never push images, so build them alongside e2e purely to prove the builds still work. amd64
+  # alone is enough of a smoke test there -- arm64 builds are much slower and get covered on merge.
   images:
     if: ${{ github.event_name == 'pull_request' }}
     needs: prep
     uses: ./.github/workflows/images.yaml
     with:
       push: false
+      amd64-only: true
       build-version: 0.0.0-${{ needs.prep.outputs.short_sha }}
     secrets: inherit
 
