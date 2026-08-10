@@ -205,7 +205,7 @@ try-c9s-apply-topology: try-c9s-install
 		--timeout=$(TRY_C9S_TIMEOUT); then \
 		echo "--> TRY-C9S: topology did not report ready before timeout; current status:"; \
 		$(KUBECTL) -n default get topology $(TRY_C9S_TOPOLOGY_NAME) || true; \
-		$(KUBECTL) -n default get pods -l clabernetes/topologyOwner=$(TRY_C9S_TOPOLOGY_NAME) || true; \
+		$(KUBECTL) -n default get pods -l c9s.run/topologyOwner=$(TRY_C9S_TOPOLOGY_NAME) || true; \
 	fi
 
 .PHONY: try-c9s-print-access

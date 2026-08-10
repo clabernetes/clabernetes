@@ -109,7 +109,7 @@ The storage class cannot be changed after PVC creation. To change storage class:
 When a node is removed from the topology, its PVC is retained. To clean up:
 
 ```bash
-kubectl delete pvc -l clabernetes/topology=<topology-name>
+kubectl delete pvc -l c9s.run/topologyOwner=<topology-name>
 ```
 
 ## Use Cases
@@ -156,7 +156,7 @@ spec:
 List PVCs for a topology:
 
 ```bash
-kubectl get pvc -l clabernetes/topology=my-topology
+kubectl get pvc -l c9s.run/topologyOwner=my-topology
 ```
 
 Check PVC details:
@@ -171,7 +171,7 @@ kubectl describe pvc <pvc-name>
 
 ```bash
 # Get pod name
-POD=$(kubectl get pod -l clabernetes/topologyNode=srl1 -o name)
+POD=$(kubectl get pod -l c9s.run/topologyNode=srl1 -o name)
 
 # Copy data out
 kubectl cp $POD:/clabernetes ./backup-srl1

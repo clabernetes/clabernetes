@@ -37,7 +37,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG TARGETARCH
 ARG DOCKER_VERSION="5:28.*"
-ARG CONTAINERLAB_VERSION="0.74.3+"
+ARG CONTAINERLAB_VERSION="0.78.0+"
 ARG NERDCTL_VERSION="2.1.4"
 
 # BuildKit mounts the optional host CA only for network operations. It is never copied into the

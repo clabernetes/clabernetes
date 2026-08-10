@@ -70,12 +70,13 @@ type ConfigDeployment struct {
 	ContainerlabTimeout string `json:"containerlabTimeout"`
 	// ContainerlabVersion sets a custom version to use for containerlab -- when set this will cause
 	// the launcher pods to download and use this specific version of containerlab. Setting a bad
-	// version (version that doesnt exist/typo/etc.) will cause pods to fail to launch, so be
+	// version (version that doesn't exist/typo/etc.) will cause pods to fail to launch, so be
 	// careful! You never "need" to this as the publicly available launcher image will always be
 	// built with a (reasonably) up to date containerlab version, this setting exists in case you
 	// want to pin back to an older version for some reason or you want to be bleeding edge with
-	// some new feature (but do note that just because it exists in containerlab doesnt
+	// some new feature (but do note that just because it exists in containerlab doesn't
 	// *necessarily* mean it will be auto-working in clabernetes!
+	// 0.78.0 is the floor -- the Node vocabulary includes fields older releases reject outright.
 	// +optional
 	ContainerlabVersion string `json:"containerlabVersion,omitempty"`
 	// LauncherImage sets the default launcher image to use when spawning launcher deployments.

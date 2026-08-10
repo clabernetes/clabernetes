@@ -10,9 +10,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes
-    clabernetes/name: "clabernetes-clicker"
-    clabernetes/component: clicker
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-clicker"
+    c9s.run/component: clicker
 spec:
   template:
     metadata:
@@ -21,9 +21,9 @@ spec:
         release: release-name
         heritage: Helm
         revision: "1"
-        clabernetes/app: clabernetes
-        clabernetes/name: "clabernetes-clicker"
-        clabernetes/component: clicker
+        c9s.run/app: clabernetes
+        c9s.run/name: "clabernetes-clicker"
+        c9s.run/component: clicker
     spec:
       containers:
         - name: clicker

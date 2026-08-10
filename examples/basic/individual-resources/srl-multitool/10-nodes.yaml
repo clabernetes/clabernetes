@@ -4,7 +4,7 @@ kind: Node
 metadata:
   name: srl1
   labels:
-    clabernetes/example: srl-multitool
+    c9s.run/example: srl-multitool
 spec:
   launcherProfileRef:
     name: srl-multitool
@@ -25,7 +25,7 @@ kind: Node
 metadata:
   name: multitool
   labels:
-    clabernetes/example: srl-multitool
+    c9s.run/example: srl-multitool
 spec:
   launcherProfileRef:
     name: srl-multitool

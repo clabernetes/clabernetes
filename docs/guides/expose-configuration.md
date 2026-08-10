@@ -9,6 +9,25 @@ This guide explains how to configure Clabernetes service exposure for your netwo
 
 By default, Clabernetes creates LoadBalancer services for each node in your topology, automatically exposing common network management ports. This behavior can be customized to match your access requirements.
 
+## How exposure works
+
+A node container does not run in its launcher pod's network namespace -- it sits on a containerlab
+managed docker bridge *inside* the pod. A node port is therefore only reachable from outside when
+docker publishes it, which makes the exposed port set an explicit list rather than "everything the
+node listens on":
+
+1. The default management port list (see the table below) is exposed unless
+   `disableAutoExpose: true`.
+2. Anything outside that list -- a custom app on 8080, iperf3 on 5201 -- has to be named in the
+   node's `ports`.
+3. For each destination port, c9s allocates a pod-side port and records the pair in the Node's
+   `status.exposedPorts`. That status is the source of truth for both the node's Service and the
+   topology the launcher hands to containerlab.
+
+Clients always connect to the node's natural port: the Service listens on the destination port and
+targets the allocated pod-side port. That allocation is c9s's to make, which is why `ports` entries
+declare a destination port only.
+
 ## Exposure Options
 
 ### Complete Disable (`disableExpose: true`)
@@ -66,9 +85,13 @@ spec:
             kind: nokia_srlinux
             image: ghcr.io/nokia/srlinux:latest
             ports:
-              - 22:22/tcp       # SSH only
-              - 57400:57400/tcp # gNMI
+              - 22/tcp    # SSH only
+              - 57400/tcp # gNMI
 ```
+
+Each entry is the destination port -- the port the node itself listens on -- with an optional
+protocol. clabernetes allocates the pod-side port that carries it and records both in the Node
+status, so docker style `host:container` bindings are not used here.
 
 **Effects:**
 
@@ -235,7 +258,7 @@ spec:
 
 ```bash
 # Get service IPs
-kubectl get svc -l clabernetes/topology=my-topology
+kubectl get svc -l c9s.run/topologyOwner=my-topology
 
 # SSH to node
 ssh admin@<EXTERNAL-IP>

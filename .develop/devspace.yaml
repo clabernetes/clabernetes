@@ -189,8 +189,8 @@ deployments:
 dev:
   clabernetes:
     labelSelector:
-      clabernetes/app: clabernetes
-      clabernetes/component: manager
+      c9s.run/app: clabernetes
+      c9s.run/component: manager
     container: manager
     devImage: ${MANAGER_DEV_IMAGE_TAGGED}
     sync:

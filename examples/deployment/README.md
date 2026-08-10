@@ -123,8 +123,11 @@ spec:
   deployment:
     containerlabDebug: true        # Enable debug logging
     containerlabTimeout: "30m"     # Deploy timeout
-    containerlabVersion: "0.72.0"  # Pin specific version
+    containerlabVersion: "0.78.0"  # Pin specific version (0.78.0 is the minimum)
 ```
+
+`containerlabVersion` must be 0.78.0 or newer: the Node spec vocabulary includes fields (i.e.
+`privileged`, `tmpfs`, `security-opts`) that older containerlab releases reject outright.
 
 ### Launcher Configuration
 

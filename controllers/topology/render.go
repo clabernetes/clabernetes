@@ -102,6 +102,11 @@ func RenderNodes(
 		// Retain this label for human selection and compatibility; profile attachment is explicit.
 		node.Labels[clabernetesconstants.LabelTopologyNode] = nodeName
 
+		// containerlab node labels are kubernetes labels here rather than docker labels on the
+		// node container. The compiler has already dropped any that kubernetes would reject or
+		// that sit in c9s' own namespace, so nothing here can shadow the labels above.
+		maps.Copy(node.Labels, nodeDefinition.Labels)
+
 		nodes = append(nodes, node)
 	}
 

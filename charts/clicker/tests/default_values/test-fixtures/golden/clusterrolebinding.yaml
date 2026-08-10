@@ -9,9 +9,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes
-    clabernetes/name: "clabernetes-clicker-cluster-role-binding"
-    clabernetes/component: cluster-role-binding
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-clicker-cluster-role-binding"
+    c9s.run/component: cluster-role-binding
 subjects:
   - kind: ServiceAccount
     name: "clabernetes-clicker-service-account"
@@ -31,9 +31,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes
-    clabernetes/name: "clabernetes-clicker-cluster-role-binding"
-    clabernetes/component: cluster-role-binding
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-clicker-cluster-role-binding"
+    c9s.run/component: cluster-role-binding
 subjects:
   - kind: ServiceAccount
     name: "clabernetes-clicker-service-account"

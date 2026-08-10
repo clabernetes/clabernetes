@@ -9,9 +9,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes
-    clabernetes/name: "clabernetes-cluster-role-binding"
-    clabernetes/component: cluster-role-binding
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-cluster-role-binding"
+    c9s.run/component: cluster-role-binding
 subjects:
   - kind: ServiceAccount
     name: "clabernetes-service-account"

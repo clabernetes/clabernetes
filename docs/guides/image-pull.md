@@ -352,7 +352,7 @@ kubectl describe imagerequest <name>
 Check pull pod:
 
 ```bash
-kubectl get pods -l clabernetes/imagePuller=true
+kubectl get pods -l c9s.run/pullerImageHash=<image-hash>
 kubectl logs <pull-pod-name>
 ```
 
@@ -383,7 +383,7 @@ ls -la /run/containerd/containerd.sock
 Check launcher logs:
 
 ```bash
-kubectl logs -l clabernetes/topologyNode=<node> -c clabernetes-launcher
+kubectl logs -l c9s.run/topologyNode=<node> -c clabernetes-launcher
 ```
 
 ### Pull-Through Not Working

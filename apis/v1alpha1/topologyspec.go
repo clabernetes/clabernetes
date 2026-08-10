@@ -187,6 +187,7 @@ type Deployment struct {
 	// want to pin back to an older version for some reason or you want to be bleeding edge with
 	// some new feature (but do note that just because it exists in containerlab doesnt
 	// *necessarily* mean it will be auto-working in clabernetes!
+	// 0.78.0 is the floor -- the Node vocabulary includes fields older releases reject outright.
 	// +optional
 	ContainerlabVersion string `json:"containerlabVersion,omitempty"`
 	// LauncherImage sets the default launcher image to use when spawning launcher deployments for

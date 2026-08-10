@@ -91,7 +91,7 @@ func TestResolveExposedPortsAutoExpose(t *testing.T) {
 
 func TestResolveExposedPortsDisabled(t *testing.T) {
 	exposedPorts, err := clabernetescontrollersnode.ResolveExposedPorts(
-		testExposeNode("srl1", []string{"60123:57400/tcp"}, nil),
+		testExposeNode("srl1", []string{"57400/tcp"}, nil),
 		testResolvedProfile(t, func(profile *clabernetescontrollersnode.ResolvedProfile) {
 			profile.DisableExpose = true
 		}),
@@ -106,9 +106,9 @@ func TestResolveExposedPortsDisabled(t *testing.T) {
 	}
 }
 
-func TestResolveExposedPortsUserPortsHonored(t *testing.T) {
+func TestResolveExposedPortsSpecPortsAllocated(t *testing.T) {
 	exposedPorts, err := clabernetescontrollersnode.ResolveExposedPorts(
-		testExposeNode("srl1", []string{"60123:57400/tcp", "830/tcp"}, nil),
+		testExposeNode("srl1", []string{"57400/tcp", "830/tcp"}, nil),
 		testResolvedProfile(t, func(profile *clabernetescontrollersnode.ResolvedProfile) {
 			profile.DisableAutoExpose = true
 		}),
@@ -122,14 +122,31 @@ func TestResolveExposedPortsUserPortsHonored(t *testing.T) {
 		t.Fatalf("expected 2 allocations, got %+v", exposedPorts.Ports)
 	}
 
-	gnmiPort := findPort(exposedPorts, 57400, "TCP")
-	if gnmiPort == nil || gnmiPort.ExposePort != 60123 {
-		t.Fatalf("expected user provided expose port 60123 to be honored, got %+v", gnmiPort)
-	}
-
+	// allocation walks the destination ports in ascending order, handing out the lowest free
+	// port in the range to each
 	netconfPort := findPort(exposedPorts, 830, "TCP")
 	if netconfPort == nil || netconfPort.ExposePort != 60_000 {
 		t.Fatalf("expected lowest free allocation 60000, got %+v", netconfPort)
+	}
+
+	gnmiPort := findPort(exposedPorts, 57400, "TCP")
+	if gnmiPort == nil || gnmiPort.ExposePort != 60_001 {
+		t.Fatalf("expected next free allocation 60001, got %+v", gnmiPort)
+	}
+}
+
+// TestResolveExposedPortsRejectsHostBinding covers that the pod side port is not the user's to
+// pin -- clabernetes allocates it, so the docker style two sided form is an error.
+func TestResolveExposedPortsRejectsHostBinding(t *testing.T) {
+	_, err := clabernetescontrollersnode.ResolveExposedPorts(
+		testExposeNode("srl1", []string{"60123:57400/tcp"}, nil),
+		testResolvedProfile(t, func(profile *clabernetescontrollersnode.ResolvedProfile) {
+			profile.DisableAutoExpose = true
+		}),
+		nil,
+	)
+	if err == nil {
+		t.Fatal("expected an error for a docker style host:container port binding")
 	}
 }
 

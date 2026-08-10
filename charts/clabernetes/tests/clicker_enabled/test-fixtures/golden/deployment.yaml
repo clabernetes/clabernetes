@@ -11,9 +11,9 @@ metadata:
     heritage: Helm
     revision: "1"
     app.kubernetes.io/name: "clabernetes-plus-clicker-manager"
-    clabernetes/app: clabernetes-plus-clicker
-    clabernetes/name: "clabernetes-plus-clicker-manager"
-    clabernetes/component: manager
+    c9s.run/app: clabernetes-plus-clicker
+    c9s.run/name: "clabernetes-plus-clicker-manager"
+    c9s.run/component: manager
     anotherlabel: anotherlabelvalue
     somelabel: somelabelvalue
   annotations:
@@ -22,9 +22,9 @@ metadata:
 spec:
   selector:
     matchLabels:
-      clabernetes/app: clabernetes-plus-clicker
+      c9s.run/app: clabernetes-plus-clicker
       release: release-name
-      clabernetes/component: manager
+      c9s.run/component: manager
   replicas: 3
   strategy:
     rollingUpdate:
@@ -39,9 +39,9 @@ spec:
         heritage: Helm
         revision: "1"
         app.kubernetes.io/name: "clabernetes-plus-clicker-manager"
-        clabernetes/app: clabernetes-plus-clicker
-        clabernetes/name: "clabernetes-plus-clicker-manager"
-        clabernetes/component: manager
+        c9s.run/app: clabernetes-plus-clicker
+        c9s.run/name: "clabernetes-plus-clicker-manager"
+        c9s.run/component: manager
         anotherlabel: anotherlabelvalue
         somelabel: somelabelvalue
       annotations:
@@ -55,17 +55,17 @@ spec:
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    clabernetes/app: clabernetes-plus-clicker
-                    clabernetes/name: "clabernetes-plus-clicker-manager"
-                    clabernetes/component: manager
+                    c9s.run/app: clabernetes-plus-clicker
+                    c9s.run/name: "clabernetes-plus-clicker-manager"
+                    c9s.run/component: manager
                 topologyKey: kubernetes.io/hostname
             - weight: 50
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    clabernetes/app: clabernetes-plus-clicker
-                    clabernetes/name: "clabernetes-plus-clicker-manager"
-                    clabernetes/component: manager
+                    c9s.run/app: clabernetes-plus-clicker
+                    c9s.run/name: "clabernetes-plus-clicker-manager"
+                    c9s.run/component: manager
                 topologyKey: topology.kubernetes.io/zone
       terminationGracePeriodSeconds: 10
       serviceAccountName: "clabernetes-plus-clicker-service-account"

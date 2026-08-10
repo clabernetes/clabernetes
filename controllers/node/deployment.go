@@ -219,6 +219,18 @@ func (r *DeploymentReconciler) renderDeploymentBase(
 
 	labels := map[string]string{}
 
+	// a lab author's own labels on the Node -- i.e. containerlab node labels the topology compiler
+	// carried over -- flow down to the deployment and its pods, which is what makes them useful:
+	// `kubectl get pods -l <their label>` reaches the launcher pods. c9s' own label
+	// namespace is skipped, since those labels are set below and mean things to the controllers
+	for key, value := range input.Node.GetLabels() {
+		if strings.HasPrefix(key, clabernetesconstants.LabelPrefix+"/") {
+			continue
+		}
+
+		labels[key] = value
+	}
+
 	maps.Copy(labels, selectorLabels)
 	maps.Copy(labels, globalLabels)
 

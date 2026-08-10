@@ -57,13 +57,14 @@ func destinationKey(port clabernetesapisv1alpha1.NodeExposedPort) string {
 	return fmt.Sprintf("%d/%s", port.DestinationPort, port.Protocol)
 }
 
-// ResolveExposedPorts computes the desired expose port allocations for a node: the ports the
-// user listed in the node definition (with any user-provided expose ports honored verbatim),
-// plus -- unless auto expose is disabled -- the default port set. Allocations previously
-// recorded in the node's status are retained so that adding/removing ports never renumbers the
-// surviving ones, and ports already claimed by other members of the node's launcher group
-// (takenExposePorts, keyed by protocol) are never handed out twice on the shared pod network
-// namespace. Returns nil when the node exposes nothing.
+// ResolveExposedPorts computes the desired expose port allocations for a node: the destination
+// ports the user listed in the node definition, plus -- unless auto expose is disabled -- the
+// default port set. The pod side (expose) port of every entry is allocated here; node specs
+// declare destination ports only. Allocations previously recorded in the node's status are
+// retained so that adding/removing ports never renumbers the surviving ones, and ports already
+// claimed by other members of the node's launcher group (takenExposePorts, keyed by protocol)
+// are never handed out twice on the shared pod network namespace. Returns nil when the node
+// exposes nothing.
 func ResolveExposedPorts( //nolint:gocognit,gocyclo,cyclop,funlen
 	node *clabernetesapisv1alpha1.Node,
 	resolvedProfile *ResolvedProfile,
@@ -89,7 +90,6 @@ func ResolveExposedPorts( //nolint:gocognit,gocyclo,cyclop,funlen
 		}
 
 		port := clabernetesapisv1alpha1.NodeExposedPort{
-			ExposePort:      int(typedPort.ExposePort),
 			DestinationPort: int(typedPort.DestinationPort),
 			Protocol:        typedPort.Protocol,
 		}
@@ -139,13 +139,6 @@ func ResolveExposedPorts( //nolint:gocognit,gocyclo,cyclop,funlen
 		}
 	}
 
-	// user-provided expose ports win unconditionally
-	for idx := range desired {
-		if desired[idx].ExposePort != 0 {
-			taken[desired[idx].Protocol][desired[idx].ExposePort] = true
-		}
-	}
-
 	// previously allocated expose ports are retained where possible
 	previousAllocations := map[string]int{}
 
@@ -156,10 +149,6 @@ func ResolveExposedPorts( //nolint:gocognit,gocyclo,cyclop,funlen
 	}
 
 	for idx := range desired {
-		if desired[idx].ExposePort != 0 {
-			continue
-		}
-
 		previous, ok := previousAllocations[destinationKey(desired[idx])]
 		if !ok || previous == 0 || taken[desired[idx].Protocol][previous] {
 			continue

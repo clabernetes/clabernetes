@@ -3,7 +3,7 @@ kind: Node
 metadata:
   annotations: {}
   labels:
-    c9s: direct
+    c9s.run/mode: direct
   name: srl1
   namespace: NAMESPACE
 spec:

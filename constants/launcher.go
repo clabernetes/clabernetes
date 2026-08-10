@@ -46,6 +46,6 @@ const (
 	NodeStatusUnknown = "unknown"
 
 	// NodeStatusDeploymentDisabled is reported in the topology.status.nodereadiness map when the
-	// parent topology has the "clabernetes/disableDeployments" label set.
+	// parent topology has the "c9s.run/disableDeployments" label set.
 	NodeStatusDeploymentDisabled = "deploymentDisabled"
 )

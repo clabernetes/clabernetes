@@ -109,7 +109,7 @@ e2e-debug-dump: ## Dump manager pods/events/logs for debugging a failed e2e run
 	@echo "******** events ********"
 	@$(E2E_KUBECTL) get events -n $(E2E_NAMESPACE) --sort-by='.lastTimestamp' || true
 	@echo "******** logs ********"
-	@$(E2E_KUBECTL) logs -l clabernetes/name=clabernetes-manager -n $(E2E_NAMESPACE) --tail=-1 || true
+	@$(E2E_KUBECTL) logs -l c9s.run/name=clabernetes-manager -n $(E2E_NAMESPACE) --tail=-1 || true
 
 .PHONY: e2e-clean
 e2e-clean: ## Delete the local e2e KinD cluster

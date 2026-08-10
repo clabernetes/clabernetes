@@ -131,6 +131,40 @@ func TestRenderNodes(t *testing.T) {
 	}
 }
 
+// TestRenderNodesCarriesContainerlabLabels pins where containerlab node labels end up: the Node's
+// metadata, which is where kubernetes labels belong and what carries them on to the launcher
+// deployment and its pods. There is deliberately no spec.labels for them to live in.
+func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
+	topology, compiled := renderTestTopology(t)
+
+	nodes := clabernetescontrollerstopology.RenderNodes(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	for _, node := range nodes {
+		if node.Labels["tier"] != "lab" {
+			t.Errorf(
+				"expected the topology defaults label on node %q, got %v",
+				node.GetName(),
+				node.Labels,
+			)
+		}
+
+		// c9s' own labels must still be intact alongside them
+		if node.Labels[clabernetesconstants.LabelTopologyOwner] != "render-test" {
+			t.Errorf("expected owner label on node %q, got %v", node.GetName(), node.Labels)
+		}
+	}
+
+	srl1 := nodes[1]
+
+	if srl1.Labels["owner"] != "roman" || srl1.Labels["vendor"] != "nokia" {
+		t.Errorf("expected node and kind level labels on srl1, got %v", srl1.Labels)
+	}
+}
+
 func TestRenderLinks(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 

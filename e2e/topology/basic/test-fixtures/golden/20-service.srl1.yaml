@@ -3,11 +3,11 @@ kind: Service
 metadata:
   annotations: {}
   labels:
-    clabernetes/app: clabernetes
-    clabernetes/name: srl1
-    clabernetes/topologyNode: srl1
-    clabernetes/topologyOwner: topology-basic
-    clabernetes/topologyServiceType: expose
+    c9s.run/app: clabernetes
+    c9s.run/name: srl1
+    c9s.run/topologyNode: srl1
+    c9s.run/topologyOwner: topology-basic
+    c9s.run/topologyServiceType: expose
   name: srl1
   namespace: NAMESPACE
   ownerReferences:
@@ -79,9 +79,9 @@ spec:
       protocol: UDP
       targetPort: 60000
   selector:
-    clabernetes/app: clabernetes
-    clabernetes/name: srl1
-    clabernetes/topologyNode: srl1
+    c9s.run/app: clabernetes
+    c9s.run/name: srl1
+    c9s.run/topologyNode: srl1
   sessionAffinity: None
   type: LoadBalancer
 status:

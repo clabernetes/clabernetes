@@ -4,10 +4,10 @@ metadata:
   annotations: {}
   labels:
     app.kubernetes.io/name: srl1
-    clabernetes/app: clabernetes
-    clabernetes/name: srl1
-    clabernetes/topologyNode: srl1
-    clabernetes/topologyOwner: topology-basic
+    c9s.run/app: clabernetes
+    c9s.run/name: srl1
+    c9s.run/topologyNode: srl1
+    c9s.run/topologyOwner: topology-basic
   name: srl1
   namespace: NAMESPACE
   ownerReferences:
@@ -21,9 +21,9 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: srl1
-      clabernetes/app: clabernetes
-      clabernetes/name: srl1
-      clabernetes/topologyNode: srl1
+      c9s.run/app: clabernetes
+      c9s.run/name: srl1
+      c9s.run/topologyNode: srl1
   strategy:
     type: Recreate
   template:
@@ -33,10 +33,10 @@ spec:
         clabernetes/nodeConfigDigest: e7c66a3da651e14784927a8a228df681b3363f1c3460ec356c6651561183ee3a
       labels:
         app.kubernetes.io/name: srl1
-        clabernetes/app: clabernetes
-        clabernetes/name: srl1
-        clabernetes/topologyNode: srl1
-        clabernetes/topologyOwner: topology-basic
+        c9s.run/app: clabernetes
+        c9s.run/name: srl1
+        c9s.run/topologyNode: srl1
+        c9s.run/topologyOwner: topology-basic
     spec:
       containers:
         - command:

@@ -8,9 +8,9 @@ metadata:
     release: release-name
     heritage: Helm
     revision: "1"
-    clabernetes/app: clabernetes
-    clabernetes/name: "clabernetes-clicker-cluster-role"
-    clabernetes/component: cluster-role
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-clicker-cluster-role"
+    c9s.run/component: cluster-role
   name: "clabernetes-clicker-cluster-role"
 rules:
   - apiGroups:

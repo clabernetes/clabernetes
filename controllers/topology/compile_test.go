@@ -21,6 +21,9 @@ topology:
       OVERRIDDEN: defaults
     binds:
       - /defaults:/defaults
+    labels:
+      tier: lab
+      owner: defaults
   kinds:
     nokia_srlinux:
       image: ghcr.io/nokia/srlinux:latest
@@ -28,6 +31,9 @@ topology:
       env:
         FROM_KIND: "1"
         OVERRIDDEN: kind
+      labels:
+        vendor: nokia
+        owner: kind
     linux:
       image: ghcr.io/srl-labs/network-multitool
   nodes:
@@ -39,6 +45,15 @@ topology:
         - /node:/node
       ports:
         - 21022:22/tcp
+        - 5201/udp
+      labels:
+        owner: roman
+        # docker labels are far more permissive than kubernetes labels, and clabernetes owns its
+        # own label namespace and controller keys -- all four of these have to be dropped
+        not a valid key: x
+        bad-value: has spaces and a !
+        c9s.run/ignoreReconcile: "true"
+        app.kubernetes.io/name: user-value
     multitool:
       kind: linux
   links:
@@ -104,8 +119,11 @@ func TestCompileContainerlabFlattening(t *testing.T) {
 		t.Fatalf("expected merged binds %v, got %v", expectedBinds, srl1.Binds)
 	}
 
-	if !reflect.DeepEqual(srl1.Ports, []string{"21022:22/tcp"}) {
-		t.Fatalf("expected node ports, got %v", srl1.Ports)
+	// pasted containerlab topologies carry docker style bindings; the host side is dropped since
+	// clabernetes allocates it, while destination-only entries pass through untouched
+	expectedPorts := []string{"22/tcp", "5201/udp"}
+	if !reflect.DeepEqual(srl1.Ports, expectedPorts) {
+		t.Fatalf("expected normalized node ports %v, got %v", expectedPorts, srl1.Ports)
 	}
 
 	multitool := compiled.Nodes["multitool"]
@@ -129,6 +147,37 @@ func TestCompileContainerlabFlattening(t *testing.T) {
 
 	if compiled.Mgmt == nil || compiled.Mgmt.IPv4Subnet != "172.20.20.0/24" {
 		t.Fatalf("expected mgmt settings to be compiled, got %+v", compiled.Mgmt)
+	}
+}
+
+// TestCompileContainerlabLabels covers containerlab node labels, which become kubernetes labels on
+// the emitted Node rather than docker labels on the node container. They inherit like env does, and
+// anything kubernetes would reject -- or that sits in c9s' own label namespace -- is
+// dropped here, since the alternative is an emitted Node the apiserver refuses to create.
+func TestCompileContainerlabLabels(t *testing.T) {
+	compiled := compileFlattenTest(t)
+
+	expected := map[string]map[string]string{
+		// defaults, then kind, then node, most specific winning "owner"
+		"srl1": {"tier": "lab", "vendor": "nokia", "owner": "roman"},
+		// the linux kind declares no labels, so only the topology defaults apply
+		"multitool": {"tier": "lab", "owner": "defaults"},
+	}
+
+	for nodeName, expectedLabels := range expected {
+		node := compiled.Nodes[nodeName]
+		if node == nil {
+			t.Fatalf("expected compiled node %q", nodeName)
+		}
+
+		if !reflect.DeepEqual(node.Labels, expectedLabels) {
+			t.Errorf(
+				"node %q: expected labels %v, got %v",
+				nodeName,
+				expectedLabels,
+				node.Labels,
+			)
+		}
 	}
 }
 

@@ -16,69 +16,91 @@ import (
 // vocabulary in the codebase.
 
 // NodeDefinition represents a configuration a given node can have in a (containerlab) lab
-// definition file. This is also, verbatim, the containerlab portion of the clabernetes Node
-// custom resource spec.
+// definition file. It is a *curated subset* of the containerlab node vocabulary: a field lives
+// here only if a clabernetes controller reads it, or if containerlab-in-a-launcher-pod can
+// realize it for a single node. Deliberately absent are vocabulary whose meaning spans the nodes
+// of one lab (deployment stages, startup delays, boot ordering), settings the launcher pod
+// already owns (resources, image pull policy, readiness -- LauncherProfile territory), and
+// anything containerlab itself no longer accepts. This is also, verbatim, the containerlab
+// portion of the clabernetes Node custom resource spec.
 type NodeDefinition struct {
 	// Kind is the containerlab kind of the node -- i.e. nokia_srlinux.
 	// +optional
 	Kind string `json:"kind,omitempty" yaml:"kind,omitempty"`
-	// Group is the (containerlab) group of the node.
-	// +optional
-	Group string `json:"group,omitempty" yaml:"group,omitempty"`
 	// Type is the type of the node -- i.e. ixrd2.
 	// +optional
 	Type string `json:"type,omitempty" yaml:"type,omitempty"`
+	// Image is the container image for the node.
+	// +optional
+	Image string `json:"image,omitempty" yaml:"image,omitempty"`
+	// License is the path to the license file for the node.
+	// +optional
+	License string `json:"license,omitempty" yaml:"license,omitempty"`
 	// StartupConfig is the startup configuration for the node -- either a path or an inline
 	// (multiline string) config.
 	// +optional
 	StartupConfig string `json:"startup-config,omitempty" yaml:"startup-config,omitempty"`
-	// StartupDelay is the delay (in seconds) to wait before starting the node.
+	// EnforceStartupConfig makes the node boot from StartupConfig even when it already has a
+	// saved (persisted) configuration.
 	// +optional
-	StartupDelay uint `json:"startup-delay,omitempty" yaml:"startup-delay,omitempty"`
-	// EnforceStartupConfig enforces the startup config even if the node has a saved config.
+	EnforceStartupConfig *bool `json:"enforce-startup-config,omitempty" yaml:"enforce-startup-config,omitempty"` //nolint:lll
+	// SuppressStartupConfig boots the node with its factory configuration -- containerlab
+	// generates and mounts no startup config at all.
 	// +optional
-	EnforceStartupConfig bool `json:"enforce-startup-config,omitempty" yaml:"enforce-startup-config,omitempty"` //nolint:lll
-	// AutoRemove enables the auto removal of the node's container when it stops.
-	// +optional
-	AutoRemove *bool `json:"auto-remove,omitempty" yaml:"auto-remove,omitempty"`
+	SuppressStartupConfig *bool `json:"suppress-startup-config,omitempty" yaml:"suppress-startup-config,omitempty"` //nolint:lll
 	// Config holds containerlab config engine settings for the node.
 	// +optional
 	Config *ConfigDispatcher `json:"config,omitempty" yaml:"config,omitempty"`
-	// Image is the container image for the node.
-	// +optional
-	Image string `json:"image,omitempty" yaml:"image,omitempty"`
-	// ImagePullPolicy is the (containerlab, so docker) image pull policy for the node.
-	// +optional
-	ImagePullPolicy string `json:"image-pull-policy,omitempty" yaml:"image-pull-policy,omitempty"`
-	// License is the path to the license file for the node.
-	// +optional
-	License string `json:"license,omitempty" yaml:"license,omitempty"`
-	// Position is the position of the node (used by graphing tooling).
-	// +optional
-	Position string `json:"position,omitempty" yaml:"position,omitempty"`
 	// Entrypoint overrides the container entrypoint.
 	// +optional
 	Entrypoint string `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
 	// Cmd overrides the container command.
 	// +optional
 	Cmd string `json:"cmd,omitempty" yaml:"cmd,omitempty"`
-	// SANs is the list of subject alternative names to be added to the node's certificate.
-	// +listType=atomic
-	// +optional
-	SANs []string `json:"SANs,omitempty" yaml:"SANs,omitempty"`
 	// Exec is a list of commands to run in the node's container once it is started.
 	// +listType=atomic
 	// +optional
 	Exec []string `json:"exec,omitempty" yaml:"exec,omitempty"`
+	// User is the linux user to use in the node's container.
+	// +optional
+	User string `json:"user,omitempty" yaml:"user,omitempty"`
 	// Binds is a list of bind (mount) compatible strings.
 	// +listType=atomic
 	// +optional
 	Binds []string `json:"binds,omitempty" yaml:"binds,omitempty"`
-	// Ports is a list of (docker style) port bindings for the node. Ports listed here are also
-	// what feeds the clabernetes expose machinery -- the allocated (load balancer) port set ends
-	// up in the Node status.
-	// note: no yaml omitempty -- historically we always render the (possibly empty) list so that
-	// rendered topology comparisons never see nil vs empty slice differences.
+	// Devices is a list of host devices to map into the node's container.
+	// +listType=atomic
+	// +optional
+	Devices []string `json:"devices,omitempty" yaml:"devices,omitempty"`
+	// CapAdd is a list of linux capabilities to add to the node's container.
+	// +listType=atomic
+	// +optional
+	CapAdd []string `json:"cap-add,omitempty" yaml:"cap-add,omitempty"`
+	// Privileged runs the node's container in privileged mode.
+	// +optional
+	Privileged *bool `json:"privileged,omitempty" yaml:"privileged,omitempty"`
+	// SecurityOpts is a list of security options (i.e. seccomp or apparmor settings) to apply to
+	// the node's container.
+	// +listType=atomic
+	// +optional
+	SecurityOpts []string `json:"security-opts,omitempty" yaml:"security-opts,omitempty"`
+	// Tmpfs holds tmpfs mounts for the node's container, keyed by destination path.
+	// +optional
+	Tmpfs map[string]string `json:"tmpfs,omitempty" yaml:"tmpfs,omitempty"`
+	// ShmSize is the shared memory size allocated to the node's container -- i.e. 256m.
+	// +optional
+	ShmSize string `json:"shm-size,omitempty" yaml:"shm-size,omitempty"`
+	// the ports pattern spells out 1-65535 as an alternation so the range is enforced by the
+	// pattern alone: a CEL rule over an unbounded list of unbounded strings blows the
+	// apiserver's estimated cost budget and the whole CRD is then rejected at install time
+
+	// Ports lists additional ports to expose on this node. Each entry is a destination port
+	// between 1 and 65535 with an optional protocol -- "8080" or "5201/udp" -- meaning the port
+	// the node itself listens on. clabernetes allocates the pod side port that carries it and
+	// records both in the Node status, so docker style "host:container" bindings are rejected
+	// here. Unless auto expose is disabled, the default set of management ports is exposed in
+	// addition to these.
+	// +kubebuilder:validation:items:Pattern=`^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])(/(tcp|udp|TCP|UDP))?$`
 	// +listType=atomic
 	// +optional
 	Ports []string `json:"ports,omitempty" yaml:"ports"`
@@ -88,10 +110,18 @@ type NodeDefinition struct {
 	// MgmtIPv6 is the user-defined IPv6 address of the node in the management network.
 	// +optional
 	MgmtIPv6 string `json:"mgmt-ipv6,omitempty" yaml:"mgmt-ipv6,omitempty"`
-	// Publish is a list of ports to publish with mysocketctl.
-	// +listType=atomic
+	// the network-mode length bound is what keeps its CEL rule inside the apiserver's estimated
+	// cost budget: "container:" plus a node name, which is an RFC1123 label, so 10 + 63
+
+	// NetworkMode declares that this node shares the network namespace -- and therefore the
+	// launcher pod -- of the named primary node. `container:<primary node name>` is the only
+	// accepted value: clabernetes derives node "grouping" (nodes co-located in one launcher pod,
+	// i.e. the cards of a distributed chassis) from exactly this containerlab-native field, and
+	// the other containerlab network modes have no meaning inside a launcher pod.
+	// +kubebuilder:validation:MaxLength=73
+	// +kubebuilder:validation:XValidation:rule="self.matches('^container:[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="network-mode must be container:<primary node name> -- it declares that this node shares its launcher pod with the named primary node"
 	// +optional
-	Publish []string `json:"publish,omitempty" yaml:"publish,omitempty"`
+	NetworkMode string `json:"network-mode,omitempty" yaml:"network-mode,omitempty"`
 	// Env holds the environment variables for the node's container.
 	// +optional
 	Env map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
@@ -99,60 +129,26 @@ type NodeDefinition struct {
 	// +listType=atomic
 	// +optional
 	EnvFiles []string `json:"env-files,omitempty" yaml:"env-files,omitempty"`
-	// User is the linux user to use in the node's container.
-	// +optional
-	User string `json:"user,omitempty" yaml:"user,omitempty"`
-	// Labels holds the container labels for the node.
-	// +optional
-	Labels map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
-	// NetworkMode is the container networking mode. `container:<name>` expresses that this node
-	// shares the network namespace of another node -- clabernetes derives node "grouping" (nodes
-	// co-located in one launcher pod) from exactly this containerlab-native field.
-	// +optional
-	NetworkMode string `json:"network-mode,omitempty" yaml:"network-mode,omitempty"`
-	// Sandbox is the ignite sandbox image name.
-	// +optional
-	Sandbox string `json:"sandbox,omitempty" yaml:"sandbox,omitempty"`
-	// Kernel is the ignite kernel image name.
-	// +optional
-	Kernel string `json:"kernel,omitempty" yaml:"kernel,omitempty"`
-	// Runtime overrides the container runtime for the node.
-	// +optional
-	Runtime string `json:"runtime,omitempty" yaml:"runtime,omitempty"`
-	// CPU is the node CPU limit (cgroup or hypervisor) -- note that this is the *containerlab*
-	// (docker) cpu setting, launcher pod resources are LauncherProfile territory.
-	// +optional
-	CPU float64 `json:"cpu,omitempty" yaml:"cpu,omitempty"`
-	// CPUSet is the set of CPUs the node can use.
-	// +optional
-	CPUSet string `json:"cpu-set,omitempty" yaml:"cpu-set,omitempty"`
-	// Memory is the node memory limit (cgroup or hypervisor) -- as with CPU this is the
-	// *containerlab* (docker) setting, not the launcher pod resources.
-	// +optional
-	Memory string `json:"memory,omitempty" yaml:"memory,omitempty"`
 	// Sysctls holds sysctl settings for the node.
 	// +optional
 	Sysctls map[string]string `json:"sysctls,omitempty" yaml:"sysctls,omitempty"`
-	// Extras holds extra, possibly kind specific, node parameters.
+	// Labels are containerlab node labels, and exist only so a Topology definition can carry
+	// them: the compiler copies them onto the emitted Node's metadata.labels, from where they
+	// reach the launcher deployment and its pods. There is deliberately no spec.labels on a Node
+	// (hence json:"-") -- in Kubernetes, metadata.labels is where labels belong, and unlike
+	// containerlab's docker labels these are selectable with kubectl. Invalid labels and keys
+	// reserved by c9s are omitted with a warning during Topology compilation.
 	// +optional
-	Extras *Extras `json:"extras,omitempty" yaml:"extras,omitempty"`
-	// WaitFor is a list of node names to wait for before starting this particular node.
-	// +listType=atomic
-	// +optional
-	WaitFor []string `json:"wait-for,omitempty" yaml:"wait-for,omitempty"`
+	Labels map[string]string `json:"-" yaml:"labels,omitempty"`
 	// DNS holds the DNS configuration for the node.
 	// +optional
 	DNS *DNSConfig `json:"dns,omitempty" yaml:"dns,omitempty"`
 	// Certificate holds the TLS certificate configuration for the node.
 	// +optional
 	Certificate *CertificateConfig `json:"certificate,omitempty" yaml:"certificate,omitempty"`
-	// Healthcheck holds the healthcheck configuration for the node.
+	// Extras holds extra, possibly kind specific, node parameters.
 	// +optional
-	Healthcheck *HealthcheckConfig `json:"healthcheck,omitempty" yaml:"healthcheck,omitempty"`
-	// Aliases is a list of network aliases for the node.
-	// +listType=atomic
-	// +optional
-	Aliases []string `json:"aliases,omitempty" yaml:"aliases,omitempty"`
+	Extras *Extras `json:"extras,omitempty" yaml:"extras,omitempty"`
 	// Components holds the hardware component (i.e. SR-OS card/mda) configuration for the node.
 	// +listType=atomic
 	// +optional
@@ -222,9 +218,6 @@ type Extras struct {
 	// +listType=atomic
 	// +optional
 	SRLAgents []string `json:"srl-agents,omitempty" yaml:"srl-agents,omitempty"`
-	// MysocketProxy is the proxy address that mysocketctl will use.
-	// +optional
-	MysocketProxy string `json:"mysocket-proxy,omitempty" yaml:"mysocket-proxy,omitempty"`
 	// CeosCopyToFlash is a list of paths to files which are to be copied to the ceos flash dir.
 	// +listType=atomic
 	// +optional
@@ -249,32 +242,22 @@ type DNSConfig struct {
 
 // CertificateConfig represents the configuration of a TLS infrastructure used by a node.
 type CertificateConfig struct {
-	// Issue indicates if the node should have a certificate issued -- the default false value
-	// indicates that the node does not use TLS.
+	// Issue indicates if the node should have a certificate issued -- when unset the node does
+	// not use TLS.
 	// +optional
-	Issue bool `json:"issue,omitempty" yaml:"issue,omitempty"`
-}
-
-// HealthcheckConfig represents healthcheck options a node has.
-type HealthcheckConfig struct {
-	// Test is the command to run to check the health of the container.
+	Issue *bool `json:"issue,omitempty" yaml:"issue,omitempty"`
+	// KeySize is the size of the certificate key in bits.
+	// +optional
+	KeySize int `json:"key-size,omitempty" yaml:"key-size,omitempty"`
+	// ValidityDuration is how long the issued certificate is valid for, as a Go duration --
+	// i.e. 8760h for a year.
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
+	// +optional
+	ValidityDuration string `json:"validity-duration,omitempty" yaml:"validity-duration,omitempty"` //nolint:lll
+	// SANs is the list of subject alternative names to add to the node's certificate.
 	// +listType=atomic
 	// +optional
-	Test []string `json:"test,omitempty" yaml:"test"`
-	// StartPeriod is the time in seconds to wait for the container to bootstrap before running
-	// the first health check.
-	// +optional
-	StartPeriod int `json:"start-period,omitempty" yaml:"start-period,omitempty"`
-	// Retries is the number of consecutive healthcheck failures needed to report the container
-	// as unhealthy.
-	// +optional
-	Retries int `json:"retries,omitempty" yaml:"retries,omitempty"`
-	// Interval is the time interval between the health checks in seconds.
-	// +optional
-	Interval int `json:"interval,omitempty" yaml:"interval,omitempty"`
-	// Timeout is the time in seconds to wait for a single health check operation to complete.
-	// +optional
-	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	SANs []string `json:"sans,omitempty" yaml:"sans,omitempty"`
 }
 
 // Component holds a hardware component configuration (i.e. an SR-OS card or mda).

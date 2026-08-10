@@ -61,13 +61,14 @@ spec:
     disableAutoExpose: true
 ```
 
-Define ports explicitly in the containerlab topology:
+Define ports explicitly in the containerlab topology -- each entry is the destination port (the
+port the node listens on) with an optional protocol:
 ```yaml
 nodes:
   srl1:
     ports:
-      - 22:22/tcp
-      - 57400:57400/tcp
+      - 22/tcp
+      - 57400/tcp
 ```
 
 ## Auto-Exposed Ports

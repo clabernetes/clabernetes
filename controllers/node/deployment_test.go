@@ -27,6 +27,8 @@ func TestRenderDeployment(t *testing.T) {
 	node.Namespace = "clabernetes"
 	node.Labels = map[string]string{
 		clabernetesconstants.LabelTopologyOwner: "my-lab",
+		clabernetesconstants.LabelTopologyKind:  "containerlab",
+		"owner":                                 "roman",
 	}
 	node.Spec.Kind = "nokia_srlinux"
 	node.Spec.Image = "ghcr.io/nokia/srlinux:latest"
@@ -80,6 +82,30 @@ func TestRenderDeployment(t *testing.T) {
 
 	if deployment.Labels[clabernetesconstants.LabelTopologyOwner] != "my-lab" {
 		t.Fatal("expected topology owner label to be propagated from the node")
+	}
+
+	// a lab author's own labels reach the deployment *and* its pods, which is the point of
+	// carrying containerlab node labels over; c9s' own namespace does not tag along, so
+	// labs without such labels do not get a gratuitous pod roll on upgrade
+	if deployment.Labels["owner"] != "roman" ||
+		deployment.Spec.Template.ObjectMeta.Labels["owner"] != "roman" {
+		t.Fatalf(
+			"expected node labels on the deployment and pod template, got %v / %v",
+			deployment.Labels,
+			deployment.Spec.Template.ObjectMeta.Labels,
+		)
+	}
+
+	if _, ok := deployment.Labels[clabernetesconstants.LabelTopologyKind]; ok {
+		t.Fatalf(
+			"expected c9s-owned labels not to be propagated, got %v",
+			deployment.Labels,
+		)
+	}
+
+	// the selector is immutable once created, so it must stay exactly the fixed set
+	if _, ok := deployment.Spec.Selector.MatchLabels["owner"]; ok {
+		t.Fatalf("node labels must not leak into the selector, got %v", deployment.Spec.Selector)
 	}
 
 	podAnnotations := deployment.Spec.Template.ObjectMeta.Annotations

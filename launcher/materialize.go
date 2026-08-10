@@ -45,6 +45,11 @@ func materializeTopology(
 		member := members[memberName]
 
 		nodeDefinition := member.Spec.NodeDefinition.DeepCopy()
+
+		// the spec ports are user *intent* (destination ports); what gets published is the
+		// status allocation, gathered below and rendered on the primary. NodeDefinition.Ports
+		// carries no yaml omitempty so the (possibly empty) list always renders -- that keeps
+		// rendered topology comparisons from seeing nil vs empty slice differences.
 		nodeDefinition.Ports = []string{}
 
 		if member.Status.ExposedPorts != nil {

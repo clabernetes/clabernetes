@@ -377,13 +377,21 @@ func (c *Clabverter) load() error {
 	c.rawClabConfig = string(rawClabConfigBytes)
 
 	// parse the topo file
-	c.clabConfig, err = clabernetesutilcontainerlab.LoadContainerlabConfig(c.rawClabConfig)
+	var unknownFields []string
+
+	c.clabConfig, unknownFields, err = clabernetesutilcontainerlab.LoadContainerlabConfig(
+		c.rawClabConfig,
+	)
 	if err != nil {
 		c.logger.Criticalf(
 			"failed parsing containerlab topology file at '%s', error: %s", c.topologyPath, err,
 		)
 
 		return err
+	}
+
+	for _, unknownField := range unknownFields {
+		c.logger.Warn(unknownField)
 	}
 
 	// set the destination namespace to the c9s-<topology name>
