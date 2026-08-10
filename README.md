@@ -119,12 +119,11 @@ troubleshooting): [`.develop/README.md`](.develop/README.md).
 ### Registry mode summary
 
 | Command | Use when |
-| --------- | ---------- |
-| `make dev` | Default. Remote clusters → in-cluster registry. kind/minikube → push to `REGISTRY`. |
-| `LOCAL_REGISTRY=0 make dev DEVSPACE_ARGS="--profile always-pull"` | Cluster can pull from GHCR or another external registry you push to. |
-| `LOCAL_REGISTRY=1 make dev` | Force in-cluster registry (e.g. on kind without loading images). |
+| ------- | -------- |
+| `make dev` | Default. Remote clusters → DevSpace native local registry. kind/minikube → push to `REGISTRY`. |
+| `LOCAL_REGISTRY=0 make dev DEVSPACE_ARGS="--profile always-pull"` | Cluster can pull from GHCR or another external registry. |
 
-Default `REGISTRY` is `ghcr.io/clabernetes/clabernetes`. Override with `REGISTRY=...`.
+Default `REGISTRY` is `ghcr.io/clabernetes/clabernetes`.
 
 ### Common options
 
@@ -150,5 +149,5 @@ kubectl -n clabernetes rollout status deployment/clabernetes-manager
 ```
 
 ```bash
-build/dev/bin/devspace run purge   # removes deployment + clabernetes CRDs
+make purge-dev   # removes deployment + clabernetes CRDs
 ```

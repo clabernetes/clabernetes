@@ -17,9 +17,9 @@ ifeq (set-chart-versions,$(firstword $(MAKECMDGOALS)))
   $(eval $(BUMP_CHART_VERSION_ARGS):;@:)
 endif
 
-include .mk/tools.makefile
-include .mk/try-c9s.makefile
-include .mk/e2e.makefile
+include .mk/tools.mk
+include .mk/try-c9s.mk
+include .mk/e2e.mk
 
 ## Image names + tag used by the build-* targets. IMAGE_TAG defaults to "latest"
 ## for one-off local builds; the e2e flow overrides it (IMAGE_TAG=dev-latest).
@@ -29,12 +29,8 @@ MANAGER_IMAGE ?= $(IMAGE_BASE)/clabernetes-manager
 LAUNCHER_IMAGE ?= $(IMAGE_BASE)/clabernetes-launcher
 CLABVERTER_IMAGE ?= $(IMAGE_BASE)/clabverter
 
-DEVSPACE_TOOLS_DIR ?= build/dev/bin
-DEVSPACE_BIN ?= $(shell command -v devspace 2>/dev/null)
-DEVSPACE_INSTALL_DEP :=
-ifeq ($(strip $(DEVSPACE_BIN)),)
-DEVSPACE_BIN := $(abspath $(DEVSPACE_TOOLS_DIR))/devspace
-endif
+DEV_TOOLS_DIR := build/dev/bin
+DEVSPACE := $(abspath $(DEV_TOOLS_DIR)/devspace)
 DEVSPACE_ARGS ?=
 # LOCAL_REGISTRY controls where dev images are pushed/pulled from:
 #   auto (default) — in-cluster registry on remote clusters; REGISTRY push on kind/minikube
@@ -50,7 +46,6 @@ else
 LOCAL_REGISTRY := 0
 endif
 endif
-LOCAL_REGISTRY_BUILD := $(if $(filter 1 true,$(LOCAL_REGISTRY)),1,)
 NS ?= clabernetes
 DOCS_SITE_DIR ?= docs-site
 DOCS_HOST ?= 0.0.0.0
@@ -59,11 +54,18 @@ PNPM ?= pnpm
 help:
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
+.PHONY: install-dev-tools
+install-dev-tools: TOOLS_BIN_DIR := $(abspath $(DEV_TOOLS_DIR))
+install-dev-tools: install-devspace ## Download pinned devspace into DEV_TOOLS_DIR
+
 .PHONY: dev
-dev: TOOLS_BIN_DIR := $(abspath $(DEVSPACE_TOOLS_DIR))
 dev: DEVSPACE_DEV_PROFILES := --profile auto-run-manager$(if $(filter 1 true,$(LOCAL_REGISTRY)), --profile local-registry,)
-dev: install-devspace ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1; see README)
-	LOCAL_REGISTRY_BUILD=$(LOCAL_REGISTRY_BUILD) NS="$(NS)" "$(DEVSPACE_BIN)" --namespace "$(NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
+dev: install-dev-tools ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1)
+	NS="$(NS)" "$(DEVSPACE)" --namespace "$(NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
+
+.PHONY: purge-dev
+purge-dev: install-dev-tools ## Tear down the DevSpace development deployment
+	NS="$(NS)" "$(DEVSPACE)" --namespace "$(NS)" --no-warn run purge $(DEVSPACE_ARGS)
 
 .PHONY: docs-install serve-docs check-docs build-docs preview-docs
 docs-install: ## Install locked documentation dependencies
