@@ -37,7 +37,7 @@ if [[ "${LOCAL_REGISTRY_BUILD:-}" == "1" ]]; then
     registry_name="${LOCAL_REGISTRY_NAME:-registry}"
 
     registry_port=$(
-        kubectl get svc "${registry_name}" \
+        "${KUBECTL:-kubectl}" get svc "${registry_name}" \
             -n "${namespace}" \
             -o jsonpath='{.spec.ports[0].nodePort}'
     )

@@ -16,7 +16,7 @@ if [[ -n "${TARGET_PLATFORM:-}" ]]; then
 fi
 
 platforms="$(
-    kubectl get nodes \
+    "${KUBECTL:-kubectl}" get nodes \
         -o jsonpath='{range .items[*]}{.status.nodeInfo.operatingSystem}/{.status.nodeInfo.architecture}{"\n"}{end}' |
         sort -u
 )"

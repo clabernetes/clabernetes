@@ -9,6 +9,12 @@ vars:
     source: env
     default: ghcr.io/clabernetes/clabernetes
 
+  # The Makefile exports the pinned kubectl it downloads; standalone devspace runs fall back to
+  # whatever is on PATH.
+  KUBECTL:
+    source: env
+    default: kubectl
+
   # DevSpace runs command-backed variables relative to this config directory. The detector reads
   # node OS/architecture values from the current kubectl context and fails on mixed platforms.
   DETECTED_TARGET_PLATFORM:
@@ -392,8 +398,8 @@ pipelines:
     run: |-
       stop_dev --all
       purge_deployments --all
-      kubectl delete deploy,svc registry -n ${DEVSPACE_NAMESPACE} --ignore-not-found
-      kubectl delete leases -n ${DEVSPACE_NAMESPACE} \
-        $(kubectl get leases -n ${DEVSPACE_NAMESPACE} 2> /dev/null | grep "clabernetes" | awk '{print $1}') 2> /dev/null || true
-      kubectl delete crds \
-        $(kubectl get crds 2> /dev/null | grep "clabernetes" | awk '{print $1}') 2> /dev/null || true
+      ${KUBECTL} delete deploy,svc registry -n ${DEVSPACE_NAMESPACE} --ignore-not-found
+      ${KUBECTL} delete leases -n ${DEVSPACE_NAMESPACE} \
+        $(${KUBECTL} get leases -n ${DEVSPACE_NAMESPACE} 2> /dev/null | grep "clabernetes" | awk '{print $1}') 2> /dev/null || true
+      ${KUBECTL} delete crds \
+        $(${KUBECTL} get crds 2> /dev/null | grep "clabernetes" | awk '{print $1}') 2> /dev/null || true

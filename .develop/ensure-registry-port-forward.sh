@@ -13,6 +13,7 @@ namespace=${1:?namespace required}
 registry_name=${2:?registry service name required}
 local_port=${3:?local port required}
 bind_address="${LOCAL_REGISTRY_PORT_FORWARD_ADDRESS:-0.0.0.0}"
+kubectl=${KUBECTL:-kubectl}
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 lock_file="${script_dir}/.registry-port-forward.lock"
@@ -24,39 +25,63 @@ registry_ready() {
 }
 
 wait_for_registry() {
+    local attempts=${1:-30}
     local attempt
-    for attempt in $(seq 1 30); do
+    for attempt in $(seq 1 "${attempts}"); do
         if registry_ready; then
             return 0
         fi
         sleep 1
     done
-    echo "timed out waiting for registry at 127.0.0.1:${local_port}" >&2
     return 1
 }
 
-start_port_forward() {
-    if [[ -f "${pid_file}" ]]; then
-        local pid
-        pid=$(<"${pid_file}")
-        if kill -0 "${pid}" 2>/dev/null; then
-            wait_for_registry
-            return 0
-        fi
-        rm -f "${pid_file}"
+# A recorded forward is only reusable when it serves the port we were asked for; recreating the
+# registry Service hands out a new NodePort, leaving the previous forward alive but useless.
+reuse_forward() {
+    [[ -f "${pid_file}" ]] || return 1
+
+    local pid port
+    read -r pid port <"${pid_file}" || return 1
+    [[ -n "${pid}" && "${port}" == "${local_port}" ]] || return 1
+    kill -0 "${pid}" 2>/dev/null || return 1
+
+    wait_for_registry 5
+}
+
+kill_recorded_forward() {
+    [[ -f "${pid_file}" ]] || return 0
+
+    local pid
+    read -r pid _ <"${pid_file}" || true
+    if [[ -n "${pid:-}" ]]; then
+        kill "${pid}" 2>/dev/null || true
     fi
+    rm -f "${pid_file}"
+}
+
+start_port_forward() {
+    if reuse_forward; then
+        return 0
+    fi
+
+    kill_recorded_forward
 
     # Detach the forward from the short-lived custom build process. DevSpace may terminate the
     # build command's process group after one image finishes, while other parallel image pushes
     # still depend on this forward.
-    nohup setsid kubectl port-forward \
+    nohup setsid "${kubectl}" port-forward \
         --address "${bind_address}" \
         -n "${namespace}" \
         "svc/${registry_name}" \
         "${local_port}:5000" \
         >"${log_file}" 2>&1 </dev/null 9>&- &
-    echo $! >"${pid_file}"
-    wait_for_registry
+    echo "$! ${local_port}" >"${pid_file}"
+
+    if ! wait_for_registry; then
+        echo "timed out waiting for registry at 127.0.0.1:${local_port}; see ${log_file}" >&2
+        return 1
+    fi
 }
 
 if registry_ready; then

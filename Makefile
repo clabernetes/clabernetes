@@ -60,20 +60,24 @@ help:
 install-dev-tools: TOOLS_BIN_DIR := $(abspath $(DEV_TOOLS_DIR))
 install-dev-tools: install-devspace $(UV) ## Download pinned devspace and ensure uv is available
 
+.PHONY: $(NS)
+$(NS): $(KUBECTL)
+	@$(KUBECTL) create namespace "$(NS)" --dry-run=client -o yaml | $(KUBECTL) apply -f -
+
 .PHONY: dev
 dev: DEVSPACE_DEV_PROFILES := --profile auto-run-manager$(if $(filter 1 true,$(LOCAL_REGISTRY)), --profile local-registry, --profile external-registry)
-dev: install-dev-tools ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1)
-	$(if $(filter 1 true,$(LOCAL_REGISTRY)),bash .develop/ensure-local-registry.sh "$(NS)",REGISTRY="$(DEV_REGISTRY)" UV="$(UV)" bash .develop/ensure-registry-auth.sh)
-	REGISTRY="$(DEV_REGISTRY)" NS="$(NS)" "$(DEVSPACE)" --namespace "$(NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
+dev: install-dev-tools $(NS) ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1)
+	$(if $(filter 1 true,$(LOCAL_REGISTRY)),KUBECTL="$(abspath $(KUBECTL))" bash .develop/ensure-local-registry.sh "$(NS)",REGISTRY="$(DEV_REGISTRY)" UV="$(UV)" bash .develop/ensure-registry-auth.sh)
+	REGISTRY="$(DEV_REGISTRY)" NS="$(NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
 
 .PHONY: purge-dev
-purge-dev: install-dev-tools ## Tear down the DevSpace development deployment and delete the namespace
-	@if kubectl get namespace "$(NS)" >/dev/null 2>&1; then \
-		NS="$(NS)" "$(DEVSPACE)" --namespace "$(NS)" --no-warn run purge $(DEVSPACE_ARGS); \
+purge-dev: install-dev-tools $(KUBECTL) ## Tear down the DevSpace development deployment and delete the namespace
+	@if $(KUBECTL) get namespace "$(NS)" >/dev/null 2>&1; then \
+		NS="$(NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(NS)" --no-warn run purge $(DEVSPACE_ARGS); \
 	fi
-	@crds=$$(kubectl get crds -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep clabernetes || true); \
-	if [ -n "$$crds" ]; then kubectl delete crd $$crds --ignore-not-found=true; fi
-	kubectl delete namespace "$(NS)" --ignore-not-found=true
+	@crds=$$($(KUBECTL) get crds -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep clabernetes || true); \
+	if [ -n "$$crds" ]; then $(KUBECTL) delete crd $$crds --ignore-not-found=true; fi
+	$(KUBECTL) delete namespace "$(NS)" --ignore-not-found=true
 
 .PHONY: docs-install serve-docs check-docs build-docs preview-docs
 docs-install: ## Install locked documentation dependencies

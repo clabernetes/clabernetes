@@ -15,3 +15,28 @@ generated/openapi
 
 # not needed in the image obviously
 charts
+
+# docs and irrelevant dirs
+docs-site
+docs
+e2e
+examples
+
+# ai
+.claude
+.cline
+.clinerules
+.cursor
+.kilocode
+.opencode
+
+# caches
+.pnpm-store
+.vscode
+
+openspec
+
+# binaries
+build/dev
+build/e2e
+build/try-c9s
