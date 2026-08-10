@@ -100,55 +100,57 @@ make preview-docs  # build and serve the static output locally
 
 ## Development
 
-To run the manager from the current checkout in an existing Kubernetes cluster, first select the
-desired `kubectl` context, then run:
+Run the manager from your current checkout in an existing Kubernetes cluster:
 
 ```bash
+kubectl config use-context <your-cluster>
 make dev
 ```
 
-The target uses the existing DevSpace configuration to build the manager and launcher images,
-install the local Helm chart in the `clabernetes` namespace, synchronize the source tree into the
-manager pod, and start the manager with debug logging. If `devspace` is not already on `PATH`, the
-pinned version is downloaded to `build/dev/bin`. Each run forces the local chart to be redeployed
-and replaces the global `Config` CR from the development values. This keeps the manager and launcher
-images from different checkouts from being mixed, but it also means `make dev` overwrites an existing
-global clabernetes configuration in the selected development namespace.
+DevSpace builds images, deploys the Helm chart into the `c9s-dev` namespace, syncs source into
+the manager pod, and starts the manager with debug logging. Each run forces a chart redeploy and
+overwrites the global `Config` CR from development values.
 
-DevSpace invokes [`.develop/target-platform.sh`](.develop/target-platform.sh) through the
-`DETECTED_TARGET_PLATFORM` variable in `.develop/devspace.yaml`. The script reads the operating
-system and architecture reported by every node in the current `kubectl` context. Its result becomes
-`TARGET_PLATFORM`, which every image passes to BuildKit as `--platform=<os>/<architecture>`.
+If `devspace` is not on `PATH`, the pinned version is downloaded to `build/dev/bin`.
 
-Run the detector directly with `bash .develop/target-platform.sh`. If the cluster contains more
-than one platform, select the platform on which clabernetes will run:
+**Full documentation** (registry modes, `localhost:<port>` image URLs, helper scripts,
+troubleshooting): [`.develop/README.md`](.develop/README.md).
+
+### Registry mode summary
+
+| Command | Use when |
+| ------- | -------- |
+| `make dev` | Default. Remote clusters → project-managed local registry. kind/minikube → push to `REGISTRY`. |
+| `LOCAL_REGISTRY=0 make dev` | Push dev images to `DEV_REGISTRY` (default GHCR); cluster pulls from there. Requires `docker login`. |
+
+Default `DEV_REGISTRY` is `ghcr.io/clabernetes/clabernetes`.
+
+### Common options
 
 ```bash
+# different namespace (defaults to c9s-dev)
+DEV_NS=my-c9s-dev make dev
+
+# push dev images to GHCR (requires docker login ghcr.io)
+LOCAL_REGISTRY=0 make dev
+
+# mixed-platform cluster
 TARGET_PLATFORM=linux/amd64 make dev
+
+# extra DevSpace profiles
+make dev DEVSPACE_ARGS="--profile always-pull"
 ```
 
-Override the development namespace with `NS`:
+Platform detection: [`.develop/target-platform.sh`](.develop/target-platform.sh) (see
+[`.develop/README.md`](.develop/README.md)).
+
+### Verify and clean up
 
 ```bash
-NS=my-clabernetes make dev
+kubectl -n c9s-dev get pods
+kubectl -n c9s-dev rollout status deployment/clabernetes-manager
 ```
-
-For a non-local cluster, set a registry that is writable from the development machine and readable
-by the cluster, and enable fresh image pulls:
 
 ```bash
-NS=my-clabernetes REGISTRY=registry.example.com/clabernetes \
-  make dev DEVSPACE_ARGS="--profile always-pull"
+make purge-dev   # removes deployment, clabernetes CRDs, and the dev namespace
 ```
-
-Verify the installation from another terminal:
-
-```bash
-kubectl -n clabernetes get pods
-kubectl -n clabernetes rollout status deployment/clabernetes-manager
-```
-
-To remove the DevSpace deployment, run `devspace run purge` (or
-`build/dev/bin/devspace run purge` when using the downloaded binary). This also deletes all
-clabernetes CRDs and their custom resources from the cluster. When overriding the namespace, pass
-the same value to the purge command, for example `NS=my-clabernetes devspace run purge`.

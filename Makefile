@@ -17,9 +17,9 @@ ifeq (set-chart-versions,$(firstword $(MAKECMDGOALS)))
   $(eval $(BUMP_CHART_VERSION_ARGS):;@:)
 endif
 
-include .mk/tools.makefile
-include .mk/try-c9s.makefile
-include .mk/e2e.makefile
+include .mk/tools.mk
+include .mk/try-c9s.mk
+include .mk/e2e.mk
 
 ## Image names + tag used by the build-* targets. IMAGE_TAG defaults to "latest"
 ## for one-off local builds; the e2e flow overrides it (IMAGE_TAG=dev-latest).
@@ -29,14 +29,29 @@ MANAGER_IMAGE ?= $(IMAGE_BASE)/clabernetes-manager
 LAUNCHER_IMAGE ?= $(IMAGE_BASE)/clabernetes-launcher
 CLABVERTER_IMAGE ?= $(IMAGE_BASE)/clabverter
 
-DEVSPACE_TOOLS_DIR ?= build/dev/bin
-DEVSPACE_BIN ?= $(shell command -v devspace 2>/dev/null)
-DEVSPACE_INSTALL_DEP :=
-ifeq ($(strip $(DEVSPACE_BIN)),)
-DEVSPACE_BIN := $(abspath $(DEVSPACE_TOOLS_DIR))/devspace
-endif
+DEV_TOOLS_DIR := build/dev/bin
+DEVSPACE := $(abspath $(DEV_TOOLS_DIR)/devspace)
 DEVSPACE_ARGS ?=
-NS ?= clabernetes
+# LOCAL_REGISTRY controls where dev images are pushed/pulled from:
+#   auto (default) — in-cluster registry on remote clusters; REGISTRY push on kind/minikube
+#   1            — always use the in-cluster DevSpace registry
+#   0            — always build with buildx and push to REGISTRY (e.g. ghcr.io)
+LOCAL_REGISTRY ?= auto
+KUBE_CONTEXT := $(shell kubectl config current-context 2>/dev/null)
+IS_LOCAL_CLUSTER := $(shell echo '$(KUBE_CONTEXT)' | grep -Eq '^(kind-|docker-desktop|minikube($$|-))' && echo 1 || echo 0)
+ifeq ($(LOCAL_REGISTRY),auto)
+ifeq ($(IS_LOCAL_CLUSTER),0)
+LOCAL_REGISTRY := 1
+else
+LOCAL_REGISTRY := 0
+endif
+endif
+# NS is the namespace a "real" c9s install lives in; DEV_NS is the one the devspace based
+# dev workflow (make dev/purge-dev) creates and tears down.
+NS ?= c9s
+DEV_NS ?= c9s-dev
+# Image registry prefix passed to DevSpace as REGISTRY (not the generic REGISTRY env var).
+DEV_REGISTRY ?= ghcr.io/clabernetes/clabernetes
 DOCS_SITE_DIR ?= docs-site
 DOCS_HOST ?= 0.0.0.0
 PNPM ?= pnpm
@@ -44,10 +59,28 @@ PNPM ?= pnpm
 help:
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
+.PHONY: install-dev-tools
+install-dev-tools: TOOLS_BIN_DIR := $(abspath $(DEV_TOOLS_DIR))
+install-dev-tools: install-devspace $(UV) ## Download pinned devspace and ensure uv is available
+
+.PHONY: $(DEV_NS)
+$(DEV_NS): $(KUBECTL)
+	@$(KUBECTL) create namespace "$(DEV_NS)" --dry-run=client -o yaml | $(KUBECTL) apply -f -
+
 .PHONY: dev
-dev: TOOLS_BIN_DIR := $(abspath $(DEVSPACE_TOOLS_DIR))
-dev: install-devspace ## Run the manager from local source in the current Kubernetes context
-	"$(DEVSPACE_BIN)" --namespace "$(NS)" --no-warn run dev --profile auto-run-manager --force-deploy $(DEVSPACE_ARGS)
+dev: DEVSPACE_DEV_PROFILES := --profile auto-run-manager$(if $(filter 1 true,$(LOCAL_REGISTRY)), --profile local-registry, --profile external-registry)
+dev: install-dev-tools $(DEV_NS) ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1)
+	$(if $(filter 1 true,$(LOCAL_REGISTRY)),KUBECTL="$(abspath $(KUBECTL))" bash .develop/ensure-local-registry.sh "$(DEV_NS)",REGISTRY="$(DEV_REGISTRY)" UV="$(UV)" bash .develop/ensure-registry-auth.sh)
+	REGISTRY="$(DEV_REGISTRY)" NS="$(DEV_NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(DEV_NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
+
+.PHONY: purge-dev
+purge-dev: install-dev-tools $(KUBECTL) ## Tear down the DevSpace development deployment and delete the namespace
+	@if $(KUBECTL) get namespace "$(DEV_NS)" >/dev/null 2>&1; then \
+		NS="$(DEV_NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(DEV_NS)" --no-warn run purge $(DEVSPACE_ARGS); \
+	fi
+	@crds=$$($(KUBECTL) get crds -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep clabernetes || true); \
+	if [ -n "$$crds" ]; then $(KUBECTL) delete crd $$crds --ignore-not-found=true; fi
+	$(KUBECTL) delete namespace "$(DEV_NS)" --ignore-not-found=true
 
 .PHONY: docs-install serve-docs check-docs build-docs preview-docs
 docs-install: ## Install locked documentation dependencies
@@ -84,7 +117,7 @@ test-race: ## Run unit tests with race flag
 test-e2e: ## Run e2e tests
 	gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
 
-C9S_NAMESPACE ?= clabernetes
+C9S_NAMESPACE ?= $(NS)
 C9S_HELM_RELEASE ?= clabernetes
 C9S_KUBECTL ?= kubectl
 C9S_HELM ?= helm

@@ -30,7 +30,7 @@ resources when the CRDs are removed.
    ```
 
    Or manually uninstall the Helm release, delete all `*.c9s.run` and
-   `*.clabernetes.containerlab.dev` CRDs, then delete the `clabernetes` namespace.
+   `*.clabernetes.containerlab.dev` CRDs, then delete the `c9s` namespace.
 
 3. Update every manifest to use the new API version:
 

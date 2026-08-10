@@ -1,4 +1,5 @@
-FROM golang:1.25-bookworm
+ARG BUILDPLATFORM=linux/amd64
+FROM --platform=${BUILDPLATFORM} golang:1.25-bookworm
 
 RUN apt-get update -y && \
     apt-get install -yq --no-install-recommends \
@@ -11,8 +12,6 @@ RUN apt-get update -y && \
     inetutils-ping binutils && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archive/*.deb
-
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
 WORKDIR /clabernetes
 

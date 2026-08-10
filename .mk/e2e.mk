@@ -12,7 +12,7 @@
 ## build-* targets come from the root Makefile.
 
 E2E_CLUSTER_NAME ?= c9s-e2e
-E2E_NAMESPACE := clabernetes
+E2E_NAMESPACE := c9s
 E2E_IMAGE_TAG := dev-latest
 E2E_TIMEOUT ?= 300s
 

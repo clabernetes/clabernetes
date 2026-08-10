@@ -1,4 +1,6 @@
 ---
+# DevSpace config for `make dev`. See README.md in this directory for registry modes,
+# image URLs (localhost:<nodePort>), scripts, and troubleshooting.
 version: v2beta1
 name: clabernetes
 
@@ -6,6 +8,12 @@ vars:
   REGISTRY:
     source: env
     default: ghcr.io/clabernetes/clabernetes
+
+  # The Makefile exports the pinned kubectl it downloads; standalone devspace runs fall back to
+  # whatever is on PATH.
+  KUBECTL:
+    source: env
+    default: kubectl
 
   # DevSpace runs command-backed variables relative to this config directory. The detector reads
   # node OS/architecture values from the current kubectl context and fails on mixed platforms.
@@ -29,7 +37,48 @@ vars:
   MANAGER_DEV_IMAGE: ${MANAGER_IMAGE}-dev
   LAUNCHER_IMAGE: ${REGISTRY}/${CLABERNETES}-launcher
   CLABVERTER_IMAGE: ${REGISTRY}/clabverter
-
+  DEV_IMAGE_TAG: dev-latest
+  # DevSpace strips tags from devImage when it matches images.*.image; keep the tag on the
+  # image name itself so the dev pod pulls an image that actually exists.
+  MANAGER_IMAGE_TAGGED:
+    source: command
+    command: bash
+    args:
+      - -c
+      - printf '%s:%s' "${MANAGER_IMAGE}" "${DEV_IMAGE_TAG}"
+  MANAGER_DEV_IMAGE_TAGGED:
+    source: command
+    command: bash
+    args:
+      - -c
+      - printf '%s:%s' "${MANAGER_DEV_IMAGE}" "${DEV_IMAGE_TAG}"
+  LAUNCHER_IMAGE_TAGGED:
+    source: command
+    command: bash
+    args:
+      - -c
+      - printf '%s:%s' "${LAUNCHER_IMAGE}" "${DEV_IMAGE_TAG}"
+  LOCAL_MANAGER_IMAGE:
+    source: command
+    command: bash
+    args:
+      - local-registry-image-ref.sh
+      - ${MANAGER_IMAGE}
+      - ${DEV_IMAGE_TAG}
+  LOCAL_MANAGER_DEV_IMAGE:
+    source: command
+    command: bash
+    args:
+      - local-registry-image-ref.sh
+      - ${MANAGER_DEV_IMAGE}
+      - ${DEV_IMAGE_TAG}
+  LOCAL_LAUNCHER_IMAGE:
+    source: command
+    command: bash
+    args:
+      - local-registry-image-ref.sh
+      - ${LAUNCHER_IMAGE}
+      - ${DEV_IMAGE_TAG}
   # always build w/ 0.0.0 -- overridden for actual releases by release profile. for "normal" builds
   # (not releases) we'll do VERSION-HASH, for releases we'll just override to have version tag.
   VERSION: 0.0.0
@@ -52,11 +101,15 @@ images:
     context: ../
     dockerfile: dev.Dockerfile
     rebuildStrategy: ignoreContextChanges
+    buildArgs:
+      BUILDPLATFORM: ${TARGET_PLATFORM}
     buildKit:
+      command: ["docker", "buildx"]
       args:
         - "--platform=${TARGET_PLATFORM}"
     tags:
       - ${COMMIT_HASH}
+      - dev-latest
 
   clabernetes:
     createPullSecret: false
@@ -66,7 +119,9 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
+      BUILDPLATFORM: ${TARGET_PLATFORM}
     buildKit:
+      command: ["docker", "buildx"]
       args:
         - "--platform=${TARGET_PLATFORM}"
     tags:
@@ -81,7 +136,9 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
+      BUILDPLATFORM: ${TARGET_PLATFORM}
     buildKit:
+      command: ["docker", "buildx"]
       args:
         - "--platform=${TARGET_PLATFORM}"
         - "--secret=id=host_ca,src=/etc/ssl/certs/ca-certificates.crt"
@@ -97,7 +154,9 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
+      BUILDPLATFORM: ${TARGET_PLATFORM}
     buildKit:
+      command: ["docker", "buildx"]
       args:
         - "--platform=${TARGET_PLATFORM}"
     tags:
@@ -112,7 +171,7 @@ deployments:
         name: ../charts/clabernetes
       values:
         manager:
-          image: ${MANAGER_IMAGE}
+          image: ${MANAGER_IMAGE_TAGGED}
           imagePullPolicy: ${PULL_POLICY}
         globalConfig:
           # The development deployment is declarative: it must replace launcher settings left by
@@ -121,10 +180,10 @@ deployments:
           imagePull:
             criKindOverride: containerd
           deployment:
-            launcherImage: ${LAUNCHER_IMAGE}
+            launcherImage: ${LAUNCHER_IMAGE_TAGGED}
             launcherImagePullPolicy: ${PULL_POLICY}
         clicker:
-          image: ${MANAGER_IMAGE}
+          image: ${MANAGER_IMAGE_TAGGED}
           imagePullPolicy: ${PULL_POLICY}
 
 dev:
@@ -133,7 +192,7 @@ dev:
       clabernetes/app: clabernetes
       clabernetes/component: manager
     container: manager
-    devImage: ${MANAGER_DEV_IMAGE}
+    devImage: ${MANAGER_DEV_IMAGE_TAGGED}
     sync:
       - path: ../.develop/:/clabernetes/.develop/
         disableDownload: true
@@ -167,6 +226,75 @@ profiles:
       - op: replace
         path: dev.clabernetes.terminal.command
         value: .develop/start.sh --run
+
+  # In-cluster registry: make dev creates the registry before DevSpace starts. Builds use docker
+  # buildx via build-for-local-registry.sh, while the command-backed image refs below point Helm
+  # and the dev pod at the registry managed by this project.
+  - name: local-registry
+    patches:
+      - op: replace
+        path: dev.clabernetes.devImage
+        value: ${LOCAL_MANAGER_DEV_IMAGE}
+      - op: replace
+        path: deployments.clabernetes.helm.values.manager.image
+        value: ${LOCAL_MANAGER_IMAGE}
+      - op: replace
+        path: deployments.clabernetes.helm.values.globalConfig.deployment.launcherImage
+        value: ${LOCAL_LAUNCHER_IMAGE}
+      - op: replace
+        path: deployments.clabernetes.helm.values.clicker.image
+        value: ${LOCAL_MANAGER_IMAGE}
+      - op: remove
+        path: images.clabernetes-dev.buildKit
+      - op: add
+        path: images.clabernetes-dev.skipPush
+        value: true
+      - op: add
+        path: images.clabernetes-dev.custom
+        value:
+          command: LOCAL_REGISTRY_BUILD=1 bash build-for-local-registry.sh ${runtime.images.clabernetes-dev.image} ${runtime.images.clabernetes-dev.tag} .develop/dev.Dockerfile .
+      - op: remove
+        path: images.clabernetes.buildKit
+      - op: remove
+        path: images.clabernetes.buildArgs
+      - op: add
+        path: images.clabernetes.skipPush
+        value: true
+      - op: add
+        path: images.clabernetes.custom
+        value:
+          command: LOCAL_REGISTRY_BUILD=1 bash build-for-local-registry.sh ${runtime.images.clabernetes.image} ${runtime.images.clabernetes.tag} build/manager.Dockerfile .
+      - op: remove
+        path: images.clabernetes-launcher.buildKit
+      - op: remove
+        path: images.clabernetes-launcher.buildArgs
+      - op: add
+        path: images.clabernetes-launcher.skipPush
+        value: true
+      - op: add
+        path: images.clabernetes-launcher.custom
+        value:
+          command: LOCAL_REGISTRY_BUILD=1 bash build-for-local-registry.sh ${runtime.images.clabernetes-launcher.image} ${runtime.images.clabernetes-launcher.tag} build/launcher.Dockerfile .
+
+  # LOCAL_REGISTRY=0: buildx pushes to REGISTRY (e.g. GHCR). Force rebuild/push every run because
+  # ignoreContextChanges would skip builds when images exist locally but not in the remote registry.
+  - name: external-registry
+    patches:
+      - op: replace
+        path: pipelines.dev.run
+        value: |-
+          build_images --force-rebuild clabernetes-dev clabernetes clabernetes-launcher
+          create_deployments --all
+          start_dev --all
+      - op: replace
+        path: deployments.clabernetes.helm.values.manager.imagePullPolicy
+        value: Always
+      - op: replace
+        path: deployments.clabernetes.helm.values.globalConfig.deployment.launcherImagePullPolicy
+        value: Always
+      - op: replace
+        path: deployments.clabernetes.helm.values.clicker.imagePullPolicy
+        value: Always
 
   # for development using devspace on "non-local" clusters (meaning *not* kind/docker-desktop/
   # minikube/maybe others) you will want to have Always for image pull so launcher and clicker pick
@@ -270,7 +398,8 @@ pipelines:
     run: |-
       stop_dev --all
       purge_deployments --all
-      kubectl delete leases -n ${DEVSPACE_NAMESPACE} \
-        $(kubectl get leases -n ${DEVSPACE_NAMESPACE} 2> /dev/null | grep "clabernetes" | awk '{print $1}') 2> /dev/null || true
-      kubectl delete crds \
-        $(kubectl get crds 2> /dev/null | grep "clabernetes" | awk '{print $1}') 2> /dev/null || true
+      ${KUBECTL} delete deploy,svc registry -n ${DEVSPACE_NAMESPACE} --ignore-not-found
+      ${KUBECTL} delete leases -n ${DEVSPACE_NAMESPACE} \
+        $(${KUBECTL} get leases -n ${DEVSPACE_NAMESPACE} 2> /dev/null | grep "clabernetes" | awk '{print $1}') 2> /dev/null || true
+      ${KUBECTL} delete crds \
+        $(${KUBECTL} get crds 2> /dev/null | grep "clabernetes" | awk '{print $1}') 2> /dev/null || true

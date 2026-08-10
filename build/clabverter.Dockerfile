@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG BUILDPLATFORM
+ARG BUILDPLATFORM=linux/amd64
 
 FROM --platform=${BUILDPLATFORM} golang:1.25-bookworm AS builder
 
