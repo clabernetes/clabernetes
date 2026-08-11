@@ -8,7 +8,7 @@ The repository currently has three materially different deployment paths:
 
 There is no c9s `make install` target for an existing cluster. The paths also disagree on tool versions and installation identity. The current live `c9s-e2e` cluster illustrates the observability problem: Helm reports chart `0.0.0`, the images are mutable `dev-latest` tags, and the old binary does not expose a usable version flag.
 
-The `cicd` workflow already has two development publication paths. A main push overwrites OCI chart `0.0.0`; because its image values are empty, chart templates currently resolve manager and launcher to mutable `dev-latest`. A manual dispatch with `push=true` builds multi-architecture images and a chart as `0.0.0-<short-sha>`, with the chart values pinned to matching image tags and no GitHub Release object. Manual feature-branch dispatch currently skips e2e, and the only observed historical manual run completed successfully but its commit artifacts are no longer available, so workflow success alone is not an installability guarantee.
+The `cicd` workflow handles pull requests and main pushes. A main push overwrites OCI chart `0.0.0`; because its image values were empty, chart templates could resolve manager and launcher to mutable `dev-latest`. A separate `Create dev release` manual workflow builds a selected branch or tag as multi-architecture images and a chart at `0.0.0-<short-sha>`, with chart values pinned to matching image tags and no GitHub Release object. Both paths retain exact artifact probing and install smoke because workflow success alone is not an installability guarantee.
 
 Published and checkout resources are not necessarily compatible. At proposal time, GitHub's latest release is `v0.6.0`; its chart installs `clabernetes.containerlab.dev` CRDs, while the checkout demo and chart use `c9s.run`. Helm does not perform an in-place migration between those groups, and the existing `crd-api-group` specification requires uninstall/reinstall.
 
@@ -112,7 +112,7 @@ The script provides commands for listing, selecting, and resolving releases. It:
 - writes Rich UI to stderr and only the selected normalized value to stdout when called by Make;
 - reports API rate-limit and network failures without a traceback.
 
-The selector also exposes a distinct development view. It presents `main` as a moving channel and obtains recent manually dispatched build candidates from successful `cicd` workflow runs through `gh api` against the GitHub Actions API. Action completion is labeled as workflow completion, not release publication or package push time. A development candidate is still installable only after the exact OCI chart probe succeeds.
+The selector also exposes a distinct development view. It presents `main` as a moving channel and obtains recent manually dispatched build candidates from successful `Create dev release` workflow runs through `gh api` against the GitHub Actions API. Action completion is labeled as workflow completion, not release publication or package push time. A development candidate is still installable only after the exact OCI chart probe succeeds.
 
 The public `make ls-releases` target produces a Rich table of all installable c9s artifacts: GitHub
 Releases, the mutable `main` chart at `0.0.0`, and successful manual development builds at
@@ -138,12 +138,12 @@ Alternative considered: use shell and `gh api` without Python. Rejected because 
 
 ### 4. Model unpublished commit and main artifacts as development channels
 
-Keep the existing `cicd` workflow as the publisher rather than creating a second release-shaped workflow.
+Keep `cicd` focused on pull-request validation and main-merge publication, and use a separate `Create dev release` entrypoint for ad-hoc publication. Both call one reusable development publisher rather than duplicating the image, chart, metadata, verification, and smoke implementation.
 
 For manual unpublished builds:
 
-1. An authorized developer dispatches `cicd` on the feature branch or tag that points at the desired repository commit, with package push enabled.
-2. Lint, unit, and e2e validate that exact workflow ref. Publication does not proceed when a required check fails.
+1. An authorized developer dispatches `Create dev release` on the feature branch or tag that points at the desired repository commit and chooses whether to run e2e.
+2. Lint and unit always validate that exact workflow ref; e2e runs when selected. Publication does not proceed when any required check fails.
 3. Manager, launcher, and clabverter multi-architecture images are published as `0.0.0-<short-sha>`.
 4. Clicker and c9s charts are published at the same version. The c9s values pin manager and launcher to those exact tags.
 5. Chart `appVersion` or an equivalent chart annotation records the full source SHA.
@@ -211,7 +211,10 @@ For local source, apply the checkout's `examples/basic/srl-multitool.yaml`.
 
 For supported published source, retrieve the demo from the immutable selected Git tag rather than from the checkout. The guaranteed published-demo support floor is `v0.6.0`, where the stable path exists. The release selector may list older releases, and `make install` may install an older exact chart after a successful OCI probe, but `make try-c9s` rejects releases below the demo support floor with an actionable message.
 
-For `main` and exact unpublished commit builds, retrieve the demo from the full source revision embedded in the chart metadata. Fail before applying resources if the chart lacks source metadata or that revision's demo is unavailable.
+For `main` and exact unpublished commit builds, the try workflow retrieves the demo from the full
+source revision embedded in the chart metadata. It fails before applying resources if the chart
+lacks source metadata or that revision's demo is unavailable. The existing-cluster install does not
+perform this metadata check.
 
 The demo manifest is stored in the try state directory before application. Readiness timeout dumps topology state, pods, events, and manager/launcher logs, then returns failure. The current soft-success behavior is removed.
 
@@ -222,7 +225,7 @@ Alternative considered: maintain duplicate legacy demos on `main`. Rejected beca
 Local manager and launcher builds share one generated identity:
 
 - clean checkout: `local-<short-commit>`;
-- dirty checkout: `local-<short-commit>-dirty-<build-id>`.
+- dirty checkout with image-input changes: `local-<short-commit>-dirty-<worktree-hash>`.
 
 The same identity is:
 
@@ -233,7 +236,9 @@ The same identity is:
 
 The installer detects the cluster's single node platform and passes it to BuildKit. Mixed-platform clusters fail unless future work adds a multi-platform push implementation.
 
-Unique dirty-build identities prevent `IfNotPresent` and an unchanged Pod template from reusing stale content.
+The worktree hash follows the image Docker context, so documentation and other excluded files do not
+invalidate the image identity. Unique identities for changed image inputs prevent `IfNotPresent` and
+an unchanged Pod template from reusing stale content.
 
 ### 10. Select image transport by cluster type and explicit user choice
 
@@ -262,14 +267,15 @@ It uses the API group derived from the selected chart. It does not set chart boo
 
 The installer then verifies:
 
-- Helm release and chart version/source;
+- Helm release, chart version, and selected channel;
 - manager Deployment image;
 - Config launcher image and pull policy;
 - manager rollout;
 - embedded manager version where the selected binary exposes it;
 - local build identity for both local images.
 
-Any mismatch fails with the expected and observed values. Successful output displays context, namespace, Helm release, source, chart, manager image, launcher image, and observed binary version.
+Any mismatch fails with the expected and observed values. Successful output displays context,
+namespace, Helm release, channel, chart, manager image, launcher image, and observed binary version.
 
 ### 12. Test the public contract in layers
 
@@ -288,7 +294,7 @@ KinD acceptance uses the same public Make targets and covers:
 - cleanup and uninstall;
 - poisoned host PATH to prove absolute pinned tools.
 
-Workflow tests and smoke checks cover manual feature-ref dispatch metadata, e2e publication gating, exact commit images/chart, generated handoff commands, mutable main chart source metadata, main chart image pinning, and demo retrieval by source revision.
+Workflow tests and smoke checks cover the `Create dev release` feature-ref dispatch, mandatory lint/unit and optional e2e publication gates, exact commit images/chart, generated handoff commands, mutable main chart source metadata, main chart image pinning, and demo retrieval by source revision.
 
 CI provides linux/amd64 gating coverage and linux/arm64 smoke coverage without multiplying every selector across every platform. The release workflow adds an exact-version install smoke after images and charts are pushed; a failed smoke fails the release workflow even though the current GitHub release object may already be visible.
 
@@ -310,7 +316,7 @@ CI provides linux/amd64 gating coverage and linux/arm64 smoke coverage without m
 ## Migration Plan
 
 1. Add stable/development selection and fixture tests without changing existing targets.
-2. Harden manual and main development publication with source metadata, exact image pins, e2e gating, artifact probes, install smoke, and handoff output.
+2. Separate routine CI from `Create dev release`, then harden manual and main development publication with source metadata, exact image pins, optional e2e gating, artifact probes, install smoke, and handoff output.
 3. Consolidate tool pins and local binary paths; prove e2e and existing developer workflows still use the intended versions.
 4. Introduce the shared install core and new `make install`.
 5. Migrate `try-c9s` to the shared core, release/source-revision demo selection, idempotent KinD handling, and hard readiness failure.

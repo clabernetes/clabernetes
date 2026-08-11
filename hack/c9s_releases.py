@@ -169,7 +169,7 @@ def _development_builds(
 ) -> list[DevelopmentBuild]:
     payload = _gh_json(
         gh,
-        f"repos/{repository}/actions/workflows/cicd.yaml/runs"
+        f"repos/{repository}/actions/workflows/create-dev-release.yaml/runs"
         "?event=workflow_dispatch&status=completed&per_page=100",
     )
     runs = _flatten_pages(payload, key="workflow_runs")

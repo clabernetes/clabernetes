@@ -1,0 +1,34 @@
+---
+name: Create dev release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_e2e:
+        description: "run e2e tests before publishing"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  lint:
+    uses: ./.github/workflows/lint.yaml
+
+  test:
+    uses: ./.github/workflows/test.yaml
+    with:
+      run_e2e: ${{ inputs.run_e2e }}
+
+  publish:
+    needs:
+      - lint
+      - test
+    if: ${{ !cancelled() && needs.lint.result == 'success' && needs.test.result == 'success' }}
+    uses: ./.github/workflows/publish-dev.yaml
+    with:
+      channel: unpublished
+    secrets: inherit

@@ -14,24 +14,24 @@
 - [x] 2.5 Add `make ls-releases` to concurrently probe stable, main, and development OCI charts and render the newest 10 installable artifacts in a Rich table sorted by publication/availability time, with `ALL=1` displaying the complete catalog without requiring cluster access.
 - [x] 2.6 Wire `VERSION=latest|main|vX.Y.Z|X.Y.Z|0.0.0-<sha>|local|select` into `make install` and the equivalent `C9S_VERSION` selections into `make try-c9s`, while keeping an unset value non-interactive.
 - [x] 2.7 Add fixture-based script tests for GitHub CLI JSON/subprocess failures, multi-page and unordered responses, drafts, prereleases, unavailable OCI charts, bounded newest-first results, concurrent probes, tags with and without `v`, latest-stable semantics, cancellation, malformed values, authentication, rate limits, network errors, and malformed API data.
-- [x] 2.8 Add a development catalog backed by recent successful manual `cicd` runs, with a separate mutable main entry, source branch/SHA, workflow completion metadata, run links, and exact OCI probing on selection.
+- [x] 2.8 Add a development catalog backed by recent successful manual `Create dev release` runs, with a separate mutable main entry discovered from `cicd` pushes, source branch/SHA, workflow completion metadata, run links, and exact OCI probing on selection.
 
 ## 3. Development artifact publication
 
-- [x] 3.1 Document and expose the existing authorized `cicd` manual dispatch for a selected feature branch or tag ref, resolving and recording the exact full source SHA.
-- [x] 3.2 Require lint, unit, and e2e success for manually dispatched publication; remove the current feature-branch e2e skip and prevent publication/handoff when a required gate fails.
+- [x] 3.1 Add and document the authorized `Create dev release` manual dispatch for a selected feature branch or tag ref, resolving and recording the exact full source SHA without a publish toggle.
+- [x] 3.2 Require lint and unit success for manually dispatched publication, run e2e only when selected, and prevent publication/handoff when an enabled required gate fails.
 - [x] 3.3 Publish manager, launcher, clabverter, clicker chart, and c9s chart as `0.0.0-<short-sha>`, with c9s chart values pinned to matching runtime image tags.
 - [x] 3.4 Embed the full source SHA in custom chart metadata and add post-push probes for the exact chart plus linux/amd64 and linux/arm64 manager/launcher manifests.
 - [x] 3.5 Add an exact unpublished-version KinD install smoke and write the full SHA, artifacts, `make install`, and `make try-c9s` handoff commands to the successful workflow summary.
 - [x] 3.6 Change main chart `0.0.0` packaging to embed the full main SHA and pin manager/launcher to immutable `0.0.0-<short-sha>` images while retaining `dev-latest` only as a development alias.
-- [x] 3.7 Add workflow-level checks for selected-ref identity, e2e publication blocking, exact custom artifacts, source metadata, main image pinning, artifact-probe failure, and handoff output.
+- [x] 3.7 Add workflow-level checks for selected-ref identity, optional e2e publication blocking, exact custom artifacts, source metadata, main image pinning, artifact-probe failure, and handoff output.
 
 ## 4. Shared context and artifact preflight
 
 - [x] 4.1 Add shared install variables for context, namespace, Helm release, OCI chart, timeout, source selection, local transport, and registry while preserving compatible existing overrides.
 - [x] 4.2 Implement context capture and bounded existence, reachability, authentication, node-discovery, and required-permission checks that run before Helm and pass the captured context to every command.
 - [x] 4.3 Probe every stable, main, or unpublished selection with `helm show chart --version <exact>` and report an unavailable artifact without mutating the cluster.
-- [x] 4.4 Validate full source revision metadata and exact manager/launcher image pins for main and unpublished charts.
+- [x] 4.4 Resolve manager/launcher image references from selected chart values without requiring source-revision metadata during `make install`.
 - [x] 4.5 Inspect the selected chart CRDs to derive its c9s API group and inspect the cluster for installed legacy and `c9s.run` CRDs.
 - [x] 4.6 Block cross-group installation before Helm with the destructive `make uninstall-c9s` warning, while allowing same-group reinstall and version changes.
 - [ ] 4.7 Add focused preflight checks for no context, unknown context, stale or unreachable API endpoint, unauthenticated context, missing permissions, missing OCI version, invalid development metadata, and both API-group mismatch directions.

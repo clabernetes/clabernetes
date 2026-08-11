@@ -36,7 +36,7 @@ The repository SHALL provide `make ls-releases`, backed by the UV-run release CL
 
 #### Scenario: Unpublished development chart is available
 
-- **WHEN** a successful manual `cicd` workflow has published chart `0.0.0-abc1234`
+- **WHEN** a successful manual `Create dev release` workflow has published chart `0.0.0-abc1234`
 - **THEN** the catalog includes a distinct development row with Version `0.0.0-abc1234`, which can be supplied as `C9S_VERSION=0.0.0-abc1234`, plus source branch, workflow URL, and workflow-availability timestamp
 
 #### Scenario: Displayed version is install input
@@ -195,11 +195,11 @@ A GitHub release catalog entry SHALL be treated as a candidate until the install
 
 ### Requirement: Development build discovery
 
-The CLI SHALL present `main` as a distinct mutable channel and SHALL discover recent unpublished-build candidates from manually dispatched `cicd` workflow runs through the GitHub Actions API. It SHALL display the source branch, short SHA version, workflow completion time, and workflow URL without describing those values as release publication or package push metadata.
+The CLI SHALL present `main` as a distinct mutable channel and SHALL discover recent unpublished-build candidates from manually dispatched `Create dev release` workflow runs through the GitHub Actions API. It SHALL display the source branch, short SHA version, workflow completion time, and workflow URL without describing those values as release publication or package push metadata.
 
 #### Scenario: Successful manual build candidate
 
-- **WHEN** a completed successful `cicd` manual run reports source SHA `abc1234...`
+- **WHEN** a completed successful `Create dev release` manual run reports source SHA `abc1234...`
 - **THEN** the development catalog presents candidate version `0.0.0-abc1234`, its source branch, workflow completion time, and run link
 
 #### Scenario: Failed or incomplete manual run
