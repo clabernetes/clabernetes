@@ -1,0 +1,149 @@
+---
+title: 0.7.0
+---
+
+2026-08-11 · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.6.0...v0.7.0)
+
+<Callout type='warn'>
+
+This release introduces breaking changes to the API group and requires a full uninstall of the previous c9s installation.
+
+There is no upgrade path from 0.6.0.
+
+</Callout>
+
+## Major refactoring
+
+Release 0.7.0 is a major refactoring of the c9s project. The main changes in one sentence are:
+
+- c9s now has its own documentation site at [c9s.run](https://c9s.run).
+- `Node` and `Link` are now the primary c9s APIs.
+- `Topology` is now a compatibility layer and emits `Node` and `Link` resources.
+- `LauncherProfile` is a resource that carries Kubernetes and launcher properties.
+- group is now `c9s.run` instead of `clabernetes.containerlab.dev`.
+- `clabverter` has not been looked at in details and can experience issues, as the plan is to add `--runtime c9s` to the containerlab binary instead and sunset clabverter.
+- repo has moved to `github.com/clabernetes/clabernetes` as well as the chart org in Artifact Hub.
+
+## Node and Link first
+
+`Node` and `Link` are now the primary c9s APIs. A Node describes one containerlab network node, a
+Link describes one point-to-point connection, and a reusable `LauncherProfile` carries Kubernetes
+and launcher policy.
+
+The `Topology` resource remains available as a convenient compatibility layer. Existing containerlab
+topology definitions are compiled into independently reconciled Nodes, Links, and LauncherProfiles,
+so existing Topology manifests continue to work.
+
+This removes the single, ever-growing Topology object from the runtime path. Large labs can now
+manage each node and link independently, while status and controller allocations stay bounded to
+the resource they describe.
+
+Connectivity is configured per Link, so VXLAN and slurpeeth links can coexist in one lab. Kubernetes
+1.31 or newer is required for the endpoint field selectors used by the Link controller.
+
+The legacy `Connectivity` resource has been removed; each Link now owns its connectivity choice,
+validation, endpoint bindings, and tunnel allocation. Topology status is reduced to bounded resource
+counts and conditions instead of growing per-node maps.
+
+## API group renamed to `c9s.run`
+
+All c9s custom resources now use:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+```
+
+The previous `clabernetes.containerlab.dev` group is not migrated automatically. The installer
+detects an incompatible API group and refuses a partial upgrade instead of leaving mixed CRDs in
+the cluster.
+
+The default installation namespace is now `c9s`, and c9s-owned Kubernetes labels use the
+`c9s.run/` prefix.
+
+## Curated Node API and containerlab 0.78
+
+The Node spec now exposes only the containerlab fields that a launcher can realize. Unknown and
+removed fields are rejected when a Node is applied instead of being silently accepted.
+
+Native containerlab definitions inside a Topology remain permissive: unsupported fields are omitted
+with a warning that names the field and source line. Malformed definitions and invalid values still
+fail compilation.
+
+The launcher now ships containerlab 0.78.0. The Node API adds `devices`, `cap-add`, `privileged`,
+`tmpfs`, `security-opts`, `shm-size`, and `suppress-startup-config`, plus additional certificate
+options.
+
+Other behavior changes:
+
+- `ports` accepts destination ports only, such as `22/tcp` or `5201/udp`;
+- node labels from Topology definitions become Kubernetes labels on the generated Node, Deployment,
+  and pods; and
+- `network-mode` is limited to the supported `container:<primary>` grouping form.
+
+## HTTP(S) proxy support
+
+Launcher pods can now pull images through corporate HTTP(S) proxies. Proxy variables supplied
+through launcher `extraEnv` are rendered into Docker daemon configuration, and Kubernetes API
+addresses are added to `NO_PROXY`.
+
+`make try-c9s` detects host proxy variables automatically, extends `NO_PROXY` with the KinD service
+and pod networks, and retries transient tool download failures. A user-provided Docker daemon
+configuration still takes precedence.
+
+## Installation workflows
+
+The repository now provides one installation flow for existing clusters and the disposable
+quickstart:
+
+```bash
+make install
+make try-c9s
+```
+
+Both commands use the same `VERSION` selector for the latest stable release, an exact release,
+the mutable `main` channel, a commit-scoped development build, or a local checkout.
+`make ls-releases` lists installable chart artifacts.
+
+Before changing a cluster, the installer validates the Kubernetes context, permissions, selected
+OCI chart, and API-group compatibility. It then verifies the Helm release, manager and launcher
+images, rollout, and embedded version.
+
+Local KinD installs build and load immutable checkout-tagged images. Repeated installs reuse matching
+images, while `C9S_LOCAL_REBUILD=1` forces a rebuild. Manual development releases publish
+commit-scoped `0.0.0-<short-sha>` charts and images without creating a GitHub Release.
+
+## New documentation site
+
+The documentation has moved into a Fumadocs site hosted at [c9s.run](https://c9s.run). Pull
+requests receive isolated preview deployments, `main` has a rolling preview, and production docs
+are deployed only after release validation and image builds succeed.
+
+The site includes an interactive CRD viewer generated from the shipped OpenAPI schema, refreshed
+installation and quickstart guides, and diagrams for the c9s architecture and sample lab.
+
+## Removed KNE and web UI support
+
+Topology definitions now accept containerlab syntax only; the KNE topology compiler has been
+removed. The bundled c9s web UI and its Helm values, Deployment, Service, and Ingress have also
+been removed.
+
+Resources generated from a Topology now use Node names directly instead of topology-prefixed names.
+`spec.naming` remains accepted for manifest compatibility but no longer changes generated resource
+names. Clients that consumed the old per-node Topology status maps must use Node and Link status
+instead.
+
+## Repository and image locations
+
+The project repository and published artifacts have moved from the `srl-labs` organization to
+`clabernetes`. Release images and the OCI Helm chart now use the
+`ghcr.io/clabernetes/clabernetes` namespace, and chart metadata is available on Artifact Hub.
+
+## Development and CI
+
+- `make dev` supports a project-managed in-cluster registry for remote clusters and an explicit
+  external-registry mode. Development resources default to the separate `c9s-dev` namespace.
+- Pull requests build amd64 test images in parallel with end-to-end tests; main and release image
+  publication remains gated by the full test suite.
+- Manager and launcher Docker build contexts were reduced and release image builds were
+  streamlined, including corrected certificate ownership for OpenShift-compatible launcher images.
+- GitHub Actions `checkout` and `setup-go` were updated to version 7.
