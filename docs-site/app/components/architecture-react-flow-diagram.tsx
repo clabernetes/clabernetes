@@ -329,11 +329,7 @@ export function ArchitectureReactFlowDiagram() {
           defaultEdgeOptions={{
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              color: '#20d9e7',
-            },
-            style: {
-              stroke: '#20d9e7',
-              strokeWidth: 1.25,
+              // color: '#20d9e7',
             },
           }}
           edges={flowEdges}

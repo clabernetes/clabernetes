@@ -215,8 +215,8 @@
 }
 
 .c9s-react-flow-canvas .react-flow__edge-path {
-  stroke: var(--c9s-react-flow-cyan);
-  stroke-width: 1.25;
+  /* stroke: var(--c9s-react-flow-cyan); */
+  stroke-width: 1.2;
 }
 
 .c9s-react-flow-canvas .react-flow__edge-textbg {
