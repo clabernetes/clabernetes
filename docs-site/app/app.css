@@ -14,6 +14,51 @@ body {
   background: var(--color-fd-background);
 }
 
+.c9s-development-banner {
+  position: relative;
+  z-index: 50;
+  display: grid;
+  min-height: 2.75rem;
+  place-items: center;
+  overflow: hidden;
+  padding: 0.65rem 1rem;
+  background: #facc15;
+  color: #111827;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.c9s-development-banner a {
+  color: var(--c9s-magenta);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.c9s-development-banner::before,
+.c9s-development-banner::after {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 0.35rem;
+  background: repeating-linear-gradient(-45deg,
+      #111827 0 0.75rem,
+      #facc15 0.75rem 1.5rem);
+  content: '';
+}
+
+.c9s-development-banner::before {
+  top: 0;
+}
+
+.c9s-development-banner::after {
+  bottom: 0;
+}
+
 .c9s-home {
   background:
     radial-gradient(circle at top,

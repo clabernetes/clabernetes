@@ -29,7 +29,7 @@ export function baseOptions(): BaseLayoutProps {
         label: 'Join the Discord community',
         icon: <DiscordIcon />,
         text: 'Discord',
-        url: 'https://discord.gg/vAyddtaEV9',
+        url: 'https://discord.gg/jaAu9JEc9',
       },
     ],
     githubUrl: 'https://github.com/clabernetes/clabernetes',
