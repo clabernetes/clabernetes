@@ -36,6 +36,8 @@ make try-c9s
 
 [Follow the local quickstart](/docs/quickstart)
 
+[Install into an existing cluster](/docs/installation)
+
 ## Continue exploring
 
 - [Architecture](/docs/architecture) explains the controllers, launchers, and connectivity model.

@@ -14,6 +14,10 @@ registry_name=${2:?registry service name required}
 local_port=${3:?local port required}
 bind_address="${LOCAL_REGISTRY_PORT_FORWARD_ADDRESS:-0.0.0.0}"
 kubectl=${KUBECTL:-kubectl}
+kubectl_args=()
+if [[ -n "${KUBE_CONTEXT:-}" ]]; then
+    kubectl_args+=(--context "${KUBE_CONTEXT}")
+fi
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 lock_file="${script_dir}/.registry-port-forward.lock"
@@ -70,7 +74,7 @@ start_port_forward() {
     # Detach the forward from the short-lived custom build process. DevSpace may terminate the
     # build command's process group after one image finishes, while other parallel image pushes
     # still depend on this forward.
-    nohup setsid "${kubectl}" port-forward \
+    nohup setsid "${kubectl}" "${kubectl_args[@]}" port-forward \
         --address "${bind_address}" \
         -n "${namespace}" \
         "svc/${registry_name}" \

@@ -17,6 +17,18 @@ Deploying this chart is like deploying any other helm chart! The simplest case l
 helm upgrade --install clabernetes oci://ghcr.io/clabernetes/clabernetes/clabernetes
 ```
 
+From this repository, `make install` performs context and artifact preflight before installing into
+an existing cluster:
+
+```bash
+make install
+```
+
+Use `C9S_CONTEXT=<context>` to avoid relying on the current context. Use
+`C9S_VERSION=main` for the mutable main chart or `C9S_VERSION=0.0.0-<short-sha>` for an exact
+unpublished development chart. These development channels are separate from the latest stable
+GitHub Release.
+
 You can select to install a specific version of the chart by adding the `--version` flag -- you can
 find all the versions of the chart stored as a package on the projects GitHub page
 [here](https://github.com/clabernetes/clabernetes/pkgs/container/clabernetes%2Fclabernetes).

@@ -14,9 +14,13 @@ image=$1
 tag=${2:-dev-latest}
 namespace="${DEVSPACE_NAMESPACE:-${NS:-c9s-dev}}"
 registry_name="${LOCAL_REGISTRY_NAME:-registry}"
+kubectl_args=()
+if [[ -n "${KUBE_CONTEXT:-}" ]]; then
+    kubectl_args+=(--context "${KUBE_CONTEXT}")
+fi
 
 registry_port=$(
-    "${KUBECTL:-kubectl}" get svc "${registry_name}" \
+    "${KUBECTL:-kubectl}" "${kubectl_args[@]}" get svc "${registry_name}" \
         -n "${namespace}" \
         -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || true
 )

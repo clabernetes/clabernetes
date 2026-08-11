@@ -133,6 +133,19 @@ resources when the CRDs are removed.
 
 5. Re-apply your updated manifests.
 
+The repository `make install` target performs the API-group check before Helm. It allows same-group
+version changes, but refuses a legacy/new group crossing and prints the destructive cleanup command:
+
+```bash
+C9S_CONTEXT=<your-context> make uninstall-c9s
+C9S_CONTEXT=<your-context> VERSION=latest make install
+```
+
+The installer reconciles manager and launcher image references while preserving unrelated fields in
+the global `Config` resource. Development charts use immutable commit-scoped image tags; `0.0.0` is
+a mutable main channel and is not a rollback target. For a reproducible rollback within one API
+group, select an exact published chart version.
+
 ### kubectl resource names
 
 | Legacy | New |

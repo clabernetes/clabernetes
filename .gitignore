@@ -14,6 +14,10 @@
 # jetbrains goodies
 .idea
 
+# python
+__pycache__/
+*.pyc
+
 # macos stuff
 .DS_Store
 */.DS_Store

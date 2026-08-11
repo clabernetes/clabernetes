@@ -113,3 +113,26 @@ jobs:
 
           helm package charts/clabernetes --version ${{ needs.prep.outputs.version }}
           helm push clabernetes-${{ needs.prep.outputs.version }}.tgz oci://ghcr.io/clabernetes/clabernetes
+
+  install-smoke:
+    needs: release
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout release source
+        uses: actions/checkout@v7
+        with:
+          # Use the installer implementation from the default branch; the demo is fetched from the
+          # exact release tag by `make try-c9s`.
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          lfs: true
+
+      - name: load tool versions
+        run: cat .github/vars.env >> "$GITHUB_ENV"
+
+      - name: install exact release in KinD
+        run: make try-c9s C9S_VERSION="${{ github.event.release.tag_name }}" TRY_C9S_TIMEOUT=600s
+
+      - name: clean release smoke cluster
+        if: ${{ always() }}
+        run: make try-c9s-clean || true

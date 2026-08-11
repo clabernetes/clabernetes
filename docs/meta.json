@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "quickstart",
+    "installation",
     "upgrading",
     "architecture",
     "concepts",

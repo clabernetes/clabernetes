@@ -10,13 +10,18 @@
 
 set -euo pipefail
 
+kubectl_args=()
+if [[ -n "${KUBE_CONTEXT:-}" ]]; then
+    kubectl_args+=(--context "${KUBE_CONTEXT}")
+fi
+
 if [[ -n "${TARGET_PLATFORM:-}" ]]; then
     printf '%s' "${TARGET_PLATFORM}"
     exit 0
 fi
 
 platforms="$(
-    "${KUBECTL:-kubectl}" get nodes \
+    "${KUBECTL:-kubectl}" "${kubectl_args[@]}" get nodes \
         -o jsonpath='{range .items[*]}{.status.nodeInfo.operatingSystem}/{.status.nodeInfo.architecture}{"\n"}{end}' |
         sort -u
 )"
