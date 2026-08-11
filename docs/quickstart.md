@@ -1,5 +1,5 @@
 ---
-title: Local quickstart
+title: Quickstart
 description: Launch c9s and a sample network lab in a disposable KinD cluster.
 icon: Rocket
 ---

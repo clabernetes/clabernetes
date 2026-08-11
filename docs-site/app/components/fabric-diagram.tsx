@@ -1,5 +1,5 @@
 import c9sLogo from '@/assets/c9s-logo-clean.png';
-import containerlabMark from '@/assets/clab-mark.svg';
+import containerlabMark from '@/assets/clab-reimagined-logo.svg';
 import kubernetesLogo from '@/assets/kubernetes-logo.svg';
 import { SwitchIcon } from '@/components/switch-icon';
 
@@ -63,7 +63,7 @@ function FabricNode({
           <img
             alt=""
             aria-hidden="true"
-            className="size-3 sm:size-3.5"
+            className="size-4 sm:size-5"
             src={containerlabMark}
           />
           <span>clab</span>

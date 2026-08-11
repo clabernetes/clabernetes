@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Containerlab reimagined logo</title>
+  <desc id="desc">A graphite container outline surrounding layered cyan and blue shapes.</desc>
+  <defs>
+    <linearGradient id="frame" x1="230" y1="180" x2="795" y2="850" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#354252"/>
+      <stop offset="1" stop-color="#26313d"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="430" y1="450" x2="600" y2="590" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#18bde9"/>
+      <stop offset="1" stop-color="#08a5dc"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="420" y1="590" x2="590" y2="770" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0872c9"/>
+      <stop offset="1" stop-color="#073d9c"/>
+    </linearGradient>
+  </defs>
+
+  <path
+    d="M350 585V455l121-80V138L190 320v370l322 208 322-208V320L553 138v237l121 80v130"
+    fill="none"
+    stroke="url(#frame)"
+    stroke-width="48"
+    stroke-linecap="butt"
+    stroke-linejoin="miter"
+  />
+
+  <path
+    d="m389 522 123-97 123 97v67l-123-73-123 73Z"
+    fill="url(#cyan)"
+  />
+
+  <path
+    d="m512 542 169 98a195 195 0 0 1-338 0Z"
+    fill="url(#blue)"
+  />
+</svg>
