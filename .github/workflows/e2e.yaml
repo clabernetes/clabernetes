@@ -55,13 +55,6 @@ jobs:
           C9S_LOCAL_REUSE_IMAGES=1 \
           make install C9S_CONTEXT=kind-c9s-e2e C9S_KIND_CLUSTER=c9s-e2e VERSION=local
 
-      - name: verify local try-c9s workflow
-        run: make try-c9s C9S_VERSION=local TRY_C9S_TIMEOUT=600s
-
-      - name: clean local try-c9s workflow
-        if: ${{ always() }}
-        run: make try-c9s-clean || true
-
       - name: setup tmate session
         uses: mxschmitt/action-tmate@v3
         if: ${{ inputs.debug }}
@@ -77,3 +70,27 @@ jobs:
           set -x
           make e2e-debug-dump
           exit 1
+
+  try-smoke:
+    runs-on: ubuntu-latest
+    # This job owns a separate KinD cluster and is intentionally independent of the e2e job above.
+    if: (github.ref_name == 'main' || github.base_ref == 'main' || github.event_name == 'workflow_dispatch') || inputs.debug
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: pull git lfs assets
+        run: git lfs pull
+
+      - name: load env vars for workflow run
+        run: cat .github/vars.env >> "$GITHUB_ENV"
+
+      - name: verify local try-c9s workflow
+        run: make try-c9s C9S_VERSION=local TRY_C9S_TIMEOUT=600s
+
+      - name: clean local try-c9s workflow
+        if: ${{ always() }}
+        run: make try-c9s-clean || true
