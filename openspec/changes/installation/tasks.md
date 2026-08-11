@@ -31,7 +31,7 @@
 - [x] 4.1 Add shared install variables for context, namespace, Helm release, OCI chart, timeout, source selection, local transport, and registry while preserving compatible existing overrides.
 - [x] 4.2 Implement context capture and bounded existence, reachability, authentication, node-discovery, and required-permission checks that run before Helm and pass the captured context to every command.
 - [x] 4.3 Probe every stable, main, or unpublished selection with `helm show chart --version <exact>` and report an unavailable artifact without mutating the cluster.
-- [x] 4.4 Validate full source revision metadata and exact manager/launcher image pins for main and unpublished charts.
+- [x] 4.4 Resolve manager/launcher image references from selected chart values without requiring source-revision metadata during `make install`.
 - [x] 4.5 Inspect the selected chart CRDs to derive its c9s API group and inspect the cluster for installed legacy and `c9s.run` CRDs.
 - [x] 4.6 Block cross-group installation before Helm with the destructive `make uninstall-c9s` warning, while allowing same-group reinstall and version changes.
 - [ ] 4.7 Add focused preflight checks for no context, unknown context, stale or unreachable API endpoint, unauthenticated context, missing permissions, missing OCI version, invalid development metadata, and both API-group mismatch directions.

@@ -102,7 +102,7 @@ Every successful main publication SHALL overwrite OCI chart `0.0.0` as the expli
 
 ### Requirement: Development artifact installation
 
-The `make install` workflow SHALL treat `VERSION=main` as exact chart version `0.0.0` in the development channel and SHALL accept exact unpublished versions matching `0.0.0-<sha>`. The `make try-c9s` workflow SHALL accept the equivalent values through `C9S_VERSION`. Both SHALL read full source revision metadata from development charts, probe the exact chart and referenced images, and SHALL never classify either channel as latest stable.
+The `make install` workflow SHALL treat `VERSION=main` as exact chart version `0.0.0` in the development channel and SHALL accept exact unpublished versions matching `0.0.0-<sha>`. The `make try-c9s` workflow SHALL accept the equivalent values through `C9S_VERSION`. Both SHALL probe the exact chart and SHALL never classify either channel as latest stable. Only the try workflow requires source-revision metadata to retrieve a matching demo.
 
 #### Scenario: Install mutable main
 
@@ -117,7 +117,7 @@ The `make install` workflow SHALL treat `VERSION=main` as exact chart version `0
 #### Scenario: Development chart lacks source metadata
 
 - **WHEN** a selected main or unpublished chart does not record a full source revision
-- **THEN** installation fails before cluster mutation with an invalid-development-artifact error
+- **THEN** `make install` may proceed when the exact chart is available, while `make try-c9s` refuses to apply a source-mismatched demo
 
 #### Scenario: Development workflow run exists but artifacts do not
 

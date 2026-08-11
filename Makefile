@@ -6,7 +6,34 @@ C9S_RELEASE_SCRIPT := hack/c9s_releases.py
 C9S_RELEASE_LIMIT ?= 10
 C9S_RELEASE_WORKERS ?= 8
 C9S_GIT_SHA := $(shell git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
-C9S_DIRTY_SUFFIX := $(if $(shell git status --porcelain --untracked-files=normal),-dirty-$(shell date +%s),)
+# Keep this list aligned with the build context allowed by .dockerignore. Documentation, CI,
+# development configuration, e2e fixtures, charts, and other operator-only files must not change
+# local runtime image identities.
+C9S_IMAGE_INPUT_PATHS := \
+	.dockerignore \
+	go.mod \
+	go.sum \
+	apis \
+	assets \
+	cmd \
+	clabverter \
+	clicker \
+	config \
+	constants \
+	controllers \
+	generated \
+	http \
+	launcher \
+	logging \
+	manager \
+	util \
+	build/launcher \
+	build/manager.Dockerfile \
+	build/launcher.Dockerfile \
+	build/clabverter.Dockerfile
+C9S_IMAGE_INPUT_STATUS := $(shell for path in $(C9S_IMAGE_INPUT_PATHS); do git status --porcelain -- "$$path"; done)
+C9S_WORKTREE_HASH := $(shell { for path in $(C9S_IMAGE_INPUT_PATHS); do git ls-files --cached --others --exclude-standard -- "$$path"; done | sort -u | while IFS= read -r file; do printf '%s\t' "$$file"; git hash-object "$$file"; done; } | sha256sum | cut -c1-12)
+C9S_DIRTY_SUFFIX := $(if $(C9S_IMAGE_INPUT_STATUS),-dirty-$(C9S_WORKTREE_HASH),)
 C9S_LOCAL_BUILD_ID ?= local-$(C9S_GIT_SHA)$(C9S_DIRTY_SUFFIX)
 
 ifeq ($(USE_UV),true)
@@ -236,13 +263,13 @@ delete-generated: ## Deletes all zz_*.go (generated) files, and crds
 	rm -rf generated/*
 
 build-manager: ## Builds the clabernetes manager container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker build --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(MANAGER_IMAGE):$(IMAGE_TAG) -f ./build/manager.Dockerfile .
+	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(MANAGER_IMAGE):$(IMAGE_TAG) -f ./build/manager.Dockerfile .
 
 build-launcher: ## Builds the clabernetes launcher container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker build --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(LAUNCHER_IMAGE):$(IMAGE_TAG) -f ./build/launcher.Dockerfile .
+	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(LAUNCHER_IMAGE):$(IMAGE_TAG) -f ./build/launcher.Dockerfile .
 
 build-clabverter: ## Builds the clabverter container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker build --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(CLABVERTER_IMAGE):$(IMAGE_TAG) -f ./build/clabverter.Dockerfile .
+	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(CLABVERTER_IMAGE):$(IMAGE_TAG) -f ./build/clabverter.Dockerfile .
 
 set-chart-versions: ## Sets the helm chart versions to the given value.
 	./hack/set-chart-versions.sh $(BUMP_CHART_VERSION_ARGS)

@@ -98,7 +98,7 @@ Before mutating a cluster, `make install` SHALL capture `C9S_CONTEXT` or the cur
 
 ### Requirement: Exact remote artifact validation
 
-For every stable or development remote source, the installer SHALL probe the exact normalized OCI chart version before invoking Helm and SHALL install with an explicit `--version`. It SHALL NOT rely on Helm's unversioned chart resolution or a mutable image tag to implement latest-release selection. Development charts SHALL additionally provide a full source revision and explicit manager and launcher image references.
+For every stable or development remote source, the installer SHALL probe the exact normalized OCI chart version before invoking Helm and SHALL install with an explicit `--version`. It SHALL NOT rely on Helm's unversioned chart resolution or a mutable image tag to implement latest-release selection. The installer SHALL resolve manager and launcher image references from the selected chart values when they are explicitly provided, without requiring source-revision metadata.
 
 #### Scenario: Selected release artifacts are ready
 
@@ -123,11 +123,11 @@ For every stable or development remote source, the installer SHALL probe the exa
 #### Scenario: Unpublished chart is selected
 
 - **WHEN** the user selects `0.0.0-abc1234`
-- **THEN** installation probes that exact chart and fails before mutation if its source metadata or matching images are unavailable
+- **THEN** installation probes that exact chart and fails before mutation only when the chart itself is unavailable
 
 ### Requirement: Identifiable local builds
 
-For local source, the installer SHALL build manager and launcher images for the target cluster's single node platform, SHALL give both images one unique build identity, SHALL pass that identity through the Docker `VERSION` build argument, and SHALL use the same identity in Helm values and the success summary. A dirty checkout identity SHALL differ between builds so an unchanged mutable tag cannot hide changed source.
+For local source, the installer SHALL build manager and launcher images for the target cluster's single node platform, SHALL give both images one unique build identity, SHALL pass that identity through the Docker `VERSION` build argument, and SHALL use the same identity in Helm values and the success summary. A dirty checkout identity SHALL differ when image-input files change, while files excluded by `.dockerignore` SHALL NOT change the identity.
 
 #### Scenario: Clean checkout build
 

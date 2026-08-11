@@ -38,7 +38,7 @@ jobs:
       # these are the exact same make targets developers run locally via
       # `make test-e2e-local`, so CI and local cannot drift.
       - name: build images, create kind cluster, and deploy clabernetes
-        run: make e2e-tools e2e-cluster e2e-images e2e-deploy
+        run: C9S_LOCAL_BUILD_ID="local-${GITHUB_SHA::8}" make e2e-tools e2e-cluster e2e-images e2e-deploy
 
       # actions seem to be running out of disk for e2e -- probably due to all the image build stuff
       # floating around, all the junk runners get pre-built with, and runners not being super beefy
@@ -49,7 +49,11 @@ jobs:
         run: docker system prune -a -f
 
       - name: verify existing-cluster make install
-        run: make install C9S_CONTEXT=kind-c9s-e2e C9S_KIND_CLUSTER=c9s-e2e VERSION=local
+        run: |
+          C9S_LOCAL_BUILD_ID="local-${GITHUB_SHA::8}" \
+          C9S_LOCAL_IMAGE_TAG="local-${GITHUB_SHA::8}" \
+          C9S_LOCAL_REUSE_IMAGES=1 \
+          make install C9S_CONTEXT=kind-c9s-e2e C9S_KIND_CLUSTER=c9s-e2e VERSION=local
 
       - name: verify local try-c9s workflow
         run: make try-c9s C9S_VERSION=local TRY_C9S_TIMEOUT=600s

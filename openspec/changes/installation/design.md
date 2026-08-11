@@ -211,7 +211,10 @@ For local source, apply the checkout's `examples/basic/srl-multitool.yaml`.
 
 For supported published source, retrieve the demo from the immutable selected Git tag rather than from the checkout. The guaranteed published-demo support floor is `v0.6.0`, where the stable path exists. The release selector may list older releases, and `make install` may install an older exact chart after a successful OCI probe, but `make try-c9s` rejects releases below the demo support floor with an actionable message.
 
-For `main` and exact unpublished commit builds, retrieve the demo from the full source revision embedded in the chart metadata. Fail before applying resources if the chart lacks source metadata or that revision's demo is unavailable.
+For `main` and exact unpublished commit builds, the try workflow retrieves the demo from the full
+source revision embedded in the chart metadata. It fails before applying resources if the chart
+lacks source metadata or that revision's demo is unavailable. The existing-cluster install does not
+perform this metadata check.
 
 The demo manifest is stored in the try state directory before application. Readiness timeout dumps topology state, pods, events, and manager/launcher logs, then returns failure. The current soft-success behavior is removed.
 
@@ -222,7 +225,7 @@ Alternative considered: maintain duplicate legacy demos on `main`. Rejected beca
 Local manager and launcher builds share one generated identity:
 
 - clean checkout: `local-<short-commit>`;
-- dirty checkout: `local-<short-commit>-dirty-<build-id>`.
+- dirty checkout with image-input changes: `local-<short-commit>-dirty-<worktree-hash>`.
 
 The same identity is:
 
@@ -233,7 +236,9 @@ The same identity is:
 
 The installer detects the cluster's single node platform and passes it to BuildKit. Mixed-platform clusters fail unless future work adds a multi-platform push implementation.
 
-Unique dirty-build identities prevent `IfNotPresent` and an unchanged Pod template from reusing stale content.
+The worktree hash follows the image Docker context, so documentation and other excluded files do not
+invalidate the image identity. Unique identities for changed image inputs prevent `IfNotPresent` and
+an unchanged Pod template from reusing stale content.
 
 ### 10. Select image transport by cluster type and explicit user choice
 
@@ -262,14 +267,15 @@ It uses the API group derived from the selected chart. It does not set chart boo
 
 The installer then verifies:
 
-- Helm release and chart version/source;
+- Helm release, chart version, and selected channel;
 - manager Deployment image;
 - Config launcher image and pull policy;
 - manager rollout;
 - embedded manager version where the selected binary exposes it;
 - local build identity for both local images.
 
-Any mismatch fails with the expected and observed values. Successful output displays context, namespace, Helm release, source, chart, manager image, launcher image, and observed binary version.
+Any mismatch fails with the expected and observed values. Successful output displays context,
+namespace, Helm release, channel, chart, manager image, launcher image, and observed binary version.
 
 ### 12. Test the public contract in layers
 

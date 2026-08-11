@@ -52,9 +52,39 @@ C9S_CONTEXT=kind-my-cluster C9S_KIND_CLUSTER=my-cluster \
 ```
 
 The cluster must report one operating-system/architecture pair. Local images receive a unique
-checkout/dirty-worktree identity and use `IfNotPresent`.
+checkout/dirty-worktree identity and use `IfNotPresent`. Images are built with Buildx and loaded
+with `--load`. Repeated installs reuse the local Docker images for the same identity; force a
+rebuild with:
 
-For a non-KinD cluster, set a registry prefix that every node can pull from:
+```bash
+C9S_LOCAL_REBUILD=1 VERSION=local make install
+```
+
+### Local image identity
+
+The local tag encodes the source state used to build the images:
+
+```text
+local-37c83b52-dirty-f8a82871162e
+│     │        │
+│     │        └─ deterministic worktree hash
+│     └────────── dirty checkout marker
+└──────────────── commit SHA
+```
+
+For a clean checkout the tag is `local-<commit-sha>`. For a dirty checkout, the worktree hash is
+calculated only from image-input paths allowed by the repository Docker context: source code, Go
+metadata, image Dockerfiles, and launcher assets. Paths excluded by `.dockerignore`, such as
+`docs/`, do not affect it. The same source state therefore produces the same tag on repeated
+installs.
+
+On a repeat install, the installer checks whether both tagged images already exist locally. If they
+do, it skips the Buildx build, loads the cached images into KinD when needed, and reapplies the Helm
+release using the same immutable references. A changed worktree produces a new hash and therefore a
+new tag. `C9S_LOCAL_REBUILD=1` forces rebuilding the current tag.
+
+For a non-KinD cluster, local images are pushed to
+`ghcr.io/clabernetes/clabernetes` by default. Override the registry prefix when needed:
 
 ```bash
 C9S_REGISTRY=ghcr.io/example/c9s make install VERSION=local
