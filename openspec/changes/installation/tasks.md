@@ -2,7 +2,7 @@
 
 - [x] 1.1 Consolidate installation, try, and e2e tool version pins into one source of truth and align local and CI GitHub CLI, Helm, kubectl, KinD, yq, and UV versions.
 - [x] 1.2 Add pinned GitHub CLI download support and refactor the download targets so all installation tools live at repository-local versioned paths and each source mode downloads only its required tools.
-- [x] 1.3 Update e2e, development helpers, and `uninstall-c9s` to use the shared pinned paths and an explicitly selected kube context without changing their intended namespaces.
+- [x] 1.3 Update e2e, development helpers, and `uninstall` to use the shared pinned paths and an explicitly selected kube context without changing their intended namespaces.
 - [x] 1.4 Add a runnable check that places conflicting fake tools on `PATH` and proves install, try, e2e, and uninstall commands select the repository-local binaries.
 
 ## 2. Release discovery and selection
@@ -12,7 +12,7 @@
 - [x] 2.3 Implement non-interactive `latest` and exact-version resolution, keeping exact normalization usable when release catalog retrieval is unavailable.
 - [x] 2.4 Implement the interactive selector with Rich output on stderr, one normalized value on stdout, explicit cancellation behavior, and a non-TTY error.
 - [x] 2.5 Add `make ls-releases` to concurrently probe stable, main, and development OCI charts and render the newest 10 installable artifacts in a Rich table sorted by publication/availability time, with `ALL=1` displaying the complete catalog without requiring cluster access.
-- [x] 2.6 Wire `VERSION=latest|main|vX.Y.Z|X.Y.Z|0.0.0-<sha>|local|select` into `make install` and the equivalent `C9S_VERSION` selections into `make try-c9s`, while keeping an unset value non-interactive.
+- [x] 2.6 Wire `VERSION=latest|main|vX.Y.Z|X.Y.Z|0.0.0-<sha>|local|select` into both `make install` and `make try-c9s`, while keeping an unset value non-interactive.
 - [x] 2.7 Add fixture-based script tests for GitHub CLI JSON/subprocess failures, multi-page and unordered responses, drafts, prereleases, unavailable OCI charts, bounded newest-first results, concurrent probes, tags with and without `v`, latest-stable semantics, cancellation, malformed values, authentication, rate limits, network errors, and malformed API data.
 - [x] 2.8 Add a development catalog backed by recent successful manual `Create dev release` runs, with a separate mutable main entry discovered from `cicd` pushes, source branch/SHA, workflow completion metadata, run links, and exact OCI probing on selection.
 
@@ -33,7 +33,7 @@
 - [x] 4.3 Probe every stable, main, or unpublished selection with `helm show chart --version <exact>` and report an unavailable artifact without mutating the cluster.
 - [x] 4.4 Resolve manager/launcher image references from selected chart values without requiring source-revision metadata during `make install`.
 - [x] 4.5 Inspect the selected chart CRDs to derive its c9s API group and inspect the cluster for installed legacy and `c9s.run` CRDs.
-- [x] 4.6 Block cross-group installation before Helm with the destructive `make uninstall-c9s` warning, while allowing same-group reinstall and version changes.
+- [x] 4.6 Block cross-group installation before Helm with the destructive `make uninstall` warning, while allowing same-group reinstall and version changes.
 - [ ] 4.7 Add focused preflight checks for no context, unknown context, stale or unreachable API endpoint, unauthenticated context, missing permissions, missing OCI version, invalid development metadata, and both API-group mismatch directions.
 
 ## 5. Local build identity and image transport
@@ -59,13 +59,13 @@
 
 - [x] 7.1 Add the documented `make install` entrypoint that selects the required pinned tools and invokes resolution, preflight, local transport when selected, shared Helm installation, and verification.
 - [x] 7.2 Ensure stable and development remote `make install` modes do not require Docker or KinD and local non-KinD install fails before building when no supported registry transport is configured.
-- [x] 7.3 Update `uninstall-c9s` to honor the same context, namespace, release, and pinned tool contract while retaining explicit destructive CRD cleanup.
+- [x] 7.3 Update `uninstall` to honor the same context, namespace, release, and pinned tool contract while retaining explicit destructive CRD cleanup.
 - [ ] 7.4 Add an acceptance fixture that creates a KinD cluster independently, invokes `make install` for stable, main, unpublished, and local sources, verifies no try-only resources were created, and tears it down.
 
 ## 8. try-c9s workflow
 
 - [x] 8.1 Make try KinD creation idempotent, refresh a dedicated state-directory kubeconfig, and prove the named cluster API before reusing it.
-- [ ] 8.2 Retain and converge the existing dual-stack/MetalLB and proxy behavior while calling the shared installer for all source selections.
+- [x] 8.2 Retain and converge the existing dual-stack/MetalLB and proxy behavior while calling the shared installer for all source selections.
 - [x] 8.3 Use the checkout demo for local source, fetch the immutable selected-tag demo for stable releases at or above `v0.6.0`, and fetch the source-revision demo for main/unpublished builds.
 - [x] 8.4 Reject unsupported historical releases, missing development source metadata, and unavailable source-revision demos before applying mismatched resources.
 - [x] 8.5 Make topology readiness timeout fail after collecting topology, pod, event, manager, and launcher diagnostics.

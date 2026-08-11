@@ -17,7 +17,7 @@ const CRD_REFERENCE_TAB: LayoutTab = {
   icon: layoutTabIcon('Braces'),
 };
 
-/** Guide + CRD Reference tabs with icons from meta.json and lucide names. */
+/** Guide + CRD Reference tabs with icons from meta.yaml and lucide names. */
 export function getDocsTabs(tree: Root): LayoutTab[] {
   const fromTree = getLayoutTabs(tree);
   const crdTab = fromTree.find((tab) => tab.url.startsWith('/docs/crd'));

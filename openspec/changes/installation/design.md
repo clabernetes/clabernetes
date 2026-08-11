@@ -76,8 +76,6 @@ VERSION=vX.Y.Z         # exact published release; X.Y.Z is also accepted
 VERSION=0.0.0-<sha>    # exact unpublished commit build
 VERSION=local          # checkout chart and images
 VERSION=select         # interactive stable/development picker
-
-C9S_VERSION=...        # equivalent selector for make try-c9s
 ```
 
 Existing chart/namespace/context override variables remain available where practical, but all source modes normalize into an internal structure containing:
@@ -150,8 +148,8 @@ For manual unpublished builds:
 6. The workflow probes both image platforms and the exact chart, performs an exact-version install smoke, and writes `make install` and `make try-c9s` handoff commands to the job summary.
 
 No GitHub Release is created, and the build is not eligible for `latest`. Users install it with
-`VERSION=0.0.0-<short-sha>`; `try-c9s` uses the equivalent `C9S_VERSION` selector. The try path
-obtains the compatible demo from the full source revision recorded in the chart.
+`VERSION=0.0.0-<short-sha>` through either `make install` or `make try-c9s`. The try path obtains
+the compatible demo from the full source revision recorded in the chart.
 
 GitHub workflow dispatch selects a branch or tag ref; it does not directly select an arbitrary detached SHA. For feature development, the desired commit must be the head of the selected branch/tag. The workflow summary records the resolved full SHA so the artifact remains auditable after the branch moves.
 
@@ -201,7 +199,7 @@ Alternative considered: rely on `helm upgrade --install` errors. Rejected becaus
 
 Before installation, render or inspect the selected chart CRDs and derive the target API group. Inspect the cluster for existing c9s CRDs in both `clabernetes.containerlab.dev` and `c9s.run`.
 
-If an existing installation's group differs from the selected chart's group, fail without invoking Helm and direct the user to `make uninstall-c9s`, explicitly warning that CRD deletion removes all custom resources. This handles local builds and future releases without hardcoding the release where the group changed.
+If an existing installation's group differs from the selected chart's group, fail without invoking Helm and direct the user to `make uninstall`, explicitly warning that CRD deletion removes all custom resources. This handles local builds and future releases without hardcoding the release where the group changed.
 
 Same-group reinstall and version changes are permitted, subject to the exact artifact and post-install checks.
 
@@ -309,7 +307,7 @@ CI provides linux/amd64 gating coverage and linux/arm64 smoke coverage without m
 - **External registry is authenticated for push but not pullable by nodes** → Require explicit registry configuration and fail on rollout with image-pull diagnostics; document imagePullSecret requirements.
 - **In-cluster registry becomes a runtime dependency** → Keep it opt-in and include lifecycle/teardown documentation.
 - **Dirty local tag uses a generated build identity** → Reproducibility is lower than a clean commit, but stale-image correctness is preserved and the identity is printed.
-- **Config launcher patch overrides a deliberate custom launcher image** → Treat `C9S_VERSION` as ownership of manager/launcher compatibility and document that installation reconciles both images; preserve every unrelated Config field.
+- **Config launcher patch overrides a deliberate custom launcher image** → Treat `VERSION` as ownership of manager/launcher compatibility and document that installation reconciles both images; preserve every unrelated Config field.
 - **Helm/CRD operations are not fully transactional** → Perform all possible checks before Helm, block cross-group upgrades, and provide diagnostic cleanup instructions rather than claiming automatic rollback.
 - **Tool downloads are version-pinned but not checksum-verified** → Keep downloads HTTPS-only and versioned; add checksums when upstream coverage can be maintained consistently.
 

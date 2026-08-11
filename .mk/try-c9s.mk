@@ -44,55 +44,6 @@ KUBECTL_SRC ?= https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/$(OS)/$(ARCH)/ku
 HELM_SRC ?= https://get.helm.sh/helm-$(HELM_VERSION)-$(OS)-$(ARCH).tar.gz
 YQ_SRC ?= https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(OS)_$(ARCH)
 
-TRY_C9S_HELM_WAIT_ARG := $(if $(filter v4%,$(HELM_VERSION)),--wait=legacy,--wait)
-
-## Proxy support
-## ----------------------------------------------------------------------------|
-## When the host has HTTP(S)_PROXY set, the launcher pods need those vars too so
-## their docker daemon (and nerdctl during image pull through) can pull images.
-## They are passed via the chart's globalConfig.deployment.extraEnv. NO_PROXY is
-## extended with the discovered KinD service/pod subnets and cluster-local names
-## so that in-cluster traffic (kube api, etc.) never hits the proxy. The extraEnv
-## json is rendered with yq from the env vars so no quoting/escaping shenanigans.
-TRY_C9S_NO_PROXY_EXTRA := .svc,.svc.cluster.local,localhost,127.0.0.1
-
-# expands to a `--set-json globalConfig.deployment.extraEnv=[...]` helm arg (or
-# nothing when no proxy is set); intended for use inside a recipe shell.
-define try-c9s-proxy-helm-args
-	http_proxy_val="$${HTTP_PROXY:-$${http_proxy:-}}"; \
-	https_proxy_val="$${HTTPS_PROXY:-$${https_proxy:-}}"; \
-	proxy_helm_args=""; \
-	if [ -n "$$http_proxy_val" ] || [ -n "$$https_proxy_val" ]; then \
-		pod_cidrs=$$($(KUBECTL) get nodes -o json | \
-			$(YQ) -r '[.items[].spec.podCIDRs[]] | join(",")'); \
-		service_cidrs=$$($(KUBECTL) -n kube-system get configmap kubeadm-config \
-			-o jsonpath='{.data.ClusterConfiguration}' | \
-			$(YQ) -r '.networking.serviceSubnet // ""'); \
-		if [ -z "$$pod_cidrs" ] || [ -z "$$service_cidrs" ]; then \
-			echo "--> TRY-C9S: failed to discover KinD pod/service CIDRs"; \
-			exit 1; \
-		fi; \
-		no_proxy_val="$${NO_PROXY:-$${no_proxy:-}}"; \
-		no_proxy_val="$${no_proxy_val:+$$no_proxy_val,}$$service_cidrs,$$pod_cidrs,$(TRY_C9S_NO_PROXY_EXTRA)"; \
-		extra_env_json=$$( \
-			C9S_HTTP_PROXY="$$http_proxy_val" \
-			C9S_HTTPS_PROXY="$$https_proxy_val" \
-			C9S_NO_PROXY="$$no_proxy_val" \
-			$(YQ) -n -o=json -I=0 \
-				'[ \
-					{"name": "HTTP_PROXY", "value": strenv(C9S_HTTP_PROXY)}, \
-					{"name": "http_proxy", "value": strenv(C9S_HTTP_PROXY)}, \
-					{"name": "HTTPS_PROXY", "value": strenv(C9S_HTTPS_PROXY)}, \
-					{"name": "https_proxy", "value": strenv(C9S_HTTPS_PROXY)}, \
-					{"name": "NO_PROXY", "value": strenv(C9S_NO_PROXY)}, \
-					{"name": "no_proxy", "value": strenv(C9S_NO_PROXY)} \
-				] | map(select(.value != ""))' \
-		); \
-		proxy_helm_args="--set-json globalConfig.deployment.extraEnv=$$extra_env_json"; \
-		echo "--> TRY-C9S: proxy env detected, passing proxy config to launcher pods"; \
-	fi
-endef
-
 .PHONY: try-c9s
 try-c9s: try-c9s-apply-topology try-c9s-print-access ## Launch c9s in KinD and apply a source-compatible sample topology
 	@echo "--> TRY-C9S: clabernetes is ready to try"
@@ -195,49 +146,51 @@ try-c9s-metallb: try-c9s-cluster | $(TRY_C9S_STATE_DIR)
 .PHONY: try-c9s-install
 try-c9s-install: try-c9s-metallb
 	@set -eu; export KUBECONFIG="$(TRY_C9S_KUBECONFIG)"; \
-	selection="$(C9S_VERSION)"; \
-	chart="$(TRY_C9S_CHART)"; \
-	image_args=""; \
+	selection="$(VERSION)"; \
+	install_selection="$$selection"; \
+	source_selector="$$selection"; \
 	if [ -n "$(TRY_C9S_CHART_VERSION)" ]; then \
 		chart_version="$(TRY_C9S_CHART_VERSION)"; \
+		install_selection="$$chart_version"; \
+		source_selector="$$chart_version"; \
 	elif [ "$$selection" = "main" ]; then \
 		chart_version="0.0.0"; \
+		source_selector="main"; \
 	elif [ "$$selection" = "local" ]; then \
-		chart="./charts/clabernetes"; \
 		chart_version="0.0.0"; \
-		echo "--> TRY-C9S: building local images $(TRY_C9S_IMAGE_TAG)"; \
-		$(MAKE) --no-print-directory build-manager build-launcher IMAGE_TAG="$(TRY_C9S_IMAGE_TAG)" C9S_LOCAL_BUILD_ID="$(C9S_LOCAL_BUILD_ID)"; \
-		echo "--> TRY-C9S: loading local images into KinD cluster $(TRY_C9S_CLUSTER_NAME)"; \
-		$(KIND) load docker-image "$(MANAGER_IMAGE):$(TRY_C9S_IMAGE_TAG)" --name "$(TRY_C9S_CLUSTER_NAME)"; \
-		$(KIND) load docker-image "$(LAUNCHER_IMAGE):$(TRY_C9S_IMAGE_TAG)" --name "$(TRY_C9S_CLUSTER_NAME)"; \
-		image_args="--set manager.image=$(MANAGER_IMAGE):$(TRY_C9S_IMAGE_TAG) --set manager.imagePullPolicy=IfNotPresent --set globalConfig.deployment.launcherImage=$(LAUNCHER_IMAGE):$(TRY_C9S_IMAGE_TAG) --set globalConfig.deployment.launcherImagePullPolicy=IfNotPresent"; \
+		source_selector="local"; \
 	elif [ "$$selection" = "select" ]; then \
-		chart_version="$$($(UV) run --script "$(abspath hack/c9s_releases.py)" select --gh "$(abspath $(GH))" --helm "$(abspath $(HELM))")"; \
+		install_selection="$$($(UV) run --script "$(abspath hack/c9s_releases.py)" select --gh "$(abspath $(GH))" --helm "$(abspath $(HELM))")"; \
+		chart_version="$$install_selection"; \
+		if [ "$$chart_version" = "main" ]; then \
+			chart_version="0.0.0"; \
+			source_selector="main"; \
+		else \
+			source_selector="$$chart_version"; \
+		fi; \
 	else \
 		chart_version="$$($(UV) run --script "$(abspath hack/c9s_releases.py)" resolve "$$selection" --gh "$(abspath $(GH))")"; \
+		install_selection="$$chart_version"; \
+		source_selector="$$chart_version"; \
 	fi; \
-	source_selector="$$selection"; \
-	if [ -n "$(TRY_C9S_CHART_VERSION)" ]; then source_selector="$(TRY_C9S_CHART_VERSION)"; fi; \
-	if [ "$$source_selector" = "select" ]; then source_selector="$$chart_version"; fi; \
 	printf '%s\n' "$$chart_version" > "$(TRY_C9S_STATE_DIR)/chart-version"; \
 	printf '%s\n' "$$source_selector" > "$(TRY_C9S_STATE_DIR)/source-selector"; \
-	echo "--> TRY-C9S: installing chart $$chart_version"; \
-	$(call try-c9s-proxy-helm-args); \
-	$(HELM) upgrade --install clabernetes "$$chart" --version "$$chart_version" \
-		--namespace $(TRY_C9S_NAMESPACE) \
-		--create-namespace \
-		$(TRY_C9S_HELM_WAIT_ARG) \
-		--timeout $(TRY_C9S_TIMEOUT) \
-		--set manager.replicaCount=1 \
-		$$image_args \
-		$$proxy_helm_args
-	@$(KUBECTL) -n $(TRY_C9S_NAMESPACE) rollout status deploy/clabernetes-manager --timeout=$(TRY_C9S_TIMEOUT)
+	$(MAKE) --no-print-directory c9s-install \
+		C9S_CONTEXT="kind-$(TRY_C9S_CLUSTER_NAME)" \
+		C9S_CHART_REF="$(TRY_C9S_CHART)" \
+		C9S_NAMESPACE="$(TRY_C9S_NAMESPACE)" \
+		C9S_INSTALL_TIMEOUT="$(TRY_C9S_TIMEOUT)" \
+		C9S_KIND_CLUSTER="$(TRY_C9S_CLUSTER_NAME)" \
+		C9S_LOCAL_IMAGE_TAG="$(TRY_C9S_IMAGE_TAG)" \
+		C9S_LOCAL_BUILD_ID="$(C9S_LOCAL_BUILD_ID)" \
+		C9S_LOCAL_REBUILD=1 \
+		VERSION="$$install_selection"
 
 .PHONY: try-c9s-apply-topology
 try-c9s-apply-topology: try-c9s-install
 	@set -eu; export KUBECONFIG="$(TRY_C9S_KUBECONFIG)"; \
 	topology="$(TRY_C9S_TOPOLOGY)"; \
-	source_selector="$(C9S_VERSION)"; \
+	source_selector="$(VERSION)"; \
 	if [ -f "$(TRY_C9S_STATE_DIR)/source-selector" ]; then source_selector="$$(awk 'NF {print; exit}' "$(TRY_C9S_STATE_DIR)/source-selector")"; fi; \
 	if [ "$$topology" = "examples/basic/srl-multitool.yaml" ] && [ "$$source_selector" != "local" ]; then \
 		revision=""; \
@@ -274,12 +227,18 @@ try-c9s-apply-topology: try-c9s-install
 try-c9s-print-access:
 	@export KUBECONFIG="$(TRY_C9S_KUBECONFIG)"; \
 	srl_ip=$$($(KUBECTL) -n default get svc "srl1" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true); \
+	multitool_ip=$$($(KUBECTL) -n default get svc "multitool" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true); \
 	if [ -n "$$srl_ip" ]; then \
 		echo "--> TRY-C9S: SR Linux SSH: ssh admin@$$srl_ip"; \
 		echo "--> TRY-C9S: SR Linux gNMI: $$srl_ip:57400"; \
 		echo "--> TRY-C9S: SR Linux NETCONF: $$srl_ip:830"; \
 	else \
 		echo "--> TRY-C9S: SR Linux service: kubectl -n default get svc srl1"; \
+	fi; \
+	if [ -n "$$multitool_ip" ]; then \
+		echo "--> TRY-C9S: Multitool SSH: ssh admin@$$multitool_ip"; \
+	else \
+		echo "--> TRY-C9S: Multitool service: kubectl -n default get svc multitool"; \
 	fi
 
 .PHONY: try-c9s-clean

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@react-router/node": "7.16.0",
+    "@xyflow/react": "^12.11.2",
     "fumadocs-core": "16.14.2",
     "fumadocs-mdx": "15.2.2",
     "fumadocs-ui": "16.14.2",

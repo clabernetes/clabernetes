@@ -1,7 +1,6 @@
 ## Existing-cluster c9s installation
 ## ----------------------------------------------------------------------------|
 
-VERSION ?= latest
 C9S_CONTEXT ?=
 C9S_CHART_REF ?= oci://ghcr.io/clabernetes/clabernetes/clabernetes
 C9S_HELM_RELEASE ?= clabernetes

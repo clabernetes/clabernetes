@@ -79,7 +79,7 @@ After every successful unpublished build, the workflow SHALL publish a job summa
 #### Scenario: Share a feature build
 
 - **WHEN** unpublished build `0.0.0-abc1234` succeeds
-- **THEN** the workflow summary includes `make install VERSION=0.0.0-abc1234` and `make try-c9s C9S_VERSION=0.0.0-abc1234`
+- **THEN** the workflow summary includes `make install VERSION=0.0.0-abc1234` and `make try-c9s VERSION=0.0.0-abc1234`
 
 #### Scenario: Branch moves after build
 
@@ -107,7 +107,7 @@ Every successful main publication SHALL overwrite OCI chart `0.0.0` as the expli
 
 ### Requirement: Development artifact installation
 
-The `make install` workflow SHALL treat `VERSION=main` as exact chart version `0.0.0` in the development channel and SHALL accept exact unpublished versions matching `0.0.0-<sha>`. The `make try-c9s` workflow SHALL accept the equivalent values through `C9S_VERSION`. Both SHALL probe the exact chart and SHALL never classify either channel as latest stable. Only the try workflow requires source-revision metadata to retrieve a matching demo.
+Both installation workflows SHALL treat `VERSION=main` as exact chart version `0.0.0` in the development channel and SHALL accept exact unpublished versions matching `0.0.0-<sha>`. Both SHALL probe the exact chart and SHALL never classify either channel as latest stable. Only the try workflow requires source-revision metadata to retrieve a matching demo.
 
 #### Scenario: Install mutable main
 
@@ -135,7 +135,7 @@ For main and exact unpublished builds, `make try-c9s` SHALL retrieve the demo fr
 
 #### Scenario: Try unpublished feature build
 
-- **WHEN** a user runs `make try-c9s C9S_VERSION=0.0.0-abc1234`
+- **WHEN** a user runs `make try-c9s VERSION=0.0.0-abc1234`
 - **THEN** the demo is retrieved from the chart's full source SHA and therefore matches the built feature code
 
 #### Scenario: Source demo is unavailable

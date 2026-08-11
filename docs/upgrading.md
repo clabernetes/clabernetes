@@ -117,7 +117,7 @@ resources when the CRDs are removed.
 2. Uninstall the existing c9s install and remove its CRDs:
 
    ```bash
-   make uninstall-c9s
+   make uninstall
    ```
 
    Or manually uninstall the Helm release, delete all `*.c9s.run` and
@@ -137,7 +137,7 @@ The repository `make install` target performs the API-group check before Helm. I
 version changes, but refuses a legacy/new group crossing and prints the destructive cleanup command:
 
 ```bash
-C9S_CONTEXT=<your-context> make uninstall-c9s
+C9S_CONTEXT=<your-context> make uninstall
 C9S_CONTEXT=<your-context> VERSION=latest make install
 ```
 

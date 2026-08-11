@@ -12,7 +12,7 @@
 ## 3. Uninstall Target
 
 - [x] 3.1 Remove `removeLegacyCrds` from `manager/initcrds.go` (manager applies CRDs only)
-- [x] 3.2 Add `make uninstall-c9s` target to uninstall Helm release, delete CRDs, and remove namespace
+- [x] 3.2 Add `make uninstall` target to uninstall Helm release, delete CRDs, and remove namespace
 - [x] 3.3 Document uninstall-and-reinstall flow in `docs/upgrading.md`
 
 ## 4. Helm and RBAC

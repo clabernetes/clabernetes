@@ -88,7 +88,8 @@ endef
 ## from the env file at recipe runtime to keep CI in lockstep with vars.env.
 
 .PHONY: install-helm
-install-helm: ## Download pinned helm (version from .github/vars.env) into TOOLS_BIN_DIR
+install-helm: TOOLS_BIN_DIR := $(HOME)/.local/bin
+install-helm: ## Download pinned helm (version from .github/vars.env) into ~/.local/bin
 	@mkdir -p "$(TOOLS_BIN_DIR)"
 	@set -a; . $(C9S_VARS_ENV); set +a; \
 	$(call download-bin-from-archive,$(TOOLS_BIN_DIR)/helm,https://get.helm.sh/helm-$$HELM_VERSION-$(OS)-$(ARCH).tar.gz,$(OS)-$(ARCH)/helm,z)

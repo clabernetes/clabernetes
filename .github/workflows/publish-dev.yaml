@@ -147,7 +147,7 @@ jobs:
               echo
               echo '```bash'
               echo "make install VERSION=${RELEASE_VERSION}"
-              echo "make try-c9s C9S_VERSION=${RELEASE_VERSION}"
+              echo "make try-c9s VERSION=${RELEASE_VERSION}"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -217,11 +217,11 @@ jobs:
 
       - name: smoke install published main chart
         if: ${{ inputs.channel == 'main' }}
-        run: make try-c9s-install C9S_VERSION=main TRY_C9S_TIMEOUT=600s
+        run: make try-c9s-install VERSION=main TRY_C9S_TIMEOUT=600s
 
       - name: smoke install exact unpublished chart
         if: ${{ inputs.channel == 'unpublished' }}
-        run: make try-c9s-install C9S_VERSION="$RELEASE_VERSION" TRY_C9S_TIMEOUT=600s
+        run: make try-c9s-install VERSION="$RELEASE_VERSION" TRY_C9S_TIMEOUT=600s
 
       - name: clean smoke cluster
         if: ${{ always() }}

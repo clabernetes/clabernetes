@@ -9,6 +9,7 @@ import {
 } from 'react-router';
 import c9sLogo from '@/assets/c9s-logo-clean.png';
 import StaticSearchDialog from '@/components/static-search';
+import { UnderDevelopmentBanner } from '@/components/under-development-banner';
 import type { Route } from './+types/root';
 import './app.css';
 
@@ -28,6 +29,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body className="flex min-h-screen flex-col">
         <RootProvider search={{ SearchDialog: StaticSearchDialog }}>
+          <UnderDevelopmentBanner />
           {children}
         </RootProvider>
         <ScrollRestoration />

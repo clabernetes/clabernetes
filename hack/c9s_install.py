@@ -237,7 +237,7 @@ def ensure_api_group(tools: Tools, cluster: Cluster, selected: str) -> None:
     if installed and selected not in installed:
         fail(
             f"selected chart uses {selected} but cluster has {', '.join(sorted(installed))} CRDs; "
-            f"run make uninstall-c9s C9S_CONTEXT={cluster.context} before crossing the API-group boundary"
+            f"run make uninstall C9S_CONTEXT={cluster.context} before crossing the API-group boundary"
         )
 
 
@@ -456,6 +456,8 @@ def install(
             ],
             capture=True,
         ).strip()
+        if selected_version == "main":
+            selected_version = "0.0.0"
     elif selection in {"local", "main"}:
         selected_version = "0.0.0"
     else:

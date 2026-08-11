@@ -43,7 +43,7 @@ The Helm chart ClusterRole SHALL authorize all verbs on `c9s.run` resources requ
 
 ### Requirement: Breaking cutover from legacy API group
 
-The release SHALL require a full uninstall and reinstall. The manager SHALL NOT delete legacy CRDs or migrate resources automatically. The repository SHALL provide a `make uninstall-c9s` target that uninstalls the Helm release, deletes all `*.c9s.run` and `*.clabernetes.containerlab.dev` CRDs, and removes the c9s namespace.
+The release SHALL require a full uninstall and reinstall. The manager SHALL NOT delete legacy CRDs or migrate resources automatically. The repository SHALL provide a `make uninstall` target that uninstalls the Helm release, deletes all `*.c9s.run` and `*.clabernetes.containerlab.dev` CRDs, and removes the c9s namespace.
 
 #### Scenario: Manager does not auto-delete legacy CRDs
 
@@ -52,12 +52,12 @@ The release SHALL require a full uninstall and reinstall. The manager SHALL NOT 
 
 #### Scenario: Uninstall removes CRDs and instances
 
-- **WHEN** a user runs `make uninstall-c9s` against a cluster with c9s installed
+- **WHEN** a user runs `make uninstall` against a cluster with c9s installed
 - **THEN** the Helm release is removed, all `*.c9s.run` and `*.clabernetes.containerlab.dev` CRDs are deleted, and the c9s namespace is deleted
 
 #### Scenario: Legacy CR instances are removed on uninstall
 
-- **WHEN** a c9s CRD is deleted during `make uninstall-c9s`
+- **WHEN** a c9s CRD is deleted during `make uninstall`
 - **THEN** all custom resource instances of that kind are removed from the cluster
 
 ### Requirement: Documentation and examples reference the new group
