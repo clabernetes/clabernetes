@@ -70,12 +70,14 @@ Alternative considered: make the Python CLI perform installation. Rejected becau
 The public variable is:
 
 ```text
-C9S_VERSION=latest     # default
-C9S_VERSION=main       # mutable chart 0.0.0 from the latest successful main publication
-C9S_VERSION=vX.Y.Z     # exact published release; X.Y.Z is also accepted
-C9S_VERSION=0.0.0-<sha> # exact unpublished commit build
-C9S_VERSION=local      # checkout chart and images
-C9S_VERSION=select     # interactive stable/development picker
+VERSION=latest         # make install default
+VERSION=main           # mutable chart 0.0.0 from the latest successful main publication
+VERSION=vX.Y.Z         # exact published release; X.Y.Z is also accepted
+VERSION=0.0.0-<sha>    # exact unpublished commit build
+VERSION=local          # checkout chart and images
+VERSION=select         # interactive stable/development picker
+
+C9S_VERSION=...        # equivalent selector for make try-c9s
 ```
 
 Existing chart/namespace/context override variables remain available where practical, but all source modes normalize into an internal structure containing:
@@ -91,7 +93,7 @@ Existing chart/namespace/context override variables remain available where pract
 
 `latest` means GitHub's latest stable published release, not Helm's unversioned OCI resolution, main chart `0.0.0`, or a mutable image tag. `main` explicitly selects chart `0.0.0`. Exact unpublished builds use the valid SemVer prerelease form `0.0.0-<short-sha>`. Every remote mode invokes Helm with an exact `--version`.
 
-Alternative considered: separate `C9S_SOURCE` and `C9S_VERSION` variables. Rejected because the four-value version contract is smaller for users and still normalizes unambiguously.
+Alternative considered: separate source and version variables. Rejected because one version selector per Make entrypoint is smaller for users and still normalizes unambiguously.
 
 ### 3. Keep release discovery in one UV script
 
@@ -112,7 +114,17 @@ The script provides commands for listing, selecting, and resolving releases. It:
 
 The selector also exposes a distinct development view. It presents `main` as a moving channel and obtains recent manually dispatched build candidates from successful `cicd` workflow runs through `gh api` against the GitHub Actions API. Action completion is labeled as workflow completion, not release publication or package push time. A development candidate is still installable only after the exact OCI chart probe succeeds.
 
-The public `make ls-releases` target produces a Rich table of installable GitHub Releases only. The script receives the absolute repository-local Helm path, probes every non-draft release with `helm show chart --version <normalized-version>`, omits entries whose exact chart is unavailable, and reports the omitted count separately. The table is sorted by publication time descending and includes release tag, normalized OCI version, stable/prerelease channel, and **Published (UTC)**. This target performs no cluster access or mutation.
+The public `make ls-releases` target produces a Rich table of all installable c9s artifacts: GitHub
+Releases, the mutable `main` chart at `0.0.0`, and successful manual development builds at
+`0.0.0-<short-sha>`. The script receives the absolute repository-local Helm path, probes candidates
+concurrently, and sorts them by publication or workflow-availability time descending. By default it
+stops after the newest 10 installable artifacts; `make ls-releases ALL=1` probes and displays the
+complete catalog. It omits candidates whose exact chart is unavailable and reports the omitted count
+for candidates it checked. The table includes one normalized **Version** column—the value users can
+pass as `VERSION` to `make install`—along with channel, source URL, and **Published/available
+(UTC)**. The `main` row displays Version `0.0.0`; `VERSION=0.0.0` and `VERSION=main` select that
+channel.
+This target performs no cluster access or mutation.
 
 The script does not claim that a release is installable. After resolution, the shared installer runs `helm show chart` for the exact OCI version. This probe is authoritative because the public GitHub Packages API requires `read:packages`, and a GitHub release can become visible before the release workflow pushes its chart.
 
@@ -137,7 +149,9 @@ For manual unpublished builds:
 5. Chart `appVersion` or an equivalent chart annotation records the full source SHA.
 6. The workflow probes both image platforms and the exact chart, performs an exact-version install smoke, and writes `make install` and `make try-c9s` handoff commands to the job summary.
 
-No GitHub Release is created, and the build is not eligible for `latest`. Users install it with `C9S_VERSION=0.0.0-<short-sha>`. `try-c9s` obtains the compatible demo from the full source revision recorded in the chart.
+No GitHub Release is created, and the build is not eligible for `latest`. Users install it with
+`VERSION=0.0.0-<short-sha>`; `try-c9s` uses the equivalent `C9S_VERSION` selector. The try path
+obtains the compatible demo from the full source revision recorded in the chart.
 
 GitHub workflow dispatch selects a branch or tag ref; it does not directly select an arbitrary detached SHA. For feature development, the desired commit must be the head of the selected branch/tag. The workflow summary records the resolved full SHA so the artifact remains auditable after the branch moves.
 

@@ -5,7 +5,7 @@ c9s installation is split across `try-c9s`, e2e, DevSpace, and manual Helm flows
 ## What Changes
 
 - Introduce one shared installation workflow used by `make try-c9s` and a new `make install`, while keeping cluster creation, MetalLB, and demo resources exclusive to `try-c9s`.
-- Support stable, development, and local selections through a common `C9S_VERSION` contract: latest stable release, an exact published release, mutable main, an exact unpublished commit build, the local checkout, and an interactive selector.
+- Support stable, development, and local selections through a common version contract: `VERSION` for `make install` and `C9S_VERSION` for `make try-c9s`, covering latest stable release, exact published release, mutable main, exact unpublished commit build, local checkout, and interactive selection.
 - Add a repository-local UV/PEP 723 CLI using Rich and Typer that invokes a pinned repository-local GitHub CLI for authenticated/paginated JSON, lists releases and development builds with accurate timestamps, and returns machine-readable selections to Make.
 - Harden the existing manually dispatched `cicd` workflow as the unpublished-build path: build and test a selected feature ref, publish multi-architecture images and a chart as `0.0.0-<short-sha>`, attach full source revision metadata, verify the artifacts, and print exact install/try commands without creating a GitHub Release.
 - Treat the existing `0.0.0` chart as an explicit mutable `main` channel rather than as “latest”; publish it with full source revision metadata and manager/launcher values pinned to the same main commit instead of relying on floating `dev-latest` image resolution.

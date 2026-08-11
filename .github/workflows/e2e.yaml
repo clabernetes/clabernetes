@@ -13,8 +13,8 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    # run e2e on main or prs pointing to main
-    if: (github.ref_name == 'main' || github.base_ref == 'main') || inputs.debug
+    # Run e2e on main, PRs pointing to main, or manually dispatched development builds.
+    if: (github.ref_name == 'main' || github.base_ref == 'main' || github.event_name == 'workflow_dispatch') || inputs.debug
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -47,6 +47,16 @@ jobs:
       # developer's local image cache). the cluster already has the images loaded by this point.
       - name: docker system prune
         run: docker system prune -a -f
+
+      - name: verify existing-cluster make install
+        run: make install C9S_CONTEXT=kind-c9s-e2e C9S_KIND_CLUSTER=c9s-e2e VERSION=local
+
+      - name: verify local try-c9s workflow
+        run: make try-c9s C9S_VERSION=local TRY_C9S_TIMEOUT=600s
+
+      - name: clean local try-c9s workflow
+        if: ${{ always() }}
+        run: make try-c9s-clean || true
 
       - name: setup tmate session
         uses: mxschmitt/action-tmate@v3

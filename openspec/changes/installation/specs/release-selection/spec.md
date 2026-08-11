@@ -1,13 +1,13 @@
 ## ADDED Requirements
 
-### Requirement: Installable published release catalog
+### Requirement: Installable artifact catalog
 
-The repository SHALL provide `make ls-releases`, backed by the UV-run release CLI, that invokes the pinned repository-local GitHub CLI with paginated JSON output to retrieve every page of the repository's GitHub Releases API. It SHALL exclude drafts, probe every candidate with the pinned repository-local Helm binary, omit candidates whose exact OCI chart is unavailable, sort the remaining stable and prerelease entries by `published_at` from newest to oldest, and display a Rich table containing release tag, normalized OCI version, channel, and `published_at` labeled **Published (UTC)**. The target SHALL NOT require Kubernetes access or mutate a cluster.
+The repository SHALL provide `make ls-releases`, backed by the UV-run release CLI, that invokes the pinned repository-local GitHub CLI with paginated JSON output to retrieve every page of the repository's GitHub Releases and successful development workflow candidates. It SHALL include the mutable `main` chart when available, exclude drafts and failed/incomplete development runs, probe OCI chart candidates concurrently with the pinned repository-local Helm binary, omit candidates whose exact OCI chart is unavailable, sort installable stable and development entries by publication or workflow-availability time from newest to oldest, and display the newest 10 installable entries by default. `make ls-releases ALL=1` SHALL probe and display the complete installable catalog. The target SHALL NOT require Kubernetes access or mutate a cluster.
 
 #### Scenario: List all published releases
 
 - **WHEN** a user runs `make ls-releases` and the API returns multiple pages
-- **THEN** the CLI follows pagination, probes every non-draft candidate, and displays every candidate whose exact OCI chart is available
+- **THEN** the CLI follows pagination, discovers stable/main/development candidates, probes them concurrently, and displays the newest 10 candidates whose exact OCI charts are available
 
 #### Scenario: API pages are not date ordered
 
@@ -18,6 +18,31 @@ The repository SHALL provide `make ls-releases`, backed by the UV-run release CL
 
 - **WHEN** a non-draft GitHub Release has no fetchable exact OCI chart
 - **THEN** it is omitted from the installable table and the command reports the number of omitted candidates separately
+
+#### Scenario: Complete release catalog is requested
+
+- **WHEN** a user runs `make ls-releases ALL=1`
+- **THEN** the CLI probes and displays every stable, main, or successful development candidate whose exact OCI chart is available
+
+#### Scenario: Release probes are concurrent
+
+- **WHEN** multiple OCI chart candidates are checked
+- **THEN** independent Helm probes run concurrently with a bounded worker count rather than as one sequential request stream
+
+#### Scenario: Main chart is available
+
+- **WHEN** the latest successful main workflow has published chart `0.0.0`
+- **THEN** the catalog includes a distinct `main` row with channel `main` and Version `0.0.0`, which can be supplied as `C9S_VERSION=0.0.0` or `C9S_VERSION=main`
+
+#### Scenario: Unpublished development chart is available
+
+- **WHEN** a successful manual `cicd` workflow has published chart `0.0.0-abc1234`
+- **THEN** the catalog includes a distinct development row with Version `0.0.0-abc1234`, which can be supplied as `C9S_VERSION=0.0.0-abc1234`, plus source branch, workflow URL, and workflow-availability timestamp
+
+#### Scenario: Displayed version is install input
+
+- **WHEN** a user selects a stable or development row from the table
+- **THEN** the displayed Version value is the exact value accepted by `VERSION` for `make install` and by `C9S_VERSION` for `make try-c9s`
 
 #### Scenario: Draft release is returned
 
@@ -41,12 +66,12 @@ The repository SHALL provide `make ls-releases`, backed by the UV-run release CL
 
 ### Requirement: Accurate timestamp semantics
 
-The release catalog SHALL describe GitHub's `published_at` value as the publication time and SHALL NOT present commit time, tagger time, release creation time, or workflow completion time as a Git tag push time.
+The release catalog SHALL describe GitHub's `published_at` value as the publication time and SHALL label development workflow completion time as availability time. It SHALL NOT present commit time, tagger time, release creation time, or workflow completion time as a Git tag push time.
 
 #### Scenario: Display release time
 
 - **WHEN** a release contains a `published_at` timestamp
-- **THEN** the CLI displays it in UTC under a column labeled **Published (UTC)**
+- **THEN** the CLI displays it in UTC under a column labeled **Published/available (UTC)**
 
 #### Scenario: Package timestamps are unavailable
 

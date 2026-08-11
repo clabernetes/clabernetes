@@ -2,9 +2,15 @@
 
 USE_UV ?= true
 CRDS_TO_OPENAPI_REQUIREMENTS := build/crds-to-openapi/requirements.txt
+C9S_RELEASE_SCRIPT := hack/c9s_releases.py
+C9S_RELEASE_LIMIT ?= 10
+C9S_RELEASE_WORKERS ?= 8
+C9S_GIT_SHA := $(shell git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
+C9S_DIRTY_SUFFIX := $(if $(shell git status --porcelain --untracked-files=normal),-dirty-$(shell date +%s),)
+C9S_LOCAL_BUILD_ID ?= local-$(C9S_GIT_SHA)$(C9S_DIRTY_SUFFIX)
 
 ifeq ($(USE_UV),true)
-CRDS_TO_OPENAPI_PYTHON := uv run --with-requirements $(CRDS_TO_OPENAPI_REQUIREMENTS)
+CRDS_TO_OPENAPI_PYTHON = $(UV) run --with-requirements $(CRDS_TO_OPENAPI_REQUIREMENTS)
 else ifeq ($(USE_UV),false)
 CRDS_TO_OPENAPI_PYTHON := venv/bin/python
 else
@@ -28,6 +34,7 @@ IMAGE_BASE ?= ghcr.io/clabernetes/clabernetes
 MANAGER_IMAGE ?= $(IMAGE_BASE)/clabernetes-manager
 LAUNCHER_IMAGE ?= $(IMAGE_BASE)/clabernetes-launcher
 CLABVERTER_IMAGE ?= $(IMAGE_BASE)/clabverter
+TARGET_PLATFORM ?= linux/$(ARCH)
 
 DEV_TOOLS_DIR := build/dev/bin
 DEVSPACE := $(abspath $(DEV_TOOLS_DIR)/devspace)
@@ -37,13 +44,16 @@ DEVSPACE_ARGS ?=
 #   1            — always use the in-cluster DevSpace registry
 #   0            — always build with buildx and push to REGISTRY (e.g. ghcr.io)
 LOCAL_REGISTRY ?= auto
-KUBE_CONTEXT := $(shell kubectl config current-context 2>/dev/null)
+C9S_CONTEXT ?=
+ifneq ($(filter ls-releases,$(MAKECMDGOALS)),ls-releases)
+KUBE_CONTEXT := $(if $(C9S_CONTEXT),$(C9S_CONTEXT),$(shell kubectl config current-context 2>/dev/null))
 IS_LOCAL_CLUSTER := $(shell echo '$(KUBE_CONTEXT)' | grep -Eq '^(kind-|docker-desktop|minikube($$|-))' && echo 1 || echo 0)
 ifeq ($(LOCAL_REGISTRY),auto)
 ifeq ($(IS_LOCAL_CLUSTER),0)
 LOCAL_REGISTRY := 1
 else
 LOCAL_REGISTRY := 0
+endif
 endif
 endif
 # NS is the namespace a "real" c9s install lives in; DEV_NS is the one the devspace based
@@ -56,8 +66,22 @@ DOCS_SITE_DIR ?= docs-site
 DOCS_HOST ?= 0.0.0.0
 PNPM ?= pnpm
 
+include .mk/install.mk
+
 help:
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+.PHONY: ls-releases
+ls-releases: c9s-release-tools ## List installable published c9s releases, newest first
+	@list_args="--limit $(C9S_RELEASE_LIMIT) --workers $(C9S_RELEASE_WORKERS)"; \
+	if [ "$(ALL)" = "1" ]; then list_args="--all $$list_args"; fi; \
+	$(UV) run --script "$(C9S_RELEASE_SCRIPT)" list $$list_args \
+		--gh "$(abspath $(GH))" \
+		--helm "$(abspath $(HELM))"
+
+.PHONY: test-c9s-selector
+test-c9s-selector: c9s-release-tools ## Run release selector fixture tests
+	@$(UV) run --script hack/test_c9s_releases.py
 
 .PHONY: install-dev-tools
 install-dev-tools: TOOLS_BIN_DIR := $(abspath $(DEV_TOOLS_DIR))
@@ -65,22 +89,22 @@ install-dev-tools: install-devspace $(UV) ## Download pinned devspace and ensure
 
 .PHONY: $(DEV_NS)
 $(DEV_NS): $(KUBECTL)
-	@$(KUBECTL) create namespace "$(DEV_NS)" --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	@$(KUBECTL) $(C9S_KUBECTL_CONTEXT_ARGS) create namespace "$(DEV_NS)" --dry-run=client -o yaml | $(KUBECTL) $(C9S_KUBECTL_CONTEXT_ARGS) apply -f -
 
 .PHONY: dev
 dev: DEVSPACE_DEV_PROFILES := --profile auto-run-manager$(if $(filter 1 true,$(LOCAL_REGISTRY)), --profile local-registry, --profile external-registry)
 dev: install-dev-tools $(DEV_NS) ## Run the manager from local source (LOCAL_REGISTRY=auto|0|1)
-	$(if $(filter 1 true,$(LOCAL_REGISTRY)),KUBECTL="$(abspath $(KUBECTL))" bash .develop/ensure-local-registry.sh "$(DEV_NS)",REGISTRY="$(DEV_REGISTRY)" UV="$(UV)" bash .develop/ensure-registry-auth.sh)
-	REGISTRY="$(DEV_REGISTRY)" NS="$(DEV_NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(DEV_NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
+	$(if $(filter 1 true,$(LOCAL_REGISTRY)),KUBECTL="$(abspath $(KUBECTL))" KUBE_CONTEXT="$(KUBE_CONTEXT)" bash .develop/ensure-local-registry.sh "$(DEV_NS)",REGISTRY="$(DEV_REGISTRY)" UV="$(UV)" bash .develop/ensure-registry-auth.sh)
+	REGISTRY="$(DEV_REGISTRY)" NS="$(DEV_NS)" KUBECTL="$(abspath $(KUBECTL))" KUBE_CONTEXT="$(KUBE_CONTEXT)" "$(DEVSPACE)" --kube-context "$(KUBE_CONTEXT)" --namespace "$(DEV_NS)" --no-warn run dev $(DEVSPACE_DEV_PROFILES) --force-deploy $(DEVSPACE_ARGS)
 
 .PHONY: purge-dev
 purge-dev: install-dev-tools $(KUBECTL) ## Tear down the DevSpace development deployment and delete the namespace
-	@if $(KUBECTL) get namespace "$(DEV_NS)" >/dev/null 2>&1; then \
-		NS="$(DEV_NS)" KUBECTL="$(abspath $(KUBECTL))" "$(DEVSPACE)" --namespace "$(DEV_NS)" --no-warn run purge $(DEVSPACE_ARGS); \
+	@if $(KUBECTL) $(C9S_KUBECTL_CONTEXT_ARGS) get namespace "$(DEV_NS)" >/dev/null 2>&1; then \
+		NS="$(DEV_NS)" KUBECTL="$(abspath $(KUBECTL))" KUBE_CONTEXT="$(KUBE_CONTEXT)" "$(DEVSPACE)" --kube-context "$(KUBE_CONTEXT)" --namespace "$(DEV_NS)" --no-warn run purge $(DEVSPACE_ARGS); \
 	fi
-	@crds=$$($(KUBECTL) get crds -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep clabernetes || true); \
-	if [ -n "$$crds" ]; then $(KUBECTL) delete crd $$crds --ignore-not-found=true; fi
-	$(KUBECTL) delete namespace "$(DEV_NS)" --ignore-not-found=true
+	@crds=$$($(KUBECTL) $(C9S_KUBECTL_CONTEXT_ARGS) get crds -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | grep clabernetes || true); \
+	if [ -n "$$crds" ]; then $(KUBECTL) $(C9S_KUBECTL_CONTEXT_ARGS) delete crd $$crds --ignore-not-found=true; fi
+	$(KUBECTL) $(C9S_KUBECTL_CONTEXT_ARGS) delete namespace "$(DEV_NS)" --ignore-not-found=true
 
 .PHONY: docs-install serve-docs check-docs build-docs preview-docs
 docs-install: ## Install locked documentation dependencies
@@ -119,30 +143,32 @@ test-e2e: ## Run e2e tests
 
 C9S_NAMESPACE ?= $(NS)
 C9S_HELM_RELEASE ?= clabernetes
-C9S_KUBECTL ?= kubectl
-C9S_HELM ?= helm
+C9S_KUBECTL ?= $(KUBECTL)
+C9S_HELM ?= $(HELM)
+C9S_KUBECTL_CONTEXT_ARGS := $(if $(C9S_CONTEXT),--context $(C9S_CONTEXT),)
+C9S_HELM_CONTEXT_ARGS := $(if $(C9S_CONTEXT),--kube-context $(C9S_CONTEXT),)
 
 .PHONY: uninstall-c9s
-uninstall-c9s: ## Uninstall the c9s Helm release, delete all c9s CRDs, and remove the namespace
+uninstall-c9s: $(C9S_KUBECTL) $(C9S_HELM) ## Uninstall the c9s Helm release, delete all c9s CRDs, and remove the namespace
 	@echo "--> C9S: uninstalling Helm release $(C9S_HELM_RELEASE) from namespace $(C9S_NAMESPACE)"
-	@if $(C9S_HELM) status $(C9S_HELM_RELEASE) -n $(C9S_NAMESPACE) >/dev/null 2>&1; then \
-		$(C9S_HELM) uninstall $(C9S_HELM_RELEASE) -n $(C9S_NAMESPACE); \
+	@if $(C9S_HELM) $(C9S_HELM_CONTEXT_ARGS) status $(C9S_HELM_RELEASE) -n $(C9S_NAMESPACE) >/dev/null 2>&1; then \
+		$(C9S_HELM) $(C9S_HELM_CONTEXT_ARGS) uninstall $(C9S_HELM_RELEASE) -n $(C9S_NAMESPACE); \
 	else \
 		echo "--> C9S: Helm release $(C9S_HELM_RELEASE) not found in namespace $(C9S_NAMESPACE)"; \
 	fi
 	@echo "--> C9S: deleting c9s CRDs (this removes all custom resource instances cluster-wide)"
-	@crds=$$($(C9S_KUBECTL) get crd -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | \
+	@crds=$$($(C9S_KUBECTL) $(C9S_KUBECTL_CONTEXT_ARGS) get crd -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | \
 		grep -E '\.(c9s\.run|clabernetes\.containerlab\.dev)$$' || true); \
 	if [ -z "$$crds" ]; then \
 		echo "--> C9S: no c9s CRDs found"; \
 	else \
 		for crd in $$crds; do \
 			echo "--> C9S: deleting CRD $$crd"; \
-			$(C9S_KUBECTL) delete crd "$$crd" --ignore-not-found=true; \
+			$(C9S_KUBECTL) $(C9S_KUBECTL_CONTEXT_ARGS) delete crd "$$crd" --ignore-not-found=true; \
 		done; \
 	fi
 	@echo "--> C9S: deleting namespace $(C9S_NAMESPACE)"
-	@$(C9S_KUBECTL) delete namespace $(C9S_NAMESPACE) --ignore-not-found=true
+	@$(C9S_KUBECTL) $(C9S_KUBECTL_CONTEXT_ARGS) delete namespace $(C9S_NAMESPACE) --ignore-not-found=true
 
 cov:  ## Produce html coverage report; removes all the generated bits for sanity reasons
 	cat cover.out | grep -v "/generated/" | grep -v "zz_generated.deepcopy.go" > cover.out.clean && rm cover.out && mv cover.out.clean cover.out
@@ -167,7 +193,7 @@ run-deepcopy-gen: ## Run deepcopy-gen
 	--output-file zz_generated.deepcopy.go \
 	github.com/clabernetes/clabernetes/apis/...
 
-run-openapi-gen: ## Run openapi-gen
+run-openapi-gen: $(if $(filter true,$(USE_UV)),$(UV)) ## Run openapi-gen
 	openapi-gen \
 	--go-header-file hack/boilerplate.go.txt \
 	--output-dir generated/openapi \
@@ -210,13 +236,13 @@ delete-generated: ## Deletes all zz_*.go (generated) files, and crds
 	rm -rf generated/*
 
 build-manager: ## Builds the clabernetes manager container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker build -t $(MANAGER_IMAGE):$(IMAGE_TAG) -f ./build/manager.Dockerfile .
+	docker build --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(MANAGER_IMAGE):$(IMAGE_TAG) -f ./build/manager.Dockerfile .
 
 build-launcher: ## Builds the clabernetes launcher container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker build -t $(LAUNCHER_IMAGE):$(IMAGE_TAG) -f ./build/launcher.Dockerfile .
+	docker build --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(LAUNCHER_IMAGE):$(IMAGE_TAG) -f ./build/launcher.Dockerfile .
 
 build-clabverter: ## Builds the clabverter container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker build -t $(CLABVERTER_IMAGE):$(IMAGE_TAG) -f ./build/clabverter.Dockerfile .
+	docker build --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(CLABVERTER_IMAGE):$(IMAGE_TAG) -f ./build/clabverter.Dockerfile .
 
 set-chart-versions: ## Sets the helm chart versions to the given value.
 	./hack/set-chart-versions.sh $(BUMP_CHART_VERSION_ARGS)

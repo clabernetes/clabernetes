@@ -5,6 +5,7 @@
 ## in CI. It is sourced at recipe runtime (not via make `include`) so the pinned
 ## CI versions don't leak into / clobber the versions the try-c9s flow wants.
 C9S_VARS_ENV ?= .github/vars.env
+GH_VERSION ?= $(shell awk -F= '$$1 == "GH_VERSION" {print $$2}' "$(C9S_VARS_ENV)")
 
 ## Where CI tool binaries are installed. On GitHub runners /usr/local/bin is on
 ## PATH and writable by the runner user.

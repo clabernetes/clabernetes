@@ -32,12 +32,17 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "${script_dir}/.." && pwd)
 cd "${repo_root}"
 
+kubectl_args=()
+if [[ -n "${KUBE_CONTEXT:-}" ]]; then
+    kubectl_args+=(--context "${KUBE_CONTEXT}")
+fi
+
 if [[ "${LOCAL_REGISTRY_BUILD:-}" == "1" ]]; then
     namespace="${DEVSPACE_NAMESPACE:-${NS:-c9s-dev}}"
     registry_name="${LOCAL_REGISTRY_NAME:-registry}"
 
     registry_port=$(
-        "${KUBECTL:-kubectl}" get svc "${registry_name}" \
+        "${KUBECTL:-kubectl}" "${kubectl_args[@]}" get svc "${registry_name}" \
             -n "${namespace}" \
             -o jsonpath='{.spec.ports[0].nodePort}'
     )
@@ -97,7 +102,7 @@ docker buildx build \
     "${context}"
 
 if [[ "${LOCAL_REGISTRY_BUILD:-}" == "1" ]]; then
-    bash "${registry_port_forward}" "${namespace}" "${registry_name}" "${registry_port}"
+    KUBE_CONTEXT="${KUBE_CONTEXT:-}" bash "${registry_port_forward}" "${namespace}" "${registry_name}" "${registry_port}"
 fi
 
 if [[ "${LOCAL_REGISTRY_BUILD:-}" == "1" ]]; then

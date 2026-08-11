@@ -9,6 +9,10 @@ set -euo pipefail
 namespace=${1:?namespace required}
 registry_name=${2:-registry}
 kubectl=${KUBECTL:-kubectl}
+kubectl_args=()
+if [[ -n "${KUBE_CONTEXT:-}" ]]; then
+    kubectl_args+=(--context "${KUBE_CONTEXT}")
+fi
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 lock_file="${script_dir}/.registry-deploy.lock"
@@ -16,7 +20,7 @@ lock_file="${script_dir}/.registry-deploy.lock"
 exec 9>"${lock_file}"
 flock -x 9
 
-${kubectl} apply -n "${namespace}" -f - <<EOF
+${kubectl} "${kubectl_args[@]}" apply -n "${namespace}" -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -65,4 +69,4 @@ spec:
       targetPort: registry
 EOF
 
-${kubectl} -n "${namespace}" rollout status "deployment/${registry_name}" --timeout=120s
+${kubectl} "${kubectl_args[@]}" -n "${namespace}" rollout status "deployment/${registry_name}" --timeout=120s

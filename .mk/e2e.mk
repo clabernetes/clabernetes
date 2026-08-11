@@ -12,8 +12,9 @@
 ## build-* targets come from the root Makefile.
 
 E2E_CLUSTER_NAME ?= c9s-e2e
+E2E_CONTEXT ?= kind-$(E2E_CLUSTER_NAME)
 E2E_NAMESPACE := c9s
-E2E_IMAGE_TAG := dev-latest
+E2E_IMAGE_TAG ?= $(C9S_LOCAL_BUILD_ID)
 E2E_TIMEOUT ?= 300s
 
 E2E_BUILD_DIR := build/e2e
@@ -26,6 +27,8 @@ E2E_KIND := $(E2E_TOOLS_DIR)/kind-$(KIND_VERSION)
 E2E_KUBECTL := $(E2E_TOOLS_DIR)/kubectl-$(KUBECTL_VERSION)
 E2E_HELM := $(E2E_TOOLS_DIR)/helm-$(HELM_VERSION)
 E2E_YQ := $(E2E_TOOLS_DIR)/yq-$(YQ_VERSION)
+E2E_KUBECTL_CONTEXT_ARGS := --context $(E2E_CONTEXT)
+E2E_HELM_CONTEXT_ARGS := --kube-context $(E2E_CONTEXT)
 
 $(E2E_TOOLS_DIR):
 	@mkdir -p "$(E2E_TOOLS_DIR)"
@@ -64,12 +67,12 @@ e2e-cluster: e2e-tools ## Create the local e2e KinD cluster (idempotent)
 		$(E2E_KIND) create cluster --name $(E2E_CLUSTER_NAME) --config "$(E2E_KIND_CONFIG)"; \
 	fi
 	@$(E2E_KIND) export kubeconfig --name $(E2E_CLUSTER_NAME)
-	@$(E2E_KUBECTL) wait --for=condition=Ready nodes --all --timeout=$(E2E_TIMEOUT)
+	@$(E2E_KUBECTL) $(E2E_KUBECTL_CONTEXT_ARGS) wait --for=condition=Ready nodes --all --timeout=$(E2E_TIMEOUT)
 
 .PHONY: e2e-images
 e2e-images: e2e-cluster ## Build clabernetes images locally and load them into the e2e cluster
 	@echo "--> E2E: building manager and launcher images tagged $(E2E_IMAGE_TAG)"
-	@$(MAKE) --no-print-directory build-manager build-launcher IMAGE_TAG=$(E2E_IMAGE_TAG)
+	@$(MAKE) --no-print-directory build-manager build-launcher IMAGE_TAG=$(E2E_IMAGE_TAG) C9S_LOCAL_BUILD_ID=$(C9S_LOCAL_BUILD_ID)
 	@echo "--> E2E: loading images into KinD cluster $(E2E_CLUSTER_NAME)"
 	@$(E2E_KIND) load docker-image "$(MANAGER_IMAGE):$(E2E_IMAGE_TAG)" --name $(E2E_CLUSTER_NAME)
 	@$(E2E_KIND) load docker-image "$(LAUNCHER_IMAGE):$(E2E_IMAGE_TAG)" --name $(E2E_CLUSTER_NAME)
@@ -77,7 +80,7 @@ e2e-images: e2e-cluster ## Build clabernetes images locally and load them into t
 .PHONY: e2e-deploy
 e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally built images
 	@echo "--> E2E: installing clabernetes chart into namespace $(E2E_NAMESPACE)"
-	@$(E2E_HELM) upgrade --install clabernetes ./charts/clabernetes \
+	@$(E2E_HELM) $(E2E_HELM_CONTEXT_ARGS) upgrade --install clabernetes ./charts/clabernetes \
 		--namespace $(E2E_NAMESPACE) \
 		--create-namespace \
 		--set manager.image=$(MANAGER_IMAGE):$(E2E_IMAGE_TAG) \
@@ -88,7 +91,7 @@ e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally 
 		--set globalConfig.deployment.launcherImage=$(LAUNCHER_IMAGE):$(E2E_IMAGE_TAG) \
 		--set globalConfig.deployment.launcherImagePullPolicy=IfNotPresent \
 		--set globalConfig.deployment.launcherLogLevel=debug
-	@$(E2E_KUBECTL) -n $(E2E_NAMESPACE) rollout status deploy/clabernetes-manager --timeout=$(E2E_TIMEOUT)
+	@$(E2E_KUBECTL) $(E2E_KUBECTL_CONTEXT_ARGS) -n $(E2E_NAMESPACE) rollout status deploy/clabernetes-manager --timeout=$(E2E_TIMEOUT)
 
 .PHONY: e2e-test
 e2e-test: e2e-tools install-test-tools ## Run the e2e Go tests; auto-runs e2e-deploy if the cluster is missing, otherwise reuses it
@@ -105,11 +108,11 @@ test-e2e-local: e2e-deploy e2e-test ## Run the full e2e flow locally: tools, kin
 
 .PHONY: e2e-debug-dump
 e2e-debug-dump: ## Dump manager pods/events/logs for debugging a failed e2e run
-	@$(E2E_KUBECTL) get pods -n $(E2E_NAMESPACE) -o yaml || true
+	@$(E2E_KUBECTL) $(E2E_KUBECTL_CONTEXT_ARGS) get pods -n $(E2E_NAMESPACE) -o yaml || true
 	@echo "******** events ********"
-	@$(E2E_KUBECTL) get events -n $(E2E_NAMESPACE) --sort-by='.lastTimestamp' || true
+	@$(E2E_KUBECTL) $(E2E_KUBECTL_CONTEXT_ARGS) get events -n $(E2E_NAMESPACE) --sort-by='.lastTimestamp' || true
 	@echo "******** logs ********"
-	@$(E2E_KUBECTL) logs -l c9s.run/name=clabernetes-manager -n $(E2E_NAMESPACE) --tail=-1 || true
+	@$(E2E_KUBECTL) $(E2E_KUBECTL_CONTEXT_ARGS) logs -l c9s.run/name=clabernetes-manager -n $(E2E_NAMESPACE) --tail=-1 || true
 
 .PHONY: e2e-clean
 e2e-clean: ## Delete the local e2e KinD cluster
