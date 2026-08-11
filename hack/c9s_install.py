@@ -36,7 +36,7 @@ REPO_ROOT_OPTION = typer.Option(..., exists=True, file_okay=False)
 GH_PATH_OPTION = typer.Option(..., exists=True, dir_okay=False)
 HELM_PATH_OPTION = typer.Option(..., exists=True, dir_okay=False)
 KUBECTL_PATH_OPTION = typer.Option(..., exists=True, dir_okay=False)
-KIND_PATH_OPTION = typer.Option(..., exists=True, dir_okay=False)
+KIND_PATH_OPTION = typer.Option(..., dir_okay=False)
 YQ_PATH_OPTION = typer.Option(..., exists=True, dir_okay=False)
 UV_PATH_OPTION = typer.Option(..., exists=True, dir_okay=False)
 
@@ -461,6 +461,8 @@ def install(
     else:
         selected_version = resolve_version(tools, selection)
     if selection == "local":
+        run(["make", "--no-print-directory", "c9s-local-tools"], cwd=repo_root)
+        require_executable(tools.kind, "kind")
         candidate_kind = kind_name or (
             cluster.context.removeprefix("kind-")
             if cluster.context.startswith("kind-")
@@ -663,7 +665,6 @@ def install_command(
         (gh, "gh"),
         (helm, "helm"),
         (kubectl, "kubectl"),
-        (kind, "kind"),
         (yq, "yq"),
         (uv, "uv"),
     ):
