@@ -42,6 +42,6 @@ LABEL org.opencontainers.image.source="https://github.com/clabernetes/clabernete
 WORKDIR /clabernetes
 COPY --from=builder --chown=nonroot:root /clabernetes/certificates /clabernetes/certificates
 COPY --from=builder /clabernetes/build/manager .
-USER nonroot:root
+USER nonroot:nonroot
 
 ENTRYPOINT ["/clabernetes/manager", "run"]
