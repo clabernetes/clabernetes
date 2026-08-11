@@ -1,0 +1,10 @@
+title: c9s
+pages:
+  - index
+  - quickstart
+  - installation
+  # - upgrading
+  - architecture
+  - concepts
+  - guides
+  - examples

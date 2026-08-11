@@ -4,11 +4,12 @@ description: Run containerlab network topologies across a Kubernetes cluster.
 icon: Sparkles
 ---
 
-Clabernetes, also known as **c9s**, is a set of Kubernetes custom resources and controllers for
-running containerlab network nodes across a cluster.
+Clabernetes, also known as **c9s** _(pronounced "see-nines")_, is a set of Kubernetes custom resources and controllers for
+running containerlab network topologies across a K8s cluster, achieving scalability, flexibility, and diverse deployment options.
 
-Instead of placing every node on one machine, c9s creates a launcher workload for each network
-node, connects interfaces across pods, and exposes management services through Kubernetes.
+While Containlerab is constrained by the resources of a single node (VM or bare metal), c9s creates a K8s deployment each topology node, connects interfaces across them, and exposes management services through Kubernetes services API.
+
+<IntroFabricDiagram />
 
 ## Choose an authoring model
 
