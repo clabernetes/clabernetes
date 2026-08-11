@@ -12,7 +12,7 @@
 - [x] 2.3 Implement non-interactive `latest` and exact-version resolution, keeping exact normalization usable when release catalog retrieval is unavailable.
 - [x] 2.4 Implement the interactive selector with Rich output on stderr, one normalized value on stdout, explicit cancellation behavior, and a non-TTY error.
 - [x] 2.5 Add `make ls-releases` to concurrently probe stable, main, and development OCI charts and render the newest 10 installable artifacts in a Rich table sorted by publication/availability time, with `ALL=1` displaying the complete catalog without requiring cluster access.
-- [x] 2.6 Wire `VERSION=latest|main|vX.Y.Z|X.Y.Z|0.0.0-<sha>|local|select` into `make install` and the equivalent `C9S_VERSION` selections into `make try-c9s`, while keeping an unset value non-interactive.
+- [x] 2.6 Wire `VERSION=latest|main|vX.Y.Z|X.Y.Z|0.0.0-<sha>|local|select` into both `make install` and `make try-c9s`, while keeping an unset value non-interactive.
 - [x] 2.7 Add fixture-based script tests for GitHub CLI JSON/subprocess failures, multi-page and unordered responses, drafts, prereleases, unavailable OCI charts, bounded newest-first results, concurrent probes, tags with and without `v`, latest-stable semantics, cancellation, malformed values, authentication, rate limits, network errors, and malformed API data.
 - [x] 2.8 Add a development catalog backed by recent successful manual `Create dev release` runs, with a separate mutable main entry discovered from `cicd` pushes, source branch/SHA, workflow completion metadata, run links, and exact OCI probing on selection.
 
@@ -65,7 +65,7 @@
 ## 8. try-c9s workflow
 
 - [x] 8.1 Make try KinD creation idempotent, refresh a dedicated state-directory kubeconfig, and prove the named cluster API before reusing it.
-- [ ] 8.2 Retain and converge the existing dual-stack/MetalLB and proxy behavior while calling the shared installer for all source selections.
+- [x] 8.2 Retain and converge the existing dual-stack/MetalLB and proxy behavior while calling the shared installer for all source selections.
 - [x] 8.3 Use the checkout demo for local source, fetch the immutable selected-tag demo for stable releases at or above `v0.6.0`, and fetch the source-revision demo for main/unpublished builds.
 - [x] 8.4 Reject unsupported historical releases, missing development source metadata, and unavailable source-revision demos before applying mismatched resources.
 - [x] 8.5 Make topology readiness timeout fail after collecting topology, pod, event, manager, and launcher diagnostics.

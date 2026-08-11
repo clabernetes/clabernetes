@@ -39,8 +39,8 @@ Select a published or local source explicitly:
 
 ```bash
 make ls-releases
-make try-c9s C9S_VERSION=0.6.0
-make try-c9s C9S_VERSION=local
+make try-c9s VERSION=0.6.0
+make try-c9s VERSION=local
 ```
 
 To install into an existing cluster, see [`docs/installation.md`](docs/installation.md) or run:

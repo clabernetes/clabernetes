@@ -133,7 +133,7 @@ jobs:
         run: cat .github/vars.env >> "$GITHUB_ENV"
 
       - name: install exact release in KinD
-        run: make try-c9s C9S_VERSION="${{ github.event.release.tag_name }}" TRY_C9S_TIMEOUT=600s
+        run: make try-c9s VERSION="${{ github.event.release.tag_name }}" TRY_C9S_TIMEOUT=600s
 
       - name: clean release smoke cluster
         if: ${{ always() }}

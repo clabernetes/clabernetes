@@ -4,44 +4,21 @@ description: Run containerlab network topologies across a Kubernetes cluster.
 icon: Sparkles
 ---
 
-Clabernetes, also known as **c9s** _(pronounced "see-nines")_, is a set of Kubernetes custom resources and controllers for
-running containerlab network topologies across a K8s cluster, achieving scalability, flexibility, and diverse deployment options.
+Clabernetes, also known as **c9s** <span className='text-fd-muted-foreground text-sm'>(pronounced "see-nines")</span> allows you to run containerlab network topologies across a K8s cluster, achieving scalability, flexibility, and diverse deployment options.
 
 While Containlerab is constrained by the resources of a single node (VM or bare metal), c9s creates a K8s deployment each topology node, connects interfaces across them, and exposes management services through Kubernetes services API.
 
 <IntroFabricDiagram />
 
-## Choose an authoring model
+C9s can be installed on any K8s cluster and **does not** require a custom CNI.
 
-### Nodes and Links
+If you want to try c9s with a throw-away KinD cluster, follow the quickstart guide. If you want to install c9s into an existing cluster, follow the installation guide.
 
-`Node` and `Link` are the primary API. Each resource stays bounded to one network node or one wire,
-which makes direct resources the preferred model for generated and larger labs.
-
-[Learn about Nodes and Links](/docs/concepts/nodes-and-links)
-
-### Topology
-
-`Topology` is a supported higher-level resource that accepts a containerlab definition and
-compiles it into `LauncherProfile`, `Node`, and `Link` resources.
-
-[Learn about Topology](/docs/concepts/topology)
-
-## Get started
-
-Use the disposable local workflow to create a KinD cluster, install c9s, and launch a sample lab:
-
-```bash
-make try-c9s
-```
-
-[Follow the local quickstart](/docs/quickstart)
-
-[Install into an existing cluster](/docs/installation)
-
-## Continue exploring
-
-- [Architecture](/docs/architecture) explains the controllers, launchers, and connectivity model.
-- [Guides](/docs/guides/expose-configuration) cover common deployment and operations tasks.
-- [Examples](/docs/examples) point to complete manifests in this repository.
-- [CRD reference](/docs/crd) documents the available resource fields.
+<Cards>
+  <Card icon={<Rocket />} href="/docs/quickstart" title="Quickstart">
+    Launch C9s in a disposable KinD cluster, fully automated.
+  </Card>
+  <Card icon={<Download />} href="/docs/installation" title="Installation">
+    Install C9s into an existing cluster.
+  </Card>
+</Cards>

@@ -32,17 +32,17 @@ The repository SHALL provide `make ls-releases`, backed by the UV-run release CL
 #### Scenario: Main chart is available
 
 - **WHEN** the latest successful main workflow has published chart `0.0.0`
-- **THEN** the catalog includes a distinct `main` row with channel `main` and Version `0.0.0`, which can be supplied as `C9S_VERSION=0.0.0` or `C9S_VERSION=main`
+- **THEN** the catalog includes a distinct `main` row with channel `main` and Version `0.0.0`, which can be supplied as `VERSION=0.0.0` or `VERSION=main`
 
 #### Scenario: Unpublished development chart is available
 
 - **WHEN** a successful manual `Create dev release` workflow has published chart `0.0.0-abc1234`
-- **THEN** the catalog includes a distinct development row with Version `0.0.0-abc1234`, which can be supplied as `C9S_VERSION=0.0.0-abc1234`, plus source branch, workflow URL, and workflow-availability timestamp
+- **THEN** the catalog includes a distinct development row with Version `0.0.0-abc1234`, which can be supplied as `VERSION=0.0.0-abc1234`, plus source branch, workflow URL, and workflow-availability timestamp
 
 #### Scenario: Displayed version is install input
 
 - **WHEN** a user selects a stable or development row from the table
-- **THEN** the displayed Version value is the exact value accepted by `VERSION` for `make install` and by `C9S_VERSION` for `make try-c9s`
+- **THEN** the displayed Version value is the exact value accepted by `VERSION` for both `make install` and `make try-c9s`
 
 #### Scenario: Draft release is returned
 

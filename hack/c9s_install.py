@@ -456,6 +456,8 @@ def install(
             ],
             capture=True,
         ).strip()
+        if selected_version == "main":
+            selected_version = "0.0.0"
     elif selection in {"local", "main"}:
         selected_version = "0.0.0"
     else:

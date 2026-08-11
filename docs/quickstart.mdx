@@ -1,0 +1,74 @@
+---
+title: Quickstart
+description: Launch c9s and a sample network lab in a disposable KinD cluster.
+icon: Rocket
+---
+
+The [repository](https://github.com/clabernetes/clabernetes) includes an automated workflow that creates a single-node [KinD](https://kind.sigs.k8s.io/) cluster, installs the
+selected c9s Helm chart, configures MetalLB, and deploys a sample network topology consisting of an Nokia SR Linux node connected to a Network Multitool node.
+
+## Requirements
+
+The `Makefile` provided in the repository automates all steps required to create the KinD cluster and deploy the sample network topology. All you have to ensure is that:
+
+- `git` is installed
+- you have enough local CPU and memory to run KinD cluster and the sample network node.  
+8GB of RAM and 4 CPUs should be enough.
+
+KinD, `kubectl`, Helm, yq, UV, and GitHub CLI are downloaded into `build/try-c9s/bin` at the
+repository-pinned versions. Host executables with the same names are not used by this workflow.
+
+## Clone the repository [step]
+
+From the directory where you want to clone the repository, run:
+
+```bash
+git clone https://github.com/clabernetes/clabernetes
+cd clabernetes
+```
+
+## Run the `try-c9s` workflow [step]
+
+From the repository root, run:
+
+```bash
+make try-c9s
+```
+
+This command creates a single-node KinD cluster, installs c9s, configures Kubernetes load balancer (MetalLB) and deploys a sample network topology consisting of an Nokia SR Linux node connected to a Network Multitool node.
+
+A successful run ends with the following output:
+
+```text
+--> TRY-C9S: SR Linux SSH: ssh admin@<load-balancer-ip-1>
+--> TRY-C9S: SR Linux gNMI: <load-balancer-ip-1>:57400
+--> TRY-C9S: SR Linux NETCONF: <load-balancer-ip-1>:830
+--> TRY-C9S: Multitool SSH: ssh admin@<load-balancer-ip-2>
+--> TRY-C9S: clabernetes is ready to try
+```
+
+The exact load balancer address depends on the local cluster configuration.
+
+## Connect to the nodes [step]
+
+The previous step ends with the list of commands to use to connect to the two nodes in the sample network topology. You can always re-run `make try-c9s-print-access` from the repository root to print the access commands again.
+
+The list of connection commands show you how to connect with SSH/gNMI/NETCONF to the Nokia SR Linux node deployed in the lab and
+
+## Clean up
+
+Delete the sample resources and disposable cluster with:
+
+```bash
+make try-c9s-clean
+```
+
+If installation or topology readiness fails, keep the output: the command reports the selected
+source, chart, manager and launcher images, topology status, pods, events, and manager logs. A
+failed readiness check returns a non-zero exit status.
+
+## Next steps
+
+- [Understand Nodes and Links](/docs/concepts/nodes-and-links)
+- [Read the architecture](/docs/architecture)
+- [Browse complete examples](/docs/examples)

@@ -28,6 +28,16 @@ make install VERSION=select          # interactive stable/development picker
 make install VERSION=0.0.0-abc1234
 ```
 
+`make try-c9s` uses the same `VERSION` selector values:
+
+```bash
+make try-c9s
+make try-c9s VERSION=0.6.0
+make try-c9s VERSION=main
+make try-c9s VERSION=select
+make try-c9s VERSION=local
+```
+
 Inspect installable published releases without a Kubernetes context:
 
 ```bash
@@ -111,7 +121,7 @@ Release is created. Set `run_e2e=true` when the development artifact needs the f
 
 ```bash
 make install VERSION=0.0.0-abc1234
-make try-c9s C9S_VERSION=0.0.0-abc1234
+make try-c9s VERSION=0.0.0-abc1234
 ```
 
 The `0.0.0` chart is the mutable main channel. It is distinct from latest stable and pins manager

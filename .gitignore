@@ -63,3 +63,6 @@ build/dev/bin/
 
 # for crd -> openapi gen
 venv
+
+# ignore the docs-site source directory
+/docs-site/.source/

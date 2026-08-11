@@ -25,9 +25,8 @@ make install
 ```
 
 Use `C9S_CONTEXT=<context>` to avoid relying on the current context. Use
-`C9S_VERSION=main` for the mutable main chart or `C9S_VERSION=0.0.0-<short-sha>` for an exact
-unpublished development chart. These development channels are separate from the latest stable
-GitHub Release.
+`VERSION=main` for the mutable main chart or `VERSION=0.0.0-<short-sha>` for an exact unpublished
+development chart. These development channels are separate from the latest stable GitHub Release.
 
 You can select to install a specific version of the chart by adding the `--version` flag -- you can
 find all the versions of the chart stored as a package on the projects GitHub page

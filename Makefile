@@ -85,6 +85,8 @@ endif
 endif
 # NS is the namespace a "real" c9s install lives in; DEV_NS is the one the devspace based
 # dev workflow (make dev/purge-dev) creates and tears down.
+# VERSION selects the c9s source for both install and try-c9s.
+VERSION ?= latest
 NS ?= c9s
 DEV_NS ?= c9s-dev
 # Image registry prefix passed to DevSpace as REGISTRY (not the generic REGISTRY env var).

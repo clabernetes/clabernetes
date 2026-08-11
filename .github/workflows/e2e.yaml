@@ -86,7 +86,7 @@ jobs:
         run: cat .github/vars.env >> "$GITHUB_ENV"
 
       - name: verify local try-c9s workflow
-        run: make try-c9s C9S_VERSION=local TRY_C9S_TIMEOUT=600s
+        run: make try-c9s VERSION=local TRY_C9S_TIMEOUT=600s
 
       - name: clean local try-c9s workflow
         if: ${{ always() }}

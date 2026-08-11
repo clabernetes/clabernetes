@@ -16,7 +16,7 @@ The repository SHALL provide `make install` for installation into an existing Ku
 
 ### Requirement: Common source selection contract
 
-`make install` SHALL accept `VERSION=latest`, `VERSION=main`, an exact published version with or without a leading `v`, an exact unpublished `0.0.0-<sha>` version, `VERSION=local`, or `VERSION=select`. `make try-c9s` SHALL accept the equivalent selections through `C9S_VERSION`. When the selector variable for either target is unset, the target SHALL behave as latest without prompting.
+Both `make install` and `make try-c9s` SHALL accept `VERSION=latest`, `VERSION=main`, an exact published version with or without a leading `v`, an exact unpublished `0.0.0-<sha>` version, `VERSION=local`, or `VERSION=select`. When `VERSION` is unset, either target SHALL behave as latest without prompting.
 
 #### Scenario: Default latest installation
 
@@ -25,27 +25,27 @@ The repository SHALL provide `make install` for installation into an existing Ku
 
 #### Scenario: Exact published installation
 
-- **WHEN** a user sets `VERSION=v0.6.0` or `VERSION=0.6.0` for `make install`, or the equivalent `C9S_VERSION` for `make try-c9s`
+- **WHEN** a user sets `VERSION=v0.6.0` or `VERSION=0.6.0` for either installation target
 - **THEN** the target normalizes the selection and requests OCI chart version `0.6.0`
 
 #### Scenario: Mutable main installation
 
-- **WHEN** a user sets `VERSION=main` for `make install`, or `C9S_VERSION=main` for `make try-c9s`
+- **WHEN** a user sets `VERSION=main` for either installation target
 - **THEN** the target requests OCI chart version `0.0.0`, reports it as a mutable development channel, and does not classify it as latest stable
 
 #### Scenario: Exact unpublished installation
 
-- **WHEN** a user sets `VERSION=0.0.0-abc1234` for `make install`, or the equivalent `C9S_VERSION` for `make try-c9s`
+- **WHEN** a user sets `VERSION=0.0.0-abc1234` for either installation target
 - **THEN** the target requests that exact development chart and verifies its source revision and commit-scoped images
 
 #### Scenario: Local checkout installation
 
-- **WHEN** a user sets `VERSION=local` for `make install`, or `C9S_VERSION=local` for `make try-c9s`
+- **WHEN** a user sets `VERSION=local` for either installation target
 - **THEN** the target installs the checkout chart with manager and launcher images built from that checkout
 
 #### Scenario: Interactive selection
 
-- **WHEN** a user sets `VERSION=select` for `make install`, or `C9S_VERSION=select` for `make try-c9s`, in an interactive terminal
+- **WHEN** a user sets `VERSION=select` for either installation target in an interactive terminal
 - **THEN** the target displays the stable/development selector and installs the selected exact artifact or main channel
 
 ### Requirement: Repository-controlled installation toolchain
@@ -150,7 +150,7 @@ The installer SHALL load local images directly into a verified KinD cluster. For
 
 #### Scenario: Local source on try KinD
 
-- **WHEN** `make try-c9s C9S_VERSION=local` builds the checkout images
+- **WHEN** `make try-c9s VERSION=local` builds the checkout images
 - **THEN** both images are loaded into every node of the try KinD cluster and Helm uses those exact image references with `IfNotPresent`
 
 #### Scenario: Local source on existing KinD
@@ -222,7 +222,7 @@ After Helm deployment, the installer SHALL reconcile only the Config singleton's
 
 #### Scenario: Local checkout demo
 
-- **WHEN** `make try-c9s C9S_VERSION=local` installs checkout images and chart
+- **WHEN** `make try-c9s VERSION=local` installs checkout images and chart
 - **THEN** it applies the demo from the checkout
 
 #### Scenario: Development artifact demo
