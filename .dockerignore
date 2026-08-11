@@ -33,8 +33,13 @@ examples
 # caches
 .pnpm-store
 .vscode
+.mk
+.scratch
 
 openspec
+
+# test files not needed to compile binaries
+**/*_test.go
 
 # binaries
 build/dev
