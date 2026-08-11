@@ -1,0 +1,281 @@
+.c9s-react-flow-diagram {
+  --c9s-react-flow-cyan: #20d9e7;
+  --c9s-react-flow-magenta: #d21b71;
+}
+
+.c9s-react-flow-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-inline: 1.5rem;
+}
+
+.c9s-react-flow-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-fd-primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.c9s-react-flow-title-large {
+  margin-top: 0.45rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.c9s-react-flow-status {
+  flex-shrink: 0;
+  border: 1px solid color-mix(in oklab, var(--color-fd-primary) 22%, var(--color-fd-border));
+  border-radius: 9999px;
+  background: var(--color-fd-background);
+  padding: 0.4rem 0.65rem;
+  color: var(--color-fd-muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.c9s-react-flow-canvas {
+  height: 51rem;
+}
+
+.c9s-react-flow-diagram.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 1.25rem;
+  background: var(--color-fd-background);
+}
+
+.c9s-react-flow-diagram.is-fullscreen .c9s-react-flow-heading {
+  padding-inline: 0;
+}
+
+.c9s-react-flow-diagram.is-fullscreen .c9s-react-flow-canvas {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  margin-top: 0.75rem;
+}
+
+.c9s-react-flow-canvas .react-flow {
+  overflow: visible;
+  background: transparent;
+}
+
+.c9s-react-flow-canvas .react-flow__node {
+  overflow: visible;
+}
+
+.c9s-react-flow-node {
+  position: relative;
+  min-height: 6rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--c9s-react-flow-tone) 30%, var(--color-fd-border));
+  border-radius: 1rem;
+  background: var(--color-fd-background);
+  box-shadow: 0 14px 30px color-mix(in oklab, var(--c9s-react-flow-tone) 10%, transparent);
+}
+
+.c9s-react-flow-node::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--c9s-react-flow-tone) 12%, transparent), transparent 52%);
+  content: '';
+  pointer-events: none;
+}
+
+.c9s-react-flow-node[data-tone='magenta'] {
+  --c9s-react-flow-tone: var(--c9s-react-flow-magenta);
+}
+
+.c9s-react-flow-node[data-tone='indigo'] {
+  --c9s-react-flow-tone: #8b5cf6;
+}
+
+.c9s-react-flow-node[data-tone='cyan'] {
+  --c9s-react-flow-tone: var(--c9s-react-flow-cyan);
+}
+
+.c9s-react-flow-node[data-tone='gray'] {
+  --c9s-react-flow-tone: #94a3b8;
+}
+
+.c9s-react-flow-node[data-tone='emerald'] {
+  --c9s-react-flow-tone: #10b981;
+}
+
+.c9s-react-flow-node-header,
+.c9s-react-flow-detail,
+.c9s-react-flow-chips {
+  position: relative;
+  z-index: 1;
+}
+
+.c9s-react-flow-node-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem 0;
+}
+
+.c9s-react-flow-icon {
+  display: grid;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid color-mix(in oklab, var(--c9s-react-flow-tone) 30%, var(--color-fd-border));
+  border-radius: 0.65rem;
+  background: color-mix(in oklab, var(--c9s-react-flow-tone) 13%, var(--color-fd-background));
+  color: var(--c9s-react-flow-tone);
+  box-shadow: inset 0 1px rgb(255 255 255 / 42%);
+}
+
+.c9s-react-flow-eyebrow {
+  overflow: hidden;
+  color: var(--c9s-react-flow-tone);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.c9s-react-flow-node .c9s-react-flow-title {
+  margin-top: 0.25rem;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c9s-react-flow-detail {
+  margin: 0.65rem 0.85rem 0.8rem;
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.c9s-react-flow-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0.85rem 0.75rem;
+}
+
+.c9s-react-flow-chips span {
+  border: 1px solid color-mix(in oklab, var(--c9s-react-flow-tone) 24%, var(--color-fd-border));
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--c9s-react-flow-tone) 8%, transparent);
+  padding: 0.25rem 0.45rem;
+  color: color-mix(in oklab, var(--c9s-react-flow-tone) 65%, var(--color-fd-foreground));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.53rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.c9s-react-flow-handle {
+  width: 0.45rem;
+  height: 0.45rem;
+  border: 1px solid var(--c9s-react-flow-cyan);
+  background: var(--color-fd-background);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity 160ms ease,
+    visibility 160ms ease;
+}
+
+.c9s-react-flow-canvas .react-flow.c9s-react-flow-show-connectors .c9s-react-flow-handle {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.c9s-react-flow-canvas .react-flow__edge-path {
+  stroke: var(--c9s-react-flow-cyan);
+  stroke-width: 1.25;
+}
+
+.c9s-react-flow-canvas .react-flow__edge-textbg {
+  fill: var(--color-fd-background);
+  stroke: var(--color-fd-border);
+  stroke-width: 1;
+}
+
+.c9s-react-flow-canvas .react-flow__edge-text {
+  fill: var(--color-fd-muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.c9s-react-flow-canvas .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.65rem;
+  box-shadow: 0 8px 18px rgb(0 0 0 / 10%);
+}
+
+.c9s-react-flow-canvas .react-flow__controls-button {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-bottom-color: var(--color-fd-border);
+  background: var(--color-fd-background);
+  color: var(--color-fd-muted-foreground);
+}
+
+.c9s-react-flow-canvas .react-flow__controls-button:last-child {
+  border-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c9s-react-flow-node {
+    transition: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .c9s-react-flow-heading {
+    padding-inline: 0;
+  }
+
+  .c9s-react-flow-canvas {
+    height: 45rem;
+  }
+
+  .c9s-react-flow-diagram.is-fullscreen {
+    padding: 0.75rem;
+  }
+
+  .c9s-react-flow-canvas .react-flow__controls {
+    display: none;
+  }
+
+  .c9s-react-flow-diagram.is-fullscreen .react-flow__controls {
+    display: flex;
+  }
+}

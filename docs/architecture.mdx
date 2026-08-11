@@ -4,6 +4,8 @@ description: How Clabernetes controllers, launchers, resources, and connectivity
 icon: Layers
 ---
 
+import { ArchitectureReactFlowDiagram } from '@/components/architecture-react-flow-diagram';
+
 ## Overview
 
 clabernetes is a collection of kubernetes custom resources and controllers that reconcile those
@@ -13,26 +15,7 @@ and the management interfaces of the nodes exposed.
 
 The model in one picture:
 
-```
-                 ┌──────────────────────────────────────────────────────┐
-  AUXILIARY      │ Topology CR (backward-compatible compiler layer)    │
-                 │ containerlab + existing knobs → primitives            │
-                 └──────────────────────┬───────────────────────────────┘
-                                        │ owns, corrects drift, prunes
-                                        ▼
-  PRIMARY API    LauncherProfile     Node CRs                 Link CRs
-                 launcher policy  ← explicit reference       one wire +
-                                      per-node payload        connectivity
-                                        │                        │
-                           ┌────────────┴───────────┐  ┌─────────┴────────┐
-                           │ Node controller        │  │ Link controller  │
-                           │ deployment/services/   │  │ validates and    │
-                           │ PVC/status             │  │ allocates status │
-                           └────────────┬───────────┘  └─────────┬────────┘
-                                        ▼                        ▼
-                         launcher reads its Nodes and terminating Links,
-                         materializes topo.clab.yaml, runs clab + tunnels
-```
+<ArchitectureReactFlowDiagram />
 
 Everything below the "PRIMARY API" line works identically whether the custom resources
 were written by a person, by tooling, or by the Topology compiler.
