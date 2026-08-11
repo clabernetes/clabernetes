@@ -117,6 +117,8 @@ jobs:
   install-smoke:
     needs: release
     runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: checkout release source
         uses: actions/checkout@v7

@@ -163,6 +163,7 @@ jobs:
       CHANNEL: ${{ inputs.channel }}
       SOURCE_SHA: ${{ needs.prep.outputs.source_sha }}
       RELEASE_VERSION: ${{ needs.prep.outputs.chart_version }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: checkout source
         uses: actions/checkout@v7
