@@ -1,5 +1,4 @@
-[![Discord](https://img.shields.io/discord/860500297297821756?style=flat-square&label=discord&logo=discord&color=00c9ff&labelColor=bec8d2)](https://discord.gg/vAyddtaEV9)
-[![Go Report](https://img.shields.io/badge/go%20report-A%2B-blue?style=flat-square&color=00c9ff&labelColor=bec8d2)](https://goreportcard.com/report/github.com/clabernetes/clabernetes)
+[![Discord](https://img.shields.io/discord/860500297297821756?style=flat-square&label=discord&logo=discord&color=00c9ff&labelColor=bec8d2)](https://discord.gg/jaAu9JEc9)
 
 # clabernetes a.k.a c9s
 
@@ -7,33 +6,4 @@ Love containerlab? Want containerlab, just distributed in a kubernetes cluster? 
 clabernetes -- containerlab + kubernetes. clabernetes is a kubernetes controller that deploys valid
 containerlab topologies into a kubernetes cluster.
 
-See [clabernetes docs](https://containerlab.dev/manual/clabernetes) for reference.
-
-## Deploy
-
-Deploying this chart is like deploying any other helm chart! The simplest case looks something like:
-
-```bash
-helm upgrade --install clabernetes oci://ghcr.io/clabernetes/clabernetes/clabernetes
-```
-
-From this repository, `make install` performs context and artifact preflight before installing into
-an existing cluster:
-
-```bash
-make install
-```
-
-Use `C9S_CONTEXT=<context>` to avoid relying on the current context. Use
-`VERSION=main` for the mutable main chart or `VERSION=0.0.0-<short-sha>` for an exact unpublished
-development chart. These development channels are separate from the latest stable GitHub Release.
-
-You can select to install a specific version of the chart by adding the `--version` flag -- you can
-find all the versions of the chart stored as a package on the projects GitHub page
-[here](https://github.com/clabernetes/clabernetes/pkgs/container/clabernetes%2Fclabernetes).
-
-## Values
-
-As with most helm charts, this chart is configurable via values -- please refer to the charts
-default values file for reference. You can find it
-[here](https://github.com/clabernetes/clabernetes/blob/main/charts/clabernetes/values.yaml) or on the [Artifact Hub](https://artifacthub.io/packages/helm/clabernetes/clabernetes?modal=values).
+See [clabernetes docs](https://c9s.run) for a complete reference.

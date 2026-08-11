@@ -8,7 +8,7 @@ The project is rebranding to **c9s** (`c9s.run` docs, c9s controller), but Kuber
 - Keep API version `v1alpha1` unchanged; manifests use `apiVersion: c9s.run/v1alpha1`.
 - Regenerate CRDs, typed clients, OpenAPI, and UI SDK from updated API source constants.
 - **BREAKING**: Requires full uninstall and reinstall — no in-place `helm upgrade` from the legacy API group.
-- Provide `make uninstall-c9s` to remove the Helm release, all c9s CRDs (`*.c9s.run` and legacy `*.clabernetes.containerlab.dev`), and the namespace.
+- Provide `make uninstall` to remove the Helm release, all c9s CRDs (`*.c9s.run` and legacy `*.clabernetes.containerlab.dev`), and the namespace.
 - Manager installs `c9s.run` CRDs only; it does **not** auto-delete legacy CRDs.
 - Update Helm RBAC, documentation, examples, e2e fixtures, and clabverter output to reference `c9s.run`.
 
@@ -27,7 +27,7 @@ _None — existing topology, node, link, and launcher-profile specs describe res
 - `apis/doc.go`, `apis/v1alpha1/doc.go` (source of truth)
 - Generated artifacts: `charts/clabernetes/crds/`, `assets/crd/`, `generated/`, `ui/clabernetes-openapi.json`, `ui/src/lib/clabernetes-client/`
 - `manager/initcrds.go` (CRD apply only — no legacy cleanup)
-- `Makefile` (`uninstall-c9s` target)
+- `Makefile` (`uninstall` target)
 - `charts/clabernetes/templates/clusterrole.yaml` (RBAC apiGroups)
 - `clabverter/emitcrs.go` (manifest API version constant)
 - Documentation (`docs/`), examples (`examples/`), e2e golden fixtures

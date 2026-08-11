@@ -177,8 +177,8 @@ C9S_HELM ?= $(HELM)
 C9S_KUBECTL_CONTEXT_ARGS := $(if $(C9S_CONTEXT),--context $(C9S_CONTEXT),)
 C9S_HELM_CONTEXT_ARGS := $(if $(C9S_CONTEXT),--kube-context $(C9S_CONTEXT),)
 
-.PHONY: uninstall-c9s
-uninstall-c9s: $(C9S_KUBECTL) $(C9S_HELM) ## Uninstall the c9s Helm release, delete all c9s CRDs, and remove the namespace
+.PHONY: uninstall
+uninstall: $(C9S_KUBECTL) $(C9S_HELM) ## Uninstall the c9s Helm release, delete all c9s CRDs, and remove the namespace
 	@echo "--> C9S: uninstalling Helm release $(C9S_HELM_RELEASE) from namespace $(C9S_NAMESPACE)"
 	@if $(C9S_HELM) $(C9S_HELM_CONTEXT_ARGS) status $(C9S_HELM_RELEASE) -n $(C9S_NAMESPACE) >/dev/null 2>&1; then \
 		$(C9S_HELM) $(C9S_HELM_CONTEXT_ARGS) uninstall $(C9S_HELM_RELEASE) -n $(C9S_NAMESPACE); \

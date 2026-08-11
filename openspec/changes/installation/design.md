@@ -199,7 +199,7 @@ Alternative considered: rely on `helm upgrade --install` errors. Rejected becaus
 
 Before installation, render or inspect the selected chart CRDs and derive the target API group. Inspect the cluster for existing c9s CRDs in both `clabernetes.containerlab.dev` and `c9s.run`.
 
-If an existing installation's group differs from the selected chart's group, fail without invoking Helm and direct the user to `make uninstall-c9s`, explicitly warning that CRD deletion removes all custom resources. This handles local builds and future releases without hardcoding the release where the group changed.
+If an existing installation's group differs from the selected chart's group, fail without invoking Helm and direct the user to `make uninstall`, explicitly warning that CRD deletion removes all custom resources. This handles local builds and future releases without hardcoding the release where the group changed.
 
 Same-group reinstall and version changes are permitted, subject to the exact artifact and post-install checks.
 

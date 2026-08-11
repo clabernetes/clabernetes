@@ -6,6 +6,8 @@ import {
   TryC9sDiagram,
 } from '@/components/fabric-diagram';
 import type { MDXComponents } from 'mdx/types';
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+import * as TabsComponents from 'fumadocs-ui/components/tabs';
 
 export function getMDXComponents(components?: MDXComponents) {
   return {
@@ -16,6 +18,9 @@ export function getMDXComponents(components?: MDXComponents) {
     Download,
     IntroFabricDiagram: IntroFabricDiagram,
     TryC9sDiagram: TryC9sDiagram,
+    Accordion: Accordion,
+    Accordions: Accordions,
+    ...TabsComponents,
     ...components,
   } satisfies MDXComponents;
 }

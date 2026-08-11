@@ -185,7 +185,7 @@ The installer SHALL derive the selected chart's c9s CRD API group from the chart
 #### Scenario: Incompatible API-group cutover
 
 - **WHEN** legacy `clabernetes.containerlab.dev` CRDs exist and the selected chart uses `c9s.run`, or the reverse
-- **THEN** the installer exits before Helm, identifies both groups, and warns that `make uninstall-c9s` deletes all c9s custom resources
+- **THEN** the installer exits before Helm, identifies both groups, and warns that `make uninstall` deletes all c9s custom resources
 
 ### Requirement: Coherent manager and launcher installation
 
@@ -261,5 +261,5 @@ Re-running either public installation target with the same selection SHALL conve
 
 #### Scenario: Uninstall from an existing cluster
 
-- **WHEN** a user runs `make uninstall-c9s` for an explicitly selected context
+- **WHEN** a user runs `make uninstall` for an explicitly selected context
 - **THEN** only that context is targeted and the documented destructive Helm, CRD, and namespace cleanup is performed
