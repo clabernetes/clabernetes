@@ -139,7 +139,7 @@ func (c *clabernetes) installContainerlabVersion(version string) error {
 func (c *clabernetes) destroyContainerlab() {
 	c.logger.Debug("destroying any existing containerlab topology before deploy...")
 
-	cmd := exec.CommandContext( //nolint:gosec
+	cmd := exec.CommandContext(
 		c.ctx,
 		"containerlab",
 		"destroy",
@@ -151,7 +151,8 @@ func (c *clabernetes) destroyContainerlab() {
 	cmd.Stdout = c.containerlabLogger
 	cmd.Stderr = c.containerlabLogger
 
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	if err != nil {
 		// not fatal — topology may not exist on first run
 		c.logger.Debugf("containerlab destroy returned (expected on first run): %s", err)
 	}
@@ -172,10 +173,12 @@ func (c *clabernetes) runContainerlab() error {
 	}
 
 	if !(os.Getenv(clabernetesconstants.LauncherContainerlabPersist) == clabernetesconstants.True) {
-		// when k8 redeploys nodes when node crashes or due to any other reason, host side interface
-		// is not cleaned up so we have to manually restroy the lab getting following error in a loop
-		// containerlab |   Interface host:<intf> is defined via topology but already exists: <nil>
+		// When k8 redeploys nodes due to node crash or any other reason, host side interface is
+		// not cleaned up so we have to manually destroy the lab otherwise we will keep getting
+		// following error in a loop:
+		// containerlab | Interface host:<intf> is defined via topology but already exists: <nil>
 		c.destroyContainerlab()
+
 		args = append(args, "--reconfigure")
 	}
 
