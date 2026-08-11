@@ -13,8 +13,6 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    # Run e2e on main, PRs pointing to main, or manually dispatched development builds.
-    if: (github.ref_name == 'main' || github.base_ref == 'main' || github.event_name == 'workflow_dispatch') || inputs.debug
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -74,7 +72,6 @@ jobs:
   try-smoke:
     runs-on: ubuntu-latest
     # This job owns a separate KinD cluster and is intentionally independent of the e2e job above.
-    if: (github.ref_name == 'main' || github.base_ref == 'main' || github.event_name == 'workflow_dispatch') || inputs.debug
     steps:
       - name: checkout
         uses: actions/checkout@v7

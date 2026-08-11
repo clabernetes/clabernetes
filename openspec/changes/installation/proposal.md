@@ -7,7 +7,7 @@ c9s installation is split across `try-c9s`, e2e, DevSpace, and manual Helm flows
 - Introduce one shared installation workflow used by `make try-c9s` and a new `make install`, while keeping cluster creation, MetalLB, and demo resources exclusive to `try-c9s`.
 - Support stable, development, and local selections through a common version contract: `VERSION` for `make install` and `C9S_VERSION` for `make try-c9s`, covering latest stable release, exact published release, mutable main, exact unpublished commit build, local checkout, and interactive selection.
 - Add a repository-local UV/PEP 723 CLI using Rich and Typer that invokes a pinned repository-local GitHub CLI for authenticated/paginated JSON, lists releases and development builds with accurate timestamps, and returns machine-readable selections to Make.
-- Harden the existing manually dispatched `cicd` workflow as the unpublished-build path: build and test a selected feature ref, publish multi-architecture images and a chart as `0.0.0-<short-sha>`, attach full source revision metadata, verify the artifacts, and print exact install/try commands without creating a GitHub Release.
+- Keep `cicd` as the pull-request and main-merge pipeline with no publication toggle, always publishing main artifacts after a successful merge. Add a separate `Create dev release` manual workflow that selects a branch or tag, always runs lint and unit tests, optionally runs e2e, and publishes multi-architecture images and a chart as `0.0.0-<short-sha>` without creating a GitHub Release.
 - Treat the existing `0.0.0` chart as an explicit mutable `main` channel rather than as “latest”; publish it with full source revision metadata and manager/launcher values pinned to the same main commit instead of relying on floating `dev-latest` image resolution.
 - Validate the selected Kubernetes context and exact OCI artifact before mutating a cluster, then verify the Helm chart, manager image, launcher image, rollout, and embedded version after installation.
 - Reuse the e2e local image build/load path for KinD. Require an explicit pullable registry for local-checkout installation into non-KinD clusters, while leaving the development in-cluster registry as an opt-in transport rather than an installation default.
@@ -35,6 +35,6 @@ c9s installation is split across `try-c9s`, e2e, DevSpace, and manual Helm flows
 - Local manager and launcher image tagging/version embedding, KinD loading, and registry push paths.
 - Helm invocation and Config launcher-image reconciliation without overwriting unrelated user configuration.
 - GitHub Actions for install acceptance and exact-release smoke testing.
-- Existing `cicd` manual dispatch and main-push chart publication behavior.
+- Main `cicd` publication, the `Create dev release` manual workflow, and the GitHub-release publication workflow.
 - Root README, Make help, chart README, quickstart, installation, upgrading, and troubleshooting documentation.
 - External systems: GitHub Releases API, GHCR OCI charts/images, Docker/BuildKit, KinD, Helm, and Kubernetes API/RBAC.

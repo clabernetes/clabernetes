@@ -1,12 +1,23 @@
 ---
 name: test
 
-# runs unit then e2e as a single gate. cicd calls unit.yaml/e2e.yaml directly so that pr image
-# builds can run alongside e2e; everything else wants both together.
+# Runs unit then optionally e2e as a single gate. CI calls unit.yaml/e2e.yaml directly so that PR
+# image builds can run alongside e2e; other entrypoints use this workflow as one test gate.
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      run_e2e:
+        description: "run e2e after unit tests"
+        type: boolean
+        required: false
+        default: true
   workflow_dispatch:
     inputs:
+      run_e2e:
+        description: "run e2e after unit tests"
+        type: boolean
+        required: false
+        default: true
       debug_unit:
         description: "start tmate before unit tests"
         type: boolean
@@ -26,6 +37,7 @@ jobs:
 
   e2e:
     needs: unit
+    if: ${{ inputs.run_e2e || inputs.debug_e2e }}
     uses: ./.github/workflows/e2e.yaml
     with:
       debug: ${{ inputs.debug_e2e || false }}

@@ -95,17 +95,19 @@ does not start DevSpace or its source-sync workflow.
 
 ## Development artifacts
 
-An authorized developer can download the pinned GitHub CLI and dispatch the `cicd` workflow against
-a repository branch or tag:
+An authorized developer can download the pinned GitHub CLI and dispatch the `Create dev release`
+workflow against a repository branch or tag. The workflow always runs lint and unit tests; e2e is
+optional and is off by default:
 
 ```bash
 make c9s-release-tools
-build/try-c9s/bin/gh-v2.97.0 workflow run cicd.yaml --ref feature/my-change -f push=true
+build/try-c9s/bin/gh-v2.97.0 workflow run create-dev-release.yaml \
+  --ref feature/my-change -f run_e2e=false
 ```
 
-After lint, unit, e2e, image, and chart publication complete, the workflow summary reports the
+After the selected checks, image, and chart publication complete, the workflow summary reports the
 resolved full SHA and exact commands. The chart and images use `0.0.0-<short-sha>` and no GitHub
-Release is created:
+Release is created. Set `run_e2e=true` when the development artifact needs the full e2e gate:
 
 ```bash
 make install VERSION=0.0.0-abc1234

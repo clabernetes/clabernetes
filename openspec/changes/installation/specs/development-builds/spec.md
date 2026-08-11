@@ -2,11 +2,11 @@
 
 ### Requirement: Manually dispatched unpublished build
 
-The repository SHALL provide an authorized GitHub Actions manual dispatch that builds an unpublished c9s artifact set from the exact commit resolved by a selected repository branch or tag ref. The workflow SHALL publish OCI artifacts without creating a GitHub Release.
+The repository SHALL provide an authorized `Create dev release` GitHub Actions manual dispatch that builds an unpublished c9s artifact set from the exact commit resolved by a selected repository branch or tag ref. The workflow SHALL publish OCI artifacts without creating a GitHub Release and SHALL NOT expose a publish/no-publish option.
 
 #### Scenario: Build a feature branch head
 
-- **WHEN** a developer dispatches the workflow with package push enabled on a feature branch
+- **WHEN** a developer dispatches the workflow on a feature branch
 - **THEN** the workflow resolves and records that branch's full head SHA and builds artifacts from that commit
 
 #### Scenario: Build a tagged commit
@@ -45,12 +45,17 @@ An unpublished build SHALL use version `0.0.0-<short-sha>` for its manager, laun
 
 ### Requirement: Unpublished build validation gate
 
-An unpublished artifact publication SHALL require successful lint, unit, e2e, multi-architecture image publication, chart publication, exact artifact probes, and an exact-version installation smoke. Publication or handoff SHALL not be reported as successful when a required gate fails.
+An unpublished artifact publication SHALL require successful lint and unit checks, and SHALL require successful e2e checks when the `run_e2e` input is enabled. It SHALL also require multi-architecture image publication, chart publication, exact artifact probes, and an exact-version installation smoke. Publication or handoff SHALL not be reported as successful when a required gate fails.
 
-#### Scenario: Feature branch e2e fails
+#### Scenario: Selected feature branch e2e fails
 
 - **WHEN** e2e fails for a manually dispatched feature build
 - **THEN** image/chart publication or successful handoff is blocked
+
+#### Scenario: E2E is not selected
+
+- **WHEN** a developer dispatches `Create dev release` with `run_e2e` set to false
+- **THEN** the workflow runs lint and unit, skips e2e, and may publish only after those required checks succeed
 
 #### Scenario: Published image lacks a required platform
 

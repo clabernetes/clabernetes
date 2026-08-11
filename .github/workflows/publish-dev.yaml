@@ -1,0 +1,227 @@
+---
+name: publish development artifacts
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        description: "development channel to publish: main or unpublished"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  prep:
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.context.outputs.source_sha }}
+      short_sha: ${{ steps.context.outputs.short_sha }}
+      image_version: ${{ steps.context.outputs.image_version }}
+      chart_version: ${{ steps.context.outputs.chart_version }}
+    steps:
+      - name: compute build context
+        id: context
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+          if [[ "$CHANNEL" != "main" && "$CHANNEL" != "unpublished" ]]; then
+            echo "unsupported development channel: $CHANNEL" >&2
+            exit 1
+          fi
+
+          SOURCE_SHA="$GITHUB_SHA"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE_VERSION="0.0.0-${SHORT_SHA}"
+          CHART_VERSION="$IMAGE_VERSION"
+          if [[ "$CHANNEL" == "main" ]]; then
+            CHART_VERSION=0.0.0
+          fi
+
+          {
+            echo "source_sha=$SOURCE_SHA"
+            echo "short_sha=$SHORT_SHA"
+            echo "image_version=$IMAGE_VERSION"
+            echo "chart_version=$CHART_VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+  images-publish:
+    needs: prep
+    uses: ./.github/workflows/images.yaml
+    with:
+      push: true
+      build-version: 0.0.0-${{ needs.prep.outputs.short_sha }}
+    secrets: inherit
+
+  publish-charts:
+    needs:
+      - prep
+      - images-publish
+    runs-on: ubuntu-24.04
+    env:
+      CHANNEL: ${{ inputs.channel }}
+      SOURCE_SHA: ${{ needs.prep.outputs.source_sha }}
+      IMAGE_VERSION: ${{ needs.prep.outputs.image_version }}
+      RELEASE_VERSION: ${{ needs.prep.outputs.chart_version }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: install helm
+        run: make install-helm
+
+      - name: install yq
+        run: make install-yq
+
+      - name: login to ghcr
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: package and push charts
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          helm registry login -u "$GITHUB_ACTOR" -p "$GITHUB_TOKEN" ghcr.io
+
+          MANAGER_IMAGE="ghcr.io/clabernetes/clabernetes/clabernetes-manager:${IMAGE_VERSION}"
+          LAUNCHER_IMAGE="ghcr.io/clabernetes/clabernetes/clabernetes-launcher:${IMAGE_VERSION}"
+          export MANAGER_IMAGE LAUNCHER_IMAGE SOURCE_SHA
+
+          if [[ "$CHANNEL" == "unpublished" ]]; then
+            make set-chart-versions "$RELEASE_VERSION"
+          fi
+
+          yq -i eval \
+            '.manager.image = strenv(MANAGER_IMAGE) |
+             .globalConfig.deployment.launcherImage = strenv(LAUNCHER_IMAGE)' \
+            charts/clabernetes/values.yaml
+          yq -i eval '.annotations."org.opencontainers.image.revision" = strenv(SOURCE_SHA)' \
+            charts/clabernetes/Chart.yaml
+          yq -i eval '.annotations."org.opencontainers.image.revision" = strenv(SOURCE_SHA)' \
+            charts/clicker/Chart.yaml
+
+          helm package charts/clicker --version "$RELEASE_VERSION"
+          helm push "clicker-${RELEASE_VERSION}.tgz" oci://ghcr.io/clabernetes/clabernetes
+
+          if [[ "$CHANNEL" == "main" ]]; then
+            # Keep the clicker dependency aligned with the mutable main chart.
+            sed -i \
+              's|    version: (.*)|    version: 0.0.0|g' \
+              charts/clabernetes/Chart.yaml
+          fi
+          helm package charts/clabernetes --version "$RELEASE_VERSION"
+          helm push "clabernetes-${RELEASE_VERSION}.tgz" oci://ghcr.io/clabernetes/clabernetes
+
+          if [[ "$CHANNEL" == "main" ]]; then
+            {
+              echo "## Main development artifacts"
+              echo
+              echo "- Source SHA: \`${SOURCE_SHA}\`"
+              echo "- Mutable chart: \`oci://ghcr.io/clabernetes/clabernetes/clabernetes:0.0.0\`"
+              echo "- Manager image: \`${MANAGER_IMAGE}\`"
+              echo "- Launcher image: \`${LAUNCHER_IMAGE}\`"
+              echo
+              echo '```bash'
+              echo "make install VERSION=main"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Unpublished development artifacts"
+              echo
+              echo "- Source SHA: \`${SOURCE_SHA}\`"
+              echo "- Version: \`${RELEASE_VERSION}\`"
+              echo "- Manager image: \`${MANAGER_IMAGE}\`"
+              echo "- Launcher image: \`${LAUNCHER_IMAGE}\`"
+              echo
+              echo '```bash'
+              echo "make install VERSION=${RELEASE_VERSION}"
+              echo "make try-c9s C9S_VERSION=${RELEASE_VERSION}"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  verify:
+    if: ${{ !cancelled() && needs.publish-charts.result == 'success' }}
+    needs:
+      - prep
+      - images-publish
+      - publish-charts
+    runs-on: ubuntu-24.04
+    env:
+      CHANNEL: ${{ inputs.channel }}
+      SOURCE_SHA: ${{ needs.prep.outputs.source_sha }}
+      RELEASE_VERSION: ${{ needs.prep.outputs.chart_version }}
+    steps:
+      - name: checkout source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          lfs: true
+
+      - name: load tool versions
+        run: cat .github/vars.env >> "$GITHUB_ENV"
+
+      - name: install helm
+        run: make install-helm
+
+      - name: login to ghcr
+        if: ${{ inputs.channel == 'unpublished' }}
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: verify published artifacts
+        run: |
+          set -euo pipefail
+          if [[ "$CHANNEL" == "main" ]]; then
+            {
+              echo "## Verified main artifacts"
+              echo
+              echo "- Source SHA: \`${SOURCE_SHA}\`"
+              echo "- Chart: \`oci://ghcr.io/clabernetes/clabernetes/clabernetes:0.0.0\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            CHART="oci://ghcr.io/clabernetes/clabernetes/clabernetes"
+            helm show chart "$CHART" --version "$RELEASE_VERSION"
+            for image in clabernetes-manager clabernetes-launcher; do
+              docker buildx imagetools inspect \
+                "ghcr.io/clabernetes/clabernetes/${image}:${RELEASE_VERSION}" \
+                | tee "${image}.txt"
+              grep -q 'linux/amd64' "${image}.txt"
+              grep -q 'linux/arm64' "${image}.txt"
+            done
+            {
+              echo "## Verified unpublished artifacts"
+              echo
+              echo "- Chart: \`$CHART:$RELEASE_VERSION\`"
+              echo "- Source SHA: \`${SOURCE_SHA}\`"
+              echo "- Manager and launcher manifests include linux/amd64 and linux/arm64."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: smoke install published main chart
+        if: ${{ inputs.channel == 'main' }}
+        run: make try-c9s C9S_VERSION=main TRY_C9S_TIMEOUT=600s
+
+      - name: smoke install exact unpublished chart
+        if: ${{ inputs.channel == 'unpublished' }}
+        run: make try-c9s C9S_VERSION="$RELEASE_VERSION" TRY_C9S_TIMEOUT=600s
+
+      - name: clean smoke cluster
+        if: ${{ always() }}
+        run: make try-c9s-clean || true
