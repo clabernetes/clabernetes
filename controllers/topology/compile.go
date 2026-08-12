@@ -2,6 +2,8 @@ package topology
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	clabernetesapis "github.com/clabernetes/clabernetes/apis"
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -9,6 +11,113 @@ import (
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
+
+// UnsupportedFieldPolicy controls how the compiler handles source vocabulary that c9s can
+// parse, but cannot preserve with the same semantics. The in-cluster compatibility controller
+// uses Warn; callers promising a strict containerlab-compatible runtime use Error.
+type UnsupportedFieldPolicy string
+
+const (
+	// UnsupportedFieldPolicyWarn preserves compatibility and logs lossy source fields.
+	UnsupportedFieldPolicyWarn UnsupportedFieldPolicy = "warn"
+	// UnsupportedFieldPolicyError rejects any source field c9s cannot preserve.
+	UnsupportedFieldPolicyError UnsupportedFieldPolicy = "error"
+)
+
+// CompileOptions controls compatibility behavior while compiling a source Topology.
+type CompileOptions struct {
+	UnsupportedFieldPolicy UnsupportedFieldPolicy
+}
+
+// CompilerDiagnostic describes one source construct that c9s cannot faithfully preserve.
+type CompilerDiagnostic struct {
+	Code    string
+	Path    string
+	Line    int
+	Message string
+}
+
+// UnsupportedFeaturesError reports all unsupported source constructs found in one compile pass.
+// Diagnostics are sorted so CLI errors and tests remain stable across map iteration order.
+type UnsupportedFeaturesError struct {
+	Diagnostics []CompilerDiagnostic
+}
+
+func (e *UnsupportedFeaturesError) Error() string {
+	if e == nil || len(e.Diagnostics) == 0 {
+		return "topology contains features unsupported by c9s"
+	}
+
+	parts := make([]string, 0, len(e.Diagnostics))
+	for _, diagnostic := range e.Diagnostics {
+		location := diagnostic.Path
+		if location == "" {
+			location = "topology"
+		}
+
+		if diagnostic.Line > 0 {
+			location = fmt.Sprintf("%s (line %d)", location, diagnostic.Line)
+		}
+
+		parts = append(parts, fmt.Sprintf("%s: %s", location, diagnostic.Message))
+	}
+
+	return "topology contains features unsupported by c9s: " + strings.Join(parts, "; ")
+}
+
+type compileDiagnostics struct {
+	logger      claberneteslogging.Instance
+	policy      UnsupportedFieldPolicy
+	diagnostics []CompilerDiagnostic
+	forceError  bool
+}
+
+func newCompileDiagnostics(
+	logger claberneteslogging.Instance,
+	options CompileOptions,
+) *compileDiagnostics {
+	policy := options.UnsupportedFieldPolicy
+	if policy == "" {
+		policy = UnsupportedFieldPolicyWarn
+	}
+
+	return &compileDiagnostics{logger: logger, policy: policy}
+}
+
+func (d *compileDiagnostics) add(diagnostic CompilerDiagnostic, alwaysError bool) {
+	d.diagnostics = append(d.diagnostics, diagnostic)
+	d.forceError = d.forceError || alwaysError
+
+	if d.policy == UnsupportedFieldPolicyWarn && !alwaysError {
+		d.logger.Warn(diagnostic.Message)
+	}
+}
+
+func (d *compileDiagnostics) err() error {
+	if len(d.diagnostics) == 0 ||
+		(d.policy != UnsupportedFieldPolicyError && !d.forceError) {
+		return nil
+	}
+
+	diagnostics := append([]CompilerDiagnostic(nil), d.diagnostics...)
+	sort.SliceStable(diagnostics, func(i, j int) bool {
+		if diagnostics[i].Path != diagnostics[j].Path {
+			return diagnostics[i].Path < diagnostics[j].Path
+		}
+
+		if diagnostics[i].Line != diagnostics[j].Line {
+			return diagnostics[i].Line < diagnostics[j].Line
+		}
+
+		if diagnostics[i].Code != diagnostics[j].Code {
+			return diagnostics[i].Code < diagnostics[j].Code
+		}
+
+		return diagnostics[i].Message < diagnostics[j].Message
+	})
+
+	return &UnsupportedFeaturesError{Diagnostics: diagnostics}
+}
 
 // CompiledLink holds a single wire of a compiled topology definition -- exactly the payload of
 // a Link spec.
@@ -42,6 +151,18 @@ func CompileTopology(
 	logger claberneteslogging.Instance,
 	topology *clabernetesapisv1alpha1.Topology,
 ) (*CompiledTopology, error) {
+	return CompileTopologyWithOptions(logger, topology, CompileOptions{
+		UnsupportedFieldPolicy: UnsupportedFieldPolicyWarn,
+	})
+}
+
+// CompileTopologyWithOptions parses and compiles a Topology using the requested compatibility
+// policy. Structurally impossible constructs remain errors under every policy.
+func CompileTopologyWithOptions(
+	logger claberneteslogging.Instance,
+	topology *clabernetesapisv1alpha1.Topology,
+	options CompileOptions,
+) (*CompiledTopology, error) {
 	if topology.Spec.Definition.Containerlab == "" {
 		return nil, fmt.Errorf(
 			"%w: topology definition must include a containerlab topology",
@@ -49,7 +170,11 @@ func CompileTopology(
 		)
 	}
 
-	return compileContainerlabDefinition(logger, topology.Spec.Definition.Containerlab)
+	return compileContainerlabDefinition(
+		logger,
+		topology.Spec.Definition.Containerlab,
+		newCompileDiagnostics(logger, options),
+	)
 }
 
 // GetTopologyKind returns the "kind" of topology this CR represents.

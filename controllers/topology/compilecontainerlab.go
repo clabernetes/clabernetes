@@ -3,6 +3,9 @@ package topology
 import (
 	"fmt"
 	"maps"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	clabernetesapis "github.com/clabernetes/clabernetes/apis"
@@ -15,12 +18,15 @@ import (
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
+const unknownFieldMatchCount = 3
+
 // compileContainerlabDefinition compiles a containerlab topology definition: every node gets
 // the topology defaults and its kind expanded *into* its definition (so the emitted Node
 // objects are self contained), and the links section becomes the compiled wire list.
 func compileContainerlabDefinition(
 	logger claberneteslogging.Instance,
 	definition string,
+	diagnostics *compileDiagnostics,
 ) (*CompiledTopology, error) {
 	containerlabConfig, unknownFields, err := clabernetesutilcontainerlab.LoadContainerlabConfig(
 		definition,
@@ -32,7 +38,16 @@ func compileContainerlabDefinition(
 	}
 
 	for _, unknownField := range unknownFields {
-		logger.Warn(unknownField)
+		diagnostics.add(diagnosticFromUnknownField(unknownField), false)
+	}
+
+	if containerlabConfig.Mgmt != nil {
+		diagnostics.add(CompilerDiagnostic{
+			Code: "management-network-semantics",
+			Path: "mgmt",
+			Message: "topology-level management network settings are launcher-local in c9s and " +
+				"do not create a shared cross-pod management network",
+		}, false)
 	}
 
 	compiled := &CompiledTopology{
@@ -44,7 +59,14 @@ func compileContainerlabDefinition(
 		Mgmt: containerlabConfig.Mgmt,
 	}
 
+	nodeNames := make([]string, 0, len(containerlabConfig.Topology.Nodes))
 	for nodeName := range containerlabConfig.Topology.Nodes {
+		nodeNames = append(nodeNames, nodeName)
+	}
+
+	sort.Strings(nodeNames)
+
+	for _, nodeName := range nodeNames {
 		compiled.Nodes[nodeName], err = flattenNodeDefinition(
 			containerlabConfig.Topology,
 			nodeName,
@@ -53,25 +75,149 @@ func compileContainerlabDefinition(
 			return nil, err
 		}
 
-		normalizeNodePorts(logger, nodeName, compiled.Nodes[nodeName])
-		dropUnusableNodeLabels(logger, nodeName, compiled.Nodes[nodeName])
+		normalizeNodePorts(diagnostics, nodeName, compiled.Nodes[nodeName])
+		dropUnusableNodeLabels(diagnostics, nodeName, compiled.Nodes[nodeName])
+
+		switch compiled.Nodes[nodeName].Kind {
+		case "bridge", "ovs-bridge", "host":
+			diagnostics.add(CompilerDiagnostic{
+				Code: "unsupported-pseudo-node",
+				Path: fmt.Sprintf("topology.nodes.%s.kind", nodeName),
+				Message: fmt.Sprintf(
+					"node %q uses native pseudo-node kind %q, which has no c9s "+
+						"launcher implementation",
+					nodeName,
+					compiled.Nodes[nodeName].Kind,
+				),
+			}, true)
+		}
 	}
 
-	compiled.Links, err = compileContainerlabLinks(containerlabConfig)
+	validateNodeNetworkModes(compiled.Nodes, diagnostics)
+
+	compiled.Links, err = compileContainerlabLinks(containerlabConfig, diagnostics)
 	if err != nil {
 		logger.Criticalf("failed compiling containerlab links, error: %s", err)
 
 		return nil, err
 	}
 
+	diagnosticErr := diagnostics.err()
+	if diagnosticErr != nil {
+		return nil, diagnosticErr
+	}
+
 	return compiled, nil
+}
+
+// validateNodeNetworkModes mirrors the Node CRD's container:<primary> contract in the compiler
+// and additionally verifies references and cycles that the single-object CRD cannot see. This is
+// required for strict, API-free validation and dry-run: callers must not need to create a Node
+// before learning that a native host/none mode or an impossible launcher group is unsupported.
+func validateNodeNetworkModes(
+	nodes map[string]*clabernetesutilcontainerlab.NodeDefinition,
+	diagnostics *compileDiagnostics,
+) {
+	nodeNames := make([]string, 0, len(nodes))
+	for nodeName := range nodes {
+		nodeNames = append(nodeNames, nodeName)
+	}
+
+	sort.Strings(nodeNames)
+
+	for _, nodeName := range nodeNames {
+		networkMode := nodes[nodeName].NetworkMode
+		if networkMode == "" {
+			continue
+		}
+
+		primary := clabernetesutilcontainerlab.ParseNetworkModeContainer(networkMode)
+
+		path := fmt.Sprintf("topology.nodes.%s.network-mode", nodeName)
+		if primary == "" || len(k8svalidation.IsDNS1123Label(primary)) != 0 {
+			diagnostics.add(CompilerDiagnostic{
+				Code: "unsupported-network-mode",
+				Path: path,
+				Message: fmt.Sprintf(
+					"node %q network-mode %q is unsupported; "+
+						"c9s accepts only container:<primary node name>",
+					nodeName,
+					networkMode,
+				),
+			}, true)
+
+			continue
+		}
+
+		if _, exists := nodes[primary]; !exists {
+			diagnostics.add(CompilerDiagnostic{
+				Code: "unknown-network-mode-primary",
+				Path: path,
+				Message: fmt.Sprintf(
+					"node %q shares a launcher with nonexistent primary node %q",
+					nodeName,
+					primary,
+				),
+			}, true)
+
+			continue
+		}
+
+		seen := map[string]bool{nodeName: true}
+
+		current := primary
+		for current != "" {
+			if seen[current] {
+				diagnostics.add(CompilerDiagnostic{
+					Code: "network-mode-cycle",
+					Path: path,
+					Message: fmt.Sprintf(
+						"node %q network-mode participates in a launcher-group cycle",
+						nodeName,
+					),
+				}, true)
+
+				break
+			}
+
+			seen[current] = true
+
+			nextNode, exists := nodes[current]
+			if !exists {
+				break
+			}
+
+			current = clabernetesutilcontainerlab.ParseNetworkModeContainer(
+				nextNode.NetworkMode,
+			)
+		}
+	}
+}
+
+var unknownFieldPattern = regexp.MustCompile(`^line (\d+): field ([^ ]+)`)
+
+func diagnosticFromUnknownField(message string) CompilerDiagnostic {
+	diagnostic := CompilerDiagnostic{
+		Code:    "unsupported-field",
+		Message: message,
+	}
+
+	matches := unknownFieldPattern.FindStringSubmatch(message)
+	if len(matches) != unknownFieldMatchCount {
+		return diagnostic
+	}
+
+	diagnostic.Line, _ = strconv.Atoi(matches[1])
+	diagnostic.Path = matches[2]
+
+	return diagnostic
 }
 
 // normalizeNodePorts rewrites the docker style "host:container" port entries that pasted
 // containerlab topologies carry into the destination-only form Nodes accept -- the pod side port
 // is an allocation clabernetes owns, so a pinned host side cannot be honored.
 func normalizeNodePorts(
-	logger claberneteslogging.Instance,
+	diagnostics *compileDiagnostics,
 	nodeName string,
 	nodeDefinition *clabernetesutilcontainerlab.NodeDefinition,
 ) {
@@ -81,13 +227,15 @@ func normalizeNodePorts(
 			continue
 		}
 
-		logger.Warnf(
-			"node %q port %q declares a host side port, which clabernetes allocates itself --"+
-				" using destination port %q instead",
-			nodeName,
-			portDefinition,
-			normalized,
-		)
+		diagnostics.add(CompilerDiagnostic{
+			Code: "host-port-pinning",
+			Path: fmt.Sprintf("topology.nodes.%s.ports[%d]", nodeName, idx),
+			Message: fmt.Sprintf(
+				"node %q port %q pins a host-side port, but c9s allocates launcher ports",
+				nodeName,
+				portDefinition,
+			),
+		}, false)
 
 		nodeDefinition.Ports[idx] = normalized
 	}
@@ -99,7 +247,7 @@ func normalizeNodePorts(
 // rejected on create. clabernetes' own namespace and the individual keys its controllers reserve
 // stay off limits too, since those labels carry meaning to reconciliation and selectors.
 func dropUnusableNodeLabels(
-	logger claberneteslogging.Instance,
+	diagnostics *compileDiagnostics,
 	nodeName string,
 	nodeDefinition *clabernetesutilcontainerlab.NodeDefinition,
 ) {
@@ -121,12 +269,16 @@ func dropUnusableNodeLabels(
 			reason = strings.Join(problems, "; ")
 		}
 
-		logger.Warnf(
-			"node %q label %q cannot become a kubernetes label and was omitted -- %s",
-			nodeName,
-			key,
-			reason,
-		)
+		diagnostics.add(CompilerDiagnostic{
+			Code: "unusable-node-label",
+			Path: fmt.Sprintf("topology.nodes.%s.labels.%s", nodeName, key),
+			Message: fmt.Sprintf(
+				"node %q label %q cannot become a Kubernetes label and would be omitted: %s",
+				nodeName,
+				key,
+				reason,
+			),
+		}, false)
 
 		delete(nodeDefinition.Labels, key)
 	}
@@ -258,12 +410,45 @@ func mergeSlices(base, layer []string) []string {
 }
 
 // compileContainerlabLinks converts the containerlab links section into compiled wires.
-func compileContainerlabLinks(
+func compileContainerlabLinks( //nolint:gocyclo
 	containerlabConfig *clabernetesutilcontainerlab.Config,
+	diagnostics *compileDiagnostics,
 ) ([]CompiledLink, error) {
 	links := make([]CompiledLink, 0, len(containerlabConfig.Topology.Links))
 
-	for _, link := range containerlabConfig.Topology.Links {
+	for linkIndex, link := range containerlabConfig.Topology.Links {
+		linkPath := fmt.Sprintf("topology.links[%d]", linkIndex)
+		if len(link.Labels) != 0 {
+			diagnostics.add(CompilerDiagnostic{
+				Code:    "unsupported-link-labels",
+				Path:    linkPath + ".labels",
+				Message: "link labels are not preserved by the c9s Link API",
+			}, false)
+		}
+
+		if len(link.Vars) != 0 {
+			diagnostics.add(CompilerDiagnostic{
+				Code:    "unsupported-link-vars",
+				Path:    linkPath + ".vars",
+				Message: "link vars are not preserved by the c9s Link API",
+			}, false)
+		}
+
+		switch link.Type {
+		case "", "brief", "veth", "host":
+		default:
+			diagnostics.add(CompilerDiagnostic{
+				Code: "unsupported-link-type",
+				Path: linkPath + ".type",
+				Message: fmt.Sprintf(
+					"native link type %q has no c9s topology-link equivalent",
+					link.Type,
+				),
+			}, true)
+
+			continue
+		}
+
 		if len(link.Endpoints) != clabernetesapisv1alpha1.LinkEndpointElementCount {
 			return nil, fmt.Errorf(
 				"%w: endpoint '%q' has wrong syntax, unexpected number of items",
@@ -282,6 +467,56 @@ func compileContainerlabLinks(
 				claberneteserrors.ErrParse,
 				link.Endpoints,
 			)
+		}
+
+		invalidEndpoint := false
+
+		for endpointIndex, endpointParts := range [][]string{endpointAParts, endpointBParts} {
+			nodeName := endpointParts[0]
+
+			if nodeName == clabernetesapisv1alpha1.LinkHostNodeName {
+				continue
+			}
+
+			if nodeName == "mgmt-net" || nodeName == "macvlan" {
+				diagnostics.add(CompilerDiagnostic{
+					Code: "unsupported-special-endpoint",
+					Path: fmt.Sprintf("%s.endpoints[%d]", linkPath, endpointIndex),
+					Message: fmt.Sprintf(
+						"special endpoint %q requires host networking that c9s does not provide",
+						nodeName,
+					),
+				}, true)
+
+				invalidEndpoint = true
+
+				continue
+			}
+
+			if _, exists := containerlabConfig.Topology.Nodes[nodeName]; !exists {
+				diagnostics.add(CompilerDiagnostic{
+					Code:    "unknown-link-endpoint",
+					Path:    fmt.Sprintf("%s.endpoints[%d]", linkPath, endpointIndex),
+					Message: fmt.Sprintf("link endpoint references nonexistent node %q", nodeName),
+				}, true)
+
+				invalidEndpoint = true
+			}
+		}
+
+		if endpointAParts[0] == clabernetesapisv1alpha1.LinkHostNodeName &&
+			endpointBParts[0] == clabernetesapisv1alpha1.LinkHostNodeName {
+			diagnostics.add(CompilerDiagnostic{
+				Code:    "invalid-host-link",
+				Path:    linkPath + ".endpoints",
+				Message: "a c9s host link must have exactly one Node endpoint",
+			}, true)
+
+			invalidEndpoint = true
+		}
+
+		if invalidEndpoint {
+			continue
 		}
 
 		links = append(links, CompiledLink{

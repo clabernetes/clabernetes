@@ -196,6 +196,11 @@ When status probes are enabled for a non-excluded Node, the launcher SHALL repor
 when the represented nested Docker container is running and is not paused, restarting, or dead. If
 the nested image defines a Docker healthcheck, that healthcheck SHALL also report `healthy`.
 
+When multiple Nodes share one launcher through `network-mode: container:<primary>`, the launcher
+SHALL evaluate the generic nested-container readiness of every group member. The shared launcher
+Pod SHALL be ready only when all group members are ready; all member Nodes inherit that atomic
+group result. Application-specific TCP or SSH probes remain scoped to the primary Node.
+
 #### Scenario: Generic Node has no application-specific probe
 
 - **WHEN** a Node uses an enabled status-probe configuration without TCP or SSH settings
@@ -212,6 +217,12 @@ the nested image defines a Docker healthcheck, that healthcheck SHALL also repor
 
 - **WHEN** the represented nested container is stopped, paused, restarting, or dead
 - **THEN** the Node reports not ready
+
+#### Scenario: Grouped secondary container restarts
+
+- **WHEN** a secondary nested container is paused, restarting, stopped, dead, or has an unhealthy
+  image healthcheck while the primary remains healthy
+- **THEN** the shared launcher Pod and every Node in the launcher group report not ready
 
 #### Scenario: Image healthcheck is not healthy
 

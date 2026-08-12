@@ -3,6 +3,7 @@ package topology //nolint:testpackage // tests exercise bounded aggregate status
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -11,11 +12,84 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
+	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
+	apimachineryschema "k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+type topologyConflictOnceClient struct {
+	ctrlruntimeclient.Client
+
+	updateCalls int
+}
+
+var errInjectedTopologyConflict = errors.New("injected conflict")
+
+func (c *topologyConflictOnceClient) Update(
+	ctx context.Context,
+	obj ctrlruntimeclient.Object,
+	opts ...ctrlruntimeclient.UpdateOption,
+) error {
+	c.updateCalls++
+	if c.updateCalls == 1 {
+		return apimachineryerrors.NewConflict(
+			apimachineryschema.GroupResource{Group: "c9s.run", Resource: "topologies"},
+			obj.GetName(),
+			errInjectedTopologyConflict,
+		)
+	}
+
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func TestUpdateTopologyStatusRetriesResourceVersionConflict(t *testing.T) {
+	t.Parallel()
+
+	scheme := apimachineryruntime.NewScheme()
+
+	err := clabernetesapisv1alpha1.AddToScheme(scheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	topology := &clabernetesapisv1alpha1.Topology{ObjectMeta: metav1.ObjectMeta{
+		Name: "retry-lab", Namespace: "clabernetes",
+	}}
+	baseClient := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(topology).
+		Build()
+	client := &topologyConflictOnceClient{Client: baseClient}
+	reconciler := &Reconciler{Client: client}
+	desired := clabernetesapisv1alpha1.TopologyStatus{NodeCount: 2, ReadyNodeCount: 2}
+
+	err = reconciler.updateTopologyStatus(context.Background(), topology, &desired)
+	if err != nil {
+		t.Fatalf("updateTopologyStatus() failed after retryable conflict: %s", err)
+	}
+
+	if client.updateCalls != 2 {
+		t.Fatalf("status update calls = %d, want 2", client.updateCalls)
+	}
+
+	actual := &clabernetesapisv1alpha1.Topology{}
+
+	err = baseClient.Get(
+		context.Background(),
+		ctrlruntimeclient.ObjectKeyFromObject(topology),
+		actual,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if actual.Status.ReadyNodeCount != 2 {
+		t.Fatalf("stored ready node count = %d, want 2", actual.Status.ReadyNodeCount)
+	}
+}
 
 func TestReconcileStatusRemainsBounded(t *testing.T) {
 	scheme := apimachineryruntime.NewScheme()

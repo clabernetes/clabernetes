@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -101,9 +102,10 @@ type clabernetes struct {
 	// containerIDs holds *all* ids of containers running --in theory we could have other side-car
 	// type stuff running so just catching all them here so we know if/when things fail
 	containerIDs []string
-	// meanwhile nodeContainerID is the container id of hte specific node this launcher represents
-	// -- meaning the single node from the original topology this launcher is representing
-	nodeContainerID string
+	// nodeContainerIDs maps every topology node hosted by this launcher to its nested Docker
+	// container. Readiness is group-atomic: the shared launcher pod is ready only when every
+	// member is ready.
+	nodeContainerIDs map[string]string
 
 	// initialTunnels holds the local tunnel view listed while materializing the topology -- the
 	// same snapshot seeds the connectivity manager so the tunnels it establishes line up with
@@ -248,9 +250,22 @@ func (c *clabernetes) launch() {
 		)
 	}
 
-	c.nodeContainerID, err = getContainerIDForNodeName(c.ctx, c.nodeName)
-	if err != nil {
-		c.logger.Fatalf("failed determining node %q container id, err: %s", c.nodeName, err)
+	c.nodeContainerIDs = make(map[string]string)
+
+	for _, member := range launcherGroupMembers(
+		c.nodeName,
+		os.Getenv(clabernetesconstants.LauncherGroupMembersEnv),
+	) {
+		containerID, lookupErr := getContainerIDForNodeName(c.ctx, member)
+		if lookupErr != nil {
+			c.logger.Fatalf("failed determining node %q container id, err: %s", member, lookupErr)
+		}
+
+		if containerID == "" {
+			c.logger.Fatalf("failed determining node %q container id: container not found", member)
+		}
+
+		c.nodeContainerIDs[member] = containerID
 	}
 
 	c.logger.Debug("containerlab launched successfully")
@@ -340,18 +355,24 @@ func (c *clabernetes) statusProbeConfiguration() (*statusProbeConfiguration, boo
 }
 
 func (c *clabernetes) getNodeReadiness(config *statusProbeConfiguration) bool {
-	containerReady, err := getContainerReadiness(c.ctx, c.nodeContainerID)
+	member, groupReady, err := getGroupContainerReadiness(
+		c.ctx,
+		c.nodeContainerIDs,
+		getContainerReadiness,
+	)
 	if err != nil {
 		c.logger.Warnf(
 			"failed determining node %q container readiness, error: %s",
-			c.nodeName,
+			member,
 			err,
 		)
 
 		return false
 	}
 
-	if !containerReady {
+	if !groupReady {
+		c.logger.Debugf("node %q container is not ready", member)
+
 		return false
 	}
 
@@ -362,7 +383,7 @@ func (c *clabernetes) getNodeReadiness(config *statusProbeConfiguration) bool {
 		return true
 	}
 
-	nodeAddr, err := getContainerAddr(c.ctx, c.nodeContainerID)
+	nodeAddr, err := getContainerAddr(c.ctx, c.nodeContainerIDs[c.nodeName])
 	if err != nil {
 		c.logger.Warnf(
 			"failed determining node %q address, error: %s",
@@ -383,6 +404,52 @@ func (c *clabernetes) getNodeReadiness(config *statusProbeConfiguration) bool {
 		config.sshUsername,
 		config.sshPassword,
 	)
+}
+
+func getGroupContainerReadiness(
+	ctx context.Context,
+	containerIDs map[string]string,
+	readiness func(context.Context, string) (bool, error),
+) (member string, ready bool, err error) {
+	for _, member = range sortedContainerNames(containerIDs) {
+		ready, err = readiness(ctx, containerIDs[member])
+		if err != nil || !ready {
+			return member, ready, err
+		}
+	}
+
+	return "", true, nil
+}
+
+func launcherGroupMembers(primary, secondaryCSV string) []string {
+	members := map[string]struct{}{}
+
+	for _, member := range append([]string{primary}, strings.Split(secondaryCSV, ",")...) {
+		member = strings.TrimSpace(member)
+		if member != "" {
+			members[member] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(members))
+	for member := range members {
+		result = append(result, member)
+	}
+
+	sort.Strings(result)
+
+	return result
+}
+
+func sortedContainerNames(containerIDs map[string]string) []string {
+	names := make([]string, 0, len(containerIDs))
+	for name := range containerIDs {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+
+	return names
 }
 
 func probeTCP(port int, nodeAddr string) bool {

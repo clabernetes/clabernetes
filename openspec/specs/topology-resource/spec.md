@@ -131,7 +131,16 @@ The system SHALL document and support direct application of generated primitive 
 
 The compiler SHALL accept a Containerlab definition that carries node vocabulary c9s does not implement, so an existing working Containerlab topology can be used unchanged. Fields the compiler does not recognize MUST be omitted from the emitted resources, and each one MUST be reported as a warning naming the field and its location in the definition. Unrecognized vocabulary MUST NOT fail compilation.
 
+The compiler SHALL expose an unsupported-field policy. The compatibility Topology controller uses
+the warning policy above. Strict callers MAY select an error policy, in which case all otherwise
+lossy warnings are collected into deterministic structured diagnostics and compilation fails before
+resources are rendered. This allows a CLI runtime to share the compiler's capability matrix without
+silently changing topology semantics.
+
 A definition that is malformed, or that declares a recognized field with an unusable value, SHALL still fail compilation rather than have that field silently omitted.
+Structures that cannot identify realizable c9s resources, including external bridge/host pseudo
+nodes, unresolved endpoint Nodes, `mgmt-net` or macvlan endpoints, and unsupported explicit link
+types, SHALL fail under every policy.
 
 #### Scenario: Compile a definition carrying unimplemented vocabulary
 
@@ -147,6 +156,19 @@ A definition that is malformed, or that declares a recognized field with an unus
 
 - **WHEN** direct manifest generation runs against a definition carrying unimplemented vocabulary
 - **THEN** it reports the same omitted fields before the user applies anything
+
+#### Scenario: Strict caller rejects lossy compatibility
+
+- **WHEN** a strict caller compiles a definition containing unsupported fields, native management
+  network settings, host-side port pinning, unusable labels, or link labels and vars that c9s cannot
+  preserve
+- **THEN** compilation fails with sorted diagnostics naming every unsupported location
+
+#### Scenario: Structurally impossible link fails in compatibility mode
+
+- **WHEN** a definition references an external bridge, `mgmt-net`, macvlan, a nonexistent Node, or
+  an unsupported explicit link type
+- **THEN** compilation fails instead of creating resources that can only fail after deployment
 
 #### Scenario: Reject a recognized field holding an unusable value
 

@@ -1,13 +1,32 @@
 package topology_test
 
 import (
+	"errors"
 	"reflect"
+	"slices"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
+
+func compileDefinitionWithOptions(
+	t *testing.T,
+	definition string,
+	options clabernetescontrollerstopology.CompileOptions,
+) (*clabernetescontrollerstopology.CompiledTopology, error) {
+	t.Helper()
+
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Spec.Definition.Containerlab = definition
+
+	return clabernetescontrollerstopology.CompileTopologyWithOptions(
+		&claberneteslogging.FakeInstance{},
+		topology,
+		options,
+	)
+}
 
 const flattenTestDefinition = `
 name: flatten-test
@@ -210,5 +229,145 @@ func TestCompileContainerlabLinks(t *testing.T) {
 
 	if !reflect.DeepEqual(compiled.Links, expected) {
 		t.Fatalf("expected links %+v, got %+v", expected, compiled.Links)
+	}
+}
+
+func TestCompileTopologyStrictRejectsLossyCompatibility(t *testing.T) {
+	definition := `
+name: strict-test
+mgmt:
+  ipv4-subnet: 172.30.30.0/24
+topology:
+  nodes:
+    n1:
+      kind: linux
+      image: ghcr.io/srl-labs/network-multitool
+      cpu: 2
+      ports: [22022:22/tcp]
+  links:
+    - endpoints: ["n1:eth1", "host:veth-review"]
+      labels: {purpose: review}
+      vars: {delay: 10}
+`
+
+	// The compatibility controller remains permissive.
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Spec.Definition.Containerlab = definition
+
+	_, err := clabernetescontrollerstopology.CompileTopology(
+		&claberneteslogging.FakeInstance{},
+		topology,
+	)
+	if err != nil {
+		t.Fatalf("warning policy unexpectedly rejected topology: %s", err)
+	}
+
+	_, err = compileDefinitionWithOptions(
+		t,
+		definition,
+		clabernetescontrollerstopology.CompileOptions{
+			UnsupportedFieldPolicy: clabernetescontrollerstopology.UnsupportedFieldPolicyError,
+		},
+	)
+	if err == nil {
+		t.Fatal("strict compilation accepted lossy topology")
+	}
+
+	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	codes := make([]string, 0, len(unsupported.Diagnostics))
+	for _, diagnostic := range unsupported.Diagnostics {
+		codes = append(codes, diagnostic.Code)
+	}
+
+	for _, expected := range []string{
+		"host-port-pinning",
+		"management-network-semantics",
+		"unsupported-field",
+		"unsupported-link-labels",
+		"unsupported-link-vars",
+	} {
+		if !slices.Contains(codes, expected) {
+			t.Errorf("expected diagnostic %q, got %v", expected, codes)
+		}
+	}
+}
+
+func TestCompileTopologyAlwaysRejectsImpossibleStructures(t *testing.T) {
+	tests := map[string]string{
+		"bridge pseudo node": `
+name: bridge-test
+topology:
+  nodes:
+    br0: {kind: bridge}
+`,
+		"mgmt endpoint": `
+name: mgmt-test
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine}
+  links:
+    - endpoints: ["n1:eth1", "mgmt-net:n1-eth1"]
+`,
+		"missing node": `
+name: missing-test
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine}
+  links:
+    - endpoints: ["n1:eth1", "n2:eth1"]
+`,
+		"explicit vxlan": `
+name: vxlan-test
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine}
+  links:
+    - type: vxlan
+      remote: 192.0.2.1
+      endpoint: {node: n1, interface: eth1}
+`,
+		"host network mode": `
+name: host-network-test
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine, network-mode: host}
+`,
+		"missing network mode primary": `
+name: missing-primary-test
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine, network-mode: container:missing}
+`,
+		"network mode cycle": `
+name: cycle-test
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine, network-mode: container:n2}
+    n2: {kind: linux, image: alpine, network-mode: container:n1}
+`,
+	}
+
+	for name, definition := range tests {
+		t.Run(name, func(t *testing.T) {
+			topology := &clabernetesapisv1alpha1.Topology{}
+			topology.Spec.Definition.Containerlab = definition
+
+			_, err := clabernetescontrollerstopology.CompileTopology(
+				&claberneteslogging.FakeInstance{},
+				topology,
+			)
+			if err == nil {
+				t.Fatal("warning policy accepted structurally unsupported topology")
+			}
+
+			unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+			if !errors.As(err, &unsupported) {
+				t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+			}
+		})
 	}
 }
