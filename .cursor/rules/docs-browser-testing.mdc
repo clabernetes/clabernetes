@@ -1,0 +1,12 @@
+---
+description: Run browser-based documentation tests only when explicitly requested
+alwaysApply: true
+---
+
+# Browser-based documentation testing
+
+- Do not automatically load or run `test-fumadocs-wrangler` after documentation edits.
+- Only use the browser-based Wrangler/Playwright skill when the user explicitly requests
+  browser-based, headless, Wrangler, production-like, direct-load, refresh, or redirect testing.
+- Static documentation checks such as build, typecheck, link validation, and unit tests may run when
+  relevant, but do not launch a browser or Wrangler without explicit user approval.

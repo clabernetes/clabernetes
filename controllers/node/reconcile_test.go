@@ -29,7 +29,8 @@ import (
 type conflictOnceClient struct {
 	ctrlruntimeclient.Client
 
-	updateCalls int
+	updateCalls    int
+	beforeConflict func(context.Context, ctrlruntimeclient.Object) error
 }
 
 type countingNodeReader struct {
@@ -58,6 +59,13 @@ func (c *conflictOnceClient) Update(
 ) error {
 	c.updateCalls++
 	if c.updateCalls == 1 {
+		if c.beforeConflict != nil {
+			err := c.beforeConflict(ctx, obj)
+			if err != nil {
+				return err
+			}
+		}
+
 		return apimachineryerrors.NewConflict(
 			apimachineryschema.GroupResource{Group: "c9s.run", Resource: "nodes"},
 			obj.GetName(),
@@ -74,7 +82,21 @@ func TestUpdateNodeStatusRetriesResourceVersionConflict(t *testing.T) {
 	scheme := nodeReconcileTestScheme(t)
 	node := nodeReconcileTestNode()
 	baseClient := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
-	client := &conflictOnceClient{Client: baseClient}
+	client := &conflictOnceClient{
+		Client: baseClient,
+		beforeConflict: func(ctx context.Context, obj ctrlruntimeclient.Object) error {
+			current := &clabernetesapisv1alpha1.Node{}
+
+			err := baseClient.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(obj), current)
+			if err != nil {
+				return err
+			}
+
+			current.Status.Readiness = clabernetesconstants.NodeStatusNotReady
+
+			return baseClient.Update(ctx, current)
+		},
+	}
 	apiReader := &countingNodeReader{Reader: baseClient}
 	reconciler := &Reconciler{Client: client, apiReader: apiReader}
 	desired := clabernetesapisv1alpha1.NodeStatus{

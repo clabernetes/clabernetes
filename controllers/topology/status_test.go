@@ -23,7 +23,8 @@ import (
 type topologyConflictOnceClient struct {
 	ctrlruntimeclient.Client
 
-	updateCalls int
+	updateCalls    int
+	beforeConflict func(context.Context, ctrlruntimeclient.Object) error
 }
 
 type countingTopologyReader struct {
@@ -52,6 +53,13 @@ func (c *topologyConflictOnceClient) Update(
 ) error {
 	c.updateCalls++
 	if c.updateCalls == 1 {
+		if c.beforeConflict != nil {
+			err := c.beforeConflict(ctx, obj)
+			if err != nil {
+				return err
+			}
+		}
+
 		return apimachineryerrors.NewConflict(
 			apimachineryschema.GroupResource{Group: "c9s.run", Resource: "topologies"},
 			obj.GetName(),
@@ -79,7 +87,21 @@ func TestUpdateTopologyStatusRetriesResourceVersionConflict(t *testing.T) {
 		WithScheme(scheme).
 		WithObjects(topology).
 		Build()
-	client := &topologyConflictOnceClient{Client: baseClient}
+	client := &topologyConflictOnceClient{
+		Client: baseClient,
+		beforeConflict: func(ctx context.Context, obj ctrlruntimeclient.Object) error {
+			current := &clabernetesapisv1alpha1.Topology{}
+
+			err := baseClient.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(obj), current)
+			if err != nil {
+				return err
+			}
+
+			current.Status.TopologyState = clabernetesapisv1alpha1.TopologyStateDegraded
+
+			return baseClient.Update(ctx, current)
+		},
+	}
 	apiReader := &countingTopologyReader{Reader: baseClient}
 	reconciler := &Reconciler{Client: client, apiReader: apiReader}
 	desired := clabernetesapisv1alpha1.TopologyStatus{NodeCount: 2, ReadyNodeCount: 2}

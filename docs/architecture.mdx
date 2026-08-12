@@ -72,6 +72,12 @@ not an inheritance chain. Shared containerlab management-network settings tempor
 every generated LauncherProfile required by the Topology's Nodes; this is a compatibility bridge,
 not the final ownership model.
 
+Compilation is permissive for lossy fields that can be omitted: the controller emits the supported
+resources and logs warnings with source locations. It fails before resource creation when the
+definition cannot identify realizable c9s resources, including pseudo-nodes, special or unresolved
+endpoints, unsupported explicit link types, and invalid launcher groups. Strict diagnostics are
+available to library callers; `clabverter` does not currently expose a strict-mode flag.
+
 ### Launchers
 
 Each Node gets a Deployment running a single launcher container -- a Debian image with the
@@ -82,6 +88,12 @@ On startup the launcher fetches its own Node object (and those of any grouped no
 the Links terminating on them via field selectors, and verifies that link view against a
 digest annotation the node controller stamped on the pod. From that it materializes a
 containerlab topology file locally and runs plain containerlab.
+
+When status probes are enabled, the launcher checks every nested container in its group. Each must
+be running and not paused, restarting, or dead; an image-defined Docker healthcheck must also be
+healthy. The shared launcher status is therefore group-atomic. Optional TCP and SSH checks are
+additional application checks against the primary Node, while a running image without a
+healthcheck remains only process-level readiness.
 
 ### Inter-Node Connectivity
 

@@ -254,3 +254,13 @@ A Node resource SHALL contain only its own definition, payload references, launc
 
 - **WHEN** additional Nodes and Links are added to the same lab
 - **THEN** the serialized size of an existing unchanged Node does not grow
+
+### Requirement: Node status updates tolerate resource-version conflicts
+
+The Node controller SHALL retry status writes after a resource-version conflict and SHALL avoid
+issuing an update when the current status already equals the desired status.
+
+#### Scenario: Node status races with a generated-resource update
+
+- **WHEN** a Node status write receives a resource-version conflict
+- **THEN** the controller refetches the current Node and retries without failing the reconcile solely because of the conflict

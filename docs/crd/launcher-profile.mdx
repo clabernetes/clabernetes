@@ -7,4 +7,10 @@ icon: Settings2
 The `LauncherProfile` CRD holds reusable Kubernetes and launcher realization policy. Nodes
 reference profiles explicitly via `launcherProfileRef`.
 
+With `statusProbes.enabled`, readiness first requires the nested Docker container to be running
+and, when defined by the image, its Docker healthcheck to be `healthy`. A running image without a
+healthcheck provides process-level readiness only; configure an image healthcheck or an explicit
+TCP/SSH probe when application readiness matters. For grouped Nodes, generic readiness covers every
+member, while TCP/SSH checks remain scoped to the primary Node.
+
 <CrdViewer name="launcher-profile" />

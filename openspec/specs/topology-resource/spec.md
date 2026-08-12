@@ -210,3 +210,13 @@ A label that Kubernetes would reject, or that is in the reserved `c9s.run/` name
 
 - **WHEN** a source topology node declares a valid label using a key such as `app.kubernetes.io/name` that c9s uses for identity or selection
 - **THEN** it is omitted with a warning, because user metadata must not overwrite controller invariants
+
+### Requirement: Topology status updates tolerate resource-version conflicts
+
+The Topology controller SHALL retry aggregate status writes after a resource-version conflict and SHALL
+avoid issuing an update when the current status already equals the desired status.
+
+#### Scenario: Topology status races with a spec update
+
+- **WHEN** a Topology status write receives a resource-version conflict
+- **THEN** the controller refetches the current Topology and retries without failing the reconcile solely because of the conflict
