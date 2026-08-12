@@ -435,16 +435,9 @@ func compileContainerlabLinks( //nolint:gocyclo
 		}
 
 		switch link.Type {
-		case "", "brief", "veth", "host":
+		case "", "brief":
 		default:
-			diagnostics.add(CompilerDiagnostic{
-				Code: "unsupported-link-type",
-				Path: linkPath + ".type",
-				Message: fmt.Sprintf(
-					"native link type %q has no c9s topology-link equivalent",
-					link.Type,
-				),
-			}, true)
+			diagnostics.add(unsupportedContainerlabLinkTypeDiagnostic(link.Type, linkPath), true)
 
 			continue
 		}
@@ -533,4 +526,25 @@ func compileContainerlabLinks( //nolint:gocyclo
 	}
 
 	return links, nil
+}
+
+func unsupportedContainerlabLinkTypeDiagnostic(linkType, linkPath string) CompilerDiagnostic {
+	message := fmt.Sprintf(
+		"native link type %q has no c9s topology-link equivalent",
+		linkType,
+	)
+
+	if linkType == "veth" || linkType == "host" {
+		message = fmt.Sprintf(
+			"explicit native link type %q requires structured endpoints that the "+
+				"c9s topology compiler does not support; use brief endpoints",
+			linkType,
+		)
+	}
+
+	return CompilerDiagnostic{
+		Code:    "unsupported-link-type",
+		Path:    linkPath + ".type",
+		Message: message,
+	}
 }

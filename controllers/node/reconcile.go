@@ -33,6 +33,7 @@ type Reconciler struct {
 	Client ctrlruntimeclient.Client
 
 	configManagerGetter clabernetesconfig.ManagerGetterFunc
+	apiReader           ctrlruntimeclient.Reader
 
 	namespaceResourcesReconciler *NamespaceResourcesReconciler
 
@@ -46,6 +47,7 @@ type Reconciler struct {
 func NewReconciler(
 	log claberneteslogging.Instance,
 	client ctrlruntimeclient.Client,
+	apiReader ctrlruntimeclient.Reader,
 	managerAppName,
 	managerNamespace,
 	criKind string,
@@ -55,6 +57,7 @@ func NewReconciler(
 		Log:                 log,
 		Client:              client,
 		configManagerGetter: configManagerGetter,
+		apiReader:           apiReader,
 		namespaceResourcesReconciler: NewNamespaceResourcesReconciler(
 			log,
 			client,
@@ -454,13 +457,18 @@ func (r *Reconciler) updateNodeStatus(
 	}
 
 	key := ctrlruntimeclient.ObjectKeyFromObject(node)
+	reader := r.apiReader
+
+	if reader == nil {
+		reader = r.Client
+	}
 
 	var updated *clabernetesapisv1alpha1.Node
 
 	err := clientretry.RetryOnConflict(clientretry.DefaultRetry, func() error {
 		current := &clabernetesapisv1alpha1.Node{}
 
-		err := r.Client.Get(ctx, key, current)
+		err := reader.Get(ctx, key, current)
 		if err != nil {
 			return err
 		}

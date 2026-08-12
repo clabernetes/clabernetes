@@ -32,6 +32,23 @@ type conflictOnceClient struct {
 	updateCalls int
 }
 
+type countingNodeReader struct {
+	ctrlruntimeclient.Reader
+
+	getCalls int
+}
+
+func (r *countingNodeReader) Get(
+	ctx context.Context,
+	key ctrlruntimeclient.ObjectKey,
+	obj ctrlruntimeclient.Object,
+	opts ...ctrlruntimeclient.GetOption,
+) error {
+	r.getCalls++
+
+	return r.Reader.Get(ctx, key, obj, opts...)
+}
+
 var errInjectedNodeConflict = errors.New("injected conflict")
 
 func (c *conflictOnceClient) Update(
@@ -58,7 +75,8 @@ func TestUpdateNodeStatusRetriesResourceVersionConflict(t *testing.T) {
 	node := nodeReconcileTestNode()
 	baseClient := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
 	client := &conflictOnceClient{Client: baseClient}
-	reconciler := &Reconciler{Client: client}
+	apiReader := &countingNodeReader{Reader: baseClient}
+	reconciler := &Reconciler{Client: client, apiReader: apiReader}
 	desired := clabernetesapisv1alpha1.NodeStatus{
 		Readiness: clabernetesconstants.NodeStatusReady,
 	}
@@ -70,6 +88,10 @@ func TestUpdateNodeStatusRetriesResourceVersionConflict(t *testing.T) {
 
 	if client.updateCalls != 2 {
 		t.Fatalf("status update calls = %d, want 2", client.updateCalls)
+	}
+
+	if apiReader.getCalls != 2 {
+		t.Fatalf("direct status reads = %d, want 2", apiReader.getCalls)
 	}
 
 	actual := &clabernetesapisv1alpha1.Node{}
@@ -397,6 +419,7 @@ func TestReconcileFailsClosedForMissingLauncherProfile(t *testing.T) {
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{},
 		client,
+		client,
 		"clabernetes",
 		"clabernetes",
 		clabernetesconstants.KubernetesCRIContainerd,
@@ -615,6 +638,7 @@ func TestReconcileGroupedNodesInheritPrimaryLauncherProfile(t *testing.T) {
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{},
 		client,
+		client,
 		"clabernetes",
 		"clabernetes",
 		clabernetesconstants.KubernetesCRIContainerd,
@@ -669,6 +693,7 @@ func TestReconcileRejectsGroupedLauncherProfileConflict(t *testing.T) {
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{},
+		client,
 		client,
 		"clabernetes",
 		"clabernetes",

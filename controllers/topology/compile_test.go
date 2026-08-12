@@ -11,6 +11,16 @@ import (
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
+type warningRecordingLogger struct {
+	claberneteslogging.FakeInstance
+
+	warnings []string
+}
+
+func (l *warningRecordingLogger) Warn(message string) {
+	l.warnings = append(l.warnings, message)
+}
+
 func compileDefinitionWithOptions(
 	t *testing.T,
 	definition string,
@@ -296,6 +306,37 @@ topology:
 	}
 }
 
+func TestCompileTopologyWarningsIncludeLocations(t *testing.T) {
+	definition := `
+name: warning-locations
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine}
+    n2: {kind: linux, image: alpine}
+  links:
+    - endpoints: ["n1:eth1", "n2:eth1"]
+      labels: {purpose: first}
+    - endpoints: ["n1:eth2", "n2:eth2"]
+      vars: {purpose: second}
+`
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Spec.Definition.Containerlab = definition
+	logger := &warningRecordingLogger{}
+
+	_, err := clabernetescontrollerstopology.CompileTopology(logger, topology)
+	if err != nil {
+		t.Fatalf("warning policy unexpectedly rejected topology: %s", err)
+	}
+
+	want := []string{
+		"topology.links[0].labels: link labels are not preserved by the c9s Link API",
+		"topology.links[1].vars: link vars are not preserved by the c9s Link API",
+	}
+	if !reflect.DeepEqual(logger.warnings, want) {
+		t.Fatalf("warnings = %q, want %q", logger.warnings, want)
+	}
+}
+
 func TestCompileTopologyAlwaysRejectsImpossibleStructures(t *testing.T) {
 	tests := map[string]string{
 		"bridge pseudo node": `
@@ -329,6 +370,25 @@ topology:
     - type: vxlan
       remote: 192.0.2.1
       endpoint: {node: n1, interface: eth1}
+`,
+		"explicit veth with brief endpoints": `
+name: explicit-veth-test
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine}
+    n2: {kind: linux, image: alpine}
+  links:
+    - type: veth
+      endpoints: ["n1:eth1", "n2:eth1"]
+`,
+		"explicit host with brief endpoints": `
+name: explicit-host-test
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine}
+  links:
+    - type: host
+      endpoints: ["n1:eth1", "host:veth-n1"]
 `,
 		"host network mode": `
 name: host-network-test

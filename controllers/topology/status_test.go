@@ -26,6 +26,23 @@ type topologyConflictOnceClient struct {
 	updateCalls int
 }
 
+type countingTopologyReader struct {
+	ctrlruntimeclient.Reader
+
+	getCalls int
+}
+
+func (r *countingTopologyReader) Get(
+	ctx context.Context,
+	key ctrlruntimeclient.ObjectKey,
+	obj ctrlruntimeclient.Object,
+	opts ...ctrlruntimeclient.GetOption,
+) error {
+	r.getCalls++
+
+	return r.Reader.Get(ctx, key, obj, opts...)
+}
+
 var errInjectedTopologyConflict = errors.New("injected conflict")
 
 func (c *topologyConflictOnceClient) Update(
@@ -63,7 +80,8 @@ func TestUpdateTopologyStatusRetriesResourceVersionConflict(t *testing.T) {
 		WithObjects(topology).
 		Build()
 	client := &topologyConflictOnceClient{Client: baseClient}
-	reconciler := &Reconciler{Client: client}
+	apiReader := &countingTopologyReader{Reader: baseClient}
+	reconciler := &Reconciler{Client: client, apiReader: apiReader}
 	desired := clabernetesapisv1alpha1.TopologyStatus{NodeCount: 2, ReadyNodeCount: 2}
 
 	err = reconciler.updateTopologyStatus(context.Background(), topology, &desired)
@@ -73,6 +91,10 @@ func TestUpdateTopologyStatusRetriesResourceVersionConflict(t *testing.T) {
 
 	if client.updateCalls != 2 {
 		t.Fatalf("status update calls = %d, want 2", client.updateCalls)
+	}
+
+	if apiReader.getCalls != 2 {
+		t.Fatalf("direct status reads = %d, want 2", apiReader.getCalls)
 	}
 
 	actual := &clabernetesapisv1alpha1.Topology{}

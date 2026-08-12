@@ -50,19 +50,23 @@ func (e *UnsupportedFeaturesError) Error() string {
 
 	parts := make([]string, 0, len(e.Diagnostics))
 	for _, diagnostic := range e.Diagnostics {
-		location := diagnostic.Path
-		if location == "" {
-			location = "topology"
-		}
-
-		if diagnostic.Line > 0 {
-			location = fmt.Sprintf("%s (line %d)", location, diagnostic.Line)
-		}
-
-		parts = append(parts, fmt.Sprintf("%s: %s", location, diagnostic.Message))
+		parts = append(parts, formatCompilerDiagnostic(diagnostic))
 	}
 
 	return "topology contains features unsupported by c9s: " + strings.Join(parts, "; ")
+}
+
+func formatCompilerDiagnostic(diagnostic CompilerDiagnostic) string {
+	location := diagnostic.Path
+	if location == "" {
+		location = "topology"
+	}
+
+	if diagnostic.Line > 0 {
+		location = fmt.Sprintf("%s (line %d)", location, diagnostic.Line)
+	}
+
+	return fmt.Sprintf("%s: %s", location, diagnostic.Message)
 }
 
 type compileDiagnostics struct {
@@ -89,7 +93,7 @@ func (d *compileDiagnostics) add(diagnostic CompilerDiagnostic, alwaysError bool
 	d.forceError = d.forceError || alwaysError
 
 	if d.policy == UnsupportedFieldPolicyWarn && !alwaysError {
-		d.logger.Warn(diagnostic.Message)
+		d.logger.Warn(formatCompilerDiagnostic(diagnostic))
 	}
 }
 

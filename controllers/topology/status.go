@@ -87,13 +87,18 @@ func (r *Reconciler) updateTopologyStatus(
 	}
 
 	key := ctrlruntimeclient.ObjectKeyFromObject(topology)
+	reader := r.apiReader
+
+	if reader == nil {
+		reader = r.Client
+	}
 
 	var updated *clabernetesapisv1alpha1.Topology
 
 	err := clientretry.RetryOnConflict(clientretry.DefaultRetry, func() error {
 		current := &clabernetesapisv1alpha1.Topology{}
 
-		err := r.Client.Get(ctx, key, current)
+		err := reader.Get(ctx, key, current)
 		if err != nil {
 			return err
 		}
