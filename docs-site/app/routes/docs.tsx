@@ -42,6 +42,16 @@ export async function loader({ params }: Route.LoaderArgs) {
   };
 }
 
+export async function clientLoader({
+  serverLoader,
+}: Route.ClientLoaderArgs) {
+  const data = await serverLoader();
+  await docs.getPage(data.path)?.preload();
+  return data;
+}
+
+clientLoader.hydrate = true;
+
 function Content({ path }: { path: string }) {
   const page = docs.getPage(path);
 
