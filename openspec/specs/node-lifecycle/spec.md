@@ -196,6 +196,11 @@ When status probes are enabled for a non-excluded Node, the launcher SHALL repor
 when the represented nested Docker container is running and is not paused, restarting, or dead. If
 the nested image defines a Docker healthcheck, that healthcheck SHALL also report `healthy`.
 
+When multiple Nodes share one launcher through `network-mode: container:<primary>`, the launcher
+SHALL evaluate the generic nested-container readiness of every group member. The shared launcher
+Pod SHALL be ready only when all group members are ready; all member Nodes inherit that atomic
+group result. Application-specific TCP or SSH probes remain scoped to the primary Node.
+
 #### Scenario: Generic Node has no application-specific probe
 
 - **WHEN** a Node uses an enabled status-probe configuration without TCP or SSH settings
@@ -212,6 +217,12 @@ the nested image defines a Docker healthcheck, that healthcheck SHALL also repor
 
 - **WHEN** the represented nested container is stopped, paused, restarting, or dead
 - **THEN** the Node reports not ready
+
+#### Scenario: Grouped secondary container restarts
+
+- **WHEN** a secondary nested container is paused, restarting, stopped, dead, or has an unhealthy
+  image healthcheck while the primary remains healthy
+- **THEN** the shared launcher Pod and every Node in the launcher group report not ready
 
 #### Scenario: Image healthcheck is not healthy
 
@@ -243,3 +254,13 @@ A Node resource SHALL contain only its own definition, payload references, launc
 
 - **WHEN** additional Nodes and Links are added to the same lab
 - **THEN** the serialized size of an existing unchanged Node does not grow
+
+### Requirement: Node status updates tolerate resource-version conflicts
+
+The Node controller SHALL retry status writes after a resource-version conflict and SHALL avoid
+issuing an update when the current status already equals the desired status.
+
+#### Scenario: Node status races with a generated-resource update
+
+- **WHEN** a Node status write receives a resource-version conflict
+- **THEN** the controller refetches the current Node and retries without failing the reconcile solely because of the conflict

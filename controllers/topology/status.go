@@ -8,6 +8,7 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clientretry "k8s.io/client-go/util/retry"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -73,13 +74,56 @@ func (r *Reconciler) reconcileStatus(
 		})
 	}
 
-	if reflect.DeepEqual(topology.Status, desiredStatus) {
+	return r.updateTopologyStatus(ctx, topology, &desiredStatus)
+}
+
+func (r *Reconciler) updateTopologyStatus(
+	ctx context.Context,
+	topology *clabernetesapisv1alpha1.Topology,
+	desiredStatus *clabernetesapisv1alpha1.TopologyStatus,
+) error {
+	if reflect.DeepEqual(topology.Status, *desiredStatus) {
 		return nil
 	}
 
-	topology.Status = desiredStatus
+	key := ctrlruntimeclient.ObjectKeyFromObject(topology)
+	reader := r.apiReader
 
-	return r.Client.Update(ctx, topology)
+	if reader == nil {
+		reader = r.Client
+	}
+
+	var updated *clabernetesapisv1alpha1.Topology
+
+	err := clientretry.RetryOnConflict(clientretry.DefaultRetry, func() error {
+		current := &clabernetesapisv1alpha1.Topology{}
+
+		err := reader.Get(ctx, key, current)
+		if err != nil {
+			return err
+		}
+
+		if reflect.DeepEqual(current.Status, *desiredStatus) {
+			updated = current
+
+			return nil
+		}
+
+		current.Status = *desiredStatus
+
+		updateErr := r.Client.Update(ctx, current)
+		if updateErr == nil {
+			updated = current
+		}
+
+		return updateErr
+	})
+	if err == nil && updated != nil {
+		topology.Status = updated.Status
+		topology.SetResourceVersion(updated.GetResourceVersion())
+	}
+
+	return err
 }
 
 // resolveTopologyState derives the high level lifecycle state from the readiness counts and the

@@ -51,6 +51,7 @@ func NewController(
 		reconciler: NewReconciler(
 			baseController.Log,
 			baseController.Client,
+			clabernetes.GetCtrlRuntimeMgr().GetAPIReader(),
 			clabernetes.GetAppName(),
 			clabernetes.GetNamespace(),
 			clabernetes.GetClusterCRIKind(),

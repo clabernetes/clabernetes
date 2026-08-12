@@ -275,9 +275,10 @@ func getContainerIDForNodeName(ctx context.Context, nodeName string) (string, er
 		ctx,
 		"docker",
 		"ps",
+		"--all",
 		"--quiet",
 		"--filter",
-		fmt.Sprintf("name=%s", nodeName),
+		fmt.Sprintf("label=clab-node-name=%s", nodeName),
 	)
 
 	output, err := psCmd.Output()
@@ -285,7 +286,20 @@ func getContainerIDForNodeName(ctx context.Context, nodeName string) (string, er
 		return "", err
 	}
 
-	return strings.TrimSpace(string(output)), nil
+	containerIDs := strings.Fields(string(output))
+	if len(containerIDs) > 1 {
+		return "", fmt.Errorf(
+			"%w: found multiple containers for node %q",
+			claberneteserrors.ErrInvalidData,
+			nodeName,
+		)
+	}
+
+	if len(containerIDs) == 0 {
+		return "", nil
+	}
+
+	return containerIDs[0], nil
 }
 
 func getContainerAddr(ctx context.Context, containerID string) (string, error) {

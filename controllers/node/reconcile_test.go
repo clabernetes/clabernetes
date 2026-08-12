@@ -2,6 +2,7 @@ package node //nolint:testpackage // tests exercise unexported reconciliation he
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -17,12 +18,119 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
+	apimachineryschema "k8s.io/apimachinery/pkg/runtime/schema"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	ctrlruntimeutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
+
+type conflictOnceClient struct {
+	ctrlruntimeclient.Client
+
+	updateCalls    int
+	beforeConflict func(context.Context, ctrlruntimeclient.Object) error
+}
+
+type countingNodeReader struct {
+	ctrlruntimeclient.Reader
+
+	getCalls int
+}
+
+func (r *countingNodeReader) Get(
+	ctx context.Context,
+	key ctrlruntimeclient.ObjectKey,
+	obj ctrlruntimeclient.Object,
+	opts ...ctrlruntimeclient.GetOption,
+) error {
+	r.getCalls++
+
+	return r.Reader.Get(ctx, key, obj, opts...)
+}
+
+var errInjectedNodeConflict = errors.New("injected conflict")
+
+func (c *conflictOnceClient) Update(
+	ctx context.Context,
+	obj ctrlruntimeclient.Object,
+	opts ...ctrlruntimeclient.UpdateOption,
+) error {
+	c.updateCalls++
+	if c.updateCalls == 1 {
+		if c.beforeConflict != nil {
+			err := c.beforeConflict(ctx, obj)
+			if err != nil {
+				return err
+			}
+		}
+
+		return apimachineryerrors.NewConflict(
+			apimachineryschema.GroupResource{Group: "c9s.run", Resource: "nodes"},
+			obj.GetName(),
+			errInjectedNodeConflict,
+		)
+	}
+
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+func TestUpdateNodeStatusRetriesResourceVersionConflict(t *testing.T) {
+	t.Parallel()
+
+	scheme := nodeReconcileTestScheme(t)
+	node := nodeReconcileTestNode()
+	baseClient := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
+	client := &conflictOnceClient{
+		Client: baseClient,
+		beforeConflict: func(ctx context.Context, obj ctrlruntimeclient.Object) error {
+			current := &clabernetesapisv1alpha1.Node{}
+
+			err := baseClient.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(obj), current)
+			if err != nil {
+				return err
+			}
+
+			current.Status.Readiness = clabernetesconstants.NodeStatusNotReady
+
+			return baseClient.Update(ctx, current)
+		},
+	}
+	apiReader := &countingNodeReader{Reader: baseClient}
+	reconciler := &Reconciler{Client: client, apiReader: apiReader}
+	desired := clabernetesapisv1alpha1.NodeStatus{
+		Readiness: clabernetesconstants.NodeStatusReady,
+	}
+
+	err := reconciler.updateNodeStatus(context.Background(), node, desired)
+	if err != nil {
+		t.Fatalf("updateNodeStatus() failed after retryable conflict: %s", err)
+	}
+
+	if client.updateCalls != 2 {
+		t.Fatalf("status update calls = %d, want 2", client.updateCalls)
+	}
+
+	if apiReader.getCalls != 2 {
+		t.Fatalf("direct status reads = %d, want 2", apiReader.getCalls)
+	}
+
+	actual := &clabernetesapisv1alpha1.Node{}
+
+	err = baseClient.Get(
+		context.Background(),
+		ctrlruntimeclient.ObjectKeyFromObject(node),
+		actual,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if actual.Status.Readiness != clabernetesconstants.NodeStatusReady {
+		t.Fatalf("stored readiness = %q, want ready", actual.Status.Readiness)
+	}
+}
 
 func TestReconcileFabricServicePreservesClusterAllocation(t *testing.T) {
 	scheme := nodeReconcileTestScheme(t)
@@ -333,6 +441,7 @@ func TestReconcileFailsClosedForMissingLauncherProfile(t *testing.T) {
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{},
 		client,
+		client,
 		"clabernetes",
 		"clabernetes",
 		clabernetesconstants.KubernetesCRIContainerd,
@@ -551,6 +660,7 @@ func TestReconcileGroupedNodesInheritPrimaryLauncherProfile(t *testing.T) {
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{},
 		client,
+		client,
 		"clabernetes",
 		"clabernetes",
 		clabernetesconstants.KubernetesCRIContainerd,
@@ -605,6 +715,7 @@ func TestReconcileRejectsGroupedLauncherProfileConflict(t *testing.T) {
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{},
+		client,
 		client,
 		"clabernetes",
 		"clabernetes",

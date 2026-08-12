@@ -18,6 +18,7 @@ import (
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	clientretry "k8s.io/client-go/util/retry"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimeutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -32,6 +33,7 @@ type Reconciler struct {
 	Client ctrlruntimeclient.Client
 
 	configManagerGetter clabernetesconfig.ManagerGetterFunc
+	apiReader           ctrlruntimeclient.Reader
 
 	namespaceResourcesReconciler *NamespaceResourcesReconciler
 
@@ -45,6 +47,7 @@ type Reconciler struct {
 func NewReconciler(
 	log claberneteslogging.Instance,
 	client ctrlruntimeclient.Client,
+	apiReader ctrlruntimeclient.Reader,
 	managerAppName,
 	managerNamespace,
 	criKind string,
@@ -54,6 +57,7 @@ func NewReconciler(
 		Log:                 log,
 		Client:              client,
 		configManagerGetter: configManagerGetter,
+		apiReader:           apiReader,
 		namespaceResourcesReconciler: NewNamespaceResourcesReconciler(
 			log,
 			client,
@@ -452,9 +456,44 @@ func (r *Reconciler) updateNodeStatus(
 		return nil
 	}
 
-	node.Status = desiredStatus
+	key := ctrlruntimeclient.ObjectKeyFromObject(node)
+	reader := r.apiReader
 
-	return r.Client.Update(ctx, node)
+	if reader == nil {
+		reader = r.Client
+	}
+
+	var updated *clabernetesapisv1alpha1.Node
+
+	err := clientretry.RetryOnConflict(clientretry.DefaultRetry, func() error {
+		current := &clabernetesapisv1alpha1.Node{}
+
+		err := reader.Get(ctx, key, current)
+		if err != nil {
+			return err
+		}
+
+		if reflect.DeepEqual(current.Status, desiredStatus) {
+			updated = current
+
+			return nil
+		}
+
+		current.Status = desiredStatus
+
+		updateErr := r.Client.Update(ctx, current)
+		if updateErr == nil {
+			updated = current
+		}
+
+		return updateErr
+	})
+	if err == nil && updated != nil {
+		node.Status = updated.Status
+		node.SetResourceVersion(updated.GetResourceVersion())
+	}
+
+	return err
 }
 
 func (r *Reconciler) reconcileDeployment(

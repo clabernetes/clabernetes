@@ -27,18 +27,21 @@ type Reconciler struct {
 	Client ctrlruntimeclient.Client
 
 	configManagerGetter clabernetesconfig.ManagerGetterFunc
+	apiReader           ctrlruntimeclient.Reader
 }
 
 // NewReconciler creates a new topology Reconciler.
 func NewReconciler(
 	log claberneteslogging.Instance,
 	client ctrlruntimeclient.Client,
+	apiReader ctrlruntimeclient.Reader,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) *Reconciler {
 	return &Reconciler{
 		Log:                 log,
 		Client:              client,
 		configManagerGetter: configManagerGetter,
+		apiReader:           apiReader,
 	}
 }
 
