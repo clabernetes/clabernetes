@@ -1,4 +1,4 @@
-import { Suspense, use, useMemo } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import { useFumadocsLoader } from 'fumadocs-core/source/client';
 import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import {
@@ -73,11 +73,23 @@ function Content({ path }: { path: string }) {
     throw new Error(`Unknown documentation page: ${path}`);
   }
 
-  return (
-    <Suspense fallback={null}>
-      <MdxPageContent page={page} />
-    </Suspense>
-  );
+  const [preloaded, setPreloaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void page.preload().then(() => {
+      if (active) setPreloaded(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [page]);
+
+  if (!preloaded) {
+    return null;
+  }
+
+  return <MdxPageContent page={page} />;
 }
 
 export default function DocumentationPage({
