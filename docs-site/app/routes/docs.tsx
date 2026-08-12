@@ -1,4 +1,4 @@
-import { use, useEffect, useMemo, useState } from 'react';
+import { use, useMemo } from 'react';
 import { useFumadocsLoader } from 'fumadocs-core/source/client';
 import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import {
@@ -43,11 +43,13 @@ export async function loader({ params }: Route.LoaderArgs) {
   };
 }
 
-function MdxPageContent({
-  page,
-}: {
-  page: NonNullable<ReturnType<typeof docs.getPage>>;
-}) {
+function Content({ path }: { path: string }) {
+  const page = docs.getPage(path);
+
+  if (!page) {
+    throw new Error(`Unknown documentation page: ${path}`);
+  }
+
   const { toc } = use(page.load());
   const MDX = page.body;
 
@@ -64,32 +66,6 @@ function MdxPageContent({
       </DocsBody>
     </DocsPage>
   );
-}
-
-function Content({ path }: { path: string }) {
-  const page = docs.getPage(path);
-
-  if (!page) {
-    throw new Error(`Unknown documentation page: ${path}`);
-  }
-
-  const [preloaded, setPreloaded] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void page.preload().then(() => {
-      if (active) setPreloaded(true);
-    });
-    return () => {
-      active = false;
-    };
-  }, [page]);
-
-  if (!preloaded) {
-    return null;
-  }
-
-  return <MdxPageContent page={page} />;
 }
 
 export default function DocumentationPage({
