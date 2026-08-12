@@ -3,7 +3,6 @@ apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srl-multitool
-  namespace: c9s
 spec:
   statusProbes:
     enabled: true
