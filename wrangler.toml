@@ -5,3 +5,4 @@ preview_urls = true
 [assets]
 directory = "./docs-site/build/client"
 html_handling = "drop-trailing-slash"
+not_found_handling = "single-page-application"
