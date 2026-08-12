@@ -10,10 +10,13 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
+	"strings"
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
 const (
@@ -136,29 +139,100 @@ func (c *clabernetes) installContainerlabVersion(version string) error {
 	return extractContainerlabBin(inTarFile)
 }
 
-func (c *clabernetes) destroyContainerlab() {
-	c.logger.Debug("destroying any existing containerlab topology before deploy...")
-
-	cmd := exec.CommandContext(
-		c.ctx,
-		"containerlab",
-		"destroy",
-		"-t",
-		"topo.clab.yaml",
-		"--cleanup",
-	)
-
-	cmd.Stdout = c.containerlabLogger
-	cmd.Stderr = c.containerlabLogger
-
-	err := cmd.Run()
+// topologyHostInterfaces returns the sanitized names of all "host" link endpoints defined in the
+// given topology -- these are the interfaces containerlab will create in the pod (launcher)
+// network namespace when deploying the topology.
+func topologyHostInterfaces(rawTopology string) ([]string, error) {
+	containerlabConfig, _, err := clabernetesutilcontainerlab.LoadContainerlabConfig(rawTopology)
 	if err != nil {
-		// not fatal — topology may not exist on first run
-		c.logger.Debugf("containerlab destroy returned (expected on first run): %s", err)
+		return nil, err
+	}
+
+	if containerlabConfig.Topology == nil {
+		return nil, nil
+	}
+
+	var interfaceNames []string
+
+	for _, link := range containerlabConfig.Topology.Links {
+		for _, endpoint := range link.Endpoints {
+			nodeName, interfaceName, found := strings.Cut(endpoint, ":")
+			if !found || nodeName != clabernetesconstants.HostKeyword {
+				continue
+			}
+
+			if slices.Contains([]string{"lo", "eth0", "docker0"}, interfaceName) {
+				// never touch the pod's own plumbing regardless of what the topology says
+				continue
+			}
+
+			// containerlab replaces "/" with "-" when creating the host side interface, so the
+			// interface that can exist in our network namespace is the sanitized name
+			interfaceNames = append(
+				interfaceNames,
+				strings.ReplaceAll(interfaceName, "/", "-"),
+			)
+		}
+	}
+
+	return interfaceNames, nil
+}
+
+// removeStaleHostInterfaces removes any topology defined "host" interfaces left over from a
+// previous partially failed deploy. the pod network namespace belongs to the pod sandbox and so
+// outlives launcher container restarts -- a deploy that fails mid link creation can strand veth
+// ends in the namespace, causing all subsequent deploys to fail with "Interface host:<intf> is
+// defined via topology but already exists" until the interfaces (or the whole pod) are removed.
+func (c *clabernetes) removeStaleHostInterfaces() {
+	rawTopology, err := os.ReadFile("topo.clab.yaml")
+	if err != nil {
+		c.logger.Warnf("failed reading topology file to check for stale interfaces, err: %s", err)
+
+		return
+	}
+
+	interfaceNames, err := topologyHostInterfaces(string(rawTopology))
+	if err != nil {
+		c.logger.Warnf("failed parsing topology file to check for stale interfaces, err: %s", err)
+
+		return
+	}
+
+	for _, interfaceName := range interfaceNames {
+		checkCmd := exec.CommandContext( //nolint:gosec
+			c.ctx, "ip", "link", "show", "dev", interfaceName,
+		)
+
+		if checkCmd.Run() != nil {
+			// interface does not exist, nothing to clean up -- this is the normal case
+			continue
+		}
+
+		c.logger.Warnf(
+			"interface %q already exists in the pod network namespace, it was likely stranded"+
+				" by a previously failed deploy, removing it so deploy can proceed...",
+			interfaceName,
+		)
+
+		deleteCmd := exec.CommandContext( //nolint:gosec
+			c.ctx, "ip", "link", "delete", "dev", interfaceName,
+		)
+
+		output, err := deleteCmd.CombinedOutput()
+		if err != nil {
+			c.logger.Warnf(
+				"failed removing interface %q, deploy will likely fail, err: %s, output: %s",
+				interfaceName,
+				err,
+				string(output),
+			)
+		}
 	}
 }
 
 func (c *clabernetes) runContainerlab() error {
+	c.removeStaleHostInterfaces()
+
 	containerlabLogFile, err := os.Create("containerlab.log")
 	if err != nil {
 		return err
@@ -173,12 +247,6 @@ func (c *clabernetes) runContainerlab() error {
 	}
 
 	if !(os.Getenv(clabernetesconstants.LauncherContainerlabPersist) == clabernetesconstants.True) {
-		// When k8 redeploys nodes due to node crash or any other reason, host side interface is
-		// not cleaned up so we have to manually destroy the lab otherwise we will keep getting
-		// following error in a loop:
-		// containerlab | Interface host:<intf> is defined via topology but already exists: <nil>
-		c.destroyContainerlab()
-
 		args = append(args, "--reconfigure")
 	}
 
