@@ -1,4 +1,4 @@
-import { use, useMemo } from 'react';
+import { Suspense, use, useMemo } from 'react';
 import { useFumadocsLoader } from 'fumadocs-core/source/client';
 import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import {
@@ -43,23 +43,11 @@ export async function loader({ params }: Route.LoaderArgs) {
   };
 }
 
-export async function clientLoader({
-  serverLoader,
-}: Route.ClientLoaderArgs) {
-  const data = await serverLoader();
-  await docs.getPage(data.path)?.preload();
-  return data;
-}
-
-clientLoader.hydrate = true;
-
-function Content({ path }: { path: string }) {
-  const page = docs.getPage(path);
-
-  if (!page) {
-    throw new Error(`Unknown documentation page: ${path}`);
-  }
-
+function MdxPageContent({
+  page,
+}: {
+  page: NonNullable<ReturnType<typeof docs.getPage>>;
+}) {
   const { toc } = use(page.load());
   const MDX = page.body;
 
@@ -75,6 +63,20 @@ function Content({ path }: { path: string }) {
         <MDX components={getMDXComponents()} />
       </DocsBody>
     </DocsPage>
+  );
+}
+
+function Content({ path }: { path: string }) {
+  const page = docs.getPage(path);
+
+  if (!page) {
+    throw new Error(`Unknown documentation page: ${path}`);
+  }
+
+  return (
+    <Suspense fallback={null}>
+      <MdxPageContent page={page} />
+    </Suspense>
   );
 }
 

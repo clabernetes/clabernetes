@@ -4,11 +4,9 @@ import {
   Links,
   Meta,
   Outlet,
-  redirect,
   Scripts,
   ScrollRestoration,
 } from 'react-router';
-import { docsRedirect } from '@/lib/docs-redirects';
 import c9sLogo from '@/assets/c9s-logo-clean.png';
 import StaticSearchDialog from '@/components/static-search';
 import { UnderDevelopmentBanner } from '@/components/under-development-banner';
@@ -19,18 +17,6 @@ export const links: Route.LinksFunction = () => [
   { rel: 'icon', href: c9sLogo, type: 'image/png' },
   { rel: 'apple-touch-icon', href: c9sLogo, type: 'image/png' },
 ];
-
-// Cloudflare SPA fallback serves home index.html for unknown paths, so the docs
-// route loader never runs. Redirect legacy URLs from the browser path on hydrate.
-export async function clientLoader() {
-  const target = docsRedirect(window.location.pathname);
-  if (target) {
-    throw redirect(target, { status: 308 });
-  }
-  return null;
-}
-
-clientLoader.hydrate = true;
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
