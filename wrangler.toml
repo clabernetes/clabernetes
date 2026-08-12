@@ -4,3 +4,4 @@ preview_urls = true
 
 [assets]
 directory = "./docs-site/build/client"
+html_handling = "drop-trailing-slash"
