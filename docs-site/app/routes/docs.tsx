@@ -10,6 +10,7 @@ import {
 import { redirect } from 'react-router';
 import { getMDXComponents } from '@/components/mdx';
 import { getDocsTabs } from '@/lib/docs-tabs';
+import { docsRedirect } from '@/lib/docs-redirects';
 import { baseOptions } from '@/lib/layout.shared';
 import { docs, source } from '@/lib/source';
 import type { Route } from './+types/docs';
@@ -21,9 +22,9 @@ export async function loader({ params }: Route.LoaderArgs) {
   const slug = params['*'] ?? '';
 
   // REDIRECTS SHOULD BE HANDLED HERE
-  // Redirect legacy release notes path to the new one.
-  if (slug === 'release-notes/0.7.0') {
-    throw redirect('/docs/release-notes/0.7', { status: 308 });
+  const redirectTarget = docsRedirect(`/docs/${slug.replace(/\/$/, '')}`);
+  if (redirectTarget) {
+    throw redirect(redirectTarget, { status: 308 });
   }
   // END REDIRECTS
 
