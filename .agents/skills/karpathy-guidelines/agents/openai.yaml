@@ -1,0 +1,4 @@
+interface:
+  display_name: "Karpathy Guidelines"
+  short_description: "Surgical, verifiable coding guidance"
+  default_prompt: "Use $karpathy-guidelines to make the smallest correct, verifiable engineering change."

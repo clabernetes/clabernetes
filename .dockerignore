@@ -22,13 +22,11 @@ docs
 e2e
 examples
 
-# ai
+# agent configuration
+AGENTS.md
+.agents
 .claude
 .cline
-.clinerules
-.cursor
-.kilocode
-.opencode
 
 # caches
 .pnpm-store
