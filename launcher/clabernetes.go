@@ -21,7 +21,7 @@ import (
 const (
 	maxDockerLaunchAttempts  = 10
 	containerCheckInterval   = 5 * time.Second
-	statusProbeCheckInterval = 30 * time.Second
+	statusProbeCheckInterval = 10 * time.Second
 	statusProbeCheckTimeout  = 5 * time.Second
 	clientDefaultTimeout     = time.Minute
 	defaultSSHPort           = 22
@@ -115,6 +115,14 @@ func (c *clabernetes) startup() {
 	c.logger.Info("starting clabernetes...")
 
 	c.logger.Debugf("clabernetes version %s", clabernetesconstants.Version)
+
+	// The Kubernetes startup probe may begin while the launcher is still loading the node image.
+	// Create an explicitly unhealthy marker immediately so a normal startup wait is not reported
+	// as a missing-file error.
+	err := writeNodeStatus(clabernetesconstants.NodeStatusFile, false)
+	if err != nil {
+		c.logger.Fatalf("failed initializing node status file, error: %s", err)
+	}
 
 	c.fetchNodeResources()
 	c.containerlabVersion()
@@ -251,38 +259,8 @@ func (c *clabernetes) launch() {
 func (c *clabernetes) runProbes() {
 	c.logger.Debug("starting status probe(s) if configured...")
 
-	tcpProbePort := clabernetesutil.GetEnvIntOrDefault(clabernetesconstants.LauncherTCPProbePort, 0)
-
-	sshProbePort := clabernetesutil.GetEnvIntOrDefault(
-		clabernetesconstants.LauncherSSHProbePort,
-		defaultSSHPort,
-	)
-
-	sshProbeUsername := os.Getenv(clabernetesconstants.LauncherSSHProbeUsername)
-
-	sshProbePassword := os.Getenv(clabernetesconstants.LauncherSSHProbePassword)
-
-	var runTCPProbe bool
-
-	var runSSHProbe bool
-
-	if tcpProbePort != 0 {
-		c.logger.Debugf("will run tcp status probe to port %d", tcpProbePort)
-
-		runTCPProbe = true
-	}
-
-	if sshProbeUsername != "" && sshProbePassword != "" {
-		c.logger.Debugf(
-			"will run ssh status probe using username %s to port %d",
-			sshProbeUsername,
-			sshProbePort,
-		)
-
-		runSSHProbe = true
-	}
-
-	if !runTCPProbe && !runSSHProbe {
+	config, enabled := c.statusProbeConfiguration()
+	if !enabled {
 		c.logger.Debug("no probes configured, skipping status probes...")
 
 		return
@@ -291,64 +269,13 @@ func (c *clabernetes) runProbes() {
 	c.logger.Info("starting status probes...")
 
 	ticker := time.NewTicker(statusProbeCheckInterval)
+	defer ticker.Stop()
 
-	var nodeAddr string
-
-	for range ticker.C {
-		if nodeAddr == "" {
-			var err error
-
-			nodeAddr, err = getContainerAddr(c.ctx, c.nodeContainerID)
-			if err != nil {
-				c.logger.Warnf(
-					"failed determining node %q address, error: %s",
-					c.nodeName,
-					err,
-				)
-
-				continue
-			}
-		}
-
-		tcpProbeOk := true
-		sshProbeOk := true
-
-		if runTCPProbe {
-			dialer := net.Dialer{
-				Timeout: statusProbeCheckTimeout,
-			}
-
-			tcpConn, err := dialer.Dial(
-				"tcp",
-				net.JoinHostPort(nodeAddr, strconv.Itoa(tcpProbePort)),
-			)
-			if err != nil {
-				tcpProbeOk = false
-			} else {
-				_ = tcpConn.Close()
-			}
-		}
-
-		if runSSHProbe {
-			sshProbeOk = probeSSH(sshProbePort, nodeAddr, sshProbeUsername, sshProbePassword)
-		}
-
-		var writeErr error
-
-		if tcpProbeOk && sshProbeOk {
-			writeErr = os.WriteFile(
-				clabernetesconstants.NodeStatusFile,
-				[]byte(clabernetesconstants.NodeStatusHealthy),
-				clabernetesconstants.PermissionsEveryoneAllPermissions,
-			)
-		} else {
-			writeErr = os.WriteFile(
-				clabernetesconstants.NodeStatusFile,
-				nil,
-				clabernetesconstants.PermissionsEveryoneAllPermissions,
-			)
-		}
-
+	for {
+		writeErr := writeNodeStatus(
+			clabernetesconstants.NodeStatusFile,
+			c.getNodeReadiness(config),
+		)
 		if writeErr != nil {
 			c.logger.Criticalf(
 				"failed writing node status file, this probably should not happen, error: %s",
@@ -359,7 +286,134 @@ func (c *clabernetes) runProbes() {
 
 			return
 		}
+
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
+}
+
+type statusProbeConfiguration struct {
+	tcpPort     int
+	sshPort     int
+	sshUsername string
+	sshPassword string
+}
+
+func (c *clabernetes) statusProbeConfiguration() (*statusProbeConfiguration, bool) {
+	config := &statusProbeConfiguration{
+		tcpPort: clabernetesutil.GetEnvIntOrDefault(
+			clabernetesconstants.LauncherTCPProbePort,
+			0,
+		),
+		sshPort: clabernetesutil.GetEnvIntOrDefault(
+			clabernetesconstants.LauncherSSHProbePort,
+			defaultSSHPort,
+		),
+		sshUsername: os.Getenv(clabernetesconstants.LauncherSSHProbeUsername),
+		sshPassword: os.Getenv(clabernetesconstants.LauncherSSHProbePassword),
+	}
+
+	if config.tcpPort != 0 {
+		c.logger.Debugf("will run tcp status probe to port %d", config.tcpPort)
+	}
+
+	sshEnabled := config.sshUsername != "" && config.sshPassword != ""
+	if sshEnabled {
+		c.logger.Debugf(
+			"will run ssh status probe using username %s to port %d",
+			config.sshUsername,
+			config.sshPort,
+		)
+	}
+
+	genericEnabled := clabernetesutil.GetEnvBoolOrDefault(
+		clabernetesconstants.LauncherStatusProbesEnabled,
+		false,
+	)
+
+	// An older manager does not set LauncherStatusProbesEnabled, so retain compatibility when it
+	// configures one of the original application-specific probes.
+	return config, genericEnabled || config.tcpPort != 0 || sshEnabled
+}
+
+func (c *clabernetes) getNodeReadiness(config *statusProbeConfiguration) bool {
+	containerReady, err := getContainerReadiness(c.ctx, c.nodeContainerID)
+	if err != nil {
+		c.logger.Warnf(
+			"failed determining node %q container readiness, error: %s",
+			c.nodeName,
+			err,
+		)
+
+		return false
+	}
+
+	if !containerReady {
+		return false
+	}
+
+	runTCPProbe := config.tcpPort != 0
+
+	runSSHProbe := config.sshUsername != "" && config.sshPassword != ""
+	if !runTCPProbe && !runSSHProbe {
+		return true
+	}
+
+	nodeAddr, err := getContainerAddr(c.ctx, c.nodeContainerID)
+	if err != nil {
+		c.logger.Warnf(
+			"failed determining node %q address, error: %s",
+			c.nodeName,
+			err,
+		)
+
+		return false
+	}
+
+	if runTCPProbe && !probeTCP(config.tcpPort, nodeAddr) {
+		return false
+	}
+
+	return !runSSHProbe || probeSSH(
+		config.sshPort,
+		nodeAddr,
+		config.sshUsername,
+		config.sshPassword,
+	)
+}
+
+func probeTCP(port int, nodeAddr string) bool {
+	dialer := net.Dialer{
+		Timeout: statusProbeCheckTimeout,
+	}
+
+	tcpConn, err := dialer.Dial(
+		"tcp",
+		net.JoinHostPort(nodeAddr, strconv.Itoa(port)),
+	)
+	if err != nil {
+		return false
+	}
+
+	_ = tcpConn.Close()
+
+	return true
+}
+
+func writeNodeStatus(path string, healthy bool) error {
+	var status []byte
+	if healthy {
+		status = []byte(clabernetesconstants.NodeStatusHealthy)
+	}
+
+	return os.WriteFile(
+		path,
+		status,
+		clabernetesconstants.PermissionsEveryoneAllPermissions,
+	)
 }
 
 func probeSSH(port int, nodeAddr, username, password string) bool {

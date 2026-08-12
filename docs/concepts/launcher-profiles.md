@@ -48,6 +48,16 @@ Profiles are not selected by labels and are not merged into inheritance chains. 
 referenced profile take precedence over global `Config` defaults; fields it omits continue through
 global resolution.
 
+When `statusProbes.enabled` is true, c9s considers a Node ready only after its nested Docker
+container is running and is not paused, restarting, or dead. If the container image defines a
+Docker healthcheck, that healthcheck must also report healthy. Optional TCP or SSH probe
+configuration adds an application-level requirement; c9s does not infer ports, credentials, or
+behavior from a containerlab kind or image name.
+
+For an image without a Docker healthcheck, this generic signal is intentionally process-level: a
+running network OS may still be booting services or converging protocols. Define a healthcheck in
+the image, or configure an explicit TCP or SSH probe, when application-level readiness is required.
+
 If a Node names a profile that does not exist, c9s does not silently fall back to global defaults.
 The Node remains unrealized until that explicit reference resolves.
 
