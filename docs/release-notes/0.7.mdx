@@ -1,5 +1,5 @@
 ---
-title: 0.7.0
+title: "0.7"
 ---
 
 2026-08-11 · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.6.0...v0.7.0)
@@ -147,3 +147,10 @@ The project repository and published artifacts have moved from the `srl-labs` or
 - Manager and launcher Docker build contexts were reduced and release image builds were
   streamlined, including corrected certificate ownership for OpenShift-compatible launcher images.
 - GitHub Actions `checkout` and `setup-go` were updated to version 7.
+
+## Patches
+
+### 0.7.1
+
+- Updated `x/crypto` and `x/net` dependencies to fix security vulnerabilities.
+- Fixed cloudflare redirects for trailing slashes.
