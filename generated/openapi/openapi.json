@@ -1454,7 +1454,7 @@
                                 "properties": {
                                     "enabled": {
                                         "default": true,
-                                        "description": "Enabled sets the status probes to enabled (or obviously disabled). Note that if the probes\nare enabled and the health condition fails due to configuring the node the cluster will\nrestart the node. So, if you plan on being destructive with the node config (probably because\nyou will have exec'd onto the node) then you may want to disable this!",
+                                        "description": "Enabled sets the status probes to enabled (or obviously disabled). A Node that has previously\nstarted but later fails its readiness check remains running and is reported not ready. A Node\nthat never passes its startup check is restarted after its startup allowance expires.",
                                         "type": "boolean"
                                     },
                                     "excludedNodes": {
@@ -1467,7 +1467,7 @@
                                     },
                                     "nodeProbeConfigurations": {
                                         "additionalProperties": {
-                                            "description": "ProbeConfiguration holds information about how to probe a (containerlab) node in a Topology. If\nboth style probes are configured, both will be used and both must succeed in order to report\nhealthy.",
+                                            "description": "ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a\nTopology. If both styles are configured, both and the generic nested-container probe must succeed\nin order to report healthy.",
                                             "properties": {
                                                 "sshProbeConfiguration": {
                                                     "description": "SSHProbeConfiguration defines an SSH probe.",
@@ -1492,7 +1492,7 @@
                                                     "type": "object"
                                                 },
                                                 "startupSeconds": {
-                                                    "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto ~13 minutes to hopefully account for slow to boot nodes. Note that there is also a 60\ninitial delay configured, so technically the default is ~14-15 minutes. Be careful with this\ndelay as there must be time for c9s to (via whatever means) pull the image and load it into\ndocker on the launcher and this can take a bit! Having this be bigger than you think you need\nis generally better since if the startup probe succeeds ever then the readiness probe takes\nover anyway.",
+                                                    "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nc9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value\ndoes not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
                                                     "type": "integer"
                                                 },
                                                 "tcpProbeConfiguration": {
@@ -1540,7 +1540,7 @@
                                                 "type": "object"
                                             },
                                             "startupSeconds": {
-                                                "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto ~13 minutes to hopefully account for slow to boot nodes. Note that there is also a 60\ninitial delay configured, so technically the default is ~14-15 minutes. Be careful with this\ndelay as there must be time for c9s to (via whatever means) pull the image and load it into\ndocker on the launcher and this can take a bit! Having this be bigger than you think you need\nis generally better since if the startup probe succeeds ever then the readiness probe takes\nover anyway.",
+                                                "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nc9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value\ndoes not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
                                                 "type": "integer"
                                             },
                                             "tcpProbeConfiguration": {
@@ -2959,7 +2959,7 @@
                                 "properties": {
                                     "enabled": {
                                         "default": true,
-                                        "description": "Enabled sets the status probes to enabled (or obviously disabled). Note that if the probes\nare enabled and the health condition fails due to configuring the node the cluster will\nrestart the node. So, if you plan on being destructive with the node config (probably because\nyou will have exec'd onto the node) then you may want to disable this!",
+                                        "description": "Enabled sets the status probes to enabled (or obviously disabled). A Node that has previously\nstarted but later fails its readiness check remains running and is reported not ready. A Node\nthat never passes its startup check is restarted after its startup allowance expires.",
                                         "type": "boolean"
                                     },
                                     "excludedNodes": {
@@ -2972,7 +2972,7 @@
                                     },
                                     "nodeProbeConfigurations": {
                                         "additionalProperties": {
-                                            "description": "ProbeConfiguration holds information about how to probe a (containerlab) node in a Topology. If\nboth style probes are configured, both will be used and both must succeed in order to report\nhealthy.",
+                                            "description": "ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a\nTopology. If both styles are configured, both and the generic nested-container probe must succeed\nin order to report healthy.",
                                             "properties": {
                                                 "sshProbeConfiguration": {
                                                     "description": "SSHProbeConfiguration defines an SSH probe.",
@@ -2997,7 +2997,7 @@
                                                     "type": "object"
                                                 },
                                                 "startupSeconds": {
-                                                    "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto ~13 minutes to hopefully account for slow to boot nodes. Note that there is also a 60\ninitial delay configured, so technically the default is ~14-15 minutes. Be careful with this\ndelay as there must be time for c9s to (via whatever means) pull the image and load it into\ndocker on the launcher and this can take a bit! Having this be bigger than you think you need\nis generally better since if the startup probe succeeds ever then the readiness probe takes\nover anyway.",
+                                                    "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nc9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value\ndoes not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
                                                     "type": "integer"
                                                 },
                                                 "tcpProbeConfiguration": {
@@ -3045,7 +3045,7 @@
                                                 "type": "object"
                                             },
                                             "startupSeconds": {
-                                                "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto ~13 minutes to hopefully account for slow to boot nodes. Note that there is also a 60\ninitial delay configured, so technically the default is ~14-15 minutes. Be careful with this\ndelay as there must be time for c9s to (via whatever means) pull the image and load it into\ndocker on the launcher and this can take a bit! Having this be bigger than you think you need\nis generally better since if the startup probe succeeds ever then the readiness probe takes\nover anyway.",
+                                                "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nc9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value\ndoes not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
                                                 "type": "integer"
                                             },
                                             "tcpProbeConfiguration": {

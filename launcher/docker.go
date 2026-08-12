@@ -40,6 +40,18 @@ type daemonProxiesConfig struct {
 	NoProxy    string `json:"no-proxy,omitempty"`
 }
 
+type dockerContainerState struct {
+	Running    bool                   `json:"Running"`
+	Paused     bool                   `json:"Paused"`
+	Restarting bool                   `json:"Restarting"`
+	Dead       bool                   `json:"Dead"`
+	Health     *dockerContainerHealth `json:"Health,omitempty"`
+}
+
+type dockerContainerHealth struct {
+	Status string `json:"Status"`
+}
+
 func getProxiesConfig() *daemonProxiesConfig {
 	httpProxy := clabernetesutil.GetEnvStrOrDefault(
 		clabernetesconstants.HTTPProxyEnv,
@@ -292,4 +304,44 @@ func getContainerAddr(ctx context.Context, containerID string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
+}
+
+// getContainerReadiness reports the only readiness contract Docker exposes generically: the
+// container must be running and, when its image defines a Docker healthcheck, that healthcheck
+// must be healthy. It deliberately does not infer application ports or device-kind behavior.
+func getContainerReadiness(ctx context.Context, containerID string) (bool, error) {
+	inspectCmd := exec.CommandContext( //nolint:gosec
+		ctx,
+		"docker",
+		"inspect",
+		"--format",
+		"{{json .State}}",
+		containerID,
+	)
+
+	output, err := inspectCmd.Output()
+	if err != nil {
+		return false, err
+	}
+
+	return parseContainerReadiness(output)
+}
+
+func parseContainerReadiness(value []byte) (bool, error) {
+	state := &dockerContainerState{}
+
+	err := json.Unmarshal(value, state)
+	if err != nil {
+		return false, fmt.Errorf("failed decoding docker container state: %w", err)
+	}
+
+	if !state.Running || state.Paused || state.Restarting || state.Dead {
+		return false, nil
+	}
+
+	if state.Health == nil {
+		return true, nil
+	}
+
+	return strings.EqualFold(state.Health.Status, "healthy"), nil
 }

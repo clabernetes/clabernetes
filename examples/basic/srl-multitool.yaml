@@ -6,14 +6,19 @@ metadata:
 spec:
   statusProbes:
     enabled: true
-    excludedNodes:
-      - multitool
-    probeConfiguration:
-      startupSeconds: 1200
-      sshProbeConfiguration:
-        username: admin
-        password: NokiaSrl1!
-        port: 22
+    nodeProbeConfigurations:
+      srl1:
+        startupSeconds: 1200
+        sshProbeConfiguration:
+          username: admin
+          password: NokiaSrl1!
+          port: 22
+      multitool:
+        startupSeconds: 1200
+        sshProbeConfiguration:
+          username: admin
+          password: multit00l
+          port: 22
   definition:
     containerlab: |
       name: srl-multitool

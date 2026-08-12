@@ -31,7 +31,7 @@ value -- dropping that would quietly change your lab.
 | `publish`, `sandbox`, `kernel`, `wait-for`, top-level `SANs` | Nothing -- containerlab itself removed these, so they made the launcher fail to parse the topology. `SANs` moved to `certificate.sans` |
 | `cpu`, `cpu-set`, `memory` | `LauncherProfile.resources` -- the pod's requests/limits are what actually bound a node |
 | `image-pull-policy` | `LauncherProfile.imagePull` |
-| `healthcheck` | `LauncherProfile.statusProbes` -- docker healthcheck status is invisible to Kubernetes |
+| `healthcheck` | `LauncherProfile.statusProbes` -- c9s bridges nested Docker state and image-defined healthchecks into Kubernetes readiness |
 | `runtime` | Nothing -- the launcher runs exactly one runtime (docker) |
 | `auto-remove` | Nothing -- the pod owns node lifecycle, and a removed container leaves a ready pod with no node |
 | `labels` | `metadata.labels` on the Node -- in a Topology `definition:` this is automatic, see below |

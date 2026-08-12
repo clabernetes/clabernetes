@@ -112,6 +112,11 @@ const (
 	// containerlab to download and use in the launcher.
 	LauncherContainerlabVersion = "LAUNCHER_CONTAINERLAB_VERSION"
 
+	// LauncherStatusProbesEnabled tells the launcher to report the nested container's generic
+	// Docker readiness. Application-specific TCP and SSH probes, when configured, are additional
+	// requirements.
+	LauncherStatusProbesEnabled = "LAUNCHER_STATUS_PROBES_ENABLED"
+
 	// LauncherTCPProbePort is the env var that holds the port to use in the tcp probe (if
 	// configured).
 	LauncherTCPProbePort = "LAUNCHER_TCP_PROBE_PORT"

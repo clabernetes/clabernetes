@@ -229,12 +229,13 @@ type Scheduling struct {
 }
 
 // StatusProbes holds details about if the status probes are enabled and if so how they should be
-// handled.
+// handled. Enabled probes always require the nested container to be running and not paused,
+// restarting, or dead. If Docker exposes an image-defined healthcheck, it must also be healthy.
+// Configured TCP and SSH probes are additional requirements.
 type StatusProbes struct {
-	// Enabled sets the status probes to enabled (or obviously disabled). Note that if the probes
-	// are enabled and the health condition fails due to configuring the node the cluster will
-	// restart the node. So, if you plan on being destructive with the node config (probably because
-	// you will have exec'd onto the node) then you may want to disable this!
+	// Enabled sets the status probes to enabled (or obviously disabled). A Node that has previously
+	// started but later fails its readiness check remains running and is reported not ready. A Node
+	// that never passes its startup check is restarted after its startup allowance expires.
 	// +kubebuilder:default=true
 	// +optional
 	Enabled bool `json:"enabled"`
@@ -255,17 +256,14 @@ type StatusProbes struct {
 	ProbeConfiguration ProbeConfiguration `json:"probeConfiguration"`
 }
 
-// ProbeConfiguration holds information about how to probe a (containerlab) node in a Topology. If
-// both style probes are configured, both will be used and both must succeed in order to report
-// healthy.
+// ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a
+// Topology. If both styles are configured, both and the generic nested-container probe must succeed
+// in order to report healthy.
 type ProbeConfiguration struct {
 	// StartupSeconds is the total amount of seconds to allow for the node to start. This defaults
-	// to ~13 minutes to hopefully account for slow to boot nodes. Note that there is also a 60
-	// initial delay configured, so technically the default is ~14-15 minutes. Be careful with this
-	// delay as there must be time for c9s to (via whatever means) pull the image and load it into
-	// docker on the launcher and this can take a bit! Having this be bigger than you think you need
-	// is generally better since if the startup probe succeeds ever then the readiness probe takes
-	// over anyway.
+	// to roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for
+	// c9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value
+	// does not delay fast nodes because the readiness probe takes over as soon as startup succeeds.
 	// +optional
 	StartupSeconds int `json:"startupSeconds"`
 	// SSHProbeConfiguration defines an SSH probe.

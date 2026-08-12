@@ -127,3 +127,12 @@ spec:
             failureThreshold: 2
             periodSeconds: 30
             timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /alive
+              port: 10443
+              scheme: HTTPS
+            successThreshold: 1
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 5

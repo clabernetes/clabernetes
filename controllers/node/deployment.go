@@ -23,10 +23,10 @@ import (
 )
 
 const (
-	probeInitialDelay                   = 60
-	probePeriodSeconds                  = 20
+	probeInitialDelay                   = 10
+	probePeriodSeconds                  = 10
 	probeReadinessFailureThreshold      = 3
-	probeDefaultStartupFailureThreshold = 40
+	probeDefaultStartupFailureThreshold = 90
 )
 
 // DeploymentReconciler renders/validates the launcher deployment for a Node -- exposed for
@@ -863,27 +863,34 @@ func (r *DeploymentReconciler) renderDeploymentContainerStatus(
 
 	if nodeProbeConfiguration.SSHProbeConfiguration == nil &&
 		nodeProbeConfiguration.TCPProbeConfiguration == nil {
-		r.log.Warnf("node %q has no status probe configurations, skipping...", nodeName)
-
-		return
+		r.log.Debugf(
+			"node %q has no application-specific status probe; using nested container state",
+			nodeName,
+		)
 	}
 
-	// default failure threshold for startup probe == 40, 40*20 = 800 seconds startup probe total
-	// time (plus the 60s initial delay) for 15ish min startup time...
+	// Keep roughly 15 minutes available for slow NOS image loading and startup. A successful
+	// startup probe hands control to the readiness probe immediately, so this generous failure
+	// budget does not delay fast nodes.
 	failureThresholds := probeDefaultStartupFailureThreshold
 
 	if nodeProbeConfiguration.StartupSeconds != 0 {
-		failureThresholds = nodeProbeConfiguration.StartupSeconds / probePeriodSeconds
+		// Round up so the rendered probe never allows less startup time than requested. Kubernetes
+		// requires a failure threshold of at least one.
+		failureThresholds = max(
+			1,
+			(nodeProbeConfiguration.StartupSeconds+probePeriodSeconds-1)/probePeriodSeconds,
+		)
 	}
 
-	// startup probe delays the start of the readiness probe -- this gives us time for the nos to
-	// boot before we start doing the readiness check on the (slightly) faster frequency
+	// The startup probe delays the readiness probe, giving a slow NOS time to boot without being
+	// presented as ready or restarted before its startup allowance expires.
 	deployment.Spec.Template.Spec.Containers[0].StartupProbe = &k8scorev1.Probe{
 		ProbeHandler: k8scorev1.ProbeHandler{
 			Exec: &k8scorev1.ExecAction{
 				Command: []string{
-					"grep",
-					clabernetesconstants.NodeStatusHealthy,
+					"test",
+					"-s",
 					clabernetesconstants.NodeStatusFile,
 				},
 			},
@@ -895,14 +902,13 @@ func (r *DeploymentReconciler) renderDeploymentContainerStatus(
 		FailureThreshold:    int32(failureThresholds),
 	}
 
-	// after the startup probe has done its thing we run the readiness probe -- since the
-	// launcher doesnt check the status super frequently we keep this pretty slow too
+	// After startup succeeds, the readiness probe tracks subsequent launcher status changes.
 	deployment.Spec.Template.Spec.Containers[0].ReadinessProbe = &k8scorev1.Probe{
 		ProbeHandler: k8scorev1.ProbeHandler{
 			Exec: &k8scorev1.ExecAction{
 				Command: []string{
-					"grep",
-					clabernetesconstants.NodeStatusHealthy,
+					"test",
+					"-s",
 					clabernetesconstants.NodeStatusFile,
 				},
 			},
@@ -913,7 +919,12 @@ func (r *DeploymentReconciler) renderDeploymentContainerStatus(
 		FailureThreshold: probeReadinessFailureThreshold,
 	}
 
-	probeEnvVars := make([]k8scorev1.EnvVar, 0)
+	probeEnvVars := []k8scorev1.EnvVar{
+		{
+			Name:  clabernetesconstants.LauncherStatusProbesEnabled,
+			Value: clabernetesconstants.True,
+		},
+	}
 
 	if nodeProbeConfiguration.TCPProbeConfiguration != nil {
 		probeEnvVars = append(

@@ -1,6 +1,7 @@
 package node_test
 
 import (
+	"slices"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -206,5 +207,103 @@ func TestRenderDeploymentStandaloneHasNoGroupEnv(t *testing.T) {
 
 	if findEnv(container.Env, clabernetesconstants.LauncherGroupMembersEnv) != nil {
 		t.Fatal("expected no group members env for a standalone node")
+	}
+}
+
+func TestRenderDeploymentGenericStatusProbes(t *testing.T) {
+	node := &clabernetesapisv1alpha1.Node{}
+	node.Name = "generic-node"
+	node.Namespace = "clabernetes"
+	node.Spec.Image = "example.invalid/arbitrary-kind:latest"
+
+	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
+		&claberneteslogging.FakeInstance{},
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	deployment := reconciler.Render(
+		&clabernetescontrollersnode.RenderInput{
+			Node: node,
+			Profile: testResolvedProfile(
+				t,
+				func(profile *clabernetescontrollersnode.ResolvedProfile) {
+					profile.StatusProbes.Enabled = true
+				},
+			),
+			GroupMembers: []string{"generic-node"},
+		},
+	)
+
+	container := deployment.Spec.Template.Spec.Containers[0]
+	if container.StartupProbe == nil || container.ReadinessProbe == nil {
+		t.Fatal("expected generic startup and readiness probes without TCP or SSH configuration")
+	}
+
+	wantProbeCommand := []string{"test", "-s", clabernetesconstants.NodeStatusFile}
+
+	if !slices.Equal(container.StartupProbe.Exec.Command, wantProbeCommand) ||
+		!slices.Equal(container.ReadinessProbe.Exec.Command, wantProbeCommand) {
+		t.Fatalf(
+			"expected quiet status-file probes %v, got startup=%v readiness=%v",
+			wantProbeCommand,
+			container.StartupProbe.Exec.Command,
+			container.ReadinessProbe.Exec.Command,
+		)
+	}
+
+	if container.StartupProbe.InitialDelaySeconds != 10 ||
+		container.StartupProbe.PeriodSeconds != 10 ||
+		container.StartupProbe.FailureThreshold != 90 {
+		t.Fatalf("unexpected balanced startup probe timing: %+v", container.StartupProbe)
+	}
+
+	if container.ReadinessProbe.PeriodSeconds != 10 ||
+		container.ReadinessProbe.FailureThreshold != 3 {
+		t.Fatalf("unexpected balanced readiness probe timing: %+v", container.ReadinessProbe)
+	}
+
+	enabled := findEnv(container.Env, clabernetesconstants.LauncherStatusProbesEnabled)
+	if enabled == nil || enabled.Value != clabernetesconstants.True {
+		t.Fatalf("expected generic status probe enablement env, got %+v", enabled)
+	}
+
+	if findEnv(container.Env, clabernetesconstants.LauncherTCPProbePort) != nil ||
+		findEnv(container.Env, clabernetesconstants.LauncherSSHProbeUsername) != nil {
+		t.Fatal("generic readiness must not infer an application-specific TCP or SSH probe")
+	}
+}
+
+func TestRenderDeploymentRoundsCustomStartupAllowanceUp(t *testing.T) {
+	node := &clabernetesapisv1alpha1.Node{}
+	node.Name = "generic-node"
+	node.Namespace = "clabernetes"
+	node.Spec.Image = "example.invalid/arbitrary-kind:latest"
+
+	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
+		&claberneteslogging.FakeInstance{},
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+	deployment := reconciler.Render(
+		&clabernetescontrollersnode.RenderInput{
+			Node: node,
+			Profile: testResolvedProfile(
+				t,
+				func(profile *clabernetescontrollersnode.ResolvedProfile) {
+					profile.StatusProbes.Enabled = true
+					profile.StatusProbes.ProbeConfiguration.StartupSeconds = 21
+				},
+			),
+			GroupMembers: []string{"generic-node"},
+		},
+	)
+
+	if got := deployment.Spec.Template.Spec.Containers[0].StartupProbe.FailureThreshold; got != 3 {
+		t.Fatalf("custom 21-second startup allowance threshold = %d, want 3", got)
 	}
 }
