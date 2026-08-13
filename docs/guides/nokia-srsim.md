@@ -73,7 +73,69 @@ Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single 
 
 **How it works:**
 
-Clabernetes automatically detects containers with `network-mode: container:<primary-card>` and groups them together as a single chassis. All cards in a chassis are deployed in the same launcher pod, allowing them to share the network namespace as required by distributed SR-SIM.
+Containerlab supports two equivalent ways to describe the cards. A single logical node can use a
+`components` block, in which case containerlab expands it into card containers and constructs the
+internal fabric. Alternatively, each card can be an explicit node and secondary cards can use
+`network-mode: container:<primary-card>`. Clabernetes keeps every card of either form in one launcher
+Pod and one network namespace as required by distributed SR-SIM; containerlab remains responsible
+for the SR-SIM expansion and fabric setup.
+
+The component form is the closest match to a normal containerlab topology:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srsim-license
+data:
+  license.txt: |
+    # Your license content here
+
+---
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: srsim-components
+spec:
+  deployment:
+    filesFromConfigMap:
+      srsim:
+        - filePath: /opt/nokia/sros/license.txt
+          configMapName: srsim-license
+          configMapPath: license.txt
+  definition:
+    containerlab: |
+      name: srsim-components
+      topology:
+        nodes:
+          srsim:
+            kind: nokia_srsim
+            image: nokia_srsim:25.10.R1
+            type: sr-7
+            license: /opt/nokia/sros/license.txt
+            components:
+              - slot: A
+              - slot: 1
+                type: iom5-e
+                sfm: m-sfm6-7/12
+                mda:
+                  - slot: 1
+                    type: me6-100gb-qsfp28
+          client:
+            kind: linux
+            image: ghcr.io/srl-labs/network-multitool:latest
+        links:
+          - type: veth
+            endpoints:
+              - node: srsim
+                interface: 1/1/c1/1
+              - node: client
+                interface: eth1
+```
+
+The structured `veth` endpoints above compile to the same c9s Link as brief endpoints such as
+`["srsim:1/1/c1/1", "client:eth1"]`. Clabernetes still creates one Node and one launcher Pod for
+`srsim`; nested containerlab creates component containers such as `srsim-a` and `srsim-1`.
 
 **Example distributed topology:**
 
@@ -139,7 +201,7 @@ spec:
 
 5. **Multiple chassis**: If you deploy multiple distributed chassis (e.g., two SR-7 routers), each chassis gets its own pod. Different chassis can be scheduled on different Kubernetes worker nodes.
 
-### MDA and Component Configuration
+### Card and Component Configuration
 
 For integrated systems, you can customize MDAs (Media Dependent Adapters) using environment variables:
 
@@ -153,18 +215,27 @@ nodes:
       NOKIA_SROS_MDA_2: me12-10/1gb-sfp+
 ```
 
-Or using the `components` block:
+For a distributed chassis, include the card inventory in the `components` block when containerlab
+should generate the corresponding SR OS card configuration:
 
 ```yaml
 nodes:
-  sr1:
+  srsim:
     kind: nokia_srsim
-    type: sr-1
+    type: sr-7
     components:
+      - slot: A
       - slot: 1
-        env:
-          NOKIA_SROS_MDA_1: me6-100gb-qsfp28
+        type: iom5-e
+        sfm: m-sfm6-7/12
+        mda:
+          - slot: 1
+            type: me6-100gb-qsfp28
 ```
+
+A component entry containing only `slot` starts that card's simulator container but does not tell
+containerlab which SR OS card, SFM, or MDA to provision. Supply `type`, `sfm`, and `mda` inventory
+when automatic card provisioning is required.
 
 ## Interface Naming
 
@@ -270,6 +341,11 @@ spec:
             kind: nokia_srsim
             type: sr-1
 ```
+
+All components of one logical node see the same license because they share the launcher filesystem.
+For the explicit-card form, attach the license to the primary Node when authoring primitive resources
+directly. If converted group members repeat the same shared destination, Clabernetes renders one Pod
+mount at that path; every repeated attachment must refer to the same license content.
 
 ## Limitations
 

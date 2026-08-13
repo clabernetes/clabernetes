@@ -75,8 +75,10 @@ not the final ownership model.
 Compilation is permissive for lossy fields that can be omitted: the controller emits the supported
 resources and logs warnings with source locations. It fails before resource creation when the
 definition cannot identify realizable c9s resources, including pseudo-nodes, special or unresolved
-endpoints, unsupported explicit link types, and invalid launcher groups. Strict diagnostics are
-available to library callers; `clabverter` does not currently expose a strict-mode flag.
+endpoints, unsupported explicit link types other than `veth`, and invalid launcher groups. Explicit
+`veth` links may use brief `node:interface` endpoints or equivalent structured `node`/`interface`
+mappings. Strict diagnostics are available to library callers; `clabverter` does not currently
+expose a strict-mode flag.
 
 ### Launchers
 
@@ -89,11 +91,22 @@ the Links terminating on them via field selectors, and verifies that link view a
 digest annotation the node controller stamped on the pod. From that it materializes a
 containerlab topology file locally and runs plain containerlab.
 
-When status probes are enabled, the launcher checks every nested container in its group. Each must
-be running and not paused, restarting, or dead; an image-defined Docker healthcheck must also be
-healthy. The shared launcher status is therefore group-atomic. Optional TCP and SSH checks are
-additional application checks against the primary Node, while a running image without a
-healthcheck remains only process-level readiness.
+Containerlab normally creates one same-named nested container for a Node. A component-based node,
+such as a distributed SR-SIM chassis, is different: containerlab expands the logical node into card
+containers, labels them with one root-node identity, builds the internal fabric, and puts the cards
+in one network namespace. Clabernetes keeps that expansion inside one launcher Pod and treats the
+whole set as one logical Node; it does not reproduce containerlab's device-specific component or
+fabric logic.
+
+When status probes are enabled, the launcher checks every nested container in a group or expanded
+component set. Each must be running and not paused, restarting, or dead; an image-defined Docker
+healthcheck must also be healthy. The shared launcher status is therefore atomic across the full
+set. Optional TCP and SSH checks address the single container that owns the shared network
+namespace, while a running image without a healthcheck remains only process-level readiness.
+
+Grouped Nodes also share the launcher's filesystem. If several members carry a shared payload such
+as an SR-SIM license at the same destination, the Deployment renders that destination once; the
+attachments must refer to the same shared content.
 
 ### Inter-Node Connectivity
 
