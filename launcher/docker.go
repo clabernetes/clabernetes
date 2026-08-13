@@ -20,7 +20,25 @@ const (
 	dockerDaemonConfig   = "/etc/docker/daemon.json"
 	vfsStorageDriver     = "vfs"
 	overlayStorageDriver = "overlay2"
+
+	containerlabNodeNameLabel     = "clab-node-name"
+	containerlabRootNodeNameLabel = "clab-root-node-name"
 )
+
+type dockerContainerInspect struct {
+	ID     string `json:"Id"`
+	Config struct {
+		Labels map[string]string `json:"Labels"`
+	} `json:"Config"`
+	HostConfig struct {
+		NetworkMode string `json:"NetworkMode"`
+	} `json:"HostConfig"`
+}
+
+type nodeContainers struct {
+	containerIDs       map[string]string
+	primaryContainerID string
+}
 
 func daemonConfigExists() bool {
 	_, err := os.Stat(dockerDaemonConfig)
@@ -271,22 +289,11 @@ func tailContainerLogs(
 }
 
 func getContainerIDForNodeName(ctx context.Context, nodeName string) (string, error) {
-	psCmd := exec.CommandContext( //nolint:gosec
-		ctx,
-		"docker",
-		"ps",
-		"--all",
-		"--quiet",
-		"--filter",
-		fmt.Sprintf("label=clab-node-name=%s", nodeName),
-	)
-
-	output, err := psCmd.Output()
+	containerIDs, err := getContainerIDsForLabel(ctx, containerlabNodeNameLabel, nodeName)
 	if err != nil {
 		return "", err
 	}
 
-	containerIDs := strings.Fields(string(output))
 	if len(containerIDs) > 1 {
 		return "", fmt.Errorf(
 			"%w: found multiple containers for node %q",
@@ -300,6 +307,118 @@ func getContainerIDForNodeName(ctx context.Context, nodeName string) (string, er
 	}
 
 	return containerIDs[0], nil
+}
+
+func getContainerIDsForLabel(ctx context.Context, label, value string) ([]string, error) {
+	psCmd := exec.CommandContext( //nolint:gosec
+		ctx,
+		"docker",
+		"ps",
+		"--all",
+		"--quiet",
+		"--filter",
+		fmt.Sprintf("label=%s=%s", label, value),
+	)
+
+	output, err := psCmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	return strings.Fields(string(output)), nil
+}
+
+func getNodeContainers(ctx context.Context, nodeName string) (*nodeContainers, error) {
+	containerID, err := getContainerIDForNodeName(ctx, nodeName)
+	if err != nil {
+		return nil, err
+	}
+
+	if containerID != "" {
+		return &nodeContainers{
+			containerIDs:       map[string]string{nodeName: containerID},
+			primaryContainerID: containerID,
+		}, nil
+	}
+
+	componentIDs, err := getContainerIDsForLabel(ctx, containerlabRootNodeNameLabel, nodeName)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(componentIDs) == 0 {
+		return &nodeContainers{containerIDs: map[string]string{}}, nil
+	}
+
+	inspectArgs := append([]string{"inspect"}, componentIDs...)
+	inspectCmd := exec.CommandContext(ctx, "docker", inspectArgs...) //nolint:gosec
+
+	output, err := inspectCmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	inspected := []*dockerContainerInspect{}
+
+	err = json.Unmarshal(output, &inspected)
+	if err != nil {
+		return nil, fmt.Errorf("failed decoding docker component containers: %w", err)
+	}
+
+	return resolveComponentContainers(nodeName, inspected)
+}
+
+func resolveComponentContainers(
+	rootNodeName string,
+	inspected []*dockerContainerInspect,
+) (*nodeContainers, error) {
+	resolved := &nodeContainers{containerIDs: map[string]string{}}
+
+	for _, container := range inspected {
+		componentName := container.Config.Labels[containerlabNodeNameLabel]
+		if componentName == "" {
+			return nil, fmt.Errorf(
+				"%w: component container %q for node %q has no %q label",
+				claberneteserrors.ErrInvalidData,
+				container.ID,
+				rootNodeName,
+				containerlabNodeNameLabel,
+			)
+		}
+
+		if existingID := resolved.containerIDs[componentName]; existingID != "" {
+			return nil, fmt.Errorf(
+				"%w: found multiple component containers named %q for node %q",
+				claberneteserrors.ErrInvalidData,
+				componentName,
+				rootNodeName,
+			)
+		}
+
+		resolved.containerIDs[componentName] = container.ID
+
+		if !strings.HasPrefix(container.HostConfig.NetworkMode, "container:") {
+			if resolved.primaryContainerID != "" {
+				return nil, fmt.Errorf(
+					"%w: found multiple network namespace owners for component node %q",
+					claberneteserrors.ErrInvalidData,
+					rootNodeName,
+				)
+			}
+
+			resolved.primaryContainerID = container.ID
+		}
+	}
+
+	if resolved.primaryContainerID == "" {
+		return nil, fmt.Errorf(
+			"%w: no network namespace owner found for component node %q",
+			claberneteserrors.ErrInvalidData,
+			rootNodeName,
+		)
+	}
+
+	return resolved, nil
 }
 
 func getContainerAddr(ctx context.Context, containerID string) (string, error) {

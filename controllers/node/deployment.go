@@ -415,6 +415,8 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 		)
 	}
 
+	mountedPayloadPaths := map[string]struct{}{}
+
 	for _, memberName := range input.GroupMembers {
 		memberNode := input.NodesByName[memberName]
 		if memberNode == nil && memberName == input.Node.GetName() {
@@ -426,6 +428,24 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 		}
 
 		for fileIndex, podVolume := range memberNode.Spec.FilesFromConfigMap {
+			var mountPath string
+
+			// mount relative paths under /clabernetes, and absolute paths as is
+			if strings.HasPrefix(podVolume.FilePath, "/") {
+				mountPath = podVolume.FilePath
+			} else {
+				mountPath = fmt.Sprintf("/clabernetes/%s", podVolume.FilePath)
+			}
+
+			// Grouped nodes share one launcher filesystem. A shared source file (notably an
+			// SR-SIM license) therefore has the same mount path on every member and must only be
+			// mounted once; Kubernetes rejects duplicate VolumeMount mountPath values.
+			if _, alreadyMounted := mountedPayloadPaths[mountPath]; alreadyMounted {
+				continue
+			}
+
+			mountedPayloadPaths[mountPath] = struct{}{}
+
 			// Prefix every volume with the member and attachment index. Different grouped Nodes
 			// may legitimately use the same ConfigMap key, but Kubernetes volume names in their
 			// shared launcher Pod must still be unique.
@@ -466,15 +486,6 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 					},
 				},
 			)
-
-			var mountPath string
-
-			// mount relative paths under /clabernetes, and absolute paths as is
-			if strings.HasPrefix(podVolume.FilePath, "/") {
-				mountPath = podVolume.FilePath
-			} else {
-				mountPath = fmt.Sprintf("/clabernetes/%s", podVolume.FilePath)
-			}
 
 			volumeMountsFromCommonSpec = append(
 				volumeMountsFromCommonSpec,

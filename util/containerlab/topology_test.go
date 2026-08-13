@@ -71,6 +71,48 @@ topology:
 	}
 }
 
+func TestLoadContainerlabConfigStructuredVethEndpoints(t *testing.T) {
+	t.Parallel()
+
+	config, unknownFields, err := clabernetesutilcontainerlab.LoadContainerlabConfig(`
+name: structured-links
+topology:
+  nodes:
+    srsim:
+      kind: nokia_srsim
+    client:
+      kind: linux
+  links:
+    - type: veth
+      endpoints:
+        - node: srsim
+          interface: 1/1/c1/1
+        - node: client
+          interface: eth1
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(unknownFields) != 0 {
+		t.Fatalf("structured veth endpoint warnings = %q, want none", unknownFields)
+	}
+
+	want := clabernetesutilcontainerlab.LinkEndpoints{"srsim:1/1/c1/1", "client:eth1"}
+	if diff := cmp.Diff(want, config.Topology.Links[0].Endpoints); diff != "" {
+		t.Fatalf("structured endpoints mismatch (-want +got):\n%s", diff)
+	}
+
+	rendered, err := yaml.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(rendered), "- srsim:1/1/c1/1") {
+		t.Fatalf("canonical rendered endpoints missing from:\n%s", rendered)
+	}
+}
+
 func TestLoadContainerlabConfigFromConfigObjects(t *testing.T) {
 	cases := []struct {
 		config *clabernetesutilcontainerlab.Config

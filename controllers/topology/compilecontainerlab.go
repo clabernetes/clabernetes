@@ -435,7 +435,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 		}
 
 		switch link.Type {
-		case "", "brief":
+		case "", "brief", "veth":
 		default:
 			diagnostics.add(unsupportedContainerlabLinkTypeDiagnostic(link.Type, linkPath), true)
 

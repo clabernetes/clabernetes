@@ -1,7 +1,11 @@
 package containerlab
 
 import (
+	"fmt"
+
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	"gopkg.in/yaml.v3"
 )
 
 // The containerlab *vocabulary* -- the node definition and its sub objects -- lives in
@@ -143,8 +147,60 @@ type LinkDefinition struct {
 
 // LinkConfig is the vendor'd (ish) clab link config object.
 type LinkConfig struct {
-	Endpoints []string
+	Endpoints LinkEndpoints
 	Labels    map[string]string `yaml:"labels,omitempty"`
 	Vars      map[string]any    `yaml:"vars,omitempty"`
 	MTU       int               `yaml:"mtu,omitempty"`
+}
+
+// LinkEndpoints accepts both containerlab's brief "node:interface" endpoint syntax and the
+// equivalent structured node/interface syntax used by explicit veth links. It stores the canonical
+// brief form because that is the complete endpoint vocabulary the c9s Link API can represent.
+type LinkEndpoints []string
+
+func (e *LinkEndpoints) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.SequenceNode {
+		return fmt.Errorf("%w: link endpoints must be a sequence", claberneteserrors.ErrParse)
+	}
+
+	endpoints := make(LinkEndpoints, 0, len(value.Content))
+
+	for _, endpointNode := range value.Content {
+		switch endpointNode.Kind {
+		case yaml.ScalarNode:
+			endpoints = append(endpoints, endpointNode.Value)
+		case yaml.MappingNode:
+			endpoint := struct {
+				Node      string `yaml:"node"`
+				Interface string `yaml:"interface"`
+			}{}
+
+			err := endpointNode.Decode(&endpoint)
+			if err != nil {
+				return err
+			}
+
+			if endpoint.Node == "" || endpoint.Interface == "" {
+				return fmt.Errorf(
+					"%w: structured link endpoints require node and interface",
+					claberneteserrors.ErrParse,
+				)
+			}
+
+			endpoints = append(endpoints, fmt.Sprintf("%s:%s", endpoint.Node, endpoint.Interface))
+		case yaml.DocumentNode, yaml.SequenceNode, yaml.AliasNode:
+			return fmt.Errorf(
+				"%w: link endpoint must be a string or node/interface mapping",
+				claberneteserrors.ErrParse,
+			)
+		}
+	}
+
+	*e = endpoints
+
+	return nil
+}
+
+func (e LinkEndpoints) MarshalYAML() (any, error) {
+	return []string(e), nil
 }

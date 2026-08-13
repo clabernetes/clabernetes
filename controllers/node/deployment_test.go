@@ -140,6 +140,70 @@ func TestRenderDeployment(t *testing.T) {
 	}
 }
 
+func TestRenderDeploymentDeduplicatesGroupedPayloadMountPaths(t *testing.T) {
+	primary := &clabernetesapisv1alpha1.Node{}
+	primary.Name = "srsim-a"
+	primary.Namespace = "clabernetes"
+	primary.Spec.FilesFromConfigMap = []clabernetesapisv1alpha1.FileFromConfigMap{{
+		FilePath:      "/opt/sros/license.txt",
+		ConfigMapName: "srsim-a-files",
+		ConfigMapPath: "license.txt",
+	}}
+
+	lineCard := &clabernetesapisv1alpha1.Node{}
+	lineCard.Name = "srsim-1"
+	lineCard.Spec.FilesFromConfigMap = []clabernetesapisv1alpha1.FileFromConfigMap{{
+		FilePath:      "/opt/sros/license.txt",
+		ConfigMapName: "srsim-1-files",
+		ConfigMapPath: "license.txt",
+	}}
+
+	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
+		&claberneteslogging.FakeInstance{},
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	deployment := reconciler.Render(
+		&clabernetescontrollersnode.RenderInput{
+			Node:         primary,
+			Profile:      testResolvedProfile(t, nil),
+			GroupMembers: []string{"srsim-a", "srsim-1"},
+			NodesByName: map[string]*clabernetesapisv1alpha1.Node{
+				"srsim-a": primary,
+				"srsim-1": lineCard,
+			},
+		},
+	)
+
+	licenseMounts := 0
+
+	for _, mount := range deployment.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if mount.MountPath == "/opt/sros/license.txt" {
+			licenseMounts++
+		}
+	}
+
+	if licenseMounts != 1 {
+		t.Fatalf("shared license mount count = %d, want 1", licenseMounts)
+	}
+
+	payloadVolumes := 0
+
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.ConfigMap != nil &&
+			(volume.ConfigMap.Name == "srsim-a-files" || volume.ConfigMap.Name == "srsim-1-files") {
+			payloadVolumes++
+		}
+	}
+
+	if payloadVolumes != 1 {
+		t.Fatalf("shared license payload volume count = %d, want 1", payloadVolumes)
+	}
+}
+
 func assertRenderedContainer(t *testing.T, container *k8scorev1.Container) {
 	t.Helper()
 

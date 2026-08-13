@@ -3,6 +3,7 @@ package launcher //nolint:testpackage // tests cover unexported docker daemon co
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
@@ -141,6 +142,92 @@ func TestParseContainerReadiness(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveComponentContainers(t *testing.T) {
+	t.Parallel()
+
+	lineCard := componentContainerInspect("line-card-id", "srsim-1", "clab")
+	cpm := componentContainerInspect("cpm-id", "srsim-a", "container:line-card-id")
+
+	resolved, err := resolveComponentContainers("srsim", []*dockerContainerInspect{cpm, lineCard})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resolved.primaryContainerID != "line-card-id" {
+		t.Fatalf(
+			"primary component container = %q, want line-card-id",
+			resolved.primaryContainerID,
+		)
+	}
+
+	if len(resolved.containerIDs) != 2 ||
+		resolved.containerIDs["srsim-1"] != "line-card-id" ||
+		resolved.containerIDs["srsim-a"] != "cpm-id" {
+		t.Fatalf("resolved component containers = %+v", resolved.containerIDs)
+	}
+}
+
+func TestResolveComponentContainersRejectsInvalidGroups(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		containers []*dockerContainerInspect
+		wantError  string
+	}{
+		{
+			name: "missing-node-name-label",
+			containers: []*dockerContainerInspect{
+				componentContainerInspect("component-id", "", "clab"),
+			},
+			wantError: "has no \"clab-node-name\" label",
+		},
+		{
+			name: "duplicate-component-name",
+			containers: []*dockerContainerInspect{
+				componentContainerInspect("first-id", "srsim-a", "clab"),
+				componentContainerInspect("second-id", "srsim-a", "container:first-id"),
+			},
+			wantError: "multiple component containers named \"srsim-a\"",
+		},
+		{
+			name: "multiple-netns-owners",
+			containers: []*dockerContainerInspect{
+				componentContainerInspect("first-id", "srsim-1", "clab"),
+				componentContainerInspect("second-id", "srsim-a", "clab"),
+			},
+			wantError: "multiple network namespace owners",
+		},
+		{
+			name: "missing-netns-owner",
+			containers: []*dockerContainerInspect{
+				componentContainerInspect("first-id", "srsim-1", "container:other"),
+				componentContainerInspect("second-id", "srsim-a", "container:first-id"),
+			},
+			wantError: "no network namespace owner found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := resolveComponentContainers("srsim", tt.containers)
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("resolveComponentContainers() error = %v, want %q", err, tt.wantError)
+			}
+		})
+	}
+}
+
+func componentContainerInspect(id, nodeName, networkMode string) *dockerContainerInspect {
+	container := &dockerContainerInspect{ID: id}
+	container.Config.Labels = map[string]string{containerlabNodeNameLabel: nodeName}
+	container.HostConfig.NetworkMode = networkMode
+
+	return container
 }
 
 func TestWriteNodeStatus(t *testing.T) {

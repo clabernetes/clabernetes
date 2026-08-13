@@ -242,6 +242,44 @@ func TestCompileContainerlabLinks(t *testing.T) {
 	}
 }
 
+func TestCompileContainerlabStructuredVethLink(t *testing.T) {
+	compiled, err := compileDefinitionWithOptions(t, `
+name: structured-veth
+topology:
+  nodes:
+    srsim:
+      kind: nokia_srsim
+      image: registry.example/nokia_srsim:latest
+      type: sr-7
+      components:
+        - slot: A
+        - slot: 1
+    client:
+      kind: linux
+      image: alpine:latest
+  links:
+    - type: veth
+      endpoints:
+        - node: srsim
+          interface: 1/1/c1/1
+        - node: client
+          interface: eth1
+`, clabernetescontrollerstopology.CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(compiled.Links) != 1 {
+		t.Fatalf("compiled links = %+v, want one", compiled.Links)
+	}
+
+	link := compiled.Links[0]
+	if link.EndpointA.NodeName != "srsim" || link.EndpointA.InterfaceName != "1/1/c1/1" ||
+		link.EndpointB.NodeName != "client" || link.EndpointB.InterfaceName != "eth1" {
+		t.Fatalf("compiled structured veth link = %+v", link)
+	}
+}
+
 func TestCompileTopologyStrictRejectsLossyCompatibility(t *testing.T) {
 	definition := `
 name: strict-test
@@ -370,16 +408,6 @@ topology:
     - type: vxlan
       remote: 192.0.2.1
       endpoint: {node: n1, interface: eth1}
-`,
-		"explicit veth with brief endpoints": `
-name: explicit-veth-test
-topology:
-  nodes:
-    n1: {kind: linux, image: alpine}
-    n2: {kind: linux, image: alpine}
-  links:
-    - type: veth
-      endpoints: ["n1:eth1", "n2:eth1"]
 `,
 		"explicit host with brief endpoints": `
 name: explicit-host-test
