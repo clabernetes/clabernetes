@@ -7,7 +7,7 @@ globalTolerations: &globalTolerations
     effect: PreferNoSchedule
 globalConfig:
   imagePull:
-    criHostsDir: "/etc/cri/hosts #prod"
+    criHostsDir: "/etc/cri/hosts"
 manager:
   deploymentTolerations:
     - key: test_toleration_manager_only
