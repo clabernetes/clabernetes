@@ -28,6 +28,30 @@ Clients always connect to the node's natural port: the Service listens on the de
 targets the allocated pod-side port. That allocation is c9s's to make, which is why `ports` entries
 declare a destination port only.
 
+### Portable containerlab topologies
+
+A normal containerlab `ports` entry publishes the port on the local Docker host. When a port is
+needed only so nodes can communicate through a c9s Service, use the c9s definition label instead:
+
+```yaml
+topology:
+  nodes:
+    gnmic:
+      kind: linux
+      image: ghcr.io/openconfig/gnmic:latest
+      labels:
+        c9s.run/exposePorts: "9273/tcp,8125/udp"
+```
+
+The value is a comma-separated list using the same destination-port grammar as `Node.spec.ports`.
+Each entry is a destination port with an optional `tcp` or `udp` protocol. The c9s topology
+compiler and `clabverter --emit-crs` consume all entries into `Node.spec.ports`; the label is not
+copied to Kubernetes labels. Invalid entries fail compilation. Local containerlab keeps the value
+as an inert container label and does not publish either port on the host.
+
+This label only declares which ports the c9s Service carries. The effective LauncherProfile still
+controls whether that Service is a `ClusterIP`, `LoadBalancer`, `Headless`, or disabled.
+
 ## Exposure Options
 
 ### Complete Disable (`disableExpose: true`)

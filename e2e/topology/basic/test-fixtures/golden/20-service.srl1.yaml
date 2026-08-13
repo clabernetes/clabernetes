@@ -58,22 +58,26 @@ spec:
       port: 6030
       protocol: TCP
       targetPort: 60008
+    - name: port-9273-tcp
+      port: 9273
+      protocol: TCP
+      targetPort: 60009
     - name: port-9339-tcp
       port: 9339
       protocol: TCP
-      targetPort: 60009
+      targetPort: 60010
     - name: port-9340-tcp
       port: 9340
       protocol: TCP
-      targetPort: 60010
+      targetPort: 60011
     - name: port-9559-tcp
       port: 9559
       protocol: TCP
-      targetPort: 60011
+      targetPort: 60012
     - name: port-57400-tcp
       port: 57400
       protocol: TCP
-      targetPort: 60012
+      targetPort: 60013
     - name: port-161-udp
       port: 161
       protocol: UDP

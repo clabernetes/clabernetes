@@ -50,6 +50,7 @@ func Run(t *testing.T, testName string, steps []Step, namespace string) { //noli
 				t.Logf("\tbegin assertion of %q resources %q", kind, object.Name)
 
 				fileName := fmt.Sprintf("golden/%d-%s.%s.yaml", step.Index, kind, object.Name)
+				clabernetestesthelper.KubectlWaitForCreate(t, kind, namespace, object.Name)
 
 				if *clabernetestesthelper.Update {
 					// updating so no reason to fetch/compare object

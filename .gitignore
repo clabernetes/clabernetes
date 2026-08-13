@@ -66,3 +66,7 @@ venv
 
 # ignore the docs-site source directory
 /docs-site/.source/
+
+# build cache
+go-build*/
+build/**/*.lock

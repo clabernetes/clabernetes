@@ -20,6 +20,8 @@ spec:
   kind: srl
   launcherProfileRef:
     name: topology-basic
+  ports:
+    - 9273/tcp
 status:
   appliedLauncherProfile:
     name: topology-basic
@@ -52,17 +54,20 @@ status:
       - destinationPort: 6030
         exposePort: 60008
         protocol: TCP
-      - destinationPort: 9339
+      - destinationPort: 9273
         exposePort: 60009
         protocol: TCP
-      - destinationPort: 9340
+      - destinationPort: 9339
         exposePort: 60010
         protocol: TCP
-      - destinationPort: 9559
+      - destinationPort: 9340
         exposePort: 60011
         protocol: TCP
-      - destinationPort: 57400
+      - destinationPort: 9559
         exposePort: 60012
+        protocol: TCP
+      - destinationPort: 57400
+        exposePort: 60013
         protocol: TCP
       - destinationPort: 161
         exposePort: 60000

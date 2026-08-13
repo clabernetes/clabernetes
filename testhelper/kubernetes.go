@@ -152,6 +152,20 @@ func NormalizeDeployment(t *testing.T, objectData []byte) []byte {
 
 	// we dont care about testing that the image was set "right" really, so just remove it
 	objectData = YQCommand(t, objectData, "del(.spec.template.spec.containers[0].image)")
+	// The manager namespace and launcher log level differ between legacy and dedicated current
+	// checkout installs, but neither is part of the deployment shape under test.
+	objectData = YQCommand(
+		t,
+		objectData,
+		`(.spec.template.spec.containers[].env[] | `+
+			`select(.name == "MANAGER_NAMESPACE").value) = "c9s"`,
+	)
+	objectData = YQCommand(
+		t,
+		objectData,
+		`(.spec.template.spec.containers[].env[] | `+
+			`select(.name == "LAUNCHER_LOGGER_LEVEL").value) = "debug"`,
+	)
 	// CRI discovery and socket paths vary by cluster runtime. They are covered by focused unit
 	// tests, while these e2e goldens assert the runtime-independent launcher Deployment shape.
 	objectData = YQCommand(
