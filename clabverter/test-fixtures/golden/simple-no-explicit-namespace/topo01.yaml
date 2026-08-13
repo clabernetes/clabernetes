@@ -17,6 +17,8 @@ spec:
           srl1:
             kind: srl
             image: ghcr.io/nokia/srlinux
+            labels:
+              c9s.run/exposePorts: "9273/tcp"
             startup-config: srl1.cfg
             license: taco/srl1.license
           srl2:

@@ -69,7 +69,8 @@ controller copies them to the launcher Deployment and its Pods. They inherit fro
 `kinds` like `env`, so Pods can be selected with `kubectl get pods -l owner=roman`. There is no
 `Node.spec.labels`; labels in the embedded definition are converted to Kubernetes metadata.
 Invalid Kubernetes labels and c9s-owned namespaces or identity/selector keys are omitted with a
-warning.
+warning. The one reserved source directive, `c9s.run/exposePorts`, is consumed into
+`Node.spec.ports` instead of becoming metadata; see [Service exposure](../guides/expose-configuration.md#portable-containerlab-topologies).
 
 ## Reconciliation lifecycle
 

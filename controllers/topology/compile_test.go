@@ -77,8 +77,10 @@ topology:
         - 5201/udp
       labels:
         owner: roman
-        # docker labels are far more permissive than kubernetes labels, and clabernetes owns its
-        # own label namespace and controller keys -- all four of these have to be dropped
+        # The exposePorts directive is consumed into ports and never becomes Kubernetes metadata.
+        c9s.run/exposePorts: "5201/UDP, 9273/tcp, 9273/tcp"
+        # Docker labels are far more permissive than Kubernetes labels, and clabernetes owns its
+        # own label namespace and controller keys -- all four of these have to be dropped.
         not a valid key: x
         bad-value: has spaces and a !
         c9s.run/ignoreReconcile: "true"
@@ -150,7 +152,7 @@ func TestCompileContainerlabFlattening(t *testing.T) {
 
 	// pasted containerlab topologies carry docker style bindings; the host side is dropped since
 	// clabernetes allocates it, while destination-only entries pass through untouched
-	expectedPorts := []string{"22/tcp", "5201/udp"}
+	expectedPorts := []string{"22/tcp", "5201/udp", "9273/tcp"}
 	if !reflect.DeepEqual(srl1.Ports, expectedPorts) {
 		t.Fatalf("expected normalized node ports %v, got %v", expectedPorts, srl1.Ports)
 	}
@@ -176,6 +178,38 @@ func TestCompileContainerlabFlattening(t *testing.T) {
 
 	if compiled.Mgmt == nil || compiled.Mgmt.IPv4Subnet != "172.20.20.0/24" {
 		t.Fatalf("expected mgmt settings to be compiled, got %+v", compiled.Mgmt)
+	}
+}
+
+func TestCompileContainerlabExposePortsLabelRejectsInvalidEntries(t *testing.T) {
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Spec.Definition.Containerlab = `
+name: invalid-expose-ports
+topology:
+  nodes:
+    gnmic:
+      kind: linux
+      image: ghcr.io/openconfig/gnmic:latest
+      labels:
+        c9s.run/exposePorts: "9273/tcp, not-a-port"
+`
+
+	_, err := clabernetescontrollerstopology.CompileTopology(
+		&claberneteslogging.FakeInstance{},
+		topology,
+	)
+	if err == nil {
+		t.Fatal("expected invalid exposePorts entry to fail compilation")
+	}
+
+	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	if len(unsupported.Diagnostics) != 1 ||
+		unsupported.Diagnostics[0].Code != "invalid-expose-ports-label" {
+		t.Fatalf("unexpected diagnostics: %+v", unsupported.Diagnostics)
 	}
 }
 

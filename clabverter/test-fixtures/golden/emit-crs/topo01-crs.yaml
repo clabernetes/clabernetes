@@ -106,6 +106,8 @@ spec:
   launcherProfileRef:
     name: topo01
   license: taco/srl1.license
+  ports:
+  - 9273/tcp
   startup-config: srl1.cfg
 
 ---
