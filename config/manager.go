@@ -138,6 +138,8 @@ type Manager interface { //nolint: interfacebloat
 	GetImagePullCriSockOverride() string
 	// GetImagePullCriKindOverride returns the cri kind override.
 	GetImagePullCriKindOverride() string
+	// GetImagePullCriHostsDir returns the host directory containing CRI registry configuration.
+	GetImagePullCriHostsDir() string
 	// GetDockerDaemonConfig returns the secret name to mount in /etc/docker -- the secret *must*
 	// have a key "daemon.json" so the final mounted file is /etc/docker/daemon.json.
 	GetDockerDaemonConfig() string

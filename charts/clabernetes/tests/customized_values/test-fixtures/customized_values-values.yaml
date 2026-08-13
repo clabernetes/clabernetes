@@ -5,6 +5,9 @@ globalTolerations: &globalTolerations
     operator: Equal
     value: "true"
     effect: PreferNoSchedule
+globalConfig:
+  imagePull:
+    criHostsDir: "/etc/cri/hosts #prod"
 manager:
   deploymentTolerations:
     - key: test_toleration_manager_only

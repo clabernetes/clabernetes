@@ -428,6 +428,19 @@ spec:
                   ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling
                   images.
                 properties:
+                  criHostsDir:
+                    description: |-
+                      CRIHostsDir is an optional host directory containing containerd registry hosts
+                      configuration. When set and the effective CRI is containerd, the directory is mounted
+                      read-only into pull-through launchers both at its original path (so certificate paths rooted
+                      in this directory remain valid) and at containerd's conventional certs.d path used by
+                      nerdctl.
+                    pattern: ^/.+
+                    type: string
+                    x-kubernetes-validations:
+                    - message: criHostsDir must be an absolute non-root path without
+                        '.' or '..' segments
+                      rule: self.matches('^/.*[^/].*$') && !self.matches('(^|/)[.][.]?(/|$)')
                   criKindOverride:
                     description: |-
                       CRIKindOverride allows for overriding the auto discovered cri flavor of the cluster -- this

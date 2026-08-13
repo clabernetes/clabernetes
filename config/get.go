@@ -117,6 +117,13 @@ func (m *manager) GetImagePullCriKindOverride() string {
 	return m.config.ImagePull.CRIKindOverride
 }
 
+func (m *manager) GetImagePullCriHostsDir() string {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	return m.config.ImagePull.CRIHostsDir
+}
+
 func (m *manager) GetDockerDaemonConfig() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()

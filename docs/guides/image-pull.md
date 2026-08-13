@@ -249,6 +249,28 @@ Common paths:
 - K3s: `/run/k3s/containerd/containerd.sock`
 - Minikube: `/var/run/containerd/containerd.sock`
 
+### CRI Registry Hosts
+
+Some containerd installations keep registry mirror, TLS, and host configuration outside the
+default `/etc/containerd/certs.d` directory. Set `criHostsDir` to make that host directory
+available to all pull-through launchers:
+
+```yaml
+spec:
+  imagePull:
+    pullThroughOverride: always
+    criHostsDir: /path/to/containerd/hosts
+```
+
+The directory is mounted read-only at both its original path and `/etc/containerd/certs.d`.
+Keeping the original path available allows certificate paths rooted inside that directory tree
+to continue working, while the conventional path lets nerdctl use the same registry configuration
+as the node runtime. Absolute certificate paths outside `criHostsDir` are not mounted; keep those
+certificates under `criHostsDir` or make them available to the launcher separately. The configured
+path must be an existing directory on every containerd node that can run a pull-through launcher.
+It is not mounted when pull-through is disabled or the effective CRI kind is not containerd; a
+configured `criKindOverride` takes precedence over cluster auto-detection.
+
 ## Complete Examples
 
 ### Public Registry
