@@ -1,22 +1,30 @@
 ## Why
 
-Containerlab nodes on the same Docker management network can reach every listening container port,
-but c9s nodes are isolated behind per-node Kubernetes Services and only declared/default ports are
-reachable. Reusing the native `ports` field would unnecessarily publish an internal-only port on a
-local Docker host, so portable topologies need a c9s-specific declaration that does not change local
-runtime behavior.
+Containerlab nodes on one local Docker management network can reach listening ports without host
+publication, while c9s nodes are reached through Kubernetes Services whose ports must be declared.
+Portable topologies therefore need a c9s-only declaration for internal Service ports that remains
+inert when the same topology is run directly by containerlab.
 
 ## What Changes
 
-- Add the definition-only `c9s.run/exposePorts` containerlab node label.
-- Compile its comma-separated destination-port entries into `Node.spec.ports`, merging and
-  deduplicating them with ordinary topology ports.
-- Consume the directive before Kubernetes metadata rendering so it cannot become a controller-owned
-  object label.
-- Reject malformed directive entries instead of silently deploying an unreachable service.
-- Make the behavior available to the in-cluster Topology compiler, `clabverter --emit-crs`, and
-  containerlab's c9s runtime through their shared compiler.
-- Document the portable-topology use case and label grammar.
+- Define `c9s.run/exposePorts` as a reserved, definition-only Containerlab node label.
+- Interpret its comma-separated entries as destination-port declarations using the existing c9s
+  port grammar: `port` or `port/{tcp,udp}`.
+- Trim and canonicalize directive entries, deduplicating them semantically with ordinary topology
+  ports and with other directive entries.
+- Consume the directive after topology defaults, kinds, and node fields have been flattened and
+  ordinary port bindings normalized, but before source labels are rendered as Kubernetes metadata.
+- Fail compilation with a source diagnostic for any empty or malformed directive entry; do not
+  silently produce a topology with an unreachable dependency.
+- Make in-cluster Topology compilation and `clabverter --emit-crs` produce identical Node port
+  intent through the shared compiler.
+- Preserve the source label in the embedded topology used by local containerlab, where it remains
+  an inert Docker label and does not publish a host port.
+- Document the directive, its inheritance and exposure-policy interactions, and add compiler and
+  conversion-path coverage.
+
+No CRD, persisted Node API, launcher allocation, Service rendering, or local containerlab port
+publication behavior changes are required.
 
 ## Capabilities
 
@@ -26,14 +34,13 @@ None.
 
 ### Modified Capabilities
 
-- `topology-resource`: Define how a reserved source label declares c9s-only exposed ports and is
-  consumed into emitted Node intent.
+- `topology-resource`: Specify the reserved source directive, its effective-node inheritance,
+  validation and canonicalization rules, and its conversion into `Node.spec.ports`.
 
 ## Impact
 
-- Compiler and compiler diagnostics under `controllers/topology/`.
-- The shared c9s label constants.
-- Clabverter primitive manifests and golden fixtures.
+- `controllers/topology/` compiler diagnostics and rendering.
+- Shared label and port parsing constants/utilities.
+- Clabverter primitive manifests and fixtures.
 - Topology and service-exposure documentation.
-- Portable topology consumers such as containerlab's c9s runtime and srl-telemetry-lab.
-- No CRD, Node API, launcher, Service reconciler, or local containerlab runtime behavior changes.
+- Downstream consumers that import the shared compiler, including containerlab's c9s runtime.

@@ -1,73 +1,99 @@
 ## Context
 
-The compiler already flattens native containerlab defaults, kinds, and nodes, normalizes native
-port bindings into `Node.spec.ports`, and filters reserved labels before rendering Node metadata.
-The Node controller, launcher materializer, and Service reconciler already implement all behavior
-after a destination port reaches `Node.spec.ports`. Clabverter and containerlab's c9s runtime both
-reuse this compiler.
+The topology compiler already flattens Containerlab defaults, kinds, and node definitions into
+self-contained Node intent. It also normalizes Docker-style host bindings into destination-only
+ports, filters reserved source labels, and feeds the same compiled representation to the in-cluster
+Topology controller and `clabverter --emit-crs`.
+
+Downstream Node reconciliation already allocates pod-side ports, renders Services, and materializes
+the resulting mappings into the launcher topology. The change therefore belongs at the source
+compiler boundary: it should turn a portable source declaration into the existing
+`Node.spec.ports` intent without changing downstream APIs or local Containerlab behavior.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Represent internal c9s Service reachability without changing local Docker host publication.
-- Keep one conversion path for Topology, clabverter primitive output, and the containerlab runtime.
-- Preserve existing Node exposure allocation and Service semantics.
+- Express c9s Service reachability for ports that must remain unpublished on a local Docker host.
+- Keep in-cluster compilation and direct manifest generation on one conversion path.
+- Make effective directive labels inherit through Containerlab defaults and kinds like other labels.
+- Validate malformed source input before any resource is rendered.
+- Preserve existing port allocation, Service type, and auto-exposure policy.
 
 **Non-Goals:**
 
-- Inferring application ports from node names, kinds, images, commands, or configuration files.
-- Changing `Node.spec.ports`, LauncherProfile exposure policy, or the default auto-exposed set.
-- Making arbitrary reserved labels user-controlled Kubernetes metadata.
+- Change the Node CRD or add a second persisted port field.
+- Infer ports from images, commands, kinds, or application configuration.
+- Change native Containerlab `ports` semantics for local runs.
+- Let arbitrary `c9s.run/` labels become user-controlled Kubernetes metadata.
 
 ## Decisions
 
-### Consume a reserved source label during topology compilation
+### Consume the directive after flattening and port normalization
 
-Use `c9s.run/exposePorts` as a definition-only directive and consume it after topology inheritance
-and native port normalization, but before reserved-label filtering. This makes the directive inherit
-like other containerlab labels while ensuring it never reaches Node metadata.
+Run the directive consumer on each flattened node after ordinary Docker-style port bindings have
+been reduced to destination-only entries. This gives a directive inherited from `defaults` or a
+kind the same effective-node semantics as other inherited labels, while allowing it to deduplicate
+against the final ordinary port list. Remove the directive before label validation/rendering so it
+cannot become Node metadata.
 
 Alternatives considered:
 
-- A normal `ports` entry changes local Docker behavior by publishing the port on the host.
-- A new containerlab schema field would require a broader containerlab API change for a c9s-only
-  concern.
-- Reading Node metadata in the Node controller would create a second user-intent API beside
-  `Node.spec.ports` and would not help direct Node resources.
+- Processing the raw YAML separately would duplicate inheritance rules and could diverge between
+  the controller and clabverter.
+- Processing it in the Node controller would make source labels part of a second user-intent API
+  and would not help `--emit-crs`.
+- Reusing native `ports` would publish an internal-only port on a local Docker host.
 
-### Use a comma-separated destination-port grammar
+### Reuse the established destination-port parser
 
-The label value accepts one or more comma-separated entries. Each trimmed entry uses the existing
-destination-port parser (`port` or `port/protocol`), is canonicalized to lower-case protocol, and is
-deduplicated with both ordinary ports and other directive entries.
+Split the label value on commas, trim each entry, and pass every entry through
+`ProcessPortDefinition`. That parser enforces ports 1 through 65535 and TCP/UDP protocols,
+including the default TCP protocol for a bare port. Store successful entries as
+`<destination>/<lowercase protocol>` and use that same canonical form for semantic deduplication
+against ordinary ports and prior directive entries.
 
-This is compact enough for a container label and reuses established Node semantics. Invalid entries
-are fatal because silently omitting one would deploy a topology whose internal dependency remains
-unreachable.
+An empty segment, unsupported protocol, range, host binding, or out-of-range port is fatal. The
+compiler collects diagnostics for all invalid entries but emits no compiled topology while any
+directive diagnostic remains.
 
-### Keep all downstream exposure behavior unchanged
+### Keep the downstream exposure pipeline unchanged
 
-The compiler appends canonical entries to the flattened node's ports. Existing allocation,
-launcher publication, and Service rendering then handle them identically to direct Node intent.
-This avoids CRD generation and keeps exposure type and enable/disable policy in LauncherProfile.
+The compiler appends only destination-port intent. Existing Node reconciliation resolves the
+effective LauncherProfile, allocates unique pod-side ports, persists allocations in status, and
+renders the Service. This preserves `disableExpose`, `disableAutoExpose`, and Service-type
+behavior without a CRD or generated-artifact change.
+
+### Preserve local-runtime inertness
+
+The source directive remains in the raw Containerlab definition stored by a normal Topology and is
+accepted as an ordinary Containerlab label by local Containerlab. Because it is not a native
+`ports` entry, local Containerlab does not publish a host port. c9s consumers that use the shared
+compiler consume it into Node intent; direct Node manifests do not gain any new directive.
 
 ## Risks / Trade-offs
 
-- **[Comma separation cannot express future syntax containing commas]** → The current destination
-  port grammar contains no comma; introduce a versioned/new directive if that ever changes.
-- **[A reserved label is inert under local containerlab but visible as a Docker label]** → Document
-  that this is intentional and that it does not publish host ports.
-- **[Consumers built against an older clabernetes module omit the directive]** → Require downstream
-  dependency bumps when the clabernetes change is released; validate both clabverter and
-  containerlab runtime paths.
+- **Inherited directives expose the same ports on every effective node using that defaults/kind
+  label** → Document that inheritance follows Containerlab label semantics; use a node-level label
+  when only one node needs the port.
+- **Comma separation reserves commas in the directive grammar** → The current destination-port
+  grammar contains no comma; introduce a new versioned directive if that changes.
+- **Older downstream compiler consumers ignore the directive** → Coordinate a dependency release and
+  test both clabverter and the containerlab c9s runtime against the shared compiler.
+- **A valid directive still has no effect when exposure is disabled** → Document that
+  `LauncherProfile` exposure policy remains authoritative.
 
 ## Migration Plan
 
-1. Release clabernetes with compiler, tests, and documentation.
-2. Update downstream containerlab to the released clabernetes module.
-3. Add `c9s.run/exposePorts` to topologies that require non-default internal Service ports.
+1. Release the compiler, tests, and documentation.
+2. Update downstream consumers to the released compiler module.
+3. Add `c9s.run/exposePorts` to portable topologies that require non-default internal Service ports.
 4. Remove any temporary application-specific port inference.
 
-Rollback is safe: remove the directive from affected topologies and restore the previous manager
-and consumer binaries. No CRDs or persisted API shapes change.
+Rollback is safe: remove the source directive and restore the previous compiler/consumer versions.
+No persisted API or CRD migration is required.
+
+## Open Questions
+
+None for the initial grammar and compiler integration. Downstream release coordination is an
+operational dependency, not a change to the behavior defined here.

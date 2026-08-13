@@ -10,17 +10,10 @@ without altering the Deployment's Pod selector.
 
 A label that Kubernetes would reject, or that is in the reserved `c9s.run/` namespace or uses a
 controller-owned label key, MUST be omitted with a warning naming it, so that a definition can
-neither produce an unacceptable Node nor set labels the controllers act on. The sole recognized
-source-directive exception is `c9s.run/exposePorts`: the compiler MUST consume its effective
-node-label value into the emitted Node's `spec.ports` and MUST NOT copy the directive to object
-metadata.
-
-The `c9s.run/exposePorts` value MUST contain one or more comma-separated destination-port entries.
-Each trimmed entry MUST use the established `port` or `port/{tcp,udp}` grammar, with TCP as the
-default protocol. The compiler MUST canonicalize successful entries to numeric destination port
-plus lowercase protocol and MUST deduplicate them semantically with ordinary topology ports and
-other directive entries. Any empty or malformed entry MUST make compilation fail with a diagnostic
-naming the node, directive, and invalid entry.
+neither produce an unacceptable Node nor set labels the controllers act on. The sole
+source-directive exception is `c9s.run/exposePorts`: the compiler MUST consume its comma-separated
+destination-port entries into the emitted Node's `spec.ports` and MUST NOT copy the directive to
+object metadata.
 
 #### Scenario: Label a lab node
 
@@ -45,22 +38,12 @@ naming the node, directive, and invalid entry.
 #### Scenario: Declare c9s-only service ports without publishing Docker host ports
 
 - **WHEN** a source topology node declares `c9s.run/exposePorts: "9273/tcp,8125/udp"`
-- **THEN** the emitted Node carries `9273/tcp` and `8125/udp` in `spec.ports`, the directive is absent from `metadata.labels`, and an equivalent ordinary port entry is not duplicated
-
-#### Scenario: Inherit c9s-only service ports
-
-- **WHEN** `c9s.run/exposePorts` is declared on topology defaults or a kind
-- **THEN** every effective node inheriting that label receives its canonical ports, subject to normal node-label override semantics, and no emitted Node carries the directive in metadata
+- **THEN** the emitted Node carries both entries in `spec.ports`, the directive is absent from `metadata.labels`, and an equivalent ordinary port entry is not duplicated
 
 #### Scenario: Reject an invalid c9s expose ports directive
 
-- **WHEN** a source topology node's `c9s.run/exposePorts` value contains an empty or malformed entry
+- **WHEN** a source topology node's `c9s.run/exposePorts` value contains an entry outside the destination-port grammar
 - **THEN** compilation fails with a diagnostic naming the node, label, and invalid entry rather than silently omitting the requested Service port
-
-#### Scenario: Preserve exposure policy
-
-- **WHEN** a valid directive is compiled for a Topology whose effective LauncherProfile disables exposure or auto-exposure
-- **THEN** the directive contributes only to Node port intent and the existing LauncherProfile policy continues to control whether a Service and automatic ports are realized
 
 #### Scenario: Omit a controller-owned label key
 

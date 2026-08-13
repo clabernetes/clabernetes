@@ -40,14 +40,14 @@ topology:
       kind: linux
       image: ghcr.io/openconfig/gnmic:latest
       labels:
-        c9s.run/exposePorts: "9273/tcp"
+        c9s.run/exposePorts: "9273/tcp,8125/udp"
 ```
 
-The value is a comma-separated list using the same destination-port grammar as `Node.spec.ports`,
-for example `"9273/tcp,8125/udp"`. The c9s topology compiler and `clabverter --emit-crs`
-consume the label into `Node.spec.ports`; it is not copied to Kubernetes labels. Invalid entries
-fail compilation. Local containerlab keeps the value as an inert container label and does not
-publish either port on the host.
+The value is a comma-separated list using the same destination-port grammar as `Node.spec.ports`.
+Each entry is a destination port with an optional `tcp` or `udp` protocol. The c9s topology
+compiler and `clabverter --emit-crs` consume all entries into `Node.spec.ports`; the label is not
+copied to Kubernetes labels. Invalid entries fail compilation. Local containerlab keeps the value
+as an inert container label and does not publish either port on the host.
 
 This label only declares which ports the c9s Service carries. The effective LauncherProfile still
 controls whether that Service is a `ClusterIP`, `LoadBalancer`, `Headless`, or disabled.
