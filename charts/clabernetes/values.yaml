@@ -107,6 +107,10 @@ globalConfig:
     # won't be needed often, but could come in handy in multi-cri clusters or if nodes for some
     # reason do not properly report their cri flavor (or we incorrectly parse it?!)
     # criKindOverride: ""
+    # criHostsDir optionally mounts a host directory containing containerd registry hosts
+    # configuration into pull-through launcher pods. The directory is also mounted at
+    # /etc/containerd/certs.d so nerdctl uses the same mirrors, certificates, and host settings.
+    # criHostsDir: ""
 
   deployment:
     # resourcesDefault hold the default resources to apply to clabernetes launcher pods.

@@ -763,6 +763,17 @@
                             "imagePull": {
                                 "description": "ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling\nimages.",
                                 "properties": {
+                                    "criHostsDir": {
+                                        "description": "CRIHostsDir is an optional host directory containing containerd registry hosts\nconfiguration. When set and the effective CRI is containerd, the directory is mounted\nread-only into pull-through launchers both at its original path (so certificate paths rooted\nin this directory remain valid) and at containerd's conventional certs.d path used by\nnerdctl.",
+                                        "pattern": "^/.+",
+                                        "type": "string",
+                                        "x-kubernetes-validations": [
+                                            {
+                                                "message": "criHostsDir must be an absolute non-root path without '.' or '..' segments",
+                                                "rule": "self.matches('^/.*[^/].*$') && !self.matches('(^|/)[.][.]?(/|$)')"
+                                            }
+                                        ]
+                                    },
                                     "criKindOverride": {
                                         "description": "CRIKindOverride allows for overriding the auto discovered cri flavor of the cluster -- this\nmay be useful if we fail to parse the cri kind for some reason, or in mixed cri flavor\nclusters -- however in the latter case, make sure that if you are using image pull through\nthat clabernetes workloads are only run on the nodes of the cri kind specified here!",
                                         "enum": [

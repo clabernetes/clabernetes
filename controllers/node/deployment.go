@@ -363,6 +363,12 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 		)
 	}
 
+	volumes, volumeMountsFromCommonSpec = r.renderDeploymentCRIHostsVolumes(
+		input.Profile,
+		volumes,
+		volumeMountsFromCommonSpec,
+	)
+
 	if input.Profile.DockerDaemonConfig != "" {
 		volumes = append(
 			volumes,
@@ -493,11 +499,86 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 	return volumeMountsFromCommonSpec
 }
 
+func (r *DeploymentReconciler) effectiveCRIKind() string {
+	criKind := r.configManagerGetter().GetImagePullCriKindOverride()
+	if criKind != "" {
+		return criKind
+	}
+
+	return r.criKind
+}
+
+func (r *DeploymentReconciler) renderDeploymentCRIHostsVolumes(
+	profile *ResolvedProfile,
+	volumes []k8scorev1.Volume,
+	volumeMounts []k8scorev1.VolumeMount,
+) ([]k8scorev1.Volume, []k8scorev1.VolumeMount) {
+	configuredCRIHostsDir := r.configManagerGetter().GetImagePullCriHostsDir()
+	if profile.PullThroughOverride == clabernetesconstants.ImagePullThroughModeNever ||
+		configuredCRIHostsDir == "" ||
+		r.effectiveCRIKind() != clabernetesconstants.KubernetesCRIContainerd {
+		return volumes, volumeMounts
+	}
+
+	criHostsDir := filepath.Clean(configuredCRIHostsDir)
+	if !filepath.IsAbs(criHostsDir) || criHostsDir == string(filepath.Separator) {
+		r.log.Warnf("ignoring invalid CRI hosts directory %q", configuredCRIHostsDir)
+
+		return volumes, volumeMounts
+	}
+
+	volumes = append(
+		volumes,
+		k8scorev1.Volume{
+			Name: "cri-hosts",
+			VolumeSource: k8scorev1.VolumeSource{
+				HostPath: &k8scorev1.HostPathVolumeSource{
+					Path: criHostsDir,
+					Type: clabernetesutil.ToPointer(k8scorev1.HostPathDirectory),
+				},
+			},
+		},
+	)
+
+	volumeMounts = append(
+		volumeMounts,
+		k8scorev1.VolumeMount{
+			Name:      "cri-hosts",
+			ReadOnly:  true,
+			MountPath: criHostsDir,
+		},
+	)
+
+	if criHostsDir != clabernetesconstants.ContainerdCertsDir {
+		volumeMounts = append(
+			volumeMounts,
+			k8scorev1.VolumeMount{
+				Name:      "cri-hosts",
+				ReadOnly:  true,
+				MountPath: clabernetesconstants.ContainerdCertsDir,
+			},
+		)
+	}
+
+	return volumes, volumeMounts
+}
+
 func (r *DeploymentReconciler) renderDeploymentVolumesGetCRISockPath(
 	profile *ResolvedProfile,
 ) (path, subPath string) {
 	if profile.PullThroughOverride == clabernetesconstants.ImagePullThroughModeNever {
 		// image pull through is never, no cri sock needed
+		return path, subPath
+	}
+
+	criKind := r.effectiveCRIKind()
+	if criKind != clabernetesconstants.KubernetesCRIContainerd {
+		r.log.Warnf(
+			"image pull through mode is auto or always but cri kind is not containerd!"+
+				" got cri kind %q",
+			criKind,
+		)
+
 		return path, subPath
 	}
 
@@ -514,18 +595,9 @@ func (r *DeploymentReconciler) renderDeploymentVolumesGetCRISockPath(
 			return path, subPath
 		}
 	} else {
-		switch r.criKind {
-		case clabernetesconstants.KubernetesCRIContainerd:
-			path = clabernetesconstants.KubernetesCRISockContainerdPath
+		path = clabernetesconstants.KubernetesCRISockContainerdPath
 
-			subPath = clabernetesconstants.KubernetesCRISockContainerd
-		default:
-			r.log.Warnf(
-				"image pull through mode is auto or always but cri kind is not containerd!"+
-					" got cri kind %q",
-				r.criKind,
-			)
-		}
+		subPath = clabernetesconstants.KubernetesCRISockContainerd
 	}
 
 	return path, subPath
@@ -578,10 +650,7 @@ func (r *DeploymentReconciler) renderDeploymentContainerEnv( //nolint: funlen
 	nodeName := input.Node.GetName()
 	profile := input.Profile
 
-	criKind := r.configManagerGetter().GetImagePullCriKindOverride()
-	if criKind == "" {
-		criKind = r.criKind
-	}
+	criKind := r.effectiveCRIKind()
 
 	nodeImage := input.Node.Spec.Image
 	if nodeImage == "" {

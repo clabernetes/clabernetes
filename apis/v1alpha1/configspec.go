@@ -124,6 +124,15 @@ type ConfigImagePull struct {
 	// +kubebuilder:validation:Enum=containerd
 	// +optional
 	CRIKindOverride string `json:"criKindOverride,omitempty"`
+	// CRIHostsDir is an optional host directory containing containerd registry hosts
+	// configuration. When set and the effective CRI is containerd, the directory is mounted
+	// read-only into pull-through launchers both at its original path (so certificate paths rooted
+	// in this directory remain valid) and at containerd's conventional certs.d path used by
+	// nerdctl.
+	// +kubebuilder:validation:Pattern=^/.+
+	// +kubebuilder:validation:XValidation:rule="self.matches('^/.*[^/].*$') && !self.matches('(^|/)[.][.]?(/|$)')",message="criHostsDir must be an absolute non-root path without '.' or '..' segments"
+	// +optional
+	CRIHostsDir string `json:"criHostsDir,omitempty"`
 	// DockerDaemonConfig allows for setting a default docker daemon config for launcher pods
 	// with the specified secret. The secret *must be present in the namespace of any given
 	// topology* -- so if you are configuring this at the "global config" level, ensure that you are

@@ -38,6 +38,8 @@ const (
 	KubernetesCRISockContainerdPath = "/run/containerd"
 	// KubernetesCRISockContainerd is the containerd sock filename.
 	KubernetesCRISockContainerd = "containerd.sock"
+	// ContainerdCertsDir is the conventional registry hosts directory used by containerd clients.
+	ContainerdCertsDir = "/etc/containerd/certs.d"
 )
 
 const (
