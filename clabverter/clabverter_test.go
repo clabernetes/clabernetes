@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -270,6 +271,19 @@ func assertPrimitiveManifestSemantics(t *testing.T, content []byte) {
 			}
 
 			nodeCount++
+
+			if node.GetName() == "srl1" {
+				if !slices.Contains(node.Spec.Ports, "9273/tcp") {
+					t.Fatalf(
+						"expected exposePorts label to produce srl1 spec.ports: %+v",
+						node.Spec,
+					)
+				}
+
+				if _, exists := node.Labels[clabernetesconstants.LabelExposePorts]; exists {
+					t.Fatalf("exposePorts directive leaked into Node metadata: %v", node.Labels)
+				}
+			}
 
 			expectedProfileName := "topo01"
 			if node.GetName() == "srl2" {

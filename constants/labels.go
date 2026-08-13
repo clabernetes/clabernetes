@@ -32,6 +32,11 @@ const (
 	// is -- that is, it is either a "connectivity" service, or an "expose" service; note that
 	// this is strictly a clabernetes concept, obviously not a kubernetes one!
 	LabelTopologyServiceType = LabelPrefix + "/topologyServiceType"
+
+	// LabelExposePorts is a definition-only containerlab label that declares destination ports
+	// c9s should expose. The topology compiler consumes it into Node.spec.ports; it must never be
+	// copied onto Kubernetes object metadata like an ordinary containerlab label.
+	LabelExposePorts = LabelPrefix + "/exposePorts"
 )
 
 const (

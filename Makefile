@@ -167,9 +167,6 @@ test: ## Run unit tests
 test-race: ## Run unit tests with race flag
 	gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out `go list ./... | grep -v e2e`
 
-test-e2e: ## Run e2e tests
-	gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
-
 C9S_NAMESPACE ?= $(NS)
 C9S_HELM_RELEASE ?= clabernetes
 C9S_KUBECTL ?= $(KUBECTL)

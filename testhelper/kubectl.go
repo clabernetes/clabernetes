@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	kubectl = "kubectl"
+	kubectl            = "kubectl"
+	kubectlWaitTimeout = "120s"
 )
 
 // Operation represents a kubectl operation type, i.e. apply or delete.
@@ -88,4 +89,24 @@ func KubectlGetOp(t *testing.T, kind, namespace, name string) []byte {
 	)
 
 	return Execute(t, cmd)
+}
+
+// KubectlWaitForCreate waits for an asserted resource to exist before its contents are compared.
+// This prevents an initial NotFound response from aborting the suite before reconciliation has
+// produced the resource.
+func KubectlWaitForCreate(t *testing.T, kind, namespace, name string) {
+	t.Helper()
+
+	cmd := exec.CommandContext( //nolint:gosec
+		t.Context(),
+		kubectl,
+		"wait",
+		"--for=create",
+		"--timeout="+kubectlWaitTimeout,
+		"--namespace",
+		namespace,
+		kind+"/"+name,
+	)
+
+	_ = Execute(t, cmd)
 }

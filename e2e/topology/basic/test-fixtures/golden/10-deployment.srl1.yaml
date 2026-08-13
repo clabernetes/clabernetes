@@ -30,7 +30,7 @@ spec:
     metadata:
       annotations:
         clabernetes/linkAttachmentsDigest: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-        clabernetes/nodeConfigDigest: e7c66a3da651e14784927a8a228df681b3363f1c3460ec356c6651561183ee3a
+        clabernetes/nodeConfigDigest: f807569f0184fe4de77ecb472f57cec93cc631ecb820dd4e0513e20de0937d57
       labels:
         app.kubernetes.io/name: srl1
         c9s.run/app: clabernetes
@@ -76,6 +76,8 @@ spec:
             - name: LAUNCHER_CONTAINERLAB_TIMEOUT
             - name: LAUNCHER_PRIVILEGED
               value: "true"
+            - name: LAUNCHER_STATUS_PROBES_ENABLED
+              value: "true"
           imagePullPolicy: IfNotPresent
           name: srl1
           ports:
@@ -85,6 +87,16 @@ spec:
             - containerPort: 4799
               name: slurpeeth
               protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - test
+                - -s
+                - /clabernetes/.nodestatus
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
           resources:
             requests:
               cpu: 200m
@@ -92,6 +104,17 @@ spec:
           securityContext:
             privileged: true
             runAsUser: 0
+          startupProbe:
+            exec:
+              command:
+                - test
+                - -s
+                - /clabernetes/.nodestatus
+            failureThreshold: 90
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:

@@ -340,6 +340,39 @@ func TestRenderDeploymentGenericStatusProbes(t *testing.T) {
 	}
 }
 
+func TestRenderDeploymentSRLinuxRuntimeReadinessWhenStatusProbesDisabled(t *testing.T) {
+	node := &clabernetesapisv1alpha1.Node{}
+	node.Name = "srl1"
+	node.Namespace = "clabernetes"
+	node.Spec.Kind = "nokia_srlinux"
+	node.Spec.Image = "ghcr.io/nokia/srlinux:latest"
+
+	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
+		&claberneteslogging.FakeInstance{},
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+	deployment := reconciler.Render(
+		&clabernetescontrollersnode.RenderInput{
+			Node:         node,
+			Profile:      testResolvedProfile(t, nil),
+			GroupMembers: []string{"srl1"},
+		},
+	)
+
+	container := deployment.Spec.Template.Spec.Containers[0]
+	if container.StartupProbe == nil || container.ReadinessProbe == nil {
+		t.Fatal("expected runtime startup and readiness probes for SR Linux")
+	}
+
+	enabled := findEnv(container.Env, clabernetesconstants.LauncherStatusProbesEnabled)
+	if enabled == nil || enabled.Value != clabernetesconstants.True {
+		t.Fatalf("expected runtime status probe enablement env, got %+v", enabled)
+	}
+}
+
 func TestRenderDeploymentRoundsCustomStartupAllowanceUp(t *testing.T) {
 	node := &clabernetesapisv1alpha1.Node{}
 	node.Name = "generic-node"

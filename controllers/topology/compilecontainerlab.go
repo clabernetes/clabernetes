@@ -76,6 +76,7 @@ func compileContainerlabDefinition(
 		}
 
 		normalizeNodePorts(diagnostics, nodeName, compiled.Nodes[nodeName])
+		consumeExposePortsLabel(diagnostics, nodeName, compiled.Nodes[nodeName])
 		dropUnusableNodeLabels(diagnostics, nodeName, compiled.Nodes[nodeName])
 
 		switch compiled.Nodes[nodeName].Kind {
@@ -239,6 +240,78 @@ func normalizeNodePorts(
 
 		nodeDefinition.Ports[idx] = normalized
 	}
+}
+
+// consumeExposePortsLabel translates c9s' portable containerlab label directive into the same
+// destination-port intent a direct Node declares in spec.ports. A label is used at the source
+// boundary because adding a normal containerlab ports entry would publish that port on the local
+// Docker host. The directive is consumed here -- before reserved label filtering -- and never
+// becomes Kubernetes metadata.
+func consumeExposePortsLabel(
+	diagnostics *compileDiagnostics,
+	nodeName string,
+	nodeDefinition *clabernetesutilcontainerlab.NodeDefinition,
+) {
+	value, ok := nodeDefinition.Labels[clabernetesconstants.LabelExposePorts]
+	if !ok {
+		return
+	}
+
+	delete(nodeDefinition.Labels, clabernetesconstants.LabelExposePorts)
+
+	seenDestinations := make(map[string]bool, len(nodeDefinition.Ports))
+
+	for _, portDefinition := range nodeDefinition.Ports {
+		typedPort, err := clabernetesutilcontainerlab.ProcessPortDefinition(portDefinition)
+		if err != nil {
+			// Existing ports are validated by the Node API/controller. Do not turn this source
+			// compatibility helper into a second validator for the ordinary ports field.
+			continue
+		}
+
+		seenDestinations[canonicalPortDefinition(typedPort)] = true
+	}
+
+	for idx, portDefinition := range strings.Split(value, ",") {
+		portDefinition = strings.TrimSpace(portDefinition)
+
+		typedPort, err := clabernetesutilcontainerlab.ProcessPortDefinition(portDefinition)
+		if err != nil {
+			diagnostics.add(CompilerDiagnostic{
+				Code: "invalid-expose-ports-label",
+				Path: fmt.Sprintf(
+					"topology.nodes.%s.labels.%s[%d]",
+					nodeName,
+					clabernetesconstants.LabelExposePorts,
+					idx,
+				),
+				Message: fmt.Sprintf(
+					"node %q expose ports label entry %q is invalid: %s",
+					nodeName,
+					portDefinition,
+					err,
+				),
+			}, true)
+
+			continue
+		}
+
+		canonical := canonicalPortDefinition(typedPort)
+		if seenDestinations[canonical] {
+			continue
+		}
+
+		seenDestinations[canonical] = true
+		nodeDefinition.Ports = append(nodeDefinition.Ports, canonical)
+	}
+}
+
+func canonicalPortDefinition(port *clabernetesutilcontainerlab.TypedPort) string {
+	return fmt.Sprintf(
+		"%d/%s",
+		port.DestinationPort,
+		strings.ToLower(port.Protocol),
+	)
 }
 
 // dropUnusableNodeLabels removes containerlab node labels that cannot be carried onto the emitted

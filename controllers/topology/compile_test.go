@@ -2,11 +2,13 @@ package topology_test
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
@@ -77,8 +79,10 @@ topology:
         - 5201/udp
       labels:
         owner: roman
-        # docker labels are far more permissive than kubernetes labels, and clabernetes owns its
-        # own label namespace and controller keys -- all four of these have to be dropped
+        # The exposePorts directive is consumed into ports and never becomes Kubernetes metadata.
+        c9s.run/exposePorts: "5201/UDP, 9273/tcp, 9273/tcp"
+        # Docker labels are far more permissive than Kubernetes labels, and clabernetes owns its
+        # own label namespace and controller keys -- all four of these have to be dropped.
         not a valid key: x
         bad-value: has spaces and a !
         c9s.run/ignoreReconcile: "true"
@@ -150,7 +154,7 @@ func TestCompileContainerlabFlattening(t *testing.T) {
 
 	// pasted containerlab topologies carry docker style bindings; the host side is dropped since
 	// clabernetes allocates it, while destination-only entries pass through untouched
-	expectedPorts := []string{"22/tcp", "5201/udp"}
+	expectedPorts := []string{"22/tcp", "5201/udp", "9273/tcp"}
 	if !reflect.DeepEqual(srl1.Ports, expectedPorts) {
 		t.Fatalf("expected normalized node ports %v, got %v", expectedPorts, srl1.Ports)
 	}
@@ -176,6 +180,151 @@ func TestCompileContainerlabFlattening(t *testing.T) {
 
 	if compiled.Mgmt == nil || compiled.Mgmt.IPv4Subnet != "172.20.20.0/24" {
 		t.Fatalf("expected mgmt settings to be compiled, got %+v", compiled.Mgmt)
+	}
+}
+
+func TestCompileContainerlabExposePortsLabelRejectsInvalidEntries(t *testing.T) {
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Spec.Definition.Containerlab = `
+name: invalid-expose-ports
+topology:
+  nodes:
+    gnmic:
+      kind: linux
+      image: ghcr.io/openconfig/gnmic:latest
+      labels:
+        c9s.run/exposePorts: "9273/tcp, not-a-port"
+`
+
+	_, err := clabernetescontrollerstopology.CompileTopology(
+		&claberneteslogging.FakeInstance{},
+		topology,
+	)
+	if err == nil {
+		t.Fatal("expected invalid exposePorts entry to fail compilation")
+	}
+
+	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	if len(unsupported.Diagnostics) != 1 ||
+		unsupported.Diagnostics[0].Code != "invalid-expose-ports-label" {
+		t.Fatalf("unexpected diagnostics: %+v", unsupported.Diagnostics)
+	}
+}
+
+func TestCompileContainerlabExposePortsLabelInheritance(t *testing.T) {
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Spec.Definition.Containerlab = `
+name: inherited-expose-ports
+topology:
+  defaults:
+    labels:
+      c9s.run/exposePorts: "830/tcp"
+  kinds:
+    metrics:
+      labels:
+        c9s.run/exposePorts: "9273/TCP, 9273/tcp, 8125/udp"
+  nodes:
+    default-node:
+      kind: linux
+      image: alpine
+    kind-node:
+      kind: metrics
+      image: alpine
+    node-override:
+      kind: metrics
+      image: alpine
+      labels:
+        c9s.run/exposePorts: "57400"
+`
+
+	compiled, err := clabernetescontrollerstopology.CompileTopology(
+		&claberneteslogging.FakeInstance{},
+		topology,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error compiling inherited expose ports: %s", err)
+	}
+
+	expectedPorts := map[string][]string{
+		"default-node":  {"830/tcp"},
+		"kind-node":     {"9273/tcp", "8125/udp"},
+		"node-override": {"57400/tcp"},
+	}
+
+	for nodeName, want := range expectedPorts {
+		node := compiled.Nodes[nodeName]
+		if node == nil {
+			t.Fatalf("expected compiled node %q", nodeName)
+		}
+
+		if !reflect.DeepEqual(node.Ports, want) {
+			t.Errorf("node %q ports = %v, want %v", nodeName, node.Ports, want)
+		}
+
+		if _, exists := node.Labels[clabernetesconstants.LabelExposePorts]; exists {
+			t.Errorf("node %q retained exposePorts directive in labels: %v", nodeName, node.Labels)
+		}
+	}
+}
+
+func TestCompileContainerlabExposePortsLabelRejectsEmptyAndMultipleInvalidEntries(t *testing.T) {
+	tests := map[string]struct {
+		value          string
+		expectedErrors int
+	}{
+		"empty middle entry": {
+			value:          "9273/tcp,,8125/udp",
+			expectedErrors: 1,
+		},
+		"trailing empty entry": {
+			value:          "9273/tcp,",
+			expectedErrors: 1,
+		},
+		"multiple invalid entries": {
+			value:          "not-a-port, 70000/tcp, 8125/sctp",
+			expectedErrors: 3,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			topology := &clabernetesapisv1alpha1.Topology{}
+			topology.Spec.Definition.Containerlab = fmt.Sprintf(`
+name: invalid-expose-ports
+topology:
+  nodes:
+    gnmic:
+      kind: linux
+      image: ghcr.io/openconfig/gnmic:latest
+      labels:
+        c9s.run/exposePorts: %q
+`, test.value)
+
+			_, err := clabernetescontrollerstopology.CompileTopology(
+				&claberneteslogging.FakeInstance{},
+				topology,
+			)
+			if err == nil {
+				t.Fatal("expected invalid exposePorts entries to fail compilation")
+			}
+
+			unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+			if !errors.As(err, &unsupported) {
+				t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+			}
+
+			if len(unsupported.Diagnostics) != test.expectedErrors {
+				t.Fatalf(
+					"expected %d invalid-entry diagnostics, got %+v",
+					test.expectedErrors,
+					unsupported.Diagnostics,
+				)
+			}
+		})
 	}
 }
 
