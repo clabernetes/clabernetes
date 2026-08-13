@@ -93,7 +93,7 @@ func (r *DeploymentReconciler) Render(input *RenderInput) *k8sappsv1.Deployment 
 	r.renderDeploymentContainerResources(deployment, input)
 	r.renderDeploymentNodeSelectors(deployment, input)
 	r.renderDeploymentContainerPrivileges(deployment, nodeName, input.Profile)
-	r.renderDeploymentContainerStatus(deployment, nodeName, input.Profile)
+	r.renderDeploymentContainerStatus(deployment, input.Node, input.Profile)
 	r.renderDeploymentDevices(deployment, input.Profile)
 	r.renderDeploymentPersistence(
 		deployment,
@@ -844,21 +844,28 @@ func (r *DeploymentReconciler) renderDeploymentContainerPrivileges(
 
 func (r *DeploymentReconciler) renderDeploymentContainerStatus(
 	deployment *k8sappsv1.Deployment,
-	nodeName string,
+	node *clabernetesapisv1alpha1.Node,
 	profile *ResolvedProfile,
 ) {
-	if !profile.StatusProbes.Enabled {
+	nodeName := node.GetName()
+	runtimeReadinessRequired := requiresSRLinuxRuntimeReadiness(node)
+
+	if !profile.StatusProbes.Enabled && !runtimeReadinessRequired {
 		return
 	}
 
-	if slices.Contains(profile.StatusProbes.ExcludedNodes, nodeName) {
+	if slices.Contains(profile.StatusProbes.ExcludedNodes, nodeName) && !runtimeReadinessRequired {
 		// this clab node was excluded, dont setup probes
 		return
 	}
 
-	nodeProbeConfiguration, ok := profile.StatusProbes.NodeProbeConfigurations[nodeName]
-	if !ok {
+	nodeProbeConfiguration := clabernetesapisv1alpha1.ProbeConfiguration{}
+	if profile.StatusProbes.Enabled {
 		nodeProbeConfiguration = profile.StatusProbes.ProbeConfiguration
+
+		if configured, ok := profile.StatusProbes.NodeProbeConfigurations[nodeName]; ok {
+			nodeProbeConfiguration = configured
+		}
 	}
 
 	if nodeProbeConfiguration.SSHProbeConfiguration == nil &&
@@ -964,6 +971,15 @@ func (r *DeploymentReconciler) renderDeploymentContainerStatus(
 		deployment.Spec.Template.Spec.Containers[0].Env,
 		probeEnvVars...,
 	)
+}
+
+func requiresSRLinuxRuntimeReadiness(node *clabernetesapisv1alpha1.Node) bool {
+	switch strings.ToLower(strings.TrimSpace(node.Spec.Kind)) {
+	case "srl", "nokia_srlinux":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *DeploymentReconciler) renderDeploymentDevices(

@@ -20,6 +20,7 @@ require (
 
 require (
 	github.com/google/go-cmp v0.7.0
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/crypto v0.55.0
 )

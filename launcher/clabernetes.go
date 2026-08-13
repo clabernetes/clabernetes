@@ -105,7 +105,9 @@ type clabernetes struct {
 	// nodeContainerIDs maps every topology node hosted by this launcher to its nested Docker
 	// container. Readiness is group-atomic: the shared launcher pod is ready only when every
 	// member is ready.
-	nodeContainerIDs map[string]string
+	nodeContainerIDs       map[string]string
+	managementNetwork      string
+	srLinuxForwardingReady bool
 
 	// initialTunnels holds the local tunnel view listed while materializing the topology -- the
 	// same snapshot seeds the connectivity manager so the tunnels it establishes line up with
@@ -131,6 +133,11 @@ func (c *clabernetes) startup() {
 	c.setup()
 	c.image()
 	c.launch()
+
+	if c.ctx.Err() != nil {
+		return
+	}
+
 	c.connectivity()
 
 	go c.imageCleanup()
@@ -268,6 +275,20 @@ func (c *clabernetes) launch() {
 		c.nodeContainerIDs[member] = containerID
 	}
 
+	err = c.configureSRLinuxForwarding()
+	if err != nil {
+		c.logger.Warnf(
+			"failed configuring SR Linux management forwarding; node readiness will "+
+				"remain false, err: %s",
+			err,
+		)
+
+		c.cancel()
+
+		return
+	}
+
+	c.srLinuxForwardingReady = true
 	c.logger.Debug("containerlab launched successfully")
 }
 
@@ -372,6 +393,12 @@ func (c *clabernetes) getNodeReadiness(config *statusProbeConfiguration) bool {
 
 	if !groupReady {
 		c.logger.Debugf("node %q container is not ready", member)
+
+		return false
+	}
+
+	if !c.srLinuxForwardingReady {
+		c.logger.Debugf("node %q SR Linux management forwarding is not ready", c.nodeName)
 
 		return false
 	}

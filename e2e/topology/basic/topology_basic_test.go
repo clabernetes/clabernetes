@@ -2,7 +2,10 @@ package basic_test
 
 import (
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	clabernetestesthelpersuite "github.com/clabernetes/clabernetes/testhelper/suite"
@@ -155,4 +158,76 @@ func TestContainerlabBasic(t *testing.T) {
 	}
 
 	clabernetestesthelpersuite.Run(t, testName, steps, namespace)
+}
+
+func TestSRLinuxDNSFromManagementNamespace(t *testing.T) {
+	testName := "topology-srlinux-dns"
+	namespace := clabernetestesthelper.NewTestNamespace(testName)
+
+	clabernetestesthelper.KubectlCreateNamespace(t, namespace)
+
+	defer func() {
+		if !*clabernetestesthelper.SkipCleanup {
+			t.Logf("deleting namespace %q used in test %q", namespace, testName)
+			clabernetestesthelper.KubectlDeleteNamespace(t, namespace)
+		}
+	}()
+
+	clabernetestesthelper.KubectlFileOp(
+		t,
+		clabernetestesthelper.Apply,
+		namespace,
+		"test-fixtures/10-apply.yaml",
+	)
+
+	waitForSRLinuxDNS(t, namespace)
+}
+
+func waitForSRLinuxDNS(t *testing.T, namespace string) {
+	t.Helper()
+
+	const (
+		pollInterval = 3 * time.Second
+		timeout      = 5 * time.Minute
+	)
+
+	command := []string{
+		"exec",
+		"--namespace",
+		namespace,
+		"deployment/srl1",
+		"-c",
+		"srl1",
+		"--",
+		"sh",
+		"-ec",
+		`container_id="$(docker ps --quiet --filter label=clab-node-name=srl1)"
+test -n "${container_id}"
+docker exec "${container_id}" ip netns exec srbase-mgmt getent hosts kubernetes.default.svc.cluster.local`,
+	}
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+
+	var lastOutput []byte
+
+	for {
+		output, err := exec.CommandContext(t.Context(), "kubectl", command...).CombinedOutput() //nolint:gosec
+		if err == nil && strings.TrimSpace(string(output)) != "" {
+			return
+		}
+
+		lastOutput = output
+
+		select {
+		case <-t.Context().Done():
+			t.Fatalf("DNS lookup canceled: %s", strings.TrimSpace(string(lastOutput)))
+		case <-deadline.C:
+			t.Fatalf(
+				"timed out waiting for DNS lookup from srbase-mgmt: %s",
+				strings.TrimSpace(string(lastOutput)),
+			)
+		case <-time.After(pollInterval):
+		}
+	}
 }
