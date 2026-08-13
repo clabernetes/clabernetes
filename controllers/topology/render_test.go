@@ -3,12 +3,14 @@ package topology_test
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
 	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
@@ -131,6 +133,60 @@ func TestRenderNodes(t *testing.T) {
 	}
 }
 
+func TestTopologyExposePortsReachExposedPorts(t *testing.T) {
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Name = "expose-ports-test"
+	topology.Namespace = "clabernetes"
+	topology.Spec.Definition.Containerlab = `
+name: expose-ports-test
+topology:
+  nodes:
+    gnmic:
+      kind: linux
+      image: ghcr.io/openconfig/gnmic:latest
+      labels:
+        c9s.run/exposePorts: "9273/tcp"
+`
+
+	compiled, err := clabernetescontrollerstopology.CompileTopology(
+		&claberneteslogging.FakeInstance{},
+		topology,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error compiling topology: %s", err)
+	}
+
+	nodes := clabernetescontrollerstopology.RenderNodes(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+	if len(nodes) != 1 {
+		t.Fatalf("expected one rendered node, got %d", len(nodes))
+	}
+
+	exposedPorts, err := clabernetescontrollersnode.ResolveExposedPorts(
+		nodes[0],
+		&clabernetescontrollersnode.ResolvedProfile{DisableAutoExpose: true},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error resolving exposed ports: %s", err)
+	}
+
+	if exposedPorts == nil {
+		t.Fatal("expected the directive port to produce an exposed-port list")
+	}
+
+	for _, port := range exposedPorts.Ports {
+		if port.DestinationPort == 9273 && port.Protocol == clabernetesconstants.TCP {
+			return
+		}
+	}
+
+	t.Fatalf("expected 9273/TCP in exposed ports, got %+v", exposedPorts.Ports)
+}
+
 // TestRenderNodesCarriesContainerlabLabels pins where containerlab node labels end up: the Node's
 // metadata, which is where kubernetes labels belong and what carries them on to the launcher
 // deployment and its pods. There is deliberately no spec.labels for them to live in.
@@ -162,6 +218,14 @@ func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
 
 	if srl1.Labels["owner"] != "roman" || srl1.Labels["vendor"] != "nokia" {
 		t.Errorf("expected node and kind level labels on srl1, got %v", srl1.Labels)
+	}
+
+	if !slices.Contains(srl1.Spec.Ports, "9273/tcp") {
+		t.Errorf("expected exposePorts directive in rendered Node ports, got %v", srl1.Spec.Ports)
+	}
+
+	if _, exists := srl1.Labels[clabernetesconstants.LabelExposePorts]; exists {
+		t.Errorf("exposePorts directive leaked into rendered Node labels: %v", srl1.Labels)
 	}
 }
 

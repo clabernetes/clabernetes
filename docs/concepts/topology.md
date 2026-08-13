@@ -70,7 +70,9 @@ controller copies them to the launcher Deployment and its Pods. They inherit fro
 `Node.spec.labels`; labels in the embedded definition are converted to Kubernetes metadata.
 Invalid Kubernetes labels and c9s-owned namespaces or identity/selector keys are omitted with a
 warning. The one reserved source directive, `c9s.run/exposePorts`, is consumed into
-`Node.spec.ports` instead of becoming metadata; see [Service exposure](../guides/expose-configuration.md#portable-containerlab-topologies).
+`Node.spec.ports` instead of becoming metadata. Its role is to request c9s Service reachability for
+an internal destination port without using a native Containerlab `ports` binding, which would
+publish a port on the local Docker host; see [Service exposure](../guides/expose-configuration.md#portable-containerlab-topologies).
 
 ## Reconciliation lifecycle
 
