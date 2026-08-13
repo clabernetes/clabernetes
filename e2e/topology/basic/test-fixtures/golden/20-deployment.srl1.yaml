@@ -30,7 +30,7 @@ spec:
     metadata:
       annotations:
         clabernetes/linkAttachmentsDigest: acbb29dba858160627ce8ac9f60599d09f36674686ab4131211e03f412711fe2
-        clabernetes/nodeConfigDigest: e7c66a3da651e14784927a8a228df681b3363f1c3460ec356c6651561183ee3a
+        clabernetes/nodeConfigDigest: f807569f0184fe4de77ecb472f57cec93cc631ecb820dd4e0513e20de0937d57
       labels:
         app.kubernetes.io/name: srl1
         c9s.run/app: clabernetes

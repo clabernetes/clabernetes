@@ -13,3 +13,5 @@ spec:
           srl1:
             kind: srl
             image: ghcr.io/nokia/srlinux
+            labels:
+              c9s.run/exposePorts: "9273/tcp"

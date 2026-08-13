@@ -64,7 +64,7 @@ You can run the full e2e suite locally against a disposable KinD cluster using
 **locally built** images (no published images, no devspace) with:
 
 ```bash
-make test-e2e-local
+make test-e2e CLUSTER=kind
 ```
 
 This downloads pinned tools into `build/e2e/bin`, creates a single-node KinD
@@ -72,20 +72,36 @@ cluster, builds the manager/launcher images, loads them into the cluster,
 installs the local Helm chart, and runs the `e2e/...` Go tests. Re-runs are
 cheap: tools are cached and the cluster is reused.
 
-To iterate on just the tests against the already-running cluster, use:
+The `CLUSTER` variable is required to be either `kind` or `existing` (and
+defaults to `kind`). To run against an already-ready cluster using the current
+kubeconfig context, use the existing-cluster mode:
 
 ```bash
-make e2e-test
+C9S_REGISTRY=<registry-visible-to-the-cluster> make test-e2e CLUSTER=existing
 ```
 
-`make e2e-test` runs the full setup automatically if the cluster is missing, and
-otherwise reuses the existing cluster.
+Both modes install the current checkout through `make install VERSION=local`.
+For a non-KinD cluster, `C9S_REGISTRY` must point to a registry the cluster can
+pull from; the existing `C9S_LOCAL_*` variables control image tags, rebuilding,
+and image reuse. The manager is installed as release `c9s-e2e` in
+namespace `c9s-e2e` by default. Override these with
+`E2E_INSTALL_RELEASE` and `E2E_INSTALL_NAMESPACE`.
+
+To run only the tests against an already-installed KinD setup, use
+`make e2e-test`. The old `make test-e2e-local` command remains a compatibility
+alias for `make test-e2e CLUSTER=kind`.
 
 CI runs the exact same `e2e-*` make targets (see
 [.github/workflows/e2e.yaml](.github/workflows/e2e.yaml)), so local and CI
 share all of the setup code.
 
-Tear down the e2e cluster with:
+Remove only the dedicated E2E Helm release and namespace with:
+
+```bash
+make test-e2e-clean C9S_CONTEXT=<context>
+```
+
+For the disposable KinD cluster, tear it down separately with:
 
 ```bash
 make e2e-clean
