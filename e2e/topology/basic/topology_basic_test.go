@@ -1,8 +1,11 @@
 package basic_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -177,13 +180,63 @@ func TestSRLinuxDNSFromManagementNamespace(t *testing.T) {
 		t,
 		clabernetestesthelper.Apply,
 		namespace,
-		"test-fixtures/10-apply.yaml",
+		"test-fixtures/20-apply.yaml",
 	)
 
-	waitForSRLinuxDNS(t, namespace)
+	srLinuxNodes := getSRLinuxNodeNames(t, namespace)
+	if len(srLinuxNodes) < 2 {
+		t.Skipf("topology has fewer than two SR Linux nodes: %v", srLinuxNodes)
+	}
+
+	waitForSRLinuxRemotePing(t, namespace, srLinuxNodes[0], srLinuxNodes[1])
 }
 
-func waitForSRLinuxDNS(t *testing.T, namespace string) {
+func getSRLinuxNodeNames(t *testing.T, namespace string) []string {
+	t.Helper()
+
+	cmd := exec.CommandContext( //nolint:gosec
+		t.Context(),
+		"kubectl",
+		"get",
+		"nodes.c9s.run",
+		"--namespace",
+		namespace,
+		"-o",
+		"json",
+	)
+
+	output := clabernetestesthelper.Execute(t, cmd)
+
+	var nodeList struct {
+		Items []struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+			Spec struct {
+				Kind string `json:"kind"`
+			} `json:"spec"`
+		} `json:"items"`
+	}
+
+	err := json.Unmarshal(output, &nodeList)
+	if err != nil {
+		t.Fatalf("failed decoding Node resources: %s", err)
+	}
+
+	srLinuxNodes := make([]string, 0, len(nodeList.Items))
+	for _, node := range nodeList.Items {
+		switch strings.ToLower(node.Spec.Kind) {
+		case "srl", "nokia_srlinux":
+			srLinuxNodes = append(srLinuxNodes, node.Metadata.Name)
+		}
+	}
+
+	sort.Strings(srLinuxNodes)
+
+	return srLinuxNodes
+}
+
+func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode string) {
 	t.Helper()
 
 	const (
@@ -191,43 +244,108 @@ func waitForSRLinuxDNS(t *testing.T, namespace string) {
 		timeout      = 5 * time.Minute
 	)
 
-	command := []string{
-		"exec",
-		"--namespace",
-		namespace,
-		"deployment/srl1",
-		"-c",
-		"srl1",
-		"--",
-		"sh",
-		"-ec",
-		`container_id="$(docker ps --quiet --filter label=clab-node-name=srl1)"
-test -n "${container_id}"
-docker exec "${container_id}" ip netns exec srbase-mgmt getent hosts kubernetes.default.svc.cluster.local`,
-	}
-
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 
 	var lastOutput []byte
 
 	for {
-		output, err := exec.CommandContext(t.Context(), "kubectl", command...).CombinedOutput() //nolint:gosec
-		if err == nil && strings.TrimSpace(string(output)) != "" {
-			return
-		}
+		remoteDNSName, err := getRemoteNodeDNSName(t, namespace, remoteNode)
+		if err != nil {
+			lastOutput = []byte(err.Error())
+		} else if remoteDNSName != "" {
+			command := []string{
+				"exec",
+				"--namespace",
+				namespace,
+				"deployment/" + sourceNode,
+				"-c",
+				sourceNode,
+				"--",
+				"sh",
+				"-ec",
+				`source="$1"
+remote="$2"
+container_id="$(docker ps --quiet --filter "label=clab-node-name=${source}")"
+test -n "${container_id}"
+docker exec "${container_id}" ip netns exec srbase-mgmt ping -c 1 -W 5 "${remote}"`,
+				"launcher",
+				sourceNode,
+				remoteDNSName,
+			}
 
-		lastOutput = output
+			cmd := exec.CommandContext( //nolint:gosec
+				t.Context(),
+				"kubectl",
+				command...,
+			)
+
+			output, pingErr := cmd.CombinedOutput()
+			if pingErr == nil && strings.TrimSpace(string(output)) != "" {
+				return
+			}
+
+			lastOutput = output
+		}
 
 		select {
 		case <-t.Context().Done():
 			t.Fatalf("DNS lookup canceled: %s", strings.TrimSpace(string(lastOutput)))
 		case <-deadline.C:
 			t.Fatalf(
-				"timed out waiting for DNS lookup from srbase-mgmt: %s",
+				"timed out waiting for SR Linux DNS ping %s -> %s: %s",
+				sourceNode,
+				remoteNode,
 				strings.TrimSpace(string(lastOutput)),
 			)
 		case <-time.After(pollInterval):
 		}
 	}
+}
+
+func getRemoteNodeDNSName(t *testing.T, namespace, nodeName string) (string, error) {
+	t.Helper()
+
+	cmd := exec.CommandContext( //nolint:gosec
+		t.Context(),
+		"kubectl",
+		"get",
+		"pods",
+		"--namespace",
+		namespace,
+		"--selector",
+		"c9s.run/name="+nodeName,
+		"-o",
+		"json",
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	var podList struct {
+		Items []struct {
+			Status struct {
+				PodIP string `json:"podIP"`
+			} `json:"status"`
+		} `json:"items"`
+	}
+
+	err = json.Unmarshal(output, &podList)
+	if err != nil {
+		return "", err
+	}
+
+	if len(podList.Items) == 0 || podList.Items[0].Status.PodIP == "" {
+		return "", nil
+	}
+
+	podIP := strings.ReplaceAll(podList.Items[0].Status.PodIP, ".", "-")
+
+	return fmt.Sprintf(
+		"%s.%s.pod.cluster.local",
+		podIP,
+		namespace,
+	), nil
 }
