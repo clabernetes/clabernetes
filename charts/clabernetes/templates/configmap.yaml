@@ -58,6 +58,9 @@ data:
   {{- if .Values.globalConfig.imagePull.criKindOverride }}
   criKindOverride: {{ .Values.globalConfig.imagePull.criKindOverride }}
   {{- end }}
+  {{- if .Values.globalConfig.imagePull.criHostsDir }}
+  criHostsDir: {{ .Values.globalConfig.imagePull.criHostsDir | quote }}
+  {{- end }}
   naming: {{ .Values.globalConfig.naming }}
   {{- if .Values.globalConfig.deployment.extraEnv }}
   extraEnv: |-

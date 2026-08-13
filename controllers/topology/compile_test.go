@@ -429,6 +429,66 @@ topology:
 	}
 }
 
+func TestCompileContainerlabBriefVethLink(t *testing.T) {
+	compiled, err := compileDefinitionWithOptions(t, `
+name: brief-veth
+topology:
+  nodes:
+    srsim:
+      kind: nokia_srsim
+      image: registry.example/nokia_srsim:latest
+    client:
+      kind: linux
+      image: alpine:latest
+  links:
+    - type: veth
+      endpoints: ["srsim:1/1/c1/1", "client:eth1"]
+`, clabernetescontrollerstopology.CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(compiled.Links) != 1 {
+		t.Fatalf("compiled links = %+v, want one", compiled.Links)
+	}
+
+	link := compiled.Links[0]
+	if link.EndpointA.NodeName != "srsim" || link.EndpointA.InterfaceName != "1/1/c1/1" ||
+		link.EndpointB.NodeName != "client" || link.EndpointB.InterfaceName != "eth1" {
+		t.Fatalf("compiled brief veth link = %+v", link)
+	}
+}
+
+func TestCompileContainerlabSRSimEmptyComponents(t *testing.T) {
+	compiled, err := compileDefinitionWithOptions(t, `
+name: srsim-components-empty
+topology:
+  nodes:
+    device:
+      kind: nokia_srsim
+      image: internal-registry/norc/sr-sim:25.10.R4
+      type: SR-1-48D
+      license: license.txt
+      components: []
+`, clabernetescontrollerstopology.CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	device, ok := compiled.Nodes["device"]
+	if !ok {
+		t.Fatalf("compiled nodes = %+v, want device", compiled.Nodes)
+	}
+
+	if device.License != "license.txt" {
+		t.Fatalf("compiled license = %q, want license.txt", device.License)
+	}
+
+	if len(device.Components) != 0 {
+		t.Fatalf("compiled components = %+v, want no components", device.Components)
+	}
+}
+
 func TestCompileTopologyStrictRejectsLossyCompatibility(t *testing.T) {
 	definition := `
 name: strict-test

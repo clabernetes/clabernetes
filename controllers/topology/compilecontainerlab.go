@@ -607,7 +607,7 @@ func unsupportedContainerlabLinkTypeDiagnostic(linkType, linkPath string) Compil
 		linkType,
 	)
 
-	if linkType == "veth" || linkType == "host" {
+	if linkType == "host" {
 		message = fmt.Sprintf(
 			"explicit native link type %q requires structured endpoints that the "+
 				"c9s topology compiler does not support; use brief endpoints",

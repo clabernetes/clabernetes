@@ -38,4 +38,5 @@ data:
   imagePullThroughMode: auto
   launcherImagePullPolicy: IfNotPresent
   launcherLogLevel: info
+  criHostsDir: "/etc/cri/hosts"
   naming: prefixed

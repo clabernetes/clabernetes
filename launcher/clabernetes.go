@@ -427,7 +427,10 @@ func (c *clabernetes) getNodeReadiness(config *statusProbeConfiguration) bool {
 		return true
 	}
 
-	nodeAddr, err := getContainerAddr(c.ctx, c.nodePrimaryContainerIDs[c.nodeName])
+	nodeAddr, err := getContainerAddr(c.ctx, nodeProbeContainerID(
+		c.nodeName,
+		c.nodePrimaryContainerIDs,
+	))
 	if err != nil {
 		c.logger.Warnf(
 			"failed determining node %q address, error: %s",
@@ -448,6 +451,10 @@ func (c *clabernetes) getNodeReadiness(config *statusProbeConfiguration) bool {
 		config.sshUsername,
 		config.sshPassword,
 	)
+}
+
+func nodeProbeContainerID(nodeName string, primaryContainerIDs map[string]string) string {
+	return primaryContainerIDs[nodeName]
 }
 
 func getGroupContainerReadiness(

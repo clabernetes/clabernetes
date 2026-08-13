@@ -113,6 +113,100 @@ topology:
 	}
 }
 
+func TestLoadContainerlabConfigMixedVethEndpoints(t *testing.T) {
+	t.Parallel()
+
+	config, unknownFields, err := clabernetesutilcontainerlab.LoadContainerlabConfig(`
+name: mixed-links
+topology:
+  nodes:
+    srsim:
+      kind: nokia_srsim
+    client:
+      kind: linux
+  links:
+    - type: veth
+      endpoints:
+        - srsim:1/1/c1/1
+        - node: client
+          interface: eth1
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(unknownFields) != 0 {
+		t.Fatalf("mixed veth endpoint warnings = %q, want none", unknownFields)
+	}
+
+	want := clabernetesutilcontainerlab.LinkEndpoints{"srsim:1/1/c1/1", "client:eth1"}
+	if diff := cmp.Diff(want, config.Topology.Links[0].Endpoints); diff != "" {
+		t.Fatalf("mixed endpoints mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestLoadContainerlabConfigRejectsMalformedVethEndpoints(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"empty scalar": `
+name: malformed-veth
+topology:
+  nodes: {srsim: {kind: linux}, client: {kind: linux}}
+  links:
+    - type: veth
+      endpoints: ["", "client:eth1"]
+`,
+		"empty interface": `
+name: malformed-veth
+topology:
+  nodes: {srsim: {kind: linux}, client: {kind: linux}}
+  links:
+    - type: veth
+      endpoints: ["srsim:", "client:eth1"]
+`,
+		"extra separator": `
+name: malformed-veth
+topology:
+  nodes: {srsim: {kind: linux}, client: {kind: linux}}
+  links:
+    - type: veth
+      endpoints: ["srsim:eth0:extra", "client:eth1"]
+`,
+		"missing structured field": `
+name: malformed-veth
+topology:
+  nodes: {srsim: {kind: linux}, client: {kind: linux}}
+  links:
+    - type: veth
+      endpoints:
+        - node: srsim
+        - client:eth1
+`,
+		"wrong structured shape": `
+name: malformed-veth
+topology:
+  nodes: {srsim: {kind: linux}, client: {kind: linux}}
+  links:
+    - type: veth
+      endpoints:
+        - [srsim, eth1]
+        - client:eth1
+`,
+	}
+
+	for name, definition := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, _, err := clabernetesutilcontainerlab.LoadContainerlabConfig(definition)
+			if err == nil || !strings.Contains(err.Error(), "link endpoint") {
+				t.Fatalf("malformed endpoint error = %v", err)
+			}
+		})
+	}
+}
+
 func TestLoadContainerlabConfigFromConfigObjects(t *testing.T) {
 	cases := []struct {
 		config *clabernetesutilcontainerlab.Config

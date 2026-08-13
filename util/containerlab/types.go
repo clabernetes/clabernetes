@@ -2,6 +2,7 @@ package containerlab
 
 import (
 	"fmt"
+	"strings"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
@@ -158,6 +159,8 @@ type LinkConfig struct {
 // brief form because that is the complete endpoint vocabulary the c9s Link API can represent.
 type LinkEndpoints []string
 
+const linkEndpointElementCount = 2
+
 func (e *LinkEndpoints) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.SequenceNode {
 		return fmt.Errorf("%w: link endpoints must be a sequence", claberneteserrors.ErrParse)
@@ -168,7 +171,12 @@ func (e *LinkEndpoints) UnmarshalYAML(value *yaml.Node) error {
 	for _, endpointNode := range value.Content {
 		switch endpointNode.Kind {
 		case yaml.ScalarNode:
-			endpoints = append(endpoints, endpointNode.Value)
+			endpoint, err := canonicalLinkEndpoint(endpointNode.Value)
+			if err != nil {
+				return err
+			}
+
+			endpoints = append(endpoints, endpoint)
 		case yaml.MappingNode:
 			endpoint := struct {
 				Node      string `yaml:"node"`
@@ -177,17 +185,26 @@ func (e *LinkEndpoints) UnmarshalYAML(value *yaml.Node) error {
 
 			err := endpointNode.Decode(&endpoint)
 			if err != nil {
-				return err
-			}
-
-			if endpoint.Node == "" || endpoint.Interface == "" {
 				return fmt.Errorf(
-					"%w: structured link endpoints require node and interface",
+					"%w: decoding structured link endpoint: %w",
 					claberneteserrors.ErrParse,
+					err,
 				)
 			}
 
-			endpoints = append(endpoints, fmt.Sprintf("%s:%s", endpoint.Node, endpoint.Interface))
+			err = validateStructuredLinkEndpoint(endpointNode)
+			if err != nil {
+				return err
+			}
+
+			canonical, err := canonicalLinkEndpoint(
+				fmt.Sprintf("%s:%s", endpoint.Node, endpoint.Interface),
+			)
+			if err != nil {
+				return err
+			}
+
+			endpoints = append(endpoints, canonical)
 		case yaml.DocumentNode, yaml.SequenceNode, yaml.AliasNode:
 			return fmt.Errorf(
 				"%w: link endpoint must be a string or node/interface mapping",
@@ -197,6 +214,51 @@ func (e *LinkEndpoints) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	*e = endpoints
+
+	return nil
+}
+
+func canonicalLinkEndpoint(value string) (string, error) {
+	parts := strings.Split(strings.TrimSpace(value), ":")
+	if len(parts) != linkEndpointElementCount {
+		return "", fmt.Errorf(
+			"%w: link endpoint %q must use node:interface syntax",
+			claberneteserrors.ErrParse,
+			value,
+		)
+	}
+
+	nodeName := strings.TrimSpace(parts[0])
+
+	interfaceName := strings.TrimSpace(parts[1])
+	if nodeName == "" || interfaceName == "" {
+		return "", fmt.Errorf(
+			"%w: link endpoint %q requires non-empty node and interface",
+			claberneteserrors.ErrParse,
+			value,
+		)
+	}
+
+	return fmt.Sprintf("%s:%s", nodeName, interfaceName), nil
+}
+
+func validateStructuredLinkEndpoint(value *yaml.Node) error {
+	for index := 0; index+1 < len(value.Content); index += 2 {
+		key := value.Content[index]
+		field := value.Content[index+1]
+
+		if key.Value != "node" && key.Value != "interface" {
+			continue
+		}
+
+		if field.Kind != yaml.ScalarNode || field.Tag != "!!str" {
+			return fmt.Errorf(
+				"%w: structured link endpoint field %q must be a string",
+				claberneteserrors.ErrParse,
+				key.Value,
+			)
+		}
+	}
 
 	return nil
 }

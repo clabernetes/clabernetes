@@ -136,6 +136,16 @@ spec:
 The structured `veth` endpoints above compile to the same c9s Link as brief endpoints such as
 `["srsim:1/1/c1/1", "client:eth1"]`. Clabernetes still creates one Node and one launcher Pod for
 `srsim`; nested containerlab creates component containers such as `srsim-a` and `srsim-1`.
+An empty `components: []` declaration is also accepted for SR-SIM images that use Containerlab's
+default component expansion, including the issue-269 topology shape. In every component form,
+Clabernetes requires one namespace owner and verifies that every dependent component resolves into
+that namespace; invalid ownership prevents launcher startup rather than selecting a card
+arbitrarily.
+
+The same Containerlab definition can be converted with `clabverter --emit-crs` or used through
+`containerlab --runtime clabernetes`. Containerlab remains responsible for component expansion and
+fabric construction, while Clabernetes owns the Kubernetes Node, launcher Pod, readiness, and
+shared payload lifecycle.
 
 **Example distributed topology:**
 
@@ -345,7 +355,8 @@ spec:
 All components of one logical node see the same license because they share the launcher filesystem.
 For the explicit-card form, attach the license to the primary Node when authoring primitive resources
 directly. If converted group members repeat the same shared destination, Clabernetes renders one Pod
-mount at that path; every repeated attachment must refer to the same license content.
+mount at that normalized path only when the ConfigMap, key, and mode agree. A conflicting repeated
+attachment stops reconciliation instead of silently choosing one license.
 
 ## Limitations
 

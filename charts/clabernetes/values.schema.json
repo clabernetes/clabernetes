@@ -147,6 +147,16 @@
             "criKindOverride": {
               "type": "string",
               "enum": ["containerd"]
+            },
+            "criHostsDir": {
+              "type": "string",
+              "pattern": "^/.+",
+              "not": {
+                "anyOf": [
+                  {"pattern": "^/*$"},
+                  {"pattern": "(^|/)\\.\\.?(/|$)"}
+                ]
+              }
             }
           }
         },

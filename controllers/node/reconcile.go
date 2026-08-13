@@ -500,9 +500,14 @@ func (r *Reconciler) reconcileDeployment(
 	ctx context.Context,
 	input *RenderInput,
 ) (*k8sappsv1.Deployment, error) {
+	err := r.DeploymentReconciler.Validate(input)
+	if err != nil {
+		return nil, err
+	}
+
 	rendered := r.DeploymentReconciler.Render(input)
 
-	err := ctrlruntimeutil.SetOwnerReference(input.Node, rendered, r.Client.Scheme())
+	err = ctrlruntimeutil.SetOwnerReference(input.Node, rendered, r.Client.Scheme())
 	if err != nil {
 		return nil, err
 	}

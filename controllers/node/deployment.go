@@ -13,6 +13,7 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
@@ -27,6 +28,7 @@ const (
 	probePeriodSeconds                  = 10
 	probeReadinessFailureThreshold      = 3
 	probeDefaultStartupFailureThreshold = 90
+	criHostsVolumeName                  = "cri-hosts"
 )
 
 // DeploymentReconciler renders/validates the launcher deployment for a Node -- exposed for
@@ -103,6 +105,76 @@ func (r *DeploymentReconciler) Render(input *RenderInput) *k8sappsv1.Deployment 
 	)
 
 	return deployment
+}
+
+type payloadMountSource struct {
+	configMapName string
+	configMapPath string
+	mode          string
+}
+
+func normalizedPayloadMountPath(filePath string) string {
+	mountPath := filePath
+
+	// mount relative paths under /clabernetes, and absolute paths as is
+	if !strings.HasPrefix(filePath, "/") {
+		mountPath = fmt.Sprintf("/clabernetes/%s", filePath)
+	}
+
+	return filepath.Clean(mountPath)
+}
+
+func canonicalPayloadMode(mode string) string {
+	if mode == "" {
+		return clabernetesconstants.FileModeRead
+	}
+
+	return mode
+}
+
+// Validate checks grouped payload declarations before a launcher Deployment is rendered.
+func (r *DeploymentReconciler) Validate(input *RenderInput) error {
+	mountedPayloads := map[string]payloadMountSource{}
+
+	for _, memberName := range input.GroupMembers {
+		memberNode := input.NodesByName[memberName]
+		if memberNode == nil && memberName == input.Node.GetName() {
+			memberNode = input.Node
+		}
+
+		if memberNode == nil {
+			continue
+		}
+
+		for _, podVolume := range memberNode.Spec.FilesFromConfigMap {
+			mountPath := normalizedPayloadMountPath(podVolume.FilePath)
+			source := payloadMountSource{
+				configMapName: podVolume.ConfigMapName,
+				configMapPath: podVolume.ConfigMapPath,
+				mode:          canonicalPayloadMode(podVolume.Mode),
+			}
+
+			if existing, alreadyMounted := mountedPayloads[mountPath]; alreadyMounted &&
+				existing != source {
+				return fmt.Errorf(
+					"%w: grouped payload destination %q has conflicting sources "+
+						"(%s/%s/%s and %s/%s/%s)",
+					claberneteserrors.ErrInvalidData,
+					mountPath,
+					existing.configMapName,
+					existing.configMapPath,
+					existing.mode,
+					source.configMapName,
+					source.configMapPath,
+					source.mode,
+				)
+			}
+
+			mountedPayloads[mountPath] = source
+		}
+	}
+
+	return nil
 }
 
 // Conforms checks if the existingDeployment conforms with the renderedDeployment.
@@ -363,6 +435,12 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 		)
 	}
 
+	volumes, volumeMountsFromCommonSpec = r.renderDeploymentCRIHostsVolumes(
+		input.Profile,
+		volumes,
+		volumeMountsFromCommonSpec,
+	)
+
 	if input.Profile.DockerDaemonConfig != "" {
 		volumes = append(
 			volumes,
@@ -428,14 +506,7 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 		}
 
 		for fileIndex, podVolume := range memberNode.Spec.FilesFromConfigMap {
-			var mountPath string
-
-			// mount relative paths under /clabernetes, and absolute paths as is
-			if strings.HasPrefix(podVolume.FilePath, "/") {
-				mountPath = podVolume.FilePath
-			} else {
-				mountPath = fmt.Sprintf("/clabernetes/%s", podVolume.FilePath)
-			}
+			mountPath := normalizedPayloadMountPath(podVolume.FilePath)
 
 			// Grouped nodes share one launcher filesystem. A shared source file (notably an
 			// SR-SIM license) therefore has the same mount path on every member and must only be
@@ -504,11 +575,86 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 	return volumeMountsFromCommonSpec
 }
 
+func (r *DeploymentReconciler) effectiveCRIKind() string {
+	criKind := r.configManagerGetter().GetImagePullCriKindOverride()
+	if criKind != "" {
+		return criKind
+	}
+
+	return r.criKind
+}
+
+func (r *DeploymentReconciler) renderDeploymentCRIHostsVolumes(
+	profile *ResolvedProfile,
+	volumes []k8scorev1.Volume,
+	volumeMounts []k8scorev1.VolumeMount,
+) ([]k8scorev1.Volume, []k8scorev1.VolumeMount) {
+	configuredCRIHostsDir := r.configManagerGetter().GetImagePullCriHostsDir()
+	if profile.PullThroughOverride == clabernetesconstants.ImagePullThroughModeNever ||
+		configuredCRIHostsDir == "" ||
+		r.effectiveCRIKind() != clabernetesconstants.KubernetesCRIContainerd {
+		return volumes, volumeMounts
+	}
+
+	criHostsDir := filepath.Clean(configuredCRIHostsDir)
+	if !filepath.IsAbs(criHostsDir) || criHostsDir == string(filepath.Separator) {
+		r.log.Warnf("ignoring invalid CRI hosts directory %q", configuredCRIHostsDir)
+
+		return volumes, volumeMounts
+	}
+
+	volumes = append(
+		volumes,
+		k8scorev1.Volume{
+			Name: criHostsVolumeName,
+			VolumeSource: k8scorev1.VolumeSource{
+				HostPath: &k8scorev1.HostPathVolumeSource{
+					Path: criHostsDir,
+					Type: clabernetesutil.ToPointer(k8scorev1.HostPathDirectory),
+				},
+			},
+		},
+	)
+
+	volumeMounts = append(
+		volumeMounts,
+		k8scorev1.VolumeMount{
+			Name:      criHostsVolumeName,
+			ReadOnly:  true,
+			MountPath: criHostsDir,
+		},
+	)
+
+	if criHostsDir != clabernetesconstants.ContainerdCertsDir {
+		volumeMounts = append(
+			volumeMounts,
+			k8scorev1.VolumeMount{
+				Name:      criHostsVolumeName,
+				ReadOnly:  true,
+				MountPath: clabernetesconstants.ContainerdCertsDir,
+			},
+		)
+	}
+
+	return volumes, volumeMounts
+}
+
 func (r *DeploymentReconciler) renderDeploymentVolumesGetCRISockPath(
 	profile *ResolvedProfile,
 ) (path, subPath string) {
 	if profile.PullThroughOverride == clabernetesconstants.ImagePullThroughModeNever {
 		// image pull through is never, no cri sock needed
+		return path, subPath
+	}
+
+	criKind := r.effectiveCRIKind()
+	if criKind != clabernetesconstants.KubernetesCRIContainerd {
+		r.log.Warnf(
+			"image pull through mode is auto or always but cri kind is not containerd!"+
+				" got cri kind %q",
+			criKind,
+		)
+
 		return path, subPath
 	}
 
@@ -525,18 +671,9 @@ func (r *DeploymentReconciler) renderDeploymentVolumesGetCRISockPath(
 			return path, subPath
 		}
 	} else {
-		switch r.criKind {
-		case clabernetesconstants.KubernetesCRIContainerd:
-			path = clabernetesconstants.KubernetesCRISockContainerdPath
+		path = clabernetesconstants.KubernetesCRISockContainerdPath
 
-			subPath = clabernetesconstants.KubernetesCRISockContainerd
-		default:
-			r.log.Warnf(
-				"image pull through mode is auto or always but cri kind is not containerd!"+
-					" got cri kind %q",
-				r.criKind,
-			)
-		}
+		subPath = clabernetesconstants.KubernetesCRISockContainerd
 	}
 
 	return path, subPath
@@ -589,10 +726,7 @@ func (r *DeploymentReconciler) renderDeploymentContainerEnv( //nolint: funlen
 	nodeName := input.Node.GetName()
 	profile := input.Profile
 
-	criKind := r.configManagerGetter().GetImagePullCriKindOverride()
-	if criKind == "" {
-		criKind = r.criKind
-	}
+	criKind := r.effectiveCRIKind()
 
 	nodeImage := input.Node.Spec.Image
 	if nodeImage == "" {

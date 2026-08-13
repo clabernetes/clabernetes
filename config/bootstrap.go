@@ -30,6 +30,7 @@ type bootstrapConfig struct {
 	launcherLogLevel            string
 	criSockOverride             string
 	criKindOverride             string
+	criHostsDir                 string
 	naming                      string
 	containerlabVersion         string
 	extraEnv                    []k8scorev1.EnvVar
@@ -154,6 +155,11 @@ func bootstrapFromConfigMap( //nolint:gocyclo,funlen,gocognit
 	criKindOverride, criKindOverrideOk := inMap["criKindOverride"]
 	if criKindOverrideOk {
 		bc.criKindOverride = criKindOverride
+	}
+
+	criHostsDir, criHostsDirOk := inMap["criHostsDir"]
+	if criHostsDirOk {
+		bc.criHostsDir = criHostsDir
 	}
 
 	naming, namingOk := inMap["naming"]
@@ -302,6 +308,10 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 		config.Spec.ImagePull.CRIKindOverride = bootstrap.criKindOverride
 	}
 
+	if config.Spec.ImagePull.CRIHostsDir == "" {
+		config.Spec.ImagePull.CRIHostsDir = bootstrap.criHostsDir
+	}
+
 	if config.Spec.Naming == "" {
 		config.Spec.Naming = bootstrap.naming
 	}
@@ -329,6 +339,7 @@ func mergeFromBootstrapConfigReplace(
 			PullThroughOverride: bootstrap.imagePullThroughMode,
 			CRISockOverride:     bootstrap.criSockOverride,
 			CRIKindOverride:     bootstrap.criKindOverride,
+			CRIHostsDir:         bootstrap.criHostsDir,
 		},
 		Deployment: clabernetesapisv1alpha1.ConfigDeployment{
 			ResourcesDefault:            bootstrap.resourcesDefault,

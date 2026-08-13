@@ -16,6 +16,8 @@ func GetFakeManager() Manager {
 // fakeManager defined type alias to be used below.
 type fakeManager struct {
 	nodeSelectorsByImage map[string]map[string]string
+	criHostsDir          string
+	criKindOverride      string
 }
 
 // FakeOption defined type alias to be used below.
@@ -43,6 +45,20 @@ func WithNodeSelectors(selectors map[string]map[string]string) FakeOption {
 			maps.Copy(copiedSelectors, selectors)
 			fm.nodeSelectorsByImage[pattern] = copiedSelectors
 		}
+	}
+}
+
+// WithCRIHostsDir configures a CRI registry hosts directory on the fake manager.
+func WithCRIHostsDir(path string) FakeOption {
+	return func(fm *fakeManager) {
+		fm.criHostsDir = path
+	}
+}
+
+// WithCRIKindOverride configures a CRI kind override on the fake manager.
+func WithCRIKindOverride(kind string) FakeOption {
+	return func(fm *fakeManager) {
+		fm.criKindOverride = kind
 	}
 }
 
@@ -106,7 +122,11 @@ func (f fakeManager) GetImagePullCriSockOverride() string {
 }
 
 func (f fakeManager) GetImagePullCriKindOverride() string {
-	return ""
+	return f.criKindOverride
+}
+
+func (f fakeManager) GetImagePullCriHostsDir() string {
+	return f.criHostsDir
 }
 
 func (f fakeManager) GetDockerDaemonConfig() string {

@@ -3,6 +3,7 @@ package launcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -25,14 +26,26 @@ const (
 	containerlabRootNodeNameLabel = "clab-root-node-name"
 )
 
+var (
+	errEmptyNetworkModeTarget = errors.New("network mode has an empty container target")
+	errNetworkTargetNotFound  = errors.New("network namespace target is not a discovered component")
+	errNetworkTargetAmbiguous = errors.New("network namespace target is ambiguous")
+	errNetworkNamespaceCycle  = errors.New("network namespace cycle")
+	errComponentNotConnected  = errors.New("component is not connected to the namespace owner")
+)
+
 type dockerContainerInspect struct {
 	ID     string `json:"Id"`
+	Name   string `json:"Name"`
 	Config struct {
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
 	HostConfig struct {
 		NetworkMode string `json:"NetworkMode"`
 	} `json:"HostConfig"`
+	NetworkSettings struct {
+		SandboxKey string `json:"SandboxKey"`
+	} `json:"NetworkSettings"`
 }
 
 type nodeContainers struct {
@@ -368,13 +381,24 @@ func getNodeContainers(ctx context.Context, nodeName string) (*nodeContainers, e
 	return resolveComponentContainers(nodeName, inspected)
 }
 
-func resolveComponentContainers(
+func resolveComponentContainers( //nolint:gocyclo
 	rootNodeName string,
 	inspected []*dockerContainerInspect,
 ) (*nodeContainers, error) {
 	resolved := &nodeContainers{containerIDs: map[string]string{}}
+	containersByID := make(map[string]*dockerContainerInspect, len(inspected))
+	networkTargets := make(map[string]string, len(inspected))
+	sandboxKey := ""
 
 	for _, container := range inspected {
+		if container == nil || container.ID == "" {
+			return nil, fmt.Errorf(
+				"%w: component container metadata for node %q has an empty container id",
+				claberneteserrors.ErrInvalidData,
+				rootNodeName,
+			)
+		}
+
 		componentName := container.Config.Labels[containerlabNodeNameLabel]
 		if componentName == "" {
 			return nil, fmt.Errorf(
@@ -396,8 +420,32 @@ func resolveComponentContainers(
 		}
 
 		resolved.containerIDs[componentName] = container.ID
+		containersByID[container.ID] = container
 
-		if !strings.HasPrefix(container.HostConfig.NetworkMode, "container:") {
+		if container.NetworkSettings.SandboxKey != "" {
+			if sandboxKey == "" {
+				sandboxKey = container.NetworkSettings.SandboxKey
+			} else if sandboxKey != container.NetworkSettings.SandboxKey {
+				return nil, fmt.Errorf(
+					"%w: component containers for node %q do not share a network namespace",
+					claberneteserrors.ErrInvalidData,
+					rootNodeName,
+				)
+			}
+		}
+
+		networkTarget, targetErr := containerNetworkModeTarget(container.HostConfig.NetworkMode)
+		if targetErr != nil {
+			return nil, fmt.Errorf(
+				"%w: component container %q for node %q: %w",
+				claberneteserrors.ErrInvalidData,
+				container.ID,
+				rootNodeName,
+				targetErr,
+			)
+		}
+
+		if networkTarget == "" {
 			if resolved.primaryContainerID != "" {
 				return nil, fmt.Errorf(
 					"%w: found multiple network namespace owners for component node %q",
@@ -407,6 +455,8 @@ func resolveComponentContainers(
 			}
 
 			resolved.primaryContainerID = container.ID
+		} else {
+			networkTargets[container.ID] = networkTarget
 		}
 	}
 
@@ -418,7 +468,124 @@ func resolveComponentContainers(
 		)
 	}
 
+	for containerID, networkTarget := range networkTargets {
+		targetID, targetErr := resolveComponentContainerReference(
+			networkTarget,
+			containersByID,
+		)
+		if targetErr != nil {
+			return nil, fmt.Errorf(
+				"%w: component container %q for node %q: %w",
+				claberneteserrors.ErrInvalidData,
+				containerID,
+				rootNodeName,
+				targetErr,
+			)
+		}
+
+		networkTargets[containerID] = targetID
+	}
+
+	for containerID := range containersByID {
+		err := validateComponentNamespace(
+			containerID,
+			resolved.primaryContainerID,
+			networkTargets,
+			map[string]struct{}{},
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"%w: component containers for node %q: %w",
+				claberneteserrors.ErrInvalidData,
+				rootNodeName,
+				err,
+			)
+		}
+	}
+
 	return resolved, nil
+}
+
+func containerNetworkModeTarget(networkMode string) (string, error) {
+	networkMode = strings.TrimSpace(networkMode)
+	if !strings.HasPrefix(networkMode, "container:") {
+		return "", nil
+	}
+
+	target := strings.TrimPrefix(networkMode, "container:")
+	if target == "" {
+		return "", errEmptyNetworkModeTarget
+	}
+
+	return target, nil
+}
+
+func resolveComponentContainerReference(
+	reference string,
+	containersByID map[string]*dockerContainerInspect,
+) (string, error) {
+	reference = strings.TrimPrefix(strings.TrimSpace(reference), "/")
+	matches := make([]string, 0, 1)
+
+	for containerID, container := range containersByID {
+		componentName := container.Config.Labels[containerlabNodeNameLabel]
+		containerName := strings.TrimPrefix(container.Name, "/")
+
+		if reference == containerID ||
+			strings.HasPrefix(containerID, reference) ||
+			reference == componentName ||
+			reference == containerName {
+			matches = append(matches, containerID)
+		}
+	}
+
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf(
+			"%w: %q",
+			errNetworkTargetNotFound,
+			reference,
+		)
+	case 1:
+		return matches[0], nil
+	default:
+		return "", fmt.Errorf("%w: %q", errNetworkTargetAmbiguous, reference)
+	}
+}
+
+func validateComponentNamespace(
+	containerID,
+	primaryContainerID string,
+	networkTargets map[string]string,
+	visiting map[string]struct{},
+) error {
+	if containerID == primaryContainerID {
+		return nil
+	}
+
+	if _, alreadyVisiting := visiting[containerID]; alreadyVisiting {
+		return fmt.Errorf("%w includes container %q", errNetworkNamespaceCycle, containerID)
+	}
+
+	targetID, hasTarget := networkTargets[containerID]
+	if !hasTarget {
+		return fmt.Errorf(
+			"%w: %q",
+			errComponentNotConnected,
+			containerID,
+		)
+	}
+
+	visiting[containerID] = struct{}{}
+	err := validateComponentNamespace(
+		targetID,
+		primaryContainerID,
+		networkTargets,
+		visiting,
+	)
+	delete(visiting, containerID)
+
+	return err
 }
 
 func getContainerAddr(ctx context.Context, containerID string) (string, error) {
