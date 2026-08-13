@@ -77,7 +77,10 @@ func (c *clabernetes) fetchNodeResources() {
 
 	c.initialTunnels = tunnelsForLinks(members, links)
 
-	config := materializeTopology(c.nodeName, members, links, mgmtNetworkFromEnv(c))
+	mgmtNetwork := mgmtNetworkFromEnv(c)
+	c.managementNetwork = managementNetworkName(mgmtNetwork)
+
+	config := materializeTopology(c.nodeName, members, links, mgmtNetwork)
 
 	c.writeNodeFiles(config, members)
 

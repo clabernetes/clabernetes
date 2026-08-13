@@ -76,6 +76,8 @@ spec:
             - name: LAUNCHER_CONTAINERLAB_TIMEOUT
             - name: LAUNCHER_PRIVILEGED
               value: "true"
+            - name: LAUNCHER_STATUS_PROBES_ENABLED
+              value: "true"
           imagePullPolicy: IfNotPresent
           name: srl1
           ports:
@@ -85,6 +87,16 @@ spec:
             - containerPort: 4799
               name: slurpeeth
               protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - test
+                - -s
+                - /clabernetes/.nodestatus
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
           resources:
             requests:
               cpu: 200m
@@ -92,6 +104,17 @@ spec:
           securityContext:
             privileged: true
             runAsUser: 0
+          startupProbe:
+            exec:
+              command:
+                - test
+                - -s
+                - /clabernetes/.nodestatus
+            failureThreshold: 90
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
