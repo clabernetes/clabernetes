@@ -268,9 +268,10 @@ func TestRunContainerlabCleansBeforeDeploy(t *testing.T) {
 	workDir := t.TempDir()
 	t.Chdir(workDir)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CLEANUP_DONE", "")
 
 	containerlab := `#!/bin/sh
-test -f cleanup.done
+[ "$CLEANUP_DONE" = "1" ]
 `
 
 	err := os.WriteFile(binDir+"/containerlab", []byte(containerlab), 0o600)
@@ -300,10 +301,7 @@ topology:
 
 	runner := func(_ context.Context, _ string, args ...string) ([]byte, error) {
 		if args[1] == "delete" {
-			err = os.WriteFile("cleanup.done", []byte("deleted\n"), 0o600)
-			if err != nil {
-				t.Fatal(err)
-			}
+			t.Setenv("CLEANUP_DONE", "1")
 		}
 
 		return nil, nil
