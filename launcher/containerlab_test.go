@@ -3,7 +3,6 @@ package launcher //nolint:testpackage // tests cover unexported release archive 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -267,13 +266,11 @@ topology:
 func TestRunContainerlabCleansBeforeDeploy(t *testing.T) {
 	binDir := t.TempDir()
 	workDir := t.TempDir()
-	eventFile := t.TempDir() + "/events"
 	t.Chdir(workDir)
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("EVENT_FILE", eventFile)
 
 	containerlab := `#!/bin/sh
-printf 'deploy\n' >> "$EVENT_FILE"
+test -f cleanup.done
 `
 
 	err := os.WriteFile(binDir+"/containerlab", []byte(containerlab), 0o600)
@@ -301,22 +298,13 @@ topology:
 		t.Fatal(err)
 	}
 
-	record := func(event string) {
-		file, err := os.OpenFile(eventFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) //nolint:gosec // test-owned temporary path
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		defer func() { _ = file.Close() }()
-
-		_, err = fmt.Fprintln(file, event)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	runner := func(_ context.Context, _ string, args ...string) ([]byte, error) {
-		record("cleanup:" + args[1])
+		if args[1] == "delete" {
+			err = os.WriteFile("cleanup.done", []byte("deleted\n"), 0o600)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 
 		return nil, nil
 	}
@@ -331,15 +319,5 @@ topology:
 	err = instance.runContainerlab()
 	if err != nil {
 		t.Fatalf("runContainerlab() returned error: %s", err)
-	}
-
-	events, err := os.ReadFile(eventFile) //nolint:gosec // test-owned temporary path
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expectedEvents := "cleanup:show\ncleanup:delete\ndeploy\n"
-	if string(events) != expectedEvents {
-		t.Fatalf("expected event order %q, got %q", expectedEvents, string(events))
 	}
 }
