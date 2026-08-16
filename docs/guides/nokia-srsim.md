@@ -11,11 +11,37 @@ Nokia SR-SIM is a containerized version of Nokia SR OS, replacing the legacy VM-
 
 ## Prerequisites
 
-1. **License**: A valid SR-SIM license file is mandatory. The license must be provided via the `license` directive or the deployment will fail.
+1. **License**: A valid SR-SIM license file is mandatory. The `license` directive must point to the
+   path where Clabernetes mounts the license, or the deployment will fail.
 
-2. **Image**: The SR-SIM container image must be downloaded from the Nokia Support Portal and loaded into your container runtime.
+2. **Image**: The SR-SIM image must be available to the launcher. Use a registry reachable from
+   the launcher or configure image pull-through from the cluster runtime; loading an image only on
+   the workstation is not sufficient for a remote Kubernetes cluster.
 
 3. **Resources**: SR-SIM nodes require significant resources. Ensure your cluster nodes have adequate CPU and memory.
+
+### Private Registry Images
+
+The launcher runs its own Docker daemon inside the launcher Pod. If the cluster cannot pull the
+image through its CRI, provide a Docker `config.json` Secret in the same namespace as the Topology:
+
+```bash
+docker login ghcr.io
+kubectl create secret generic srsim-registry \
+  --from-file=config.json="$HOME/.docker/config.json"
+```
+
+Reference that Secret from the Topology:
+
+```yaml
+spec:
+  imagePull:
+    dockerConfig: srsim-registry
+```
+
+The Secret must contain a `config.json` key. `imagePull.pullSecrets` authenticates the cluster CRI
+pull-through path; `imagePull.dockerConfig` supplies credentials directly to the launcher's nested
+Docker daemon when pull-through is unavailable.
 
 ## Supported Configurations
 
@@ -23,19 +49,38 @@ Nokia SR-SIM is a containerized version of Nokia SR OS, replacing the legacy VM-
 
 Integrated SR-SIM systems run as a single container:
 
-| Platform Type | Description |
-|---------------|-------------|
-| `sr-1` | SR-1 integrated system (default) |
-| `sr-1s` | SR-1s integrated system |
+| Platform Type | Description                      |
+| ------------- | -------------------------------- |
+| `sr-1`        | SR-1 integrated system (default) |
+| `sr-1s`       | SR-1s integrated system          |
 
 **Example topology:**
 
 ```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srsim-license
+data:
+  license.txt: |
+    # Your license content here
+
+---
 apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srsim-integrated
 spec:
+  deployment:
+    filesFromConfigMap:
+      sr1:
+        - filePath: /opt/nokia/sros/license.txt
+          configMapName: srsim-license
+          configMapPath: license.txt
+      sr2:
+        - filePath: /opt/nokia/sros/license.txt
+          configMapName: srsim-license
+          configMapPath: license.txt
   definition:
     containerlab: |
       name: srsim-integrated
@@ -43,7 +88,7 @@ spec:
         kinds:
           nokia_srsim:
             image: nokia_srsim:25.7.R1
-            license: /path/to/license.txt
+            license: /opt/nokia/sros/license.txt
         nodes:
           sr1:
             kind: nokia_srsim
@@ -56,7 +101,10 @@ spec:
 
 ### Distributed Chassis Systems
 
-Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single chassis using multiple containers—one for each card slot (CPM-A, CPM-B, IOMs). These containers share a network namespace via the `network-mode: container:<name>` directive.
+Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single chassis using
+multiple containers—one for each card slot (CPM-A, CPM-B, IOMs). In the explicit-card form,
+secondary containers share a network namespace via `network-mode: container:<name>`; in the
+component form, Containerlab creates and wires the component containers.
 
 | Platform Type | Description |
 | --------------- | ------------- |
@@ -64,7 +112,7 @@ Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single 
 | `sr-2se` | SR-2se chassis system |
 | `sr-7` | SR-7 chassis system |
 | `sr-14s` | SR-14s chassis system |
-| `sr-1x-92S` | SR-1x-92S system |
+| `sr-1-92s` | SR-1-92s system |
 
 **Terminology:**
 
@@ -73,12 +121,12 @@ Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single 
 
 **How it works:**
 
-Containerlab supports two equivalent ways to describe the cards. A single logical node can use a
-`components` block, in which case containerlab expands it into card containers and constructs the
-internal fabric. Alternatively, each card can be an explicit node and secondary cards can use
-`network-mode: container:<primary-card>`. Clabernetes keeps every card of either form in one launcher
-Pod and one network namespace as required by distributed SR-SIM; containerlab remains responsible
-for the SR-SIM expansion and fabric setup.
+Containerlab supports two ways to describe the cards. A single logical node can use a `components`
+block, in which case Containerlab expands it into card containers and constructs the internal
+fabric. Alternatively, each card can be an explicit node and secondary cards can use
+`network-mode: container:<primary-card>`. Clabernetes keeps every card of either form in one
+launcher Pod and one network namespace as required by distributed SR-SIM; Containerlab remains
+responsible for the SR-SIM expansion and fabric setup.
 
 The component form is the closest match to a normal containerlab topology:
 
@@ -150,12 +198,26 @@ shared payload lifecycle.
 **Example distributed topology:**
 
 ```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srsim-license
+data:
+  license.txt: |
+    # Your license content here
+
+---
 apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srsim-distributed
 spec:
   deployment:
+    filesFromConfigMap:
+      srsim-a:
+        - filePath: /opt/nokia/sros/license.txt
+          configMapName: srsim-license
+          configMapPath: license.txt
     resources:
       # Resources are specified for the primary card (chassis leader)
       srsim-a:
@@ -251,7 +313,7 @@ when automatic card provisioning is required.
 
 SR-SIM uses a specific interface naming convention:
 
-```
+```text
 L/xX/M/cC/P
 ```
 

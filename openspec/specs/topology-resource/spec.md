@@ -142,7 +142,8 @@ Structures that cannot identify realizable c9s resources, including external bri
 nodes, unresolved endpoint Nodes, `mgmt-net` or macvlan endpoints, and unsupported explicit link
 types other than `veth`, SHALL fail under every policy. An explicit `veth` link SHALL accept brief
 `node:interface` endpoints or structured node/interface mappings when both forms identify the same
-representable c9s Link endpoints.
+representable c9s Link endpoints. Endpoint values that are empty, malformed, or not strings or
+node/interface mappings MUST fail parsing.
 
 #### Scenario: Compile a definition carrying unimplemented vocabulary
 
@@ -170,6 +171,16 @@ representable c9s Link endpoints.
 
 - **WHEN** a source definition declares an explicit `veth` link whose endpoints are node/interface mappings
 - **THEN** the compiler emits the same c9s Link as the equivalent brief `node:interface` endpoint syntax
+
+#### Scenario: Compile an explicit veth link with brief endpoints
+
+- **WHEN** a source definition declares an explicit `veth` link whose endpoints are non-empty brief strings
+- **THEN** the compiler emits the same c9s Link as the equivalent structured endpoint syntax
+
+#### Scenario: Reject malformed veth endpoints
+
+- **WHEN** an explicit `veth` link contains an empty endpoint, an endpoint with an empty node or interface, or an endpoint with an unsupported YAML shape
+- **THEN** parsing or compilation fails before a Link resource is emitted
 
 #### Scenario: Structurally impossible link fails in compatibility mode
 
