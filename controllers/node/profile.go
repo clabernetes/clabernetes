@@ -35,6 +35,7 @@ type ResolvedProfile struct {
 	// scheduling
 	NodeSelector map[string]string
 	Tolerations  []k8scorev1.Toleration
+	Affinity     *k8scorev1.Affinity
 
 	// launcher deployment settings
 	PrivilegedLauncher      bool
@@ -113,6 +114,10 @@ func applyProfile(
 
 		if scheduling.Tolerations != nil {
 			resolved.Tolerations = scheduling.Tolerations
+		}
+
+		if profile.Spec.Scheduling.Affinity != nil {
+			resolved.Affinity = profile.Spec.Scheduling.Affinity.DeepCopy()
 		}
 	}
 

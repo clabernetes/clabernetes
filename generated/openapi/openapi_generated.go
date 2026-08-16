@@ -3568,11 +3568,17 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Scheduling(
 							},
 						},
 					},
+					"affinity": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Affinity sets the affinity rules that will be configured on all launcher pods using this scheduling policy. This supports node affinity, pod affinity, and pod anti-affinity.",
+							Ref:         ref("k8s.io/api/core/v1.Affinity"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.Toleration"},
+			"k8s.io/api/core/v1.Affinity", "k8s.io/api/core/v1.Toleration"},
 	}
 }
 

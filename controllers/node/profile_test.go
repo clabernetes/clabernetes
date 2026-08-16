@@ -1,6 +1,7 @@
 package node_test
 
 import (
+	"reflect"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -121,6 +122,7 @@ func TestResolveProfilePreservesExplicitEmptyValues(t *testing.T) {
 			spec.Scheduling = &clabernetesapisv1alpha1.Scheduling{
 				NodeSelector: map[string]string{},
 				Tolerations:  []k8scorev1.Toleration{},
+				Affinity:     &k8scorev1.Affinity{},
 			}
 			spec.Deployment = &clabernetesapisv1alpha1.LauncherProfileDeployment{
 				ContainerlabTimeout: clabernetesutil.ToPointer(""),
@@ -145,8 +147,59 @@ func TestResolveProfilePreservesExplicitEmptyValues(t *testing.T) {
 		t.Fatalf("expected explicit empty collections to remain non-nil, got %+v", resolved)
 	}
 
+	if resolved.Affinity == nil {
+		t.Fatal("expected explicit empty affinity to remain non-nil")
+	}
+
 	if resolved.DockerDaemonConfig != "" || resolved.DockerConfig != "" ||
 		resolved.ContainerlabTimeout != "" || resolved.ContainerlabVersion != "" {
 		t.Fatalf("expected explicit empty scalar overrides, got %+v", resolved)
+	}
+}
+
+func TestResolveProfileDeepCopiesAffinity(t *testing.T) {
+	affinity := &k8scorev1.Affinity{
+		NodeAffinity: &k8scorev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &k8scorev1.NodeSelector{
+				NodeSelectorTerms: []k8scorev1.NodeSelectorTerm{{
+					MatchExpressions: []k8scorev1.NodeSelectorRequirement{{
+						Key:      "topology.kubernetes.io/zone",
+						Operator: k8scorev1.NodeSelectorOpIn,
+						Values:   []string{"zone-a"},
+					}},
+				}},
+			},
+		},
+	}
+	profile := testLauncherProfile(
+		"affinity",
+		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
+			spec.Scheduling = &clabernetesapisv1alpha1.Scheduling{Affinity: affinity}
+		},
+	)
+
+	resolved, err := clabernetescontrollersnode.ResolveProfile(
+		testProfileNode("srl1", nil),
+		profile,
+		clabernetesconfig.GetFakeManager,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if !reflect.DeepEqual(resolved.Affinity, affinity) {
+		t.Fatalf(
+			"resolved affinity differs from profile: got %+v, want %+v",
+			resolved.Affinity,
+			affinity,
+		)
+	}
+
+	affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].
+		MatchExpressions[0].Values[0] = "zone-b"
+
+	if resolved.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
+		NodeSelectorTerms[0].MatchExpressions[0].Values[0] != "zone-a" {
+		t.Fatal("resolved affinity shares mutable state with the LauncherProfile")
 	}
 }

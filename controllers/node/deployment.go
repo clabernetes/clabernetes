@@ -87,6 +87,9 @@ func (r *DeploymentReconciler) Render(input *RenderInput) *k8sappsv1.Deployment 
 	deployment := r.renderDeploymentBase(input)
 
 	deployment.Spec.Template.Spec.Tolerations = input.Profile.Tolerations
+	if input.Profile.Affinity != nil {
+		deployment.Spec.Template.Spec.Affinity = input.Profile.Affinity.DeepCopy()
+	}
 
 	volumeMountsFromCommonSpec := r.renderDeploymentVolumes(deployment, input)
 
@@ -206,6 +209,13 @@ func (r *DeploymentReconciler) Conforms( //nolint: gocyclo,cyclop
 	if !reflect.DeepEqual(
 		existingDeployment.Spec.Template.Spec.Tolerations,
 		renderedDeployment.Spec.Template.Spec.Tolerations,
+	) {
+		return false
+	}
+
+	if !reflect.DeepEqual(
+		existingDeployment.Spec.Template.Spec.Affinity,
+		renderedDeployment.Spec.Template.Spec.Affinity,
 	) {
 		return false
 	}
