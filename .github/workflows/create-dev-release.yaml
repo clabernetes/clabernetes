@@ -22,6 +22,7 @@ jobs:
     uses: ./.github/workflows/test.yaml
     with:
       run_e2e: ${{ inputs.run_e2e }}
+    secrets: inherit
 
   publish:
     needs:

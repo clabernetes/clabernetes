@@ -41,3 +41,4 @@ jobs:
     uses: ./.github/workflows/e2e.yaml
     with:
       debug: ${{ inputs.debug_e2e || false }}
+    secrets: inherit
