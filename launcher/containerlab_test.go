@@ -306,6 +306,7 @@ topology:
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		defer func() { _ = file.Close() }()
 
 		_, err = fmt.Fprintln(file, event)
