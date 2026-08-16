@@ -13,6 +13,7 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
@@ -27,6 +28,7 @@ const (
 	probePeriodSeconds                  = 10
 	probeReadinessFailureThreshold      = 3
 	probeDefaultStartupFailureThreshold = 90
+	criHostsVolumeName                  = "cri-hosts"
 )
 
 // DeploymentReconciler renders/validates the launcher deployment for a Node -- exposed for
@@ -103,6 +105,76 @@ func (r *DeploymentReconciler) Render(input *RenderInput) *k8sappsv1.Deployment 
 	)
 
 	return deployment
+}
+
+type payloadMountSource struct {
+	configMapName string
+	configMapPath string
+	mode          string
+}
+
+func normalizedPayloadMountPath(filePath string) string {
+	mountPath := filePath
+
+	// mount relative paths under /clabernetes, and absolute paths as is
+	if !strings.HasPrefix(filePath, "/") {
+		mountPath = fmt.Sprintf("/clabernetes/%s", filePath)
+	}
+
+	return filepath.Clean(mountPath)
+}
+
+func canonicalPayloadMode(mode string) string {
+	if mode == "" {
+		return clabernetesconstants.FileModeRead
+	}
+
+	return mode
+}
+
+// Validate checks grouped payload declarations before a launcher Deployment is rendered.
+func (r *DeploymentReconciler) Validate(input *RenderInput) error {
+	mountedPayloads := map[string]payloadMountSource{}
+
+	for _, memberName := range input.GroupMembers {
+		memberNode := input.NodesByName[memberName]
+		if memberNode == nil && memberName == input.Node.GetName() {
+			memberNode = input.Node
+		}
+
+		if memberNode == nil {
+			continue
+		}
+
+		for _, podVolume := range memberNode.Spec.FilesFromConfigMap {
+			mountPath := normalizedPayloadMountPath(podVolume.FilePath)
+			source := payloadMountSource{
+				configMapName: podVolume.ConfigMapName,
+				configMapPath: podVolume.ConfigMapPath,
+				mode:          canonicalPayloadMode(podVolume.Mode),
+			}
+
+			if existing, alreadyMounted := mountedPayloads[mountPath]; alreadyMounted &&
+				existing != source {
+				return fmt.Errorf(
+					"%w: grouped payload destination %q has conflicting sources "+
+						"(%s/%s/%s and %s/%s/%s)",
+					claberneteserrors.ErrInvalidData,
+					mountPath,
+					existing.configMapName,
+					existing.configMapPath,
+					existing.mode,
+					source.configMapName,
+					source.configMapPath,
+					source.mode,
+				)
+			}
+
+			mountedPayloads[mountPath] = source
+		}
+	}
+
+	return nil
 }
 
 // Conforms checks if the existingDeployment conforms with the renderedDeployment.
@@ -421,6 +493,8 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 		)
 	}
 
+	mountedPayloadPaths := map[string]struct{}{}
+
 	for _, memberName := range input.GroupMembers {
 		memberNode := input.NodesByName[memberName]
 		if memberNode == nil && memberName == input.Node.GetName() {
@@ -432,6 +506,17 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 		}
 
 		for fileIndex, podVolume := range memberNode.Spec.FilesFromConfigMap {
+			mountPath := normalizedPayloadMountPath(podVolume.FilePath)
+
+			// Grouped nodes share one launcher filesystem. A shared source file (notably an
+			// SR-SIM license) therefore has the same mount path on every member and must only be
+			// mounted once; Kubernetes rejects duplicate VolumeMount mountPath values.
+			if _, alreadyMounted := mountedPayloadPaths[mountPath]; alreadyMounted {
+				continue
+			}
+
+			mountedPayloadPaths[mountPath] = struct{}{}
+
 			// Prefix every volume with the member and attachment index. Different grouped Nodes
 			// may legitimately use the same ConfigMap key, but Kubernetes volume names in their
 			// shared launcher Pod must still be unique.
@@ -472,15 +557,6 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 					},
 				},
 			)
-
-			var mountPath string
-
-			// mount relative paths under /clabernetes, and absolute paths as is
-			if strings.HasPrefix(podVolume.FilePath, "/") {
-				mountPath = podVolume.FilePath
-			} else {
-				mountPath = fmt.Sprintf("/clabernetes/%s", podVolume.FilePath)
-			}
 
 			volumeMountsFromCommonSpec = append(
 				volumeMountsFromCommonSpec,
@@ -530,7 +606,7 @@ func (r *DeploymentReconciler) renderDeploymentCRIHostsVolumes(
 	volumes = append(
 		volumes,
 		k8scorev1.Volume{
-			Name: "cri-hosts",
+			Name: criHostsVolumeName,
 			VolumeSource: k8scorev1.VolumeSource{
 				HostPath: &k8scorev1.HostPathVolumeSource{
 					Path: criHostsDir,
@@ -543,7 +619,7 @@ func (r *DeploymentReconciler) renderDeploymentCRIHostsVolumes(
 	volumeMounts = append(
 		volumeMounts,
 		k8scorev1.VolumeMount{
-			Name:      "cri-hosts",
+			Name:      criHostsVolumeName,
 			ReadOnly:  true,
 			MountPath: criHostsDir,
 		},
@@ -553,7 +629,7 @@ func (r *DeploymentReconciler) renderDeploymentCRIHostsVolumes(
 		volumeMounts = append(
 			volumeMounts,
 			k8scorev1.VolumeMount{
-				Name:      "cri-hosts",
+				Name:      criHostsVolumeName,
 				ReadOnly:  true,
 				MountPath: clabernetesconstants.ContainerdCertsDir,
 			},

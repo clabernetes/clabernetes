@@ -9,10 +9,17 @@ on:
         type: boolean
         required: false
         default: false
+    secrets:
+      SRSIM_LICENSE:
+        description: "Nokia SR-SIM license used by the SR-SIM E2E topology"
+        required: false
 
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    env:
+      SRSIM_LICENSE: ${{ secrets.SRSIM_LICENSE }}
+      SRSIM_IMAGE: ghcr.io/clabernetes/nokia_srsim:26.7.R1
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -45,6 +52,20 @@ jobs:
       # developer's local image cache). the cluster already has the images loaded by this point.
       - name: docker system prune
         run: docker system prune -a -f
+
+      - name: login to GHCR for SR-SIM
+        if: ${{ env.SRSIM_LICENSE != '' }}
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: pull and load SR-SIM image
+        if: ${{ env.SRSIM_LICENSE != '' }}
+        run: |
+          docker pull "$SRSIM_IMAGE"
+          PATH="$PWD/build/e2e/bin:$PATH" kind load docker-image "$SRSIM_IMAGE" --name c9s-e2e
 
       - name: verify existing-cluster make install
         run: |

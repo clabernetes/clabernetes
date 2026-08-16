@@ -21,6 +21,7 @@ jobs:
   e2e:
     needs: unit
     uses: ./.github/workflows/e2e.yaml
+    secrets: inherit
 
   # PRs never push images, so build them alongside e2e purely to prove the builds still work.
   # amd64 alone is enough of a smoke test there; arm64 builds are covered on main.

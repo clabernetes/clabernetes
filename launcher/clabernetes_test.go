@@ -44,6 +44,49 @@ func TestGetGroupContainerReadinessIncludesSecondaryNodes(t *testing.T) {
 	}
 }
 
+func TestGetGroupContainerReadinessIncludesExpandedComponents(t *testing.T) {
+	t.Parallel()
+
+	checked := []string{}
+
+	member, ready, err := getGroupContainerReadiness(
+		context.Background(),
+		map[string]string{
+			"srsim-1": "line-card-id",
+			"srsim-a": "cpm-id",
+			"srsim-b": "backup-id",
+		},
+		func(_ context.Context, containerID string) (bool, error) {
+			checked = append(checked, containerID)
+
+			return true, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !ready || member != "" {
+		t.Fatalf("component readiness = (%q, %t), want all ready", member, ready)
+	}
+
+	if !reflect.DeepEqual(checked, []string{"line-card-id", "cpm-id", "backup-id"}) {
+		t.Fatalf("checked components = %v", checked)
+	}
+}
+
+func TestNodeProbeContainerIDUsesNamespaceOwner(t *testing.T) {
+	t.Parallel()
+
+	got := nodeProbeContainerID(
+		"srsim",
+		map[string]string{"srsim": "line-card-id"},
+	)
+	if got != "line-card-id" {
+		t.Fatalf("probe container = %q, want line-card-id", got)
+	}
+}
+
 func TestSortedContainerNames(t *testing.T) {
 	t.Parallel()
 

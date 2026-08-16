@@ -2,6 +2,7 @@ package node_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -137,6 +138,118 @@ func TestRenderDeployment(t *testing.T) {
 
 	if len(payloadVolumeNames) != 2 {
 		t.Fatalf("expected both grouped Node payloads, got volumes %+v", payloadVolumeNames)
+	}
+}
+
+func TestRenderDeploymentDeduplicatesGroupedPayloadMountPaths(t *testing.T) {
+	primary := &clabernetesapisv1alpha1.Node{}
+	primary.Name = "srsim-a"
+	primary.Namespace = "clabernetes"
+	primary.Spec.FilesFromConfigMap = []clabernetesapisv1alpha1.FileFromConfigMap{{
+		FilePath:      "/opt/sros/license.txt",
+		ConfigMapName: "srsim-a-files",
+		ConfigMapPath: "license.txt",
+	}}
+
+	lineCard := &clabernetesapisv1alpha1.Node{}
+	lineCard.Name = "srsim-1"
+	lineCard.Spec.FilesFromConfigMap = []clabernetesapisv1alpha1.FileFromConfigMap{{
+		FilePath:      "/opt/sros/license.txt",
+		ConfigMapName: "srsim-1-files",
+		ConfigMapPath: "license.txt",
+	}}
+
+	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
+		&claberneteslogging.FakeInstance{},
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	deployment := reconciler.Render(
+		&clabernetescontrollersnode.RenderInput{
+			Node:         primary,
+			Profile:      testResolvedProfile(t, nil),
+			GroupMembers: []string{"srsim-a", "srsim-1"},
+			NodesByName: map[string]*clabernetesapisv1alpha1.Node{
+				"srsim-a": primary,
+				"srsim-1": lineCard,
+			},
+		},
+	)
+
+	licenseMounts := 0
+
+	for _, mount := range deployment.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if mount.MountPath == "/opt/sros/license.txt" {
+			licenseMounts++
+		}
+	}
+
+	if licenseMounts != 1 {
+		t.Fatalf("shared license mount count = %d, want 1", licenseMounts)
+	}
+
+	payloadVolumes := 0
+
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.ConfigMap != nil &&
+			(volume.ConfigMap.Name == "srsim-a-files" || volume.ConfigMap.Name == "srsim-1-files") {
+			payloadVolumes++
+		}
+	}
+
+	if payloadVolumes != 1 {
+		t.Fatalf("shared license payload volume count = %d, want 1", payloadVolumes)
+	}
+}
+
+func TestValidateGroupedPayloadMounts(t *testing.T) {
+	primary := &clabernetesapisv1alpha1.Node{}
+	primary.Name = "srsim-a"
+	primary.Spec.FilesFromConfigMap = []clabernetesapisv1alpha1.FileFromConfigMap{{
+		FilePath:      "licenses/../license.txt",
+		ConfigMapName: "srsim-license",
+		ConfigMapPath: "license.txt",
+	}}
+
+	secondary := &clabernetesapisv1alpha1.Node{}
+	secondary.Name = "srsim-1"
+	secondary.Spec.FilesFromConfigMap = []clabernetesapisv1alpha1.FileFromConfigMap{{
+		FilePath:      "/clabernetes/license.txt",
+		ConfigMapName: "srsim-license",
+		ConfigMapPath: "license.txt",
+		Mode:          clabernetesconstants.FileModeRead,
+	}}
+
+	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
+		&claberneteslogging.FakeInstance{},
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	input := &clabernetescontrollersnode.RenderInput{
+		Node:         primary,
+		GroupMembers: []string{"srsim-a", "srsim-1"},
+		NodesByName: map[string]*clabernetesapisv1alpha1.Node{
+			"srsim-a": primary,
+			"srsim-1": secondary,
+		},
+	}
+
+	err := reconciler.Validate(input)
+	if err != nil {
+		t.Fatalf("identical normalized payloads rejected: %v", err)
+	}
+
+	secondary.Spec.FilesFromConfigMap[0].ConfigMapName = "other-license"
+
+	err = reconciler.Validate(input)
+	if err == nil || !strings.Contains(err.Error(), "grouped payload destination") {
+		t.Fatalf("conflicting payloads error = %v", err)
 	}
 }
 

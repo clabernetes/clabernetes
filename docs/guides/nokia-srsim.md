@@ -11,11 +11,37 @@ Nokia SR-SIM is a containerized version of Nokia SR OS, replacing the legacy VM-
 
 ## Prerequisites
 
-1. **License**: A valid SR-SIM license file is mandatory. The license must be provided via the `license` directive or the deployment will fail.
+1. **License**: A valid SR-SIM license file is mandatory. The `license` directive must point to the
+   path where Clabernetes mounts the license, or the deployment will fail.
 
-2. **Image**: The SR-SIM container image must be downloaded from the Nokia Support Portal and loaded into your container runtime.
+2. **Image**: The SR-SIM image must be available to the launcher. Use a registry reachable from
+   the launcher or configure image pull-through from the cluster runtime; loading an image only on
+   the workstation is not sufficient for a remote Kubernetes cluster.
 
 3. **Resources**: SR-SIM nodes require significant resources. Ensure your cluster nodes have adequate CPU and memory.
+
+### Private Registry Images
+
+The launcher runs its own Docker daemon inside the launcher Pod. If the cluster cannot pull the
+image through its CRI, provide a Docker `config.json` Secret in the same namespace as the Topology:
+
+```bash
+docker login ghcr.io
+kubectl create secret generic srsim-registry \
+  --from-file=config.json="$HOME/.docker/config.json"
+```
+
+Reference that Secret from the Topology:
+
+```yaml
+spec:
+  imagePull:
+    dockerConfig: srsim-registry
+```
+
+The Secret must contain a `config.json` key. `imagePull.pullSecrets` authenticates the cluster CRI
+pull-through path; `imagePull.dockerConfig` supplies credentials directly to the launcher's nested
+Docker daemon when pull-through is unavailable.
 
 ## Supported Configurations
 
@@ -23,19 +49,38 @@ Nokia SR-SIM is a containerized version of Nokia SR OS, replacing the legacy VM-
 
 Integrated SR-SIM systems run as a single container:
 
-| Platform Type | Description |
-|---------------|-------------|
-| `sr-1` | SR-1 integrated system (default) |
-| `sr-1s` | SR-1s integrated system |
+| Platform Type | Description                      |
+| ------------- | -------------------------------- |
+| `sr-1`        | SR-1 integrated system (default) |
+| `sr-1s`       | SR-1s integrated system          |
 
 **Example topology:**
 
 ```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srsim-license
+data:
+  license.txt: |
+    # Your license content here
+
+---
 apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srsim-integrated
 spec:
+  deployment:
+    filesFromConfigMap:
+      sr1:
+        - filePath: /opt/nokia/sros/license.txt
+          configMapName: srsim-license
+          configMapPath: license.txt
+      sr2:
+        - filePath: /opt/nokia/sros/license.txt
+          configMapName: srsim-license
+          configMapPath: license.txt
   definition:
     containerlab: |
       name: srsim-integrated
@@ -43,7 +88,7 @@ spec:
         kinds:
           nokia_srsim:
             image: nokia_srsim:25.7.R1
-            license: /path/to/license.txt
+            license: /opt/nokia/sros/license.txt
         nodes:
           sr1:
             kind: nokia_srsim
@@ -56,7 +101,10 @@ spec:
 
 ### Distributed Chassis Systems
 
-Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single chassis using multiple containers—one for each card slot (CPM-A, CPM-B, IOMs). These containers share a network namespace via the `network-mode: container:<name>` directive.
+Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single chassis using
+multiple containers—one for each card slot (CPM-A, CPM-B, IOMs). In the explicit-card form,
+secondary containers share a network namespace via `network-mode: container:<name>`; in the
+component form, Containerlab creates and wires the component containers.
 
 | Platform Type | Description |
 | --------------- | ------------- |
@@ -64,7 +112,7 @@ Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single 
 | `sr-2se` | SR-2se chassis system |
 | `sr-7` | SR-7 chassis system |
 | `sr-14s` | SR-14s chassis system |
-| `sr-1x-92S` | SR-1x-92S system |
+| `sr-1-92s` | SR-1-92s system |
 
 **Terminology:**
 
@@ -73,17 +121,103 @@ Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single 
 
 **How it works:**
 
-Clabernetes automatically detects containers with `network-mode: container:<primary-card>` and groups them together as a single chassis. All cards in a chassis are deployed in the same launcher pod, allowing them to share the network namespace as required by distributed SR-SIM.
+Containerlab supports two ways to describe the cards. A single logical node can use a `components`
+block, in which case Containerlab expands it into card containers and constructs the internal
+fabric. Alternatively, each card can be an explicit node and secondary cards can use
+`network-mode: container:<primary-card>`. Clabernetes keeps every card of either form in one
+launcher Pod and one network namespace as required by distributed SR-SIM; Containerlab remains
+responsible for the SR-SIM expansion and fabric setup.
+
+The component form is the closest match to a normal containerlab topology:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srsim-license
+data:
+  license.txt: |
+    # Your license content here
+
+---
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: srsim-components
+spec:
+  deployment:
+    filesFromConfigMap:
+      srsim:
+        - filePath: /opt/nokia/sros/license.txt
+          configMapName: srsim-license
+          configMapPath: license.txt
+  definition:
+    containerlab: |
+      name: srsim-components
+      topology:
+        nodes:
+          srsim:
+            kind: nokia_srsim
+            image: nokia_srsim:25.10.R1
+            type: sr-7
+            license: /opt/nokia/sros/license.txt
+            components:
+              - slot: A
+              - slot: 1
+                type: iom5-e
+                sfm: m-sfm6-7/12
+                mda:
+                  - slot: 1
+                    type: me6-100gb-qsfp28
+          client:
+            kind: linux
+            image: ghcr.io/srl-labs/network-multitool:latest
+        links:
+          - type: veth
+            endpoints:
+              - node: srsim
+                interface: 1/1/c1/1
+              - node: client
+                interface: eth1
+```
+
+The structured `veth` endpoints above compile to the same c9s Link as brief endpoints such as
+`["srsim:1/1/c1/1", "client:eth1"]`. Clabernetes still creates one Node and one launcher Pod for
+`srsim`; nested containerlab creates component containers such as `srsim-a` and `srsim-1`.
+An empty `components: []` declaration is also accepted for SR-SIM images that use Containerlab's
+default component expansion, including the issue-269 topology shape. In every component form,
+Clabernetes requires one namespace owner and verifies that every dependent component resolves into
+that namespace; invalid ownership prevents launcher startup rather than selecting a card
+arbitrarily.
+
+The same Containerlab definition can be converted with `clabverter --emit-crs` or used through
+`containerlab --runtime clabernetes`. Containerlab remains responsible for component expansion and
+fabric construction, while Clabernetes owns the Kubernetes Node, launcher Pod, readiness, and
+shared payload lifecycle.
 
 **Example distributed topology:**
 
 ```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srsim-license
+data:
+  license.txt: |
+    # Your license content here
+
+---
 apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
   name: srsim-distributed
 spec:
   deployment:
+    filesFromConfigMap:
+      srsim-a:
+        - filePath: /opt/nokia/sros/license.txt
+          configMapName: srsim-license
+          configMapPath: license.txt
     resources:
       # Resources are specified for the primary card (chassis leader)
       srsim-a:
@@ -139,7 +273,7 @@ spec:
 
 5. **Multiple chassis**: If you deploy multiple distributed chassis (e.g., two SR-7 routers), each chassis gets its own pod. Different chassis can be scheduled on different Kubernetes worker nodes.
 
-### MDA and Component Configuration
+### Card and Component Configuration
 
 For integrated systems, you can customize MDAs (Media Dependent Adapters) using environment variables:
 
@@ -153,24 +287,33 @@ nodes:
       NOKIA_SROS_MDA_2: me12-10/1gb-sfp+
 ```
 
-Or using the `components` block:
+For a distributed chassis, include the card inventory in the `components` block when containerlab
+should generate the corresponding SR OS card configuration:
 
 ```yaml
 nodes:
-  sr1:
+  srsim:
     kind: nokia_srsim
-    type: sr-1
+    type: sr-7
     components:
+      - slot: A
       - slot: 1
-        env:
-          NOKIA_SROS_MDA_1: me6-100gb-qsfp28
+        type: iom5-e
+        sfm: m-sfm6-7/12
+        mda:
+          - slot: 1
+            type: me6-100gb-qsfp28
 ```
+
+A component entry containing only `slot` starts that card's simulator container but does not tell
+containerlab which SR OS card, SFM, or MDA to provision. Supply `type`, `sfm`, and `mda` inventory
+when automatic card provisioning is required.
 
 ## Interface Naming
 
 SR-SIM uses a specific interface naming convention:
 
-```
+```text
 L/xX/M/cC/P
 ```
 
@@ -270,6 +413,12 @@ spec:
             kind: nokia_srsim
             type: sr-1
 ```
+
+All components of one logical node see the same license because they share the launcher filesystem.
+For the explicit-card form, attach the license to the primary Node when authoring primitive resources
+directly. If converted group members repeat the same shared destination, Clabernetes renders one Pod
+mount at that normalized path only when the ConfigMap, key, and mode agree. A conflicting repeated
+attachment stops reconciliation instead of silently choosing one license.
 
 ## Limitations
 

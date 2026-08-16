@@ -102,11 +102,15 @@ type clabernetes struct {
 	// containerIDs holds *all* ids of containers running --in theory we could have other side-car
 	// type stuff running so just catching all them here so we know if/when things fail
 	containerIDs []string
-	// nodeContainerIDs maps every topology node hosted by this launcher to its nested Docker
-	// container. Readiness is group-atomic: the shared launcher pod is ready only when every
-	// member is ready.
-	nodeContainerIDs       map[string]string
-	managementNetwork      string
+	// nodeContainerIDs maps every nested Docker node hosted by this launcher to its container.
+	// A containerlab node with components contributes one entry per expanded component. Readiness
+	// is group-atomic: the shared launcher pod is ready only when every container is ready.
+	nodeContainerIDs map[string]string
+	// nodePrimaryContainerIDs maps logical topology nodes to the nested container owning their
+	// network namespace. Application probes use that container's management address.
+	nodePrimaryContainerIDs map[string]string
+	managementNetwork       string
+	// srLinuxForwardingReady gates node readiness until management forwarding is configured.
 	srLinuxForwardingReady bool
 
 	// initialTunnels holds the local tunnel view listed while materializing the topology -- the
@@ -258,21 +262,34 @@ func (c *clabernetes) launch() {
 	}
 
 	c.nodeContainerIDs = make(map[string]string)
+	c.nodePrimaryContainerIDs = make(map[string]string)
 
 	for _, member := range launcherGroupMembers(
 		c.nodeName,
 		os.Getenv(clabernetesconstants.LauncherGroupMembersEnv),
 	) {
-		containerID, lookupErr := getContainerIDForNodeName(c.ctx, member)
+		memberContainers, lookupErr := getNodeContainers(c.ctx, member)
 		if lookupErr != nil {
-			c.logger.Fatalf("failed determining node %q container id, err: %s", member, lookupErr)
+			c.logger.Fatalf("failed determining node %q containers, err: %s", member, lookupErr)
 		}
 
-		if containerID == "" {
-			c.logger.Fatalf("failed determining node %q container id: container not found", member)
+		if len(memberContainers.containerIDs) == 0 {
+			c.logger.Fatalf("failed determining node %q containers: container not found", member)
 		}
 
-		c.nodeContainerIDs[member] = containerID
+		for containerName, containerID := range memberContainers.containerIDs {
+			if existingID := c.nodeContainerIDs[containerName]; existingID != "" &&
+				existingID != containerID {
+				c.logger.Fatalf(
+					"nested container name %q is shared by nodes in launcher group",
+					containerName,
+				)
+			}
+
+			c.nodeContainerIDs[containerName] = containerID
+		}
+
+		c.nodePrimaryContainerIDs[member] = memberContainers.primaryContainerID
 	}
 
 	err = c.configureSRLinuxForwarding()
@@ -410,7 +427,10 @@ func (c *clabernetes) getNodeReadiness(config *statusProbeConfiguration) bool {
 		return true
 	}
 
-	nodeAddr, err := getContainerAddr(c.ctx, c.nodeContainerIDs[c.nodeName])
+	nodeAddr, err := getContainerAddr(c.ctx, nodeProbeContainerID(
+		c.nodeName,
+		c.nodePrimaryContainerIDs,
+	))
 	if err != nil {
 		c.logger.Warnf(
 			"failed determining node %q address, error: %s",
@@ -431,6 +451,10 @@ func (c *clabernetes) getNodeReadiness(config *statusProbeConfiguration) bool {
 		config.sshUsername,
 		config.sshPassword,
 	)
+}
+
+func nodeProbeContainerID(nodeName string, primaryContainerIDs map[string]string) string {
+	return primaryContainerIDs[nodeName]
 }
 
 func getGroupContainerReadiness(

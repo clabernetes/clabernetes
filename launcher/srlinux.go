@@ -18,7 +18,6 @@ import (
 const (
 	defaultContainerlabManagementNetwork = "clab"
 	containerlabNodeKindLabel            = "clab-node-kind"
-	containerlabNodeNameLabel            = "clab-node-name"
 	containerlabNodeKindSRL              = "srl"
 	containerlabNodeKindNokiaSRLinux     = "nokia_srlinux"
 	forwardingProbeAddress               = "1.1.1.1"
