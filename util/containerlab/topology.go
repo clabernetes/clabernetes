@@ -87,3 +87,10 @@ func LoadContainerlabConfig(rawConfig string) (*Config, []string, error) {
 
 	return config, unknownFields, nil
 }
+
+// SanitizeInterfaceName returns the Linux interface name containerlab derives from a topology
+// endpoint. Containerlab replaces forward slashes because they are not valid in Linux interface
+// names.
+func SanitizeInterfaceName(name string) string {
+	return strings.ReplaceAll(name, "/", "-")
+}

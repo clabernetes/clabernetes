@@ -9,12 +9,12 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	"github.com/vishvananda/netlink"
 )
 
@@ -29,7 +29,7 @@ const (
 // uses hyphens when creating the host-side veth. The name passed to "containerlab tools vxlan"
 // must match that sanitized name.
 func sanitizeInterfaceName(name string) string {
-	return strings.ReplaceAll(name, "/", "-")
+	return clabernetesutilcontainerlab.SanitizeInterfaceName(name)
 }
 
 type vxlanManager struct {

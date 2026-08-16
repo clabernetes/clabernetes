@@ -10,16 +10,24 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
 const (
 	containerlabArchAMD64 = "amd64"
 	containerlabArchARM64 = "arm64"
 )
+
+type hostInterfaceCommandRunner func(context.Context, string, ...string) ([]byte, error)
+
+func runHostInterfaceCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, args...).CombinedOutput() //nolint:gosec
+}
 
 func extractContainerlabBin(r io.Reader) error {
 	gzipReader, err := gzip.NewReader(r)
@@ -136,7 +144,106 @@ func (c *clabernetes) installContainerlabVersion(version string) error {
 	return extractContainerlabBin(inTarFile)
 }
 
+func isProtectedHostInterface(name string) bool {
+	switch name {
+	case "lo", "eth0", "docker0":
+		return true
+	default:
+		return false
+	}
+}
+
+// topologyHostInterfaces returns the sanitized names of all "host" link endpoints defined in the
+// given topology -- these are the interfaces containerlab will create in the pod (launcher)
+// network namespace when deploying the topology.
+func topologyHostInterfaces(rawTopology string) ([]string, error) {
+	containerlabConfig, _, err := clabernetesutilcontainerlab.LoadContainerlabConfig(rawTopology)
+	if err != nil {
+		return nil, err
+	}
+
+	interfaceNames := make([]string, 0)
+	seen := make(map[string]struct{})
+
+	for _, link := range containerlabConfig.Topology.Links {
+		if link == nil {
+			continue
+		}
+
+		for _, endpoint := range link.Endpoints {
+			nodeName, interfaceName, found := strings.Cut(endpoint, ":")
+			if !found || nodeName != clabernetesconstants.HostKeyword {
+				continue
+			}
+
+			interfaceName = clabernetesutilcontainerlab.SanitizeInterfaceName(interfaceName)
+			if isProtectedHostInterface(interfaceName) {
+				continue
+			}
+
+			if _, exists := seen[interfaceName]; exists {
+				continue
+			}
+
+			seen[interfaceName] = struct{}{}
+			interfaceNames = append(interfaceNames, interfaceName)
+		}
+	}
+
+	return interfaceNames, nil
+}
+
+// removeStaleHostInterfaces removes topology-defined host interfaces left over from a partially
+// failed deploy. The pod network namespace outlives launcher container restarts, so these
+// interfaces can otherwise make every subsequent deploy fail its endpoint verification.
+func (c *clabernetes) removeStaleHostInterfaces() {
+	rawTopology, err := os.ReadFile("topo.clab.yaml")
+	if err != nil {
+		c.logger.Warnf("failed reading topology file to check for stale interfaces, err: %s", err)
+
+		return
+	}
+
+	interfaceNames, err := topologyHostInterfaces(string(rawTopology))
+	if err != nil {
+		c.logger.Warnf("failed parsing topology file to check for stale interfaces, err: %s", err)
+
+		return
+	}
+
+	runner := c.runCommand
+	if runner == nil {
+		runner = runHostInterfaceCommand
+	}
+
+	for _, interfaceName := range interfaceNames {
+		_, err = runner(c.ctx, "ip", "link", "show", "dev", interfaceName)
+		if err != nil {
+			// interface does not exist, nothing to clean up -- this is the normal case
+			continue
+		}
+
+		c.logger.Warnf(
+			"interface %q already exists in the pod network namespace, it was likely stranded"+
+				" by a previously failed deploy, removing it so deploy can proceed...",
+			interfaceName,
+		)
+
+		output, deleteErr := runner(c.ctx, "ip", "link", "delete", "dev", interfaceName)
+		if deleteErr != nil {
+			c.logger.Warnf(
+				"failed removing interface %q, deploy will likely fail, err: %s, output: %s",
+				interfaceName,
+				deleteErr,
+				string(output),
+			)
+		}
+	}
+}
+
 func (c *clabernetes) runContainerlab() error {
+	c.removeStaleHostInterfaces()
+
 	containerlabLogFile, err := os.Create("containerlab.log")
 	if err != nil {
 		return err

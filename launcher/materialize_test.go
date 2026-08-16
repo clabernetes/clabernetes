@@ -1,6 +1,7 @@
 package launcher //nolint:testpackage // tests exercise the unexported materializer
 
 import (
+	"reflect"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -167,6 +168,20 @@ func TestMaterializeTopology(t *testing.T) {
 
 	if len(unknownFields) != 0 {
 		t.Fatalf("materialized config carries fields the loader does not know: %q", unknownFields)
+	}
+
+	hostInterfaces, err := topologyHostInterfaces(string(configBytes))
+	if err != nil {
+		t.Fatalf("failed extracting materialized host interfaces: %s", err)
+	}
+
+	expectedHostInterfaces := []string{"srl1-e1-2", "ens5"}
+	if !reflect.DeepEqual(hostInterfaces, expectedHostInterfaces) {
+		t.Fatalf(
+			"expected materialized host interfaces %v, got %v",
+			expectedHostInterfaces,
+			hostInterfaces,
+		)
 	}
 }
 
