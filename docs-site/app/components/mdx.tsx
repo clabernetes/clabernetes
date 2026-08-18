@@ -6,8 +6,19 @@ import {
   TryC9sDiagram,
 } from '@/components/fabric-diagram';
 import type { MDXComponents } from 'mdx/types';
+import type { AnchorHTMLAttributes } from 'react';
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import * as TabsComponents from 'fumadocs-ui/components/tabs';
+import { rewriteMarkdownFileHref } from '@/lib/docs-href';
+
+function DocsMarkdownLink(props: AnchorHTMLAttributes<HTMLAnchorElement>) {
+  return (
+    <defaultMdxComponents.a
+      {...props}
+      href={props.href ? rewriteMarkdownFileHref(props.href) : props.href}
+    />
+  );
+}
 
 export function getMDXComponents(components?: MDXComponents) {
   return {
@@ -22,6 +33,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Accordions: Accordions,
     ...TabsComponents,
     ...components,
+    a: DocsMarkdownLink,
   } satisfies MDXComponents;
 }
 

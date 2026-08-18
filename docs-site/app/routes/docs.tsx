@@ -20,6 +20,12 @@ export async function loader({ params }: Route.LoaderArgs) {
   // "release-notes/0.7.0"; keep it whole for legacy redirects, then split it
   // by "/" into the slug segments expected by the Fumadocs source.
   const slug = params['*'] ?? '';
+  const slugWithoutMarkdown = slug.replace(/\.(mdx|md)$/i, '');
+  if (slugWithoutMarkdown !== slug) {
+    throw redirect(`/docs/${slugWithoutMarkdown.replace(/\/$/, '')}`, {
+      status: 308,
+    });
+  }
 
   // REDIRECTS SHOULD BE HANDLED HERE
   const redirectTarget = docsRedirect(`/docs/${slug.replace(/\/$/, '')}`);
