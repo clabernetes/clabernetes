@@ -76,6 +76,7 @@ func StartClabernetes() {
 		nodeLogger:           nodeLogger,
 		imageName:            os.Getenv(clabernetesconstants.LauncherNodeImageEnv),
 		imagePullThroughMode: os.Getenv(clabernetesconstants.LauncherImagePullThroughModeEnv),
+		runCommand:           runHostInterfaceCommand,
 	}
 
 	clabernetesInstance.startup()
@@ -98,6 +99,7 @@ type clabernetes struct {
 
 	imageName            string
 	imagePullThroughMode string
+	runCommand           hostInterfaceCommandRunner
 
 	// containerIDs holds *all* ids of containers running --in theory we could have other side-car
 	// type stuff running so just catching all them here so we know if/when things fail
