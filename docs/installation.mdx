@@ -96,6 +96,55 @@ specific context:
  C9S_CONTEXT=my-cluster make install
 ```
 
+## Upgrade
+
+From 0.7 onward, c9s upgrades in place with Helm. Topology, Node, Link, and LauncherProfile
+objects are kept. There is no in-place path from 0.6; that cutover is described in the
+[0.7 release notes](/docs/release-notes/0.7).
+
+The installation commands above already use `helm upgrade --install`. Running them again against
+the existing `clabernetes` release in the `c9s` namespace is the upgrade.
+
+<Tabs items={['Latest release', 'Specific version']}>
+  <Tab>
+
+```bash
+helm upgrade --install --namespace c9s \
+    clabernetes oci://ghcr.io/clabernetes/clabernetes/clabernetes
+```
+
+  </Tab>
+
+  <Tab>
+```bash
+helm upgrade --install --namespace c9s --version 0.8.0 \
+    clabernetes oci://ghcr.io/clabernetes/clabernetes/clabernetes
+```
+  </Tab>
+</Tabs>
+
+If you installed with a values file, pass the same `-f` on upgrade so Helm does not reset the
+release to chart defaults.
+
+Helm rolls the manager Deployment to the chart's manager image. The new manager applies CRD
+updates on startup, so additive schema changes (for example 0.8 affinity and `criHostsDir`) take
+effect without a separate `kubectl apply` of the CRDs.
+
+Launcher images live on the global Config singleton, and Helm's default `merge` mode leaves an
+already-set `launcherImage` alone. After the Helm upgrade, point that field at the same chart
+version:
+
+```bash
+kubectl --namespace c9s patch configs.c9s.run/clabernetes --type merge \
+  --patch '{"spec":{"deployment":{"launcherImage":"ghcr.io/clabernetes/clabernetes/clabernetes-launcher:0.8.0"}}}'
+```
+
+Replace `0.8.0` with the chart version you just installed (`helm --namespace c9s list`). Existing
+launcher Deployments roll to the new image when Config changes.
+
+`make install` (optionally with `VERSION=0.8.0`) performs the Helm upgrade and the launcher-image
+update together.
+
 ## Uninstallation
 
 To uninstall c9s, you can remove the Helm release, or run:
