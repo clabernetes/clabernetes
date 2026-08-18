@@ -13,6 +13,7 @@ import (
 	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
 	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	k8scorev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -335,6 +336,46 @@ func TestRenderLauncherProfiles(t *testing.T) {
 	}
 
 	assertPerNodeLauncherProfile(t, profiles[1])
+}
+
+func TestRenderLauncherProfilesPreservesAffinity(t *testing.T) {
+	topology, compiled := renderTestTopology(t)
+	affinity := &k8scorev1.Affinity{
+		NodeAffinity: &k8scorev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &k8scorev1.NodeSelector{
+				NodeSelectorTerms: []k8scorev1.NodeSelectorTerm{{
+					MatchExpressions: []k8scorev1.NodeSelectorRequirement{{
+						Key:      "topology.kubernetes.io/zone",
+						Operator: k8scorev1.NodeSelectorOpIn,
+						Values:   []string{"zone-a", "zone-b"},
+					}},
+				}},
+			},
+		},
+	}
+	topology.Spec.Deployment.Scheduling.Affinity = affinity
+
+	profiles := clabernetescontrollerstopology.RenderLauncherProfiles(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	if len(profiles) != 2 {
+		t.Fatalf("expected shared + dedicated profiles, got %d", len(profiles))
+	}
+
+	for _, profile := range profiles {
+		if profile.Spec.Scheduling == nil {
+			t.Fatalf("expected scheduling block on profile %q", profile.GetName())
+		}
+
+		clabernetestesthelper.MarshaledEqual(
+			t,
+			profile.Spec.Scheduling.Affinity,
+			affinity,
+		)
+	}
 }
 
 func TestRenderLauncherProfilesOmitsUnusedSharedProfile(t *testing.T) {

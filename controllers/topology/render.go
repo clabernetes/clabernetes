@@ -284,7 +284,8 @@ func renderTopologyLauncherProfile(
 	}
 
 	if topology.Spec.Deployment.Scheduling.NodeSelector != nil ||
-		topology.Spec.Deployment.Scheduling.Tolerations != nil {
+		topology.Spec.Deployment.Scheduling.Tolerations != nil ||
+		topology.Spec.Deployment.Scheduling.Affinity != nil {
 		spec.Scheduling = topology.Spec.Deployment.Scheduling.DeepCopy()
 	}
 

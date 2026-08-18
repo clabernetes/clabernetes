@@ -1,6 +1,16 @@
 ---
 connectivity: slurpeeth
 deployment:
+  scheduling:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: topology.kubernetes.io/zone
+                  operator: In
+                  values:
+                    - zone-a
   resources:
     default:
       requests:

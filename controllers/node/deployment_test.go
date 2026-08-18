@@ -10,7 +10,12 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
+	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
+	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/yaml"
 )
 
 func findEnv(envs []k8scorev1.EnvVar, name string) *k8scorev1.EnvVar {
@@ -138,6 +143,136 @@ func TestRenderDeployment(t *testing.T) {
 
 	if len(payloadVolumeNames) != 2 {
 		t.Fatalf("expected both grouped Node payloads, got volumes %+v", payloadVolumeNames)
+	}
+}
+
+func TestRenderDeploymentRendersAffinity(t *testing.T) {
+	expected := &k8scorev1.Affinity{}
+
+	err := yaml.Unmarshal([]byte(`
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - key: topology.kubernetes.io/zone
+            operator: In
+            values:
+              - zone-a
+              - zone-b
+  preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 80
+      preference:
+        matchExpressions:
+          - key: node-type
+            operator: In
+            values:
+              - network-lab
+podAffinity:
+  preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 50
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app: network-peer
+        topologyKey: kubernetes.io/hostname
+podAntiAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchLabels:
+          app: launcher
+      topologyKey: topology.kubernetes.io/zone
+`), expected)
+	if err != nil {
+		t.Fatalf("failed parsing expected affinity YAML: %s", err)
+	}
+
+	node := testProfileNode("srl1", nil)
+	node.Spec.Image = "ghcr.io/nokia/srlinux:latest"
+	profile := testResolvedProfile(t, func(profile *clabernetescontrollersnode.ResolvedProfile) {
+		profile.Affinity = expected
+	})
+	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
+		&claberneteslogging.FakeInstance{},
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	deployment := reconciler.Render(&clabernetescontrollersnode.RenderInput{
+		Node:         node,
+		Profile:      profile,
+		GroupMembers: []string{"srl1"},
+		NodesByName:  map[string]*clabernetesapisv1alpha1.Node{"srl1": node},
+	})
+
+	clabernetestesthelper.MarshaledEqual(
+		t,
+		deployment.Spec.Template.Spec.Affinity,
+		expected,
+	)
+}
+
+func TestDeploymentConformsDetectsAffinityDrift(t *testing.T) {
+	affinity := &k8scorev1.Affinity{
+		NodeAffinity: &k8scorev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &k8scorev1.NodeSelector{
+				NodeSelectorTerms: []k8scorev1.NodeSelectorTerm{{
+					MatchExpressions: []k8scorev1.NodeSelectorRequirement{{
+						Key:      "topology.kubernetes.io/zone",
+						Operator: k8scorev1.NodeSelectorOpIn,
+						Values:   []string{"zone-a"},
+					}},
+				}},
+			},
+		},
+	}
+	rendered := &k8sappsv1.Deployment{
+		Spec: k8sappsv1.DeploymentSpec{
+			Template: k8scorev1.PodTemplateSpec{
+				Spec: k8scorev1.PodSpec{Affinity: affinity},
+			},
+		},
+	}
+	ownerUID := apimachinerytypes.UID("node-uid")
+	existing := rendered.DeepCopy()
+	existing.OwnerReferences = []metav1.OwnerReference{{UID: ownerUID}}
+
+	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
+		&claberneteslogging.FakeInstance{},
+		"clabernetes",
+		"clabernetes",
+		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	if !reconciler.Conforms(existing, rendered, ownerUID) {
+		t.Fatal("expected identical affinity deployments to conform")
+	}
+
+	existing.Spec.Template.Spec.Affinity = nil
+	if reconciler.Conforms(existing, rendered, ownerUID) {
+		t.Fatal("expected missing affinity to be detected as drift")
+	}
+
+	existing = rendered.DeepCopy()
+	existing.OwnerReferences = []metav1.OwnerReference{{UID: ownerUID}}
+
+	existing.Spec.Template.Spec.Affinity.NodeAffinity.
+		RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].
+		MatchExpressions[0].Values[0] = "zone-b"
+	if reconciler.Conforms(existing, rendered, ownerUID) {
+		t.Fatal("expected changed affinity to be detected as drift")
+	}
+
+	existing = rendered.DeepCopy()
+	existing.OwnerReferences = []metav1.OwnerReference{{UID: ownerUID}}
+
+	withoutAffinity := rendered.DeepCopy()
+
+	withoutAffinity.Spec.Template.Spec.Affinity = nil
+	if reconciler.Conforms(existing, withoutAffinity, ownerUID) {
+		t.Fatal("expected removed affinity to be detected as drift")
 	}
 }
 

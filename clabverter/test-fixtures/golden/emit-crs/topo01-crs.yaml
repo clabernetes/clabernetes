@@ -23,6 +23,17 @@ spec:
   resources:
     requests:
       memory: 1Gi
+  scheduling:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - zone-a
+    tolerations: null
   statusProbes:
     enabled: false
     excludedNodes: null
@@ -54,6 +65,17 @@ spec:
   resources:
     requests:
       memory: 2Gi
+  scheduling:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.kubernetes.io/zone
+              operator: In
+              values:
+              - zone-a
+    tolerations: null
   statusProbes:
     enabled: false
     excludedNodes: null
