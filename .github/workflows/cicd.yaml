@@ -23,8 +23,7 @@ jobs:
     uses: ./.github/workflows/e2e.yaml
     secrets: inherit
 
-  # PRs never push images, so build them alongside e2e purely to prove the builds still work.
-  # amd64 alone is enough of a smoke test there; arm64 builds are covered on main.
+  # PRs never push images, so build both platforms alongside e2e to prove the builds still work.
   images:
     if: ${{ github.event_name == 'pull_request' }}
     needs:
@@ -33,7 +32,6 @@ jobs:
     uses: ./.github/workflows/images.yaml
     with:
       push: false
-      amd64-only: true
       build-version: 0.0.0-${{ github.sha }}
     secrets: inherit
 
