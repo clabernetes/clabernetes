@@ -620,7 +620,7 @@ func (r *DeploymentReconciler) renderDeploymentCRIHostsVolumes(
 			VolumeSource: k8scorev1.VolumeSource{
 				HostPath: &k8scorev1.HostPathVolumeSource{
 					Path: criHostsDir,
-					Type: clabernetesutil.ToPointer(k8scorev1.HostPathDirectory),
+					Type: clabernetesutil.ToPointer(k8scorev1.HostPathType("")),
 				},
 			},
 		},

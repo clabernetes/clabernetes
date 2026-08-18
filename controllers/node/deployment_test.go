@@ -657,9 +657,8 @@ func assertCRIHostsDir(
 		t.Fatalf("unexpected CRI hosts volume: %+v", hostsVolume)
 	}
 
-	if hostsVolume.HostPath.Type == nil ||
-		*hostsVolume.HostPath.Type != k8scorev1.HostPathDirectory {
-		t.Fatalf("expected CRI hosts volume to require a directory: %+v", hostsVolume)
+	if hostsVolume.HostPath.Type == nil || *hostsVolume.HostPath.Type != "" {
+		t.Fatalf("expected CRI hosts volume to omit hostPath type: %+v", hostsVolume)
 	}
 
 	if len(hostsMounts) != len(wantMountPaths) {
