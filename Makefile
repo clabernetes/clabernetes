@@ -262,13 +262,13 @@ delete-generated: ## Deletes all zz_*.go (generated) files, and crds
 	rm -rf generated/*
 
 build-manager: ## Builds the clabernetes manager container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(MANAGER_IMAGE):$(IMAGE_TAG) -f ./build/manager.Dockerfile .
+	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(MANAGER_IMAGE):$(IMAGE_TAG) -f ./build/manager.Dockerfile .
 
 build-launcher: ## Builds the clabernetes launcher container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(LAUNCHER_IMAGE):$(IMAGE_TAG) -f ./build/launcher.Dockerfile .
+	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(LAUNCHER_IMAGE):$(IMAGE_TAG) -f ./build/launcher.Dockerfile .
 
 build-clabverter: ## Builds the clabverter container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg BUILDPLATFORM="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(CLABVERTER_IMAGE):$(IMAGE_TAG) -f ./build/clabverter.Dockerfile .
+	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(CLABVERTER_IMAGE):$(IMAGE_TAG) -f ./build/clabverter.Dockerfile .
 
 set-chart-versions: ## Sets the helm chart versions to the given value.
 	./hack/set-chart-versions.sh $(BUMP_CHART_VERSION_ARGS)
