@@ -6,6 +6,7 @@ import remarkMdx from 'remark-mdx';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { visit } from 'unist-util-visit';
+import { rewriteMarkdownFileHref } from '../app/lib/docs-href';
 
 const docsDirectory = fileURLToPath(new URL('../../docs', import.meta.url));
 const markdownExtensions = new Set(['.md', '.mdx']);
@@ -139,7 +140,9 @@ for (const file of files) {
     let problem: string | null = null;
 
     if (target.startsWith('/')) {
-      problem = routes.has(normalizeRoute(target))
+      problem = routes.has(
+        normalizeRoute(rewriteMarkdownFileHref(target)),
+      )
         ? null
         : 'site route does not exist';
     } else {
