@@ -99,7 +99,11 @@ func Scan(ctx context.Context, client dynamic.Interface) ([]Diagnostic, error) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("listing %s resources for upgrade preflight: %w", target.Kind, err)
+			return nil, fmt.Errorf(
+				"listing %s resources for upgrade preflight: %w",
+				target.Kind,
+				err,
+			)
 		}
 
 		for i := range list.Items {
@@ -383,12 +387,24 @@ func topologyManagementRules() []fieldRule {
 		name     string
 		guidance string
 	}{
-		{name: "network", guidance: "Use portable direct management allocation; Pods have no Docker network name."},
+		{
+			name:     "network",
+			guidance: "Use portable direct management allocation; Pods have no Docker network name.",
+		},
 		{name: "bridge", guidance: "A Docker management bridge has no direct-Pod replacement."},
 		{name: "mtu", guidance: "Use planned management semantics and Link MTU where applicable."},
-		{name: "external-access", guidance: "Use Kubernetes Services and explicit exposure policy."},
-		{name: "skip-when-unused", guidance: "Conditional Docker network creation has no direct-Pod replacement."},
-		{name: "driver-opts", guidance: "Configure required networking through portable cluster and Link policy."},
+		{
+			name:     "external-access",
+			guidance: "Use Kubernetes Services and explicit exposure policy.",
+		},
+		{
+			name:     "skip-when-unused",
+			guidance: "Conditional Docker network creation has no direct-Pod replacement.",
+		},
+		{
+			name:     "driver-opts",
+			guidance: "Configure required networking through portable cluster and Link policy.",
+		},
 	}
 	rules := make([]fieldRule, 0, len(fields))
 	for _, field := range fields {

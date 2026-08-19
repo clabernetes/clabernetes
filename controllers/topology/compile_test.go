@@ -238,10 +238,16 @@ topology:
 	if primary == nil {
 		t.Fatal("compiled topology has no primary Node")
 	}
-	if got, want := primary.Exec, []string{"defaults-exec", "kind-exec", "node-exec"}; !reflect.DeepEqual(got, want) {
+	if got, want := primary.Exec, []string{"defaults-exec", "kind-exec", "node-exec"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
 		t.Fatalf("effective exec = %q, want %q", got, want)
 	}
-	if got, want := primary.EnvFiles, []string{"defaults.env", "kind.env", "node.env"}; !reflect.DeepEqual(got, want) {
+	if got, want := primary.EnvFiles, []string{"defaults.env", "kind.env", "node.env"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
 		t.Fatalf("effective env-files = %q, want %q", got, want)
 	}
 	if got, want := primary.Binds,
@@ -251,10 +257,16 @@ topology:
 	if got, want := primary.Ports, []string{"3000/udp"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("effective ports = %q, want most-specific %q", got, want)
 	}
-	if got, want := primary.Devices, []string{"/dev/default", "/dev/kind"}; !reflect.DeepEqual(got, want) {
+	if got, want := primary.Devices, []string{"/dev/default", "/dev/kind"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
 		t.Fatalf("effective devices = %q, want %q", got, want)
 	}
-	if got, want := primary.CapAdd, []string{"NET_ADMIN", "SYS_ADMIN"}; !reflect.DeepEqual(got, want) {
+	if got, want := primary.CapAdd, []string{"NET_ADMIN", "SYS_ADMIN"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
 		t.Fatalf("effective capabilities = %q, want %q", got, want)
 	}
 	if got, want := primary.SecurityOpts,
@@ -270,7 +282,10 @@ topology:
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("effective env = %q, want %q", got, want)
 	}
-	if got, want := primary.Labels, map[string]string{"tier": "kind", "owner": "node"}; !reflect.DeepEqual(got, want) {
+	if got, want := primary.Labels, map[string]string{"tier": "kind", "owner": "node"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
 		t.Fatalf("effective labels = %q, want %q", got, want)
 	}
 	if primary.Config == nil || len(primary.Config.Vars) != 4 ||

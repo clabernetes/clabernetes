@@ -26,6 +26,11 @@ func SkipUnlessDeviceRuntimeMode(t *testing.T, mode string) {
 	t.Helper()
 
 	if DeviceRuntimeMode() != mode {
-		t.Skipf("test requires %s=%s, deployed mode is %q", DeviceRuntimeModeEnv, mode, DeviceRuntimeMode())
+		t.Skipf(
+			"test requires %s=%s, deployed mode is %q",
+			DeviceRuntimeModeEnv,
+			mode,
+			DeviceRuntimeMode(),
+		)
 	}
 }
