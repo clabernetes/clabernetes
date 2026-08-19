@@ -153,7 +153,7 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 			nodeInput,
 			index,
 			scratchRoot,
-			"",
+			a.PayloadRoot,
 			false,
 		)
 		if evaluateErr != nil {

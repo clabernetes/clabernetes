@@ -464,6 +464,10 @@ func (s KubernetesState) DesiredFabricForNode(
 					peer.nodeAddress = remote.pod.Status.HostIP
 				}
 			}
+			// PodInterface stays empty here: the device-visible name is produced by the
+			// imported kind's planning (a Link spec name like "1/1/c23/4" is not a Linux
+			// interface name), lives only inside the requesting Pod's own namespace, and is
+			// therefore supplied by the helper's request rather than derived.
 			result = append(result, FabricEndpoint{
 				Link: ObjectIdentity{
 					Namespace: link.GetNamespace(),
@@ -475,9 +479,8 @@ func (s KubernetesState) DesiredFabricForNode(
 					Name:      local.node.GetName(),
 					UID:       string(local.node.GetUID()),
 				},
-				PodInterface: sides[sideIndex].spec.InterfaceName,
-				TunnelID:     link.Status.TunnelID,
-				MTU:          link.Spec.MTU,
+				TunnelID: link.Status.TunnelID,
+				MTU:      link.Spec.MTU,
 				pod: ObjectIdentity{
 					Namespace: local.pod.GetNamespace(),
 					Name:      local.pod.GetName(),

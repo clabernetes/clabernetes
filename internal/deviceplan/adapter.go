@@ -1138,9 +1138,24 @@ func rewriteExplicitPayloadPaths(
 				Message:  "imported planning requires a scoped payload projection root",
 			}
 		}
-		source := filepath.Join(root, ArtifactNodeDirectory(payload.ID), "source")
-		info, err := os.Lstat(source)
-		if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		projectionDir := filepath.Join(root, ArtifactNodeDirectory(payload.ID))
+		// Kubelet's atomic writer projects every ConfigMap/Secret item as a symlink through its
+		// ..data indirection, so the projection resolves symlinks but must stay confined to the
+		// payload's own mount directory.
+		source, err := filepath.EvalSymlinks(filepath.Join(projectionDir, "source"))
+		if err == nil {
+			var relative string
+			relative, err = filepath.Rel(projectionDir, source)
+			if err == nil &&
+				(relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator))) {
+				err = fmt.Errorf("payload projection escapes its mount directory")
+			}
+		}
+		var info os.FileInfo
+		if err == nil {
+			info, err = os.Lstat(source)
+		}
+		if err != nil || !info.Mode().IsRegular() {
 			return "", &Error{
 				Code: ErrorMissingInput, NodeID: nodeID, Field: "payloads",
 				Behavior: "payload-workspace",

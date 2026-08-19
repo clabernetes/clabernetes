@@ -96,6 +96,19 @@ func (d *Daemon) reconcile(
 	if err != nil {
 		return nil, fmt.Errorf("authorizing fabric request: %w", err)
 	}
+	// The Pod-side interface name is plan-produced helper input confined to the requester's own
+	// namespace; adopt it from the (already Linux-validated) request per Link identity so the
+	// authoritative set can normalize and compare.
+	requestedInterfaces := make(map[string]string, len(normalized.Fabric))
+	for _, endpoint := range normalized.Fabric {
+		requestedInterfaces[endpoint.Link.UID] = endpoint.PodInterface
+	}
+	for index := range expectedFabric {
+		expectedFabric[index].PodInterface = requestedInterfaces[expectedFabric[index].Link.UID]
+	}
+	if len(expectedFabric) != len(normalized.Fabric) {
+		return nil, fmt.Errorf("fabric request differs from authoritative Kubernetes state")
+	}
 	expectedRequest, err := normalizeRequest(ReconcileRequest{
 		SchemaVersion: SchemaVersion,
 		Pod:           normalized.Pod,
