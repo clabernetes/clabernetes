@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -94,8 +95,13 @@ func RenderNodes(
 			Spec: clabernetesapisv1alpha1.NodeSpec{
 				NodeDefinition:     *nodeDefinition.DeepCopy(),
 				LauncherProfileRef: &k8scorev1.LocalObjectReference{Name: profileName},
-				FilesFromConfigMap: topology.Spec.Deployment.FilesFromConfigMap[nodeName],
-				FilesFromURL:       topology.Spec.Deployment.FilesFromURL[nodeName],
+				FilesFromConfigMap: slices.Clone(
+					topology.Spec.Deployment.FilesFromConfigMap[nodeName],
+				),
+				FilesFromSecret: slices.Clone(
+					topology.Spec.Deployment.FilesFromSecret[nodeName],
+				),
+				FilesFromURL: slices.Clone(topology.Spec.Deployment.FilesFromURL[nodeName]),
 			},
 		}
 
@@ -258,19 +264,8 @@ func renderTopologyLauncherProfile(
 	}
 
 	imagePull := &clabernetesapisv1alpha1.LauncherProfileImagePull{
-		InsecureRegistries:  topology.Spec.ImagePull.InsecureRegistries,
-		PullThroughOverride: topology.Spec.ImagePull.PullThroughOverride,
-		PullSecrets:         topology.Spec.ImagePull.PullSecrets,
-	}
-
-	if topology.Spec.ImagePull.DockerDaemonConfig != "" {
-		imagePull.DockerDaemonConfig = clabernetesutil.ToPointer(
-			topology.Spec.ImagePull.DockerDaemonConfig,
-		)
-	}
-
-	if topology.Spec.ImagePull.DockerConfig != "" {
-		imagePull.DockerConfig = clabernetesutil.ToPointer(topology.Spec.ImagePull.DockerConfig)
+		Policy:      topology.Spec.ImagePull.Policy,
+		PullSecrets: slices.Clone(topology.Spec.ImagePull.PullSecrets),
 	}
 
 	if !reflectValueIsZero(imagePull) {
@@ -288,26 +283,7 @@ func renderTopologyLauncherProfile(
 		spec.Scheduling = topology.Spec.Deployment.Scheduling.DeepCopy()
 	}
 
-	deployment := &clabernetesapisv1alpha1.LauncherProfileDeployment{
-		PrivilegedLauncher:      topology.Spec.Deployment.PrivilegedLauncher,
-		ContainerlabDebug:       topology.Spec.Deployment.ContainerlabDebug,
-		LauncherImage:           topology.Spec.Deployment.LauncherImage,
-		LauncherImagePullPolicy: topology.Spec.Deployment.LauncherImagePullPolicy,
-		LauncherLogLevel:        topology.Spec.Deployment.LauncherLogLevel,
-		ExtraEnv:                topology.Spec.Deployment.ExtraEnv,
-	}
-
-	if topology.Spec.Deployment.ContainerlabTimeout != "" {
-		deployment.ContainerlabTimeout = clabernetesutil.ToPointer(
-			topology.Spec.Deployment.ContainerlabTimeout,
-		)
-	}
-
-	if topology.Spec.Deployment.ContainerlabVersion != "" {
-		deployment.ContainerlabVersion = clabernetesutil.ToPointer(
-			topology.Spec.Deployment.ContainerlabVersion,
-		)
-	}
+	deployment := &clabernetesapisv1alpha1.LauncherProfileDeployment{}
 
 	if topology.Spec.Deployment.Persistence.Enabled {
 		deployment.Persistence = topology.Spec.Deployment.Persistence.DeepCopy()
@@ -320,7 +296,14 @@ func renderTopologyLauncherProfile(
 	spec.StatusProbes = topology.Spec.StatusProbes.DeepCopy()
 
 	if compiled.Mgmt != nil {
-		spec.Mgmt = compiled.Mgmt.DeepCopy()
+		spec.Mgmt = &clabernetesapisv1alpha1.ManagementPolicy{
+			IPv4Subnet: compiled.Mgmt.IPv4Subnet,
+			IPv4Gw:     compiled.Mgmt.IPv4Gw,
+			IPv4Range:  compiled.Mgmt.IPv4Range,
+			IPv6Subnet: compiled.Mgmt.IPv6Subnet,
+			IPv6Gw:     compiled.Mgmt.IPv6Gw,
+			IPv6Range:  compiled.Mgmt.IPv6Range,
+		}
 	}
 
 	profile := &clabernetesapisv1alpha1.LauncherProfile{
@@ -372,15 +355,9 @@ func reflectValueIsZero(value any) bool {
 }
 
 func imagePullIsZero(imagePull *clabernetesapisv1alpha1.LauncherProfileImagePull) bool {
-	return imagePull.InsecureRegistries == nil && imagePull.PullThroughOverride == "" &&
-		imagePull.PullSecrets == nil && imagePull.DockerDaemonConfig == nil &&
-		imagePull.DockerConfig == nil
+	return imagePull.Policy == "" && imagePull.PullSecrets == nil
 }
 
 func deploymentIsZero(deployment *clabernetesapisv1alpha1.LauncherProfileDeployment) bool {
-	return deployment.PrivilegedLauncher == nil && deployment.Persistence == nil &&
-		deployment.ContainerlabDebug == nil && deployment.ContainerlabTimeout == nil &&
-		deployment.ContainerlabVersion == nil && deployment.LauncherImage == "" &&
-		deployment.LauncherImagePullPolicy == "" && deployment.LauncherLogLevel == "" &&
-		deployment.ExtraEnv == nil
+	return deployment.Persistence == nil
 }

@@ -13,7 +13,6 @@ import (
 	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
 	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	k8scorev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -40,6 +39,12 @@ func renderTestTopology(t *testing.T) (
 			ConfigMapPath: "startup.cfg",
 		}},
 	}
+	topology.Spec.Deployment.FilesFromSecret = map[string][]clabernetesapisv1alpha1.FileFromSecret{
+		"srl1": {{
+			FilePath: "/etc/device/license.key", SecretName: "srl1-license",
+			SecretPath: "license.key",
+		}},
+	}
 	topology.Spec.Deployment.Resources = map[string]k8scorev1.ResourceRequirements{
 		clabernetesconstants.Default: {
 			Requests: k8scorev1.ResourceList{
@@ -64,7 +69,7 @@ func renderTestTopology(t *testing.T) (
 			},
 		},
 	}
-	topology.Spec.Deployment.PrivilegedLauncher = clabernetesutil.ToPointer(true)
+	topology.Spec.ImagePull.Policy = string(k8scorev1.PullAlways)
 
 	compiled, err := clabernetescontrollerstopology.CompileTopology(
 		&claberneteslogging.FakeInstance{},
@@ -77,6 +82,7 @@ func renderTestTopology(t *testing.T) (
 	return topology, compiled
 }
 
+//nolint:gocyclo,wsl_v5 // This contract test checks every field on the rendered Node pair.
 func TestRenderNodes(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
@@ -118,6 +124,10 @@ func TestRenderNodes(t *testing.T) {
 			srl1.Spec.FilesFromConfigMap,
 		)
 	}
+	if len(srl1.Spec.FilesFromSecret) != 1 ||
+		srl1.Spec.FilesFromSecret[0].SecretName != "srl1-license" {
+		t.Fatalf("expected Secret payload on rendered node, got %+v", srl1.Spec.FilesFromSecret)
+	}
 
 	if srl1.Spec.LauncherProfileRef == nil ||
 		srl1.Spec.LauncherProfileRef.Name != "render-test" {
@@ -130,6 +140,128 @@ func TestRenderNodes(t *testing.T) {
 			"expected dedicated LauncherProfile reference, got %+v",
 			nodes[0].Spec.LauncherProfileRef,
 		)
+	}
+}
+
+//nolint:gocyclo,wsl_v5 // One end-to-end render scenario pins the complete primitive contract.
+func TestRenderPlanRelevantTopologyPrimitives(t *testing.T) {
+	t.Parallel()
+
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Name = "primitive-contract"
+	topology.Namespace = "clabernetes"
+	topology.Spec.Connectivity = string(clabernetesapisv1alpha1.LinkConnectivitySlurpeeth)
+	topology.Spec.ImagePull.PullSecrets = []string{"device-pull"}
+	topology.Spec.Definition.Containerlab = `
+name: primitive-contract
+mgmt:
+  ipv4-subnet: 192.0.2.0/24
+  ipv4-gw: 192.0.2.1
+  ipv4-range: 192.0.2.10-192.0.2.200
+  ipv6-subnet: 2001:db8::/64
+  ipv6-gw: 2001:db8::1
+  ipv6-range: 2001:db8::10-2001:db8::ff
+topology:
+  defaults:
+    kind: package-owned-kind
+    labels: { tier: inherited }
+    ports: [830/tcp]
+  kinds:
+    package-owned-kind:
+      image: example/device:1
+      components:
+        - { slot: inherited, type: line-card }
+  nodes:
+    primary:
+      mgmt-ipv4: 192.0.2.10/24
+    secondary:
+      network-mode: container:primary
+      components: []
+  links:
+    - endpoints: [primary:eth1, secondary:eth1]
+      mtu: 9000
+`
+	topology.Spec.Deployment.FilesFromConfigMap = map[string][]clabernetesapisv1alpha1.FileFromConfigMap{
+		"primary": {{FilePath: "/etc/device/startup.cfg", ConfigMapName: "startup"}},
+	}
+	topology.Spec.Deployment.FilesFromSecret = map[string][]clabernetesapisv1alpha1.FileFromSecret{
+		"primary": {{FilePath: "/etc/device/license", SecretName: "license"}},
+	}
+	topology.Spec.Deployment.FilesFromURL = map[string][]clabernetesapisv1alpha1.FileFromURL{
+		"primary": {{FilePath: "/etc/device/blob", URL: "https://example.test/blob"}},
+	}
+
+	compiled, err := clabernetescontrollerstopology.CompileTopology(
+		&claberneteslogging.FakeInstance{},
+		topology,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes := clabernetescontrollerstopology.RenderNodes(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+	links := clabernetescontrollerstopology.RenderLinks(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+	profiles := clabernetescontrollerstopology.RenderLauncherProfiles(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	if len(nodes) != 2 || len(links) != 1 || len(profiles) != 1 {
+		t.Fatalf(
+			"rendered primitives: nodes=%d links=%d profiles=%d",
+			len(nodes),
+			len(links),
+			len(profiles),
+		)
+	}
+	primary, secondary := nodes[0], nodes[1]
+	if primary.GetName() != "primary" || primary.Spec.Kind != "package-owned-kind" ||
+		primary.Spec.Image != "example/device:1" || primary.Labels["tier"] != "inherited" ||
+		!reflect.DeepEqual(primary.Spec.Ports, []string{"830/tcp"}) ||
+		len(primary.Spec.Components) != 1 || primary.Spec.MgmtIPv4 != "192.0.2.10/24" {
+		t.Fatalf("rendered primary Node = %#v", primary)
+	}
+	if len(primary.Spec.FilesFromConfigMap) != 1 || len(primary.Spec.FilesFromSecret) != 1 ||
+		len(primary.Spec.FilesFromURL) != 1 {
+		t.Fatalf("rendered primary payloads = %#v", primary.Spec)
+	}
+	if secondary.GetName() != "secondary" ||
+		secondary.Spec.NetworkMode != "container:primary" || secondary.Spec.Components == nil ||
+		len(secondary.Spec.Components) != 0 {
+		t.Fatalf("rendered secondary Node = %#v", secondary)
+	}
+	if links[0].Spec.Connectivity != clabernetesapisv1alpha1.LinkConnectivitySlurpeeth ||
+		links[0].Spec.MTU != 9000 || links[0].Spec.EndpointA.NodeName != "primary" ||
+		links[0].Spec.EndpointB.NodeName != "secondary" {
+		t.Fatalf("rendered Link = %#v", links[0])
+	}
+	management := profiles[0].Spec.Mgmt
+	if management == nil || management.IPv4Subnet != "192.0.2.0/24" ||
+		management.IPv4Gw != "192.0.2.1" ||
+		management.IPv4Range != "192.0.2.10-192.0.2.200" ||
+		management.IPv6Subnet != "2001:db8::/64" || management.IPv6Gw != "2001:db8::1" ||
+		management.IPv6Range != "2001:db8::10-2001:db8::ff" {
+		t.Fatalf("rendered management policy = %#v", management)
+	}
+	if profiles[0].Spec.ImagePull == nil ||
+		!reflect.DeepEqual(profiles[0].Spec.ImagePull.PullSecrets, []string{"device-pull"}) {
+		t.Fatalf("rendered image-pull policy = %#v", profiles[0].Spec.ImagePull)
+	}
+
+	// Emitted primitives are snapshots, not aliases into the mutable source Topology object.
+	topology.Spec.Deployment.FilesFromConfigMap["primary"][0].FilePath = "changed"
+	topology.Spec.ImagePull.PullSecrets[0] = "changed"
+	if primary.Spec.FilesFromConfigMap[0].FilePath != "/etc/device/startup.cfg" ||
+		profiles[0].Spec.ImagePull.PullSecrets[0] != "device-pull" {
+		t.Fatalf("rendered primitive changed with source Topology mutation")
 	}
 }
 
@@ -313,12 +445,12 @@ func TestRenderLauncherProfiles(t *testing.T) {
 		t.Fatalf("expected default resources compiled into profile, got %+v", main.Spec.Resources)
 	}
 
-	if main.Spec.Deployment == nil || main.Spec.Deployment.PrivilegedLauncher == nil ||
-		!*main.Spec.Deployment.PrivilegedLauncher {
-		t.Fatalf(
-			"expected privileged launcher compiled into profile, got %+v",
-			main.Spec.Deployment,
-		)
+	if main.Spec.Deployment != nil {
+		t.Fatalf("unexpected empty persistence block: %+v", main.Spec.Deployment)
+	}
+
+	if main.Spec.ImagePull == nil || main.Spec.ImagePull.Policy != string(k8scorev1.PullAlways) {
+		t.Fatalf("expected direct pull policy compiled into profile, got %+v", main.Spec.ImagePull)
 	}
 
 	if main.Spec.Mgmt == nil || main.Spec.Mgmt.IPv4Subnet != "172.20.20.0/24" {

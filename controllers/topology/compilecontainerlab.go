@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,11 +15,16 @@ import (
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
+	clabtypes "github.com/srl-labs/containerlab/types"
 	"gopkg.in/yaml.v3"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
-const unknownFieldMatchCount = 3
+const (
+	unknownFieldMatchCount = 3
+	yamlMappingPairSize    = 2
+	importedNodeLayerCount = 4
+)
 
 // compileContainerlabDefinition compiles a containerlab topology definition: every node gets
 // the topology defaults and its kind expanded *into* its definition (so the emitted Node
@@ -38,17 +44,20 @@ func compileContainerlabDefinition(
 	}
 
 	for _, unknownField := range unknownFields {
-		diagnostics.add(diagnosticFromUnknownField(unknownField), false)
+		diagnostics.add(diagnosticFromUnknownField(unknownField))
 	}
 
-	if containerlabConfig.Mgmt != nil {
-		diagnostics.add(CompilerDiagnostic{
-			Code: "management-network-semantics",
-			Path: "mgmt",
-			Message: "topology-level management network settings are launcher-local in c9s and " +
-				"do not create a shared cross-pod management network",
-		}, false)
+	importedTopology, err := loadImportedNodeTopology(definition)
+	if err != nil {
+		return nil, err
 	}
+
+	managementFieldLines, err := topLevelMappingFieldLines(definition, "mgmt")
+	if err != nil {
+		return nil, err
+	}
+
+	validateManagementPolicy(managementFieldLines, diagnostics)
 
 	compiled := &CompiledTopology{
 		Kind: clabernetesapis.TopologyKindContainerlab,
@@ -68,7 +77,7 @@ func compileContainerlabDefinition(
 
 	for _, nodeName := range nodeNames {
 		compiled.Nodes[nodeName], err = flattenNodeDefinition(
-			containerlabConfig.Topology,
+			importedTopology,
 			nodeName,
 		)
 		if err != nil {
@@ -78,20 +87,6 @@ func compileContainerlabDefinition(
 		normalizeNodePorts(diagnostics, nodeName, compiled.Nodes[nodeName])
 		consumeExposePortsLabel(diagnostics, nodeName, compiled.Nodes[nodeName])
 		dropUnusableNodeLabels(diagnostics, nodeName, compiled.Nodes[nodeName])
-
-		switch compiled.Nodes[nodeName].Kind {
-		case "bridge", "ovs-bridge", "host":
-			diagnostics.add(CompilerDiagnostic{
-				Code: "unsupported-pseudo-node",
-				Path: fmt.Sprintf("topology.nodes.%s.kind", nodeName),
-				Message: fmt.Sprintf(
-					"node %q uses native pseudo-node kind %q, which has no c9s "+
-						"launcher implementation",
-					nodeName,
-					compiled.Nodes[nodeName].Kind,
-				),
-			}, true)
-		}
 	}
 
 	validateNodeNetworkModes(compiled.Nodes, diagnostics)
@@ -109,6 +104,92 @@ func compileContainerlabDefinition(
 	}
 
 	return compiled, nil
+}
+
+func validateManagementPolicy(
+	fieldLines map[string]int,
+	diagnostics *compileDiagnostics,
+) {
+	fields := []struct {
+		name    string
+		path    string
+		message string
+	}{
+		{
+			name:    "network",
+			path:    "mgmt.network",
+			message: "container runtime management network names have no direct-Pod semantic",
+		},
+		{
+			name:    "bridge",
+			path:    "mgmt.bridge",
+			message: "container runtime management bridges have no direct-Pod semantic",
+		},
+		{
+			name:    "mtu",
+			path:    "mgmt.mtu",
+			message: "Docker management-network MTU is not direct management policy",
+		},
+		{
+			name:    "external-access",
+			path:    "mgmt.external-access",
+			message: "Docker management-network external access is replaced by Kubernetes Services",
+		},
+		{
+			name:    "skip-when-unused",
+			path:    "mgmt.skip-when-unused",
+			message: "conditional container runtime network creation has no direct-Pod semantic",
+		},
+		{
+			name:    "driver-opts",
+			path:    "mgmt.driver-opts",
+			message: "container runtime network driver options have no direct-Pod semantic",
+		},
+	}
+	for _, field := range fields {
+		line, present := fieldLines[field.name]
+		if !present {
+			continue
+		}
+
+		diagnostics.add(CompilerDiagnostic{
+			Code:    "unsupported-management-field",
+			Path:    field.path,
+			Line:    line,
+			Message: field.message,
+		})
+	}
+}
+
+func topLevelMappingFieldLines(definition, fieldName string) (map[string]int, error) {
+	document := &yaml.Node{}
+
+	err := yaml.Unmarshal([]byte(definition), document)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
+		return map[string]int{}, nil
+	}
+
+	root := document.Content[0]
+	for index := 0; index+1 < len(root.Content); index += 2 {
+		key, value := root.Content[index], root.Content[index+1]
+		if key.Value != fieldName || value.Kind != yaml.MappingNode {
+			continue
+		}
+
+		lines := make(map[string]int, len(value.Content)/yamlMappingPairSize)
+		for childIndex := 0; childIndex+1 < len(value.Content); childIndex += yamlMappingPairSize {
+			childKey := value.Content[childIndex]
+			lines[childKey.Value] = childKey.Line
+		}
+
+		return lines, nil
+	}
+
+	return map[string]int{}, nil
 }
 
 // validateNodeNetworkModes mirrors the Node CRD's container:<primary> contract in the compiler
@@ -145,7 +226,7 @@ func validateNodeNetworkModes(
 					nodeName,
 					networkMode,
 				),
-			}, true)
+			})
 
 			continue
 		}
@@ -159,7 +240,7 @@ func validateNodeNetworkModes(
 					nodeName,
 					primary,
 				),
-			}, true)
+			})
 
 			continue
 		}
@@ -176,7 +257,7 @@ func validateNodeNetworkModes(
 						"node %q network-mode participates in a launcher-group cycle",
 						nodeName,
 					),
-				}, true)
+				})
 
 				break
 			}
@@ -214,9 +295,9 @@ func diagnosticFromUnknownField(message string) CompilerDiagnostic {
 	return diagnostic
 }
 
-// normalizeNodePorts rewrites the docker style "host:container" port entries that pasted
-// containerlab topologies carry into the destination-only form Nodes accept -- the pod side port
-// is an allocation clabernetes owns, so a pinned host side cannot be honored.
+// normalizeNodePorts records Docker-style host pinning that direct Node resources cannot preserve.
+// The temporary normalization lets validation continue and gather all diagnostics, but the compile
+// fails and returns no resources when any such entry is present.
 func normalizeNodePorts(
 	diagnostics *compileDiagnostics,
 	nodeName string,
@@ -232,11 +313,11 @@ func normalizeNodePorts(
 			Code: "host-port-pinning",
 			Path: fmt.Sprintf("topology.nodes.%s.ports[%d]", nodeName, idx),
 			Message: fmt.Sprintf(
-				"node %q port %q pins a host-side port, but c9s allocates launcher ports",
+				"node %q port %q pins a host-side port, but c9s allocates Pod-side ports",
 				nodeName,
 				portDefinition,
 			),
-		}, false)
+		})
 
 		nodeDefinition.Ports[idx] = normalized
 	}
@@ -291,7 +372,7 @@ func consumeExposePortsLabel(
 					portDefinition,
 					err,
 				),
-			}, true)
+			})
 
 			continue
 		}
@@ -314,11 +395,9 @@ func canonicalPortDefinition(port *clabernetesutilcontainerlab.TypedPort) string
 	)
 }
 
-// dropUnusableNodeLabels removes containerlab node labels that cannot be carried onto the emitted
-// Node's metadata. containerlab labels become docker labels, which accept far more than a
-// kubernetes label does, so an unusable one has to be dropped here rather than making the Node
-// rejected on create. clabernetes' own namespace and the individual keys its controllers reserve
-// stay off limits too, since those labels carry meaning to reconciliation and selectors.
+// dropUnusableNodeLabels records containerlab node labels that cannot be carried onto the emitted
+// Node's metadata. The compile fails after collecting diagnostics, so the temporary flattened Node
+// can be pruned without silently changing any emitted resource.
 func dropUnusableNodeLabels(
 	diagnostics *compileDiagnostics,
 	nodeName string,
@@ -346,12 +425,12 @@ func dropUnusableNodeLabels(
 			Code: "unusable-node-label",
 			Path: fmt.Sprintf("topology.nodes.%s.labels.%s", nodeName, key),
 			Message: fmt.Sprintf(
-				"node %q label %q cannot become a Kubernetes label and would be omitted: %s",
+				"node %q label %q cannot become a Kubernetes label: %s",
 				nodeName,
 				key,
 				reason,
 			),
-		}, false)
+		})
 
 		delete(nodeDefinition.Labels, key)
 	}
@@ -375,111 +454,247 @@ func isReservedNodeLabel(key string) bool {
 	}
 }
 
-// flattenNodeDefinition merges the topology defaults, the node's kind, and the node's own
-// definition into a single self contained node definition -- following containerlab's own
-// inheritance rules: the most specific value wins for scalar fields, maps (env/sysctls) merge
-// with the most specific entry winning, and binds/ports extend (defaults + kind + node).
+type importedNodeTopologyDocument struct {
+	Topology *importedNodeTopology `yaml:"topology"`
+}
+
+// importedNodeTopology deliberately omits Links: the c9s Link compiler parses both native brief
+// and structured endpoint syntax separately, while this projection exists only to invoke the
+// imported package's node inheritance behavior.
+type importedNodeTopology struct {
+	Defaults *clabtypes.NodeDefinition            `yaml:"defaults,omitempty"`
+	Kinds    map[string]*clabtypes.NodeDefinition `yaml:"kinds,omitempty"`
+	Nodes    map[string]*clabtypes.NodeDefinition `yaml:"nodes,omitempty"`
+	Groups   map[string]*clabtypes.NodeDefinition `yaml:"groups,omitempty"`
+}
+
+func loadImportedNodeTopology(definition string) (*clabtypes.Topology, error) {
+	document := &importedNodeTopologyDocument{}
+
+	err := yaml.Unmarshal([]byte(definition), document)
+	if err != nil {
+		return nil, err
+	}
+
+	if document.Topology == nil {
+		return nil, fmt.Errorf(
+			"%w: containerlab definition has no topology section",
+			claberneteserrors.ErrParse,
+		)
+	}
+
+	topology := &clabtypes.Topology{
+		Defaults: document.Topology.Defaults,
+		Kinds:    document.Topology.Kinds,
+		Nodes:    document.Topology.Nodes,
+		Groups:   document.Topology.Groups,
+	}
+	if topology.Defaults == nil {
+		topology.Defaults = &clabtypes.NodeDefinition{}
+	}
+
+	return topology, nil
+}
+
+// flattenNodeDefinition asks the imported containerlab Topology for every supported effective
+// value. c9s owns the primitive shape, but it does not duplicate containerlab's inheritance rules.
 func flattenNodeDefinition(
-	topology *clabernetesutilcontainerlab.Topology,
+	topology *clabtypes.Topology,
 	nodeName string,
 ) (*clabernetesutilcontainerlab.NodeDefinition, error) {
-	flattened := &clabernetesutilcontainerlab.NodeDefinition{}
-
-	nodeDefinition := topology.Nodes[nodeName]
-
-	kindName := topology.Defaults.Kind
-	if nodeDefinition.Kind != "" {
-		kindName = nodeDefinition.Kind
+	flattened := &clabernetesutilcontainerlab.NodeDefinition{
+		Kind:          topology.GetNodeKind(nodeName),
+		Type:          topology.GetNodeType(nodeName),
+		Image:         topology.GetNodeImage(nodeName),
+		License:       topology.GetNodeLicense(nodeName),
+		StartupConfig: topology.GetNodeStartupConfig(nodeName),
+		Entrypoint:    topology.GetNodeEntrypoint(nodeName),
+		Cmd:           topology.GetNodeCmd(nodeName),
+		Exec:          slices.Clone(topology.GetNodeExec(nodeName)),
+		User:          topology.GetNodeUser(nodeName),
+		Devices:       slices.Clone(topology.GetNodeDevices(nodeName)),
+		CapAdd:        slices.Clone(topology.GetNodeCapAdd(nodeName)),
+		SecurityOpts:  slices.Clone(topology.GetNodeSecurityOpts(nodeName)),
+		Tmpfs:         maps.Clone(topology.GetNodeTmpfs(nodeName)),
+		ShmSize:       topology.GetNodeShmSize(nodeName),
+		Ports:         importedNodePorts(topology, nodeName),
+		NetworkMode:   topology.GetNodeNetworkMode(nodeName),
+		Env:           maps.Clone(topology.GetNodeEnv(nodeName)),
+		EnvFiles:      slices.Clone(topology.GetNodeEnvFiles(nodeName)),
+		Sysctls:       maps.Clone(topology.GetSysCtl(nodeName)),
+		Labels:        maps.Clone(topology.GetNodeLabels(nodeName)),
 	}
 
-	// layer from least to most specific: defaults, kind, node
-	layers := []*clabernetesutilcontainerlab.NodeDefinition{topology.Defaults}
+	layers := importedNodeLayers(topology, nodeName)
+	flattened.EnforceStartupConfig = clonePointer(firstImportedPointer(
+		layers,
+		func(definition *clabtypes.NodeDefinition) *bool { return definition.EnforceStartupConfig },
+	))
+	flattened.SuppressStartupConfig = clonePointer(firstImportedPointer(
+		layers,
+		func(definition *clabtypes.NodeDefinition) *bool {
+			return definition.SuppressStartupConfig
+		},
+	))
+	flattened.Privileged = clonePointer(firstImportedPointer(
+		layers,
+		func(definition *clabtypes.NodeDefinition) *bool { return definition.Privileged },
+	))
 
-	if kindDefinition, ok := topology.Kinds[kindName]; ok {
-		layers = append(layers, kindDefinition)
+	binds, err := topology.GetNodeBinds(nodeName)
+	if err != nil {
+		return nil, err
 	}
 
-	layers = append(layers, nodeDefinition)
+	flattened.Binds = slices.Clone(binds)
 
-	for _, layer := range layers {
-		if layer == nil {
-			continue
+	if sourceNode := topology.Nodes[nodeName]; sourceNode != nil {
+		// Containerlab intentionally does not inherit per-node management addresses.
+		flattened.MgmtIPv4 = sourceNode.MgmtIPv4
+		flattened.MgmtIPv6 = sourceNode.MgmtIPv6
+	}
+
+	if firstImportedPointer(
+		layers,
+		func(definition *clabtypes.NodeDefinition) *clabtypes.ConfigDispatcher {
+			return definition.Config
+		},
+	) != nil {
+		flattened.Config = &clabernetesutilcontainerlab.ConfigDispatcher{}
+
+		transcodeErr := transcodeImportedField(
+			topology.GetNodeConfigDispatcher(nodeName),
+			flattened.Config,
+		)
+		if transcodeErr != nil {
+			return nil, transcodeErr
 		}
+	}
 
-		err := overlayNodeDefinition(flattened, layer)
-		if err != nil {
-			return nil, err
+	if firstImportedPointer(
+		layers,
+		func(definition *clabtypes.NodeDefinition) *clabtypes.DNSConfig {
+			return definition.DNS
+		},
+	) != nil {
+		flattened.DNS = &clabernetesutilcontainerlab.DNSConfig{}
+
+		transcodeErr := transcodeImportedField(topology.GetNodeDns(nodeName), flattened.DNS)
+		if transcodeErr != nil {
+			return nil, transcodeErr
 		}
 	}
 
-	flattened.Kind = kindName
+	if firstImportedPointer(
+		layers,
+		func(definition *clabtypes.NodeDefinition) *clabtypes.Extras {
+			return definition.Extras
+		},
+	) != nil {
+		flattened.Extras = &clabernetesutilcontainerlab.Extras{}
+
+		transcodeErr := transcodeImportedField(
+			topology.GetNodeExtras(nodeName),
+			flattened.Extras,
+		)
+		if transcodeErr != nil {
+			return nil, transcodeErr
+		}
+	}
+
+	if firstImportedPointer(
+		layers,
+		func(definition *clabtypes.NodeDefinition) *clabtypes.CertificateConfig {
+			return definition.Certificate
+		},
+	) != nil {
+		certificate := topology.GetCertificateConfig(nodeName)
+
+		flattened.Certificate = &clabernetesutilcontainerlab.CertificateConfig{
+			Issue:   clonePointer(certificate.Issue),
+			KeySize: certificate.KeySize,
+			SANs:    slices.Clone(certificate.SANs),
+		}
+		if certificate.ValidityDuration > 0 {
+			flattened.Certificate.ValidityDuration = certificate.ValidityDuration.String()
+		}
+	}
+
+	components := topology.GetComponents(nodeName)
+	if components != nil {
+		transcodeErr := transcodeImportedField(components, &flattened.Components)
+		if transcodeErr != nil {
+			return nil, transcodeErr
+		}
+	}
 
 	return flattened, nil
 }
 
-// overlayNodeDefinition overlays the given layer onto the base node definition. Rather than
-// hand-writing (and hand-maintaining) per-field merge logic over the whole containerlab
-// vocabulary, the layer is marshaled and unmarshaled *onto* the base -- yaml unmarshal only
-// touches fields present in the layer, which gives exactly the "most specific value wins"
-// semantic for scalars and pointers. The map/extend style fields containerlab merges rather
-// than replaces (env, sysctls, labels, binds, ports) are handled explicitly.
-func overlayNodeDefinition(
-	base,
-	layer *clabernetesutilcontainerlab.NodeDefinition,
-) error {
-	mergedEnv := mergeMaps(base.Env, layer.Env)
-	mergedSysctls := mergeMaps(base.Sysctls, layer.Sysctls)
-	mergedLabels := mergeMaps(base.Labels, layer.Labels)
-	mergedBinds := mergeSlices(base.Binds, layer.Binds)
-	mergedPorts := mergeSlices(base.Ports, layer.Ports)
-
-	layerYAML, err := yaml.Marshal(layer)
-	if err != nil {
-		return err
+func importedNodeLayers(
+	topology *clabtypes.Topology,
+	nodeName string,
+) []*clabtypes.NodeDefinition {
+	layers := make([]*clabtypes.NodeDefinition, 0, importedNodeLayerCount)
+	if node := topology.Nodes[nodeName]; node != nil {
+		layers = append(layers, node)
 	}
 
-	err = yaml.Unmarshal(layerYAML, base)
-	if err != nil {
-		return err
+	if group := topology.GetGroup(topology.GetNodeGroup(nodeName)); group != nil {
+		layers = append(layers, group)
 	}
 
-	base.Env = mergedEnv
-	base.Sysctls = mergedSysctls
-	base.Labels = mergedLabels
-	base.Binds = mergedBinds
-	base.Ports = mergedPorts
+	if kind := topology.GetKind(topology.GetNodeKind(nodeName)); kind != nil {
+		layers = append(layers, kind)
+	}
+
+	layers = append(layers, topology.GetDefaults())
+
+	return layers
+}
+
+func firstImportedPointer[T any](
+	layers []*clabtypes.NodeDefinition,
+	get func(*clabtypes.NodeDefinition) *T,
+) *T {
+	for _, layer := range layers {
+		if value := get(layer); value != nil {
+			return value
+		}
+	}
 
 	return nil
 }
 
-func mergeMaps(base, layer map[string]string) map[string]string {
-	if len(base) == 0 && len(layer) == 0 {
+func clonePointer[T any](value *T) *T {
+	if value == nil {
 		return nil
 	}
 
-	merged := make(map[string]string, len(base)+len(layer))
+	cloned := *value
 
-	maps.Copy(merged, base)
-	maps.Copy(merged, layer)
-
-	return merged
+	return &cloned
 }
 
-func mergeSlices(base, layer []string) []string {
-	merged := make([]string, 0, len(base)+len(layer))
-	seen := make(map[string]bool, len(base)+len(layer))
-
-	for _, entry := range append(append([]string{}, base...), layer...) {
-		if seen[entry] {
-			continue
+// importedNodePorts retains the package's most-specific non-empty ports rule while preserving the
+// original strings so strict diagnostics can still name Docker host-side pinning exactly.
+func importedNodePorts(topology *clabtypes.Topology, nodeName string) []string {
+	for _, layer := range importedNodeLayers(topology, nodeName) {
+		if len(layer.Ports) != 0 {
+			return slices.Clone(layer.Ports)
 		}
-
-		seen[entry] = true
-
-		merged = append(merged, entry)
 	}
 
-	return merged
+	return nil
+}
+
+func transcodeImportedField(source, destination any) error {
+	raw, err := yaml.Marshal(source)
+	if err != nil {
+		return err
+	}
+
+	return yaml.Unmarshal(raw, destination)
 }
 
 // compileContainerlabLinks converts the containerlab links section into compiled wires.
@@ -496,7 +711,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 				Code:    "unsupported-link-labels",
 				Path:    linkPath + ".labels",
 				Message: "link labels are not preserved by the c9s Link API",
-			}, false)
+			})
 		}
 
 		if len(link.Vars) != 0 {
@@ -504,13 +719,13 @@ func compileContainerlabLinks( //nolint:gocyclo
 				Code:    "unsupported-link-vars",
 				Path:    linkPath + ".vars",
 				Message: "link vars are not preserved by the c9s Link API",
-			}, false)
+			})
 		}
 
 		switch link.Type {
 		case "", "brief", "veth":
 		default:
-			diagnostics.add(unsupportedContainerlabLinkTypeDiagnostic(link.Type, linkPath), true)
+			diagnostics.add(unsupportedContainerlabLinkTypeDiagnostic(link.Type, linkPath))
 
 			continue
 		}
@@ -552,7 +767,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 						"special endpoint %q requires host networking that c9s does not provide",
 						nodeName,
 					),
-				}, true)
+				})
 
 				invalidEndpoint = true
 
@@ -564,7 +779,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 					Code:    "unknown-link-endpoint",
 					Path:    fmt.Sprintf("%s.endpoints[%d]", linkPath, endpointIndex),
 					Message: fmt.Sprintf("link endpoint references nonexistent node %q", nodeName),
-				}, true)
+				})
 
 				invalidEndpoint = true
 			}
@@ -576,7 +791,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 				Code:    "invalid-host-link",
 				Path:    linkPath + ".endpoints",
 				Message: "a c9s host link must have exactly one Node endpoint",
-			}, true)
+			})
 
 			invalidEndpoint = true
 		}

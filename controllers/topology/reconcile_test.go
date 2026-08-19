@@ -2,17 +2,78 @@ package topology //nolint:testpackage // tests exercise the unexported conforms 
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
+	k8sappsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestReconcileCompileFailureDoesNotMutateLegacyObjects(t *testing.T) {
+	t.Parallel()
+
+	scheme := apimachineryruntime.NewScheme()
+	for _, addToScheme := range []func(*apimachineryruntime.Scheme) error{
+		clabernetesapisv1alpha1.AddToScheme,
+		k8sappsv1.AddToScheme,
+	} {
+		err := addToScheme(scheme)
+		if err != nil {
+			t.Fatalf("adding scheme: %v", err)
+		}
+	}
+
+	topology := &clabernetesapisv1alpha1.Topology{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "invalid", Namespace: "clabernetes", UID: "topology-uid",
+		},
+	}
+	topology.Spec.Definition.Containerlab = `
+name: invalid
+topology:
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      unsupported-setting: true
+`
+	controller := true
+	legacy := &k8sappsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
+		Name: "invalid-n1", Namespace: topology.GetNamespace(),
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(),
+			Kind:       "Topology", Name: topology.GetName(), UID: topology.GetUID(),
+			Controller: &controller,
+		}},
+	}}
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(legacy).Build()
+	reconciler := &Reconciler{Log: &claberneteslogging.FakeInstance{}, Client: client}
+
+	err := reconciler.Reconcile(context.Background(), topology)
+
+	unsupported := &UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("Reconcile() error = %v, want UnsupportedFeaturesError", err)
+	}
+
+	actual := &k8sappsv1.Deployment{}
+
+	err = client.Get(
+		context.Background(),
+		ctrlruntimeclient.ObjectKeyFromObject(legacy),
+		actual,
+	)
+	if err != nil {
+		t.Fatalf("compile failure deleted legacy workload: %v", err)
+	}
+}
 
 // the api server drops empty omitempty fields on storage, so a compiled node whose (always
 // non-nil) merged ports/binds/env are empty reads back with those fields nil -- the conforms

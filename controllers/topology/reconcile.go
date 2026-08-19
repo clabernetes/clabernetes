@@ -91,16 +91,16 @@ func (r *Reconciler) Reconcile(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
 ) error {
-	err := r.legacyCleanup(ctx, topology)
+	compiled, err := CompileTopology(r.Log, topology)
 	if err != nil {
-		r.Log.Criticalf("failed cleaning up legacy (pre node/link) objects, err: %s", err)
+		r.Log.Criticalf("failed compiling topology definition, err: %s", err)
 
 		return err
 	}
 
-	compiled, err := CompileTopology(r.Log, topology)
+	err = r.legacyCleanup(ctx, topology)
 	if err != nil {
-		r.Log.Criticalf("failed compiling topology definition, err: %s", err)
+		r.Log.Criticalf("failed cleaning up legacy (pre node/link) objects, err: %s", err)
 
 		return err
 	}

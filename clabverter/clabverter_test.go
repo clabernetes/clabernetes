@@ -35,53 +35,43 @@ func TestClabvert(t *testing.T) {
 		topologyFile         string
 		topologySpecFile     string
 		destinationNamespace string
-		insecureRegistries   string
 		imagePullSecrets     string
 		disableExpose        bool
 		emitCRs              bool
 		naming               string
-		containerlabVersion  string
 	}{
 		{
 			name:                 "simple",
 			topologyFile:         "test-fixtures/clabversiontest/clab.yaml",
 			topologySpecFile:     "",
 			destinationNamespace: "notclabernetes",
-			insecureRegistries:   "1.2.3.4",
 			imagePullSecrets:     "regcred",
 			naming:               "prefixed",
-			containerlabVersion:  "",
 		},
 		{
-			name:                "simple-no-explicit-namespace",
-			topologyFile:        "test-fixtures/clabversiontest/clab.yaml",
-			topologySpecFile:    "test-fixtures/clabversiontest/specs.yaml",
-			insecureRegistries:  "1.2.3.4",
-			imagePullSecrets:    "",
-			disableExpose:       true,
-			naming:              "non-prefixed",
-			containerlabVersion: "0.51.0",
+			name:             "simple-no-explicit-namespace",
+			topologyFile:     "test-fixtures/clabversiontest/clab.yaml",
+			topologySpecFile: "test-fixtures/clabversiontest/specs.yaml",
+			imagePullSecrets: "",
+			disableExpose:    true,
+			naming:           "non-prefixed",
 		},
 		{
 			name:                 "emit-crs",
 			topologyFile:         "test-fixtures/clabversiontest/clab.yaml",
 			topologySpecFile:     "test-fixtures/clabversiontest/emit-crs-specs.yaml",
 			destinationNamespace: "notclabernetes",
-			insecureRegistries:   "1.2.3.4",
 			imagePullSecrets:     "regcred",
 			emitCRs:              true,
 			naming:               "prefixed",
-			containerlabVersion:  "",
 		},
 		{
 			name:                 "inline-startup-config",
 			topologyFile:         "test-fixtures/inline-startup-config/clab.yaml",
 			topologySpecFile:     "",
 			destinationNamespace: "inline-test",
-			insecureRegistries:   "",
 			imagePullSecrets:     "",
 			naming:               "prefixed",
-			containerlabVersion:  "",
 		},
 	}
 
@@ -127,8 +117,6 @@ func TestClabvert(t *testing.T) {
 					actualDir,
 					testCase.destinationNamespace,
 					testCase.naming,
-					testCase.containerlabVersion,
-					testCase.insecureRegistries,
 					testCase.imagePullSecrets,
 					testCase.disableExpose,
 					testCase.emitCRs,

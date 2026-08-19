@@ -48,8 +48,7 @@ type Clabverter struct {
 
 	destinationNamespace string
 
-	insecureRegistries []string
-	imagePullSecrets   []string
+	imagePullSecrets []string
 
 	disableExpose bool
 
@@ -63,11 +62,10 @@ type Clabverter struct {
 	topologySpecFile     string
 	topologySpecFilePath string
 
-	githubGroup         string
-	githubRepo          string
-	githubToken         string
-	naming              string
-	containerlabVersion string
+	githubGroup string
+	githubRepo  string
+	githubToken string
+	naming      string
 
 	rawClabConfig string
 	clabConfig    *clabernetesutilcontainerlab.Config
@@ -95,9 +93,7 @@ func MustNewClabverter(
 	topologySpecFile,
 	outputDirectory,
 	destinationNamespace,
-	naming,
-	containerlabVersion,
-	insecureRegistries string,
+	naming string,
 	imagePullSecrets string,
 	disableExpose,
 	emitCRs,
@@ -131,12 +127,6 @@ func MustNewClabverter(
 		logLevel,
 	)
 
-	// trim insecureRegistries and split into array if not empty
-	var insecureRegistriesArr []string
-	if strings.TrimSpace(insecureRegistries) != "" {
-		insecureRegistriesArr = strings.Split(insecureRegistries, ",")
-	}
-
 	// trim imagePullSecrets and split into array if not empty
 	var imagePullSecretsArr []string
 	if strings.TrimSpace(imagePullSecrets) != "" {
@@ -164,13 +154,11 @@ func MustNewClabverter(
 		disableExpose:           disableExpose,
 		emitCRs:                 emitCRs,
 		destinationNamespace:    destinationNamespace,
-		insecureRegistries:      insecureRegistriesArr,
 		imagePullSecrets:        imagePullSecretsArr,
 		startupConfigConfigMaps: make(map[string]topologyConfigMapTemplateVars),
 		extraFilesConfigMaps:    make(map[string][]topologyConfigMapTemplateVars),
 		extraFilesFromURL:       make(map[string][]topologyFileFromURLTemplateVars),
 		naming:                  naming,
-		containerlabVersion:     containerlabVersion,
 		renderedFiles:           []renderedContent{},
 	}
 }
@@ -218,8 +206,13 @@ func (c *Clabverter) Clabvert() error {
 		return err
 	}
 
+	topology, compiled, err := c.compileDirectTopology()
+	if err != nil {
+		return err
+	}
+
 	if c.emitCRs {
-		err = c.handleCRManifests()
+		err = c.handleCRManifests(topology, compiled)
 	} else {
 		err = c.handleManifest()
 	}
@@ -510,13 +503,11 @@ func (c *Clabverter) handleManifest() error {
 				c.rawClabConfig,
 				specDefinitionIndentSpaces,
 			),
-			Files:               files,
-			FilesFromURL:        c.extraFilesFromURL,
-			InsecureRegistries:  c.insecureRegistries,
-			ImagePullSecrets:    c.imagePullSecrets,
-			DisableExpose:       c.disableExpose,
-			Naming:              c.naming,
-			ContainerlabVersion: c.containerlabVersion,
+			Files:            files,
+			FilesFromURL:     c.extraFilesFromURL,
+			ImagePullSecrets: c.imagePullSecrets,
+			DisableExpose:    c.disableExpose,
+			Naming:           c.naming,
 		},
 	)
 	if err != nil {
@@ -560,7 +551,7 @@ func (c *Clabverter) mergeConfigSpecWithRenderedTopology(
 
 	topologySpecFromTopoSpecsFile := &clabernetesapisv1alpha1.TopologySpec{}
 
-	err = sigsyaml.Unmarshal(content, topologySpecFromTopoSpecsFile)
+	err = sigsyaml.UnmarshalStrict(content, topologySpecFromTopoSpecsFile)
 	if err != nil {
 		return nil, err
 	}

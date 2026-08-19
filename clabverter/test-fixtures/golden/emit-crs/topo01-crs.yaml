@@ -16,8 +16,6 @@ spec:
     useNodeMgmtIpv4Address: false
     useNodeMgmtIpv6Address: false
   imagePull:
-    insecureRegistries:
-    - 1.2.3.4
     pullSecrets:
     - regcred
   resources:
@@ -47,8 +45,6 @@ spec:
     useNodeMgmtIpv4Address: false
     useNodeMgmtIpv6Address: false
   imagePull:
-    insecureRegistries:
-    - 1.2.3.4
     pullSecrets:
     - regcred
   resources:

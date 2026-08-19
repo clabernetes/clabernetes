@@ -1,6 +1,7 @@
 package topology
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,19 +13,18 @@ import (
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
-// UnsupportedFieldPolicy controls how the compiler handles source vocabulary that c9s can
-// parse, but cannot preserve with the same semantics. The in-cluster compatibility controller
-// uses Warn; callers promising a strict containerlab-compatible runtime use Error.
+// UnsupportedFieldPolicy is retained for callers that explicitly requested strict compilation.
+// Error is the only supported policy; Topology compilation no longer has a warning mode.
 type UnsupportedFieldPolicy string
 
 const (
-	// UnsupportedFieldPolicyWarn preserves compatibility and logs lossy source fields.
-	UnsupportedFieldPolicyWarn UnsupportedFieldPolicy = "warn"
-	// UnsupportedFieldPolicyError rejects any source field c9s cannot preserve.
+	// UnsupportedFieldPolicyError rejects every source field c9s cannot preserve.
 	UnsupportedFieldPolicyError UnsupportedFieldPolicy = "error"
 )
 
-// CompileOptions controls compatibility behavior while compiling a source Topology.
+var errUnsupportedFieldPolicy = errors.New("unsupported topology compiler field policy")
+
+// CompileOptions is retained for strict external compiler callers.
 type CompileOptions struct {
 	UnsupportedFieldPolicy UnsupportedFieldPolicy
 }
@@ -70,36 +70,19 @@ func formatCompilerDiagnostic(diagnostic CompilerDiagnostic) string {
 }
 
 type compileDiagnostics struct {
-	logger      claberneteslogging.Instance
-	policy      UnsupportedFieldPolicy
 	diagnostics []CompilerDiagnostic
-	forceError  bool
 }
 
-func newCompileDiagnostics(
-	logger claberneteslogging.Instance,
-	options CompileOptions,
-) *compileDiagnostics {
-	policy := options.UnsupportedFieldPolicy
-	if policy == "" {
-		policy = UnsupportedFieldPolicyWarn
-	}
-
-	return &compileDiagnostics{logger: logger, policy: policy}
+func newCompileDiagnostics() *compileDiagnostics {
+	return &compileDiagnostics{}
 }
 
-func (d *compileDiagnostics) add(diagnostic CompilerDiagnostic, alwaysError bool) {
+func (d *compileDiagnostics) add(diagnostic CompilerDiagnostic) {
 	d.diagnostics = append(d.diagnostics, diagnostic)
-	d.forceError = d.forceError || alwaysError
-
-	if d.policy == UnsupportedFieldPolicyWarn && !alwaysError {
-		d.logger.Warn(formatCompilerDiagnostic(diagnostic))
-	}
 }
 
 func (d *compileDiagnostics) err() error {
-	if len(d.diagnostics) == 0 ||
-		(d.policy != UnsupportedFieldPolicyError && !d.forceError) {
+	if len(d.diagnostics) == 0 {
 		return nil
 	}
 
@@ -155,18 +138,6 @@ func CompileTopology(
 	logger claberneteslogging.Instance,
 	topology *clabernetesapisv1alpha1.Topology,
 ) (*CompiledTopology, error) {
-	return CompileTopologyWithOptions(logger, topology, CompileOptions{
-		UnsupportedFieldPolicy: UnsupportedFieldPolicyWarn,
-	})
-}
-
-// CompileTopologyWithOptions parses and compiles a Topology using the requested compatibility
-// policy. Structurally impossible constructs remain errors under every policy.
-func CompileTopologyWithOptions(
-	logger claberneteslogging.Instance,
-	topology *clabernetesapisv1alpha1.Topology,
-	options CompileOptions,
-) (*CompiledTopology, error) {
 	if topology.Spec.Definition.Containerlab == "" {
 		return nil, fmt.Errorf(
 			"%w: topology definition must include a containerlab topology",
@@ -177,8 +148,28 @@ func CompileTopologyWithOptions(
 	return compileContainerlabDefinition(
 		logger,
 		topology.Spec.Definition.Containerlab,
-		newCompileDiagnostics(logger, options),
+		newCompileDiagnostics(),
 	)
+}
+
+// CompileTopologyWithOptions preserves the explicit strict entry point used by external callers.
+// An omitted policy and Error both select the same fail-closed compiler.
+func CompileTopologyWithOptions(
+	logger claberneteslogging.Instance,
+	topology *clabernetesapisv1alpha1.Topology,
+	options CompileOptions,
+) (*CompiledTopology, error) {
+	if options.UnsupportedFieldPolicy != "" &&
+		options.UnsupportedFieldPolicy != UnsupportedFieldPolicyError {
+		return nil, fmt.Errorf(
+			"%w %q; only %q is supported",
+			errUnsupportedFieldPolicy,
+			options.UnsupportedFieldPolicy,
+			UnsupportedFieldPolicyError,
+		)
+	}
+
+	return CompileTopology(logger, topology)
 }
 
 // GetTopologyKind returns the "kind" of topology this CR represents.
