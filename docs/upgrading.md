@@ -4,6 +4,29 @@ description: Breaking changes and upgrade steps for c9s releases.
 icon: ArrowUpCircle
 ---
 
+## Device runtime modes and the upgrade preflight
+
+The manager now selects its device runtime through the Helm value `manager.deviceRuntimeMode`.
+The default `nested` keeps the launcher-pod runtime; `direct` runs every network-device image as
+a regular application container in a c9s-managed Pod, with planning executed in short-lived
+isolated worker Pods. Direct mode never falls back to nested: a Node the direct planner cannot
+realize stays failed with a structured diagnostic. The nested runtime no longer receives image
+pull secrets, insecure-registry configuration, or proxy environment -- private registries and
+registry trust are Kubernetes concerns (`imagePullSecrets`, cluster runtime configuration, and
+the controller-only `Config.spec.imagePull.registryMetadataTrust`).
+
+Before upgrading across the breaking API cut, run the read-only preflight against the live
+cluster. It lists every stored `Config`, `LauncherProfile`, and `Topology` that still uses a
+removed field, with the replacement guidance per path, and exits non-zero when anything needs a
+decision:
+
+```bash
+clabernetes upgrade-preflight
+```
+
+The tool never rewrites objects: several removed launcher fields have no automatic replacement,
+and silently retargeting launcher policy onto device containers would change behavior.
+
 ## Node spec is a curated containerlab subset
 
 **Breaking change:** The Node spec no longer mirrors the whole containerlab node definition. It now

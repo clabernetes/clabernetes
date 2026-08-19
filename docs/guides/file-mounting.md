@@ -178,13 +178,9 @@ https://drive.google.com/file/d/xxx               # Requires auth
 
 ### Authentication
 
-For authenticated URLs, use ConfigMaps with secrets instead, or configure Docker credentials:
-
-```yaml
-spec:
-  imagePull:
-    dockerConfig: my-docker-config-secret  # Contains config.json with auth
-```
+URL payloads are fetched anonymously. For content behind authentication, load it into a
+ConfigMap or Secret and reference that instead -- registry credentials belong in Kubernetes
+`imagePull.pullSecrets`, not in file mounting.
 
 ## Common Use Cases
 

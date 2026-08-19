@@ -375,9 +375,12 @@ func (r Resolver) Resolve(ctx context.Context, request Request) (*Metadata, erro
 
 	digestReference := reference.Context().Digest(manifestDigest.String()).Name()
 	return &Metadata{
-		SchemaVersion:     SchemaVersion,
-		SourceReference:   reference.Name(),
-		DigestReference:   digestReference,
+		SchemaVersion: SchemaVersion,
+		// The source reference echoes the request verbatim: planning matches resolved metadata
+		// back to declared and discovered references by this exact string, so normalization
+		// (a defaulted tag, a canonicalized registry host) must not rewrite it.
+		SourceReference: strings.TrimSpace(request.Reference),
+		DigestReference: digestReference,
 		RootDigest:        descriptor.Digest.String(),
 		RootMediaType:     string(descriptor.MediaType),
 		ManifestDigest:    manifestDigest.String(),

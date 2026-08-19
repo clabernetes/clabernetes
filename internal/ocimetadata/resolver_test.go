@@ -135,6 +135,13 @@ func TestResolveDefaultsMissingTagToLatest(t *testing.T) {
 	if !strings.Contains(metadata.DigestReference, "@sha256:") {
 		t.Errorf("digest reference = %q, want immutable sha256 reference", metadata.DigestReference)
 	}
+	if metadata.SourceReference != tagged.Context().Name() {
+		t.Errorf(
+			"source reference = %q, want the requested reference %q echoed verbatim",
+			metadata.SourceReference,
+			tagged.Context().Name(),
+		)
+	}
 
 	if _, err = AuthenticationFromPullSecrets(tagged.Context().Name(), nil); err != nil {
 		t.Errorf("AuthenticationFromPullSecrets() tagless reference error = %v", err)

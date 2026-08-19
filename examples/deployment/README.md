@@ -116,28 +116,14 @@ spec:
 - Useful for files larger than ConfigMap 1MB limit
 - Re-downloaded on pod restart
 
-### Containerlab Options
+### Removed launcher and containerlab options
 
-```yaml
-spec:
-  deployment:
-    containerlabDebug: true        # Enable debug logging
-    containerlabTimeout: "30m"     # Deploy timeout
-```
-
-### Launcher Configuration
-
-```yaml
-spec:
-  deployment:
-    launcherImage: "my-registry/clabernetes-launcher:v1.0.0"
-    launcherImagePullPolicy: Always
-    launcherLogLevel: debug
-    privilegedLauncher: true       # Default is true
-    extraEnv:
-      - name: MY_VAR
-        value: "my-value"
-```
+`containerlabDebug`, `containerlabTimeout`, `containerlabVersion`, `launcherImage`,
+`launcherImagePullPolicy`, `launcherLogLevel`, `privilegedLauncher`, and `extraEnv` are no
+longer part of the API. Containerlab behavior comes from the pinned Go module baseline, the
+launcher/runtime image is release deployment policy (`manager.launcherImage` Helm value), and
+device privilege comes exclusively from the imported kind plan. Run `clabernetes
+upgrade-preflight` to list stored objects still using these fields.
 
 ## Combining Options
 

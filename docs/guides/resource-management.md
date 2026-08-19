@@ -116,7 +116,9 @@ spec:
 
 ### Resources by Containerlab Kind
 
-Set resources based on containerlab kind and type:
+Per-kind resource defaults are no longer configured in c9s: the imported containerlab package
+owns kind requirements, and generic defaults come from `config.deployment.resourcesDefault`. Use
+a `LauncherProfile` when a specific group of nodes needs different sizing:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -125,26 +127,10 @@ metadata:
   name: clabernetes
 spec:
   deployment:
-    resourcesByContainerlabKind:
-      nokia_srlinux:
-        default:
-          requests:
-            memory: "4Gi"
-            cpu: "2"
-        ixr10:  # Specific type
-          requests:
-            memory: "16Gi"
-            cpu: "8"
-      nokia_sros:
-        default:
-          requests:
-            memory: "8Gi"
-            cpu: "4"
-      linux:
-        default:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
+    resourcesDefault:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
 ```
 
 ### Resource Priority
@@ -153,9 +139,7 @@ The effective LauncherProfile (explicitly authored or generated from Topology po
 global Config fields it sets. Omitted profile fields continue to use Config resolution:
 
 1. Referenced/generated LauncherProfile resources
-2. Global kind/type resources (`config.deployment.resourcesByContainerlabKind.<kind>.<type>`)
-3. Global kind default resources (`config.deployment.resourcesByContainerlabKind.<kind>.default`)
-4. Global default resources (`config.deployment.resourcesDefault`)
+2. Global default resources (`config.deployment.resourcesDefault`)
 
 ## Recommended Resource Values
 
@@ -366,15 +350,9 @@ kubectl describe node <node-name> | grep -A5 "Allocated"
 
 ## Privileged Mode
 
-Launcher pods run in privileged mode by default. To disable:
-
-```yaml
-spec:
-  deployment:
-    privilegedLauncher: false
-```
-
-**Note**: Some network OS images require privileged mode. Test thoroughly before disabling.
+Device privilege is not user configuration. Nested launcher pods are privileged by design, and
+in the direct runtime each device container receives exactly the privilege, capabilities, and
+devices its imported containerlab kind plan declares -- there is no `privilegedLauncher` knob.
 
 ## Related
 
