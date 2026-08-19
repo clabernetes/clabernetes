@@ -105,7 +105,8 @@ spec:
   statusProbes:
     enabled: true
   imagePull:
-    dockerConfig: %s
+    pullSecrets:
+      - %s
   deployment:
     filesFromConfigMap:
       sros:
@@ -231,7 +232,8 @@ func createSRSimRegistrySecret(t *testing.T, namespace string) {
 		srsimRegistrySecret,
 		"--namespace",
 		namespace,
-		"--from-file=config.json="+minimalConfigPath,
+		"--type=kubernetes.io/dockerconfigjson",
+		"--from-file=.dockerconfigjson="+minimalConfigPath,
 	)
 }
 

@@ -1,0 +1,98 @@
+{{- if eq .Values.manager.deviceRuntimeMode "direct" }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "{{ .Values.appName }}-host-endpoint"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    revision: "{{ .Release.Revision }}"
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/name: "{{ .Values.appName }}-host-endpoint"
+    c9s.run/component: host-endpoint
+    {{- if .Values.globalLabels }}
+{{ .Values.globalLabels | toYaml | indent 4 }}
+    {{- end }}
+  {{- if .Values.globalAnnotations }}
+  annotations:
+{{ .Values.globalAnnotations | toYaml | indent 4 }}
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "{{ .Values.appName }}-host-endpoint"
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    revision: "{{ .Release.Revision }}"
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/name: "{{ .Values.appName }}-host-endpoint"
+    c9s.run/component: host-endpoint
+    {{- if .Values.globalLabels }}
+{{ .Values.globalLabels | toYaml | indent 4 }}
+    {{- end }}
+  {{- if .Values.globalAnnotations }}
+  annotations:
+{{ .Values.globalAnnotations | toYaml | indent 4 }}
+  {{- end }}
+rules:
+  - apiGroups:
+      - c9s.run
+    resources:
+      - links
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  - apiGroups:
+      - c9s.run
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "{{ .Values.appName }}-host-endpoint"
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    revision: "{{ .Release.Revision }}"
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/name: "{{ .Values.appName }}-host-endpoint"
+    c9s.run/component: host-endpoint
+    {{- if .Values.globalLabels }}
+{{ .Values.globalLabels | toYaml | indent 4 }}
+    {{- end }}
+  {{- if .Values.globalAnnotations }}
+  annotations:
+{{ .Values.globalAnnotations | toYaml | indent 4 }}
+  {{- end }}
+subjects:
+  - kind: ServiceAccount
+    name: "{{ .Values.appName }}-host-endpoint"
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: "{{ .Values.appName }}-host-endpoint"
+{{- end }}

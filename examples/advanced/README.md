@@ -58,9 +58,9 @@ Using images from private container registries.
 
 **Features:**
 - Pull secrets for registry authentication
-- Image pull-through mode
-- Insecure registry configuration
-- Docker config secrets
+- Kubernetes-native pull policy
+- Cluster-runtime registry configuration
+- Separate controller metadata trust policy
 
 **Setup:**
 ```bash
@@ -129,7 +129,7 @@ spec:
         username: admin
         password: NokiaSrl1!
   imagePull:
-    pullThroughOverride: always
+    policy: IfNotPresent
     pullSecrets:
       - registry-credentials
   definition:

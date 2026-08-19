@@ -81,6 +81,10 @@ spec:
               value: info
             - name: CONTROLLER_LOGGER_LEVEL
               value: info
+            - name: DEVICE_RUNTIME_MODE
+              value: "nested"
+            - name: DEVICE_RUNTIME_IMAGE
+              value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
             - name: LAUNCHER_IMAGE
               value: "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:dev-latest"
           resources:
@@ -109,6 +113,10 @@ spec:
               value: info
             - name: CONTROLLER_LOGGER_LEVEL
               value: info
+            - name: DEVICE_RUNTIME_MODE
+              value: "nested"
+            - name: DEVICE_RUNTIME_IMAGE
+              value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
             - name: LAUNCHER_IMAGE
               value: "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:dev-latest"
           resources:

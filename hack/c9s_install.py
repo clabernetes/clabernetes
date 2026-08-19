@@ -346,70 +346,12 @@ def chart_images(tools: Tools, chart: str, version: str) -> Images:
         [str(tools.helm), "show", "values", chart, "--version", version], capture=True
     )
     manager = yq(tools, '.manager.image // ""', values)
-    launcher = yq(tools, '.globalConfig.deployment.launcherImage // ""', values)
+    launcher = yq(tools, '.manager.launcherImage // ""', values)
     if not manager:
         manager = f"{DEFAULT_IMAGE_BASE}/clabernetes-manager:{'dev-latest' if version == '0.0.0' else version}"
     if not launcher:
         launcher = f"{DEFAULT_IMAGE_BASE}/clabernetes-launcher:{'dev-latest' if version == '0.0.0' else version}"
     return Images(manager=manager, launcher=launcher)
-
-
-def proxy_values(tools: Tools, cluster: Cluster) -> str | None:
-    http_proxy = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy", "")
-    https_proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy", "")
-    if not http_proxy and not https_proxy:
-        return None
-    nodes = node_data(cluster, tools)
-    pod_cidrs = ",".join(
-        cidr
-        for item in nodes.get("items", [])
-        for cidr in item.get("spec", {}).get("podCIDRs", [])
-    )
-    config = run(
-        kubectl(
-            cluster,
-            tools,
-            "-n",
-            "kube-system",
-            "get",
-            "configmap",
-            "kubeadm-config",
-            "-o",
-            "jsonpath={.data.ClusterConfiguration}",
-        ),
-        capture=True,
-    )
-    service_cidr = yq(tools, '.networking.serviceSubnet // ""', config)
-    if not pod_cidrs or not service_cidr:
-        fail("proxy environment detected but pod/service CIDRs could not be discovered")
-    no_proxy = os.environ.get("NO_PROXY") or os.environ.get("no_proxy", "")
-    no_proxy = ",".join(
-        filter(
-            None,
-            [
-                no_proxy,
-                service_cidr,
-                pod_cidrs,
-                ".svc",
-                ".svc.cluster.local",
-                "localhost",
-                "127.0.0.1",
-            ],
-        )
-    )
-    env = [
-        {"name": name, "value": value}
-        for name, value in (
-            ("HTTP_PROXY", http_proxy),
-            ("http_proxy", http_proxy),
-            ("HTTPS_PROXY", https_proxy),
-            ("https_proxy", https_proxy),
-            ("NO_PROXY", no_proxy),
-            ("no_proxy", no_proxy),
-        )
-        if value
-    ]
-    return json.dumps(env, separators=(",", ":"))
 
 
 def install(
@@ -524,13 +466,8 @@ def install(
         "--set",
         "manager.imagePullPolicy=IfNotPresent",
         "--set",
-        f"globalConfig.deployment.launcherImage={images.launcher}",
-        "--set",
-        "globalConfig.deployment.launcherImagePullPolicy=IfNotPresent",
+        f"manager.launcherImage={images.launcher}",
     ]
-    proxy = proxy_values(tools, cluster)
-    if proxy:
-        helm_args.extend(["--set-json", f"globalConfig.deployment.extraEnv={proxy}"])
     run(helm_args)
     run(
         kubectl(
@@ -577,30 +514,6 @@ def install(
         time.sleep(1)
     else:
         fail("Config singleton did not become available")
-    patch = json.dumps(
-        {
-            "spec": {
-                "deployment": {
-                    "launcherImage": images.launcher,
-                    "launcherImagePullPolicy": "IfNotPresent",
-                }
-            }
-        },
-        separators=(",", ":"),
-    )
-    run(
-        kubectl(
-            cluster,
-            tools,
-            "-n",
-            namespace,
-            "patch",
-            f"{config_resource}/clabernetes",
-            "--type=merge",
-            "-p",
-            patch,
-        )
-    )
     launcher_observed = run(
         kubectl(
             cluster,
@@ -608,9 +521,9 @@ def install(
             "-n",
             namespace,
             "get",
-            f"{config_resource}/clabernetes",
+            "deploy/clabernetes-manager",
             "-o",
-            "jsonpath={.spec.deployment.launcherImage}",
+            'jsonpath={.spec.template.spec.containers[?(@.name=="manager")].env[?(@.name=="LAUNCHER_IMAGE")].value}',
         ),
         capture=True,
     ).strip()

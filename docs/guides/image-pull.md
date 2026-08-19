@@ -1,221 +1,86 @@
 ---
 title: Image pulling
-description: Configure public, private, pull-through, proxied, and air-gapped image workflows.
+description: Configure direct kubelet pulls, private registry credentials, and registry trust.
 ---
 
-This guide explains how to configure image pulling in Clabernetes, including private registries, pull secrets, and pull-through modes.
+Device images run directly in c9s-managed Pods. The kubelet and cluster container runtime are the
+only components that download and start them. c9s does not import image layers, create image-puller
+Pods, mount a CRI socket, or copy images into an inner Docker daemon.
 
-## Overview
+## Pull policy
 
-Clabernetes launcher pods run containerlab, which in turn runs Docker to manage network device containers. Images can be pulled in several ways:
-
-1. **Direct pull**: Docker in the launcher pulls images directly
-2. **Pull-through**: Clabernetes pre-pulls images via the cluster CRI
-
-## Pull-Through Modes
-
-### Auto (Default)
-
-Clabernetes automatically detects if pull-through is needed:
+Set the default Kubernetes pull policy in the singleton Config or in the one LauncherProfile
+selected by a Node:
 
 ```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Config
+metadata:
+  name: clabernetes
 spec:
   imagePull:
-    pullThroughOverride: auto
+    policy: IfNotPresent
 ```
 
-**Behavior:**
+The supported values are the Kubernetes policies `Always`, `IfNotPresent`, and `Never`. An
+explicit image-pull policy produced by the imported containerlab node definition takes precedence
+over this profile default.
 
-- Checks if image exists in launcher's Docker
-- If not, requests pull via ImageRequest CRD
-- Controller creates a pull pod on the same node
-- Image is pulled to node's CRI, then available to Docker
+## Private registry credentials
 
-### Always
-
-Force pull-through for all images:
-
-```yaml
-spec:
-  imagePull:
-    pullThroughOverride: always
-```
-
-**Use cases:**
-
-- Private registries requiring cluster credentials
-- Ensuring images are cached at CRI level
-- Consistent behavior across all topologies
-
-### Never
-
-Disable pull-through, use Docker direct pull:
-
-```yaml
-spec:
-  imagePull:
-    pullThroughOverride: never
-```
-
-**Use cases:**
-
-- Public images that Docker can pull directly
-- When pull-through isn't working
-- Debugging image pull issues
-
-## Private Registry Configuration
-
-### Using Pull Secrets
-
-Create a Kubernetes secret for your registry:
+Create a Docker registry Secret in the same namespace as the Node:
 
 ```bash
-kubectl create secret docker-registry my-registry-secret \
+kubectl -n lab create secret docker-registry device-registry \
   --docker-server=registry.example.com \
   --docker-username=myuser \
-  --docker-password=mypass \
-  --docker-email=myemail@example.com
+  --docker-password=mypass
 ```
 
-Reference in your topology:
+Reference it from a LauncherProfile:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
-kind: Topology
+kind: LauncherProfile
 metadata:
   name: private-images
+  namespace: lab
 spec:
   imagePull:
-    pullThroughOverride: always
     pullSecrets:
-      - my-registry-secret
-  definition:
-    containerlab: |
-      name: private
-      topology:
-        nodes:
-          srl1:
-            kind: nokia_srlinux
-            image: registry.example.com/nokia/srlinux:latest
-```
-
-**How it works:**
-
-1. Controller creates ImageRequest for each image
-2. Pull pod is created with the specified pull secrets
-3. Image is pulled to node's CRI
-4. Launcher can then use the image
-
-### Using Docker Config
-
-For more complex authentication (multiple registries, credential helpers):
-
-```bash
-# Create secret from existing docker config
-kubectl create secret generic docker-config \
-  --from-file=config.json=$HOME/.docker/config.json
-```
-
-Reference in topology:
-
-```yaml
-spec:
-  imagePull:
-    dockerConfig: docker-config  # Secret name
-```
-
-The secret must contain a `config.json` key with valid Docker config.
-
-### Docker Daemon Configuration
-
-For daemon-level settings (insecure registries, mirrors):
-
-```bash
-# Create secret with daemon.json
-kubectl create secret generic docker-daemon-config \
-  --from-file=daemon.json=/path/to/daemon.json
-```
-
-Example daemon.json:
-
-```json
-{
-  "insecure-registries": ["registry.local:5000"],
-  "registry-mirrors": ["https://mirror.example.com"]
-}
-```
-
-Reference in topology:
-
-```yaml
-spec:
-  imagePull:
-    dockerDaemonConfig: docker-daemon-config
-```
-
-## Insecure Registries
-
-For registries without valid TLS:
-
-```yaml
-spec:
-  imagePull:
-    insecureRegistries:
-      - registry.local:5000
-      - 10.0.0.100:5000
-```
-
-**Note:** This is ignored if `dockerDaemonConfig` is set (configure in daemon.json instead).
-
-## HTTP(S) Proxy Support
-
-If your cluster reaches the internet through an HTTP(S) proxy, set the standard proxy env vars
-on the launcher pods -- either per topology or globally:
-
-```yaml
-spec:
-  deployment:
-    extraEnv:
-      - name: HTTP_PROXY
-        value: http://proxy.example.com:8080
-      - name: HTTPS_PROXY
-        value: http://proxy.example.com:8080
-      - name: NO_PROXY
-        value: 10.96.0.0/16,10.244.0.0/16,.svc,.svc.cluster.local,localhost,127.0.0.1
-```
-
-Or for all topologies via the Config CRD (or the `globalConfig.deployment.extraEnv` helm value):
-
-```yaml
+      - device-registry
+---
 apiVersion: c9s.run/v1alpha1
-kind: Config
+kind: Node
 metadata:
-  name: clabernetes
+  name: router
+  namespace: lab
 spec:
-  deployment:
-    extraEnv:
-      - name: HTTPS_PROXY
-        value: http://proxy.example.com:8080
-      # ...
+  launcherProfileRef:
+    name: private-images
+  kind: nokia_srlinux
+  image: registry.example.com/network/srlinux:latest
 ```
 
-**How it works:**
+c9s places the Secret name in `Pod.spec.imagePullSecrets`; credential bytes are never stored in a
+device plan or immutable ConfigMap. The controller accepts only Kubernetes Docker-config Secret
+types when it needs the same credentials for OCI metadata access.
 
-- The launcher writes the proxy env vars into its Docker daemon config (`proxies` section), so
-  direct Docker pulls go through the proxy.
-- Pull-through mode also works: the pull pod uses the node CRI (configure your CRI for the proxy
-  as usual, most distributions handle this already), and the launcher-side `nerdctl` operations
-  inherit the env vars.
-- The in-cluster Kubernetes API service address is automatically appended to `NO_PROXY` by the
-  launcher, so it never tries to reach the API through the proxy.
+Topology-level `spec.imagePull` is compiled into the shared LauncherProfile generated for that
+Topology. Direct Node manifests select a profile explicitly through
+`Node.spec.launcherProfileRef`.
 
-**Note:** `NO_PROXY` should contain your cluster's service and pod CIDRs plus cluster-local DNS
-suffixes (see the example above -- adjust the CIDRs for your cluster). Proxy env vars are ignored
-if `dockerDaemonConfig` is set (configure `proxies` in your daemon.json instead).
+## Registry mirrors, private CAs, HTTP, and proxies
 
-## Global Configuration
+Configure registry mirrors, runtime proxy settings, private certificate authorities, and
+plain-HTTP endpoints in the container runtime on every Kubernetes node eligible to run a device
+Pod. The files and reload procedure depend on the cluster distribution and runtime. Validate that
+path by scheduling an ordinary Pod with the same image, placement, pull policy, and pull Secret.
 
-Set defaults in the Config CRD:
+Before creating the device Pod, the c9s controller fetches only the OCI manifest and configuration
+blob required by package-driven planning. Publicly trusted HTTPS needs no extra setting. If this
+metadata request needs a private CA or an explicitly permitted HTTP endpoint, configure an exact
+registry authority in the Config:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -224,217 +89,51 @@ metadata:
   name: clabernetes
 spec:
   imagePull:
-    # Default pull-through mode
-    pullThroughOverride: auto
-    # CRI socket for K3s
-    criSockOverride: /run/k3s/containerd/containerd.sock
-    # Default docker config for all topologies
-    dockerConfig: global-docker-config
-    dockerDaemonConfig: global-daemon-config
+    registryMetadataTrust:
+      - registry: registry.example.com
+        caBundle: |-
+          -----BEGIN CERTIFICATE-----
+          ...
+          -----END CERTIFICATE-----
+      - registry: registry.lab.example:5000
+        plainHTTP: true
 ```
 
-### CRI Socket Override
-
-For non-standard CRI socket locations (e.g., K3s):
-
-```yaml
-spec:
-  imagePull:
-    criSockOverride: /run/k3s/containerd/containerd.sock
-```
-
-Common paths:
-
-- Standard containerd: `/run/containerd/containerd.sock`
-- K3s: `/run/k3s/containerd/containerd.sock`
-- Minikube: `/var/run/containerd/containerd.sock`
-
-### CRI Registry Hosts
-
-Some containerd installations keep registry mirror, TLS, and host configuration outside the
-default `/etc/containerd/certs.d` directory. Set `criHostsDir` to make that host directory
-available to all pull-through launchers:
-
-```yaml
-spec:
-  imagePull:
-    pullThroughOverride: always
-    criHostsDir: /path/to/containerd/hosts
-```
-
-The directory is mounted read-only at both its original path and `/etc/containerd/certs.d`.
-Keeping the original path available allows certificate paths rooted inside that directory tree
-to continue working, while the conventional path lets nerdctl use the same registry configuration
-as the node runtime. Absolute certificate paths outside `criHostsDir` are not mounted; keep those
-certificates under `criHostsDir` or make them available to the launcher separately. The configured
-path must be an existing directory on every containerd node that can run a pull-through launcher.
-It is not mounted when pull-through is disabled or the effective CRI kind is not containerd; a
-configured `criKindOverride` takes precedence over cluster auto-detection.
-
-## Complete Examples
-
-### Public Registry
-
-```yaml
-apiVersion: c9s.run/v1alpha1
-kind: Topology
-metadata:
-  name: public-images
-spec:
-  imagePull:
-    pullThroughOverride: auto
-  definition:
-    containerlab: |
-      name: public
-      topology:
-        nodes:
-          srl1:
-            kind: nokia_srlinux
-            image: ghcr.io/nokia/srlinux:latest
-```
-
-### Private Registry with Pull Secrets
-
-```yaml
-apiVersion: c9s.run/v1alpha1
-kind: Topology
-metadata:
-  name: enterprise
-spec:
-  imagePull:
-    pullThroughOverride: always
-    pullSecrets:
-      - enterprise-registry-creds
-  definition:
-    containerlab: |
-      name: enterprise
-      topology:
-        nodes:
-          srl1:
-            kind: nokia_srlinux
-            image: registry.corp.example.com/network/srlinux:23.10.1
-```
-
-### Insecure Local Registry
-
-```yaml
-apiVersion: c9s.run/v1alpha1
-kind: Topology
-metadata:
-  name: local-dev
-spec:
-  imagePull:
-    pullThroughOverride: never
-    insecureRegistries:
-      - localhost:5000
-  definition:
-    containerlab: |
-      name: local
-      topology:
-        nodes:
-          srl1:
-            kind: nokia_srlinux
-            image: localhost:5000/srlinux:dev
-```
-
-### Air-Gapped Environment
-
-```yaml
-apiVersion: c9s.run/v1alpha1
-kind: Topology
-metadata:
-  name: airgapped
-spec:
-  imagePull:
-    pullThroughOverride: always
-    pullSecrets:
-      - internal-registry-secret
-    dockerConfig: docker-auth-config
-  definition:
-    containerlab: |
-      name: airgapped
-      topology:
-        nodes:
-          srl1:
-            kind: nokia_srlinux
-            image: internal-registry.corp:5000/nokia/srlinux:latest
-```
+This trust policy affects only controller metadata access. It does not configure kubelets,
+mirrors, proxies, or node trust. Entries match exact `host[:port]` authorities. Wildcards, schemes,
+repository paths, duplicate authorities, empty exceptions, and a CA combined with `plainHTTP` are
+rejected. Configure the equivalent trust and endpoint in the node runtime as well. Prefer TLS with
+a private CA; plain HTTP has no transport encryption.
 
 ## Troubleshooting
 
-### Image Pull Failures
+Metadata authentication or trust failures are reported on the Node before a device workload is
+created. Kubelet pull failures appear on the device Pod as normal events such as `ErrImagePull` or
+`ImagePullBackOff`.
 
-Check ImageRequest status:
-
-```bash
-kubectl get imagerequests
-kubectl describe imagerequest <name>
-```
-
-Check pull pod:
+Inspect the Node, Pod, events, and resolved profile:
 
 ```bash
-kubectl get pods -l c9s.run/pullerImageHash=<image-hash>
-kubectl logs <pull-pod-name>
+kubectl -n lab describe node router
+kubectl -n lab get pods -l c9s.run/direct-workload=router
+kubectl -n lab describe pod -l c9s.run/direct-workload=router
+kubectl -n lab get launcherprofile private-images -o yaml
 ```
 
-### Authentication Issues
-
-Verify secret exists and is correct:
+Test the kubelet path independently:
 
 ```bash
-kubectl get secret my-registry-secret -o yaml
+kubectl -n lab run image-pull-test --restart=Never --image=registry.example.com/network/srlinux:latest \
+  --overrides='{"spec":{"imagePullSecrets":[{"name":"device-registry"}]}}'
+kubectl -n lab describe pod image-pull-test
 ```
 
-Test manually:
-
-```bash
-kubectl run test --rm -it --image=<your-image> \
-  --overrides='{"spec":{"imagePullSecrets":[{"name":"my-registry-secret"}]}}'
-```
-
-### CRI Socket Issues
-
-Verify socket path:
-
-```bash
-# On the node
-ls -la /run/containerd/containerd.sock
-```
-
-Check launcher logs:
-
-```bash
-kubectl logs -l c9s.run/topologyNode=<node> -c clabernetes-launcher
-```
-
-### Pull-Through Not Working
-
-1. Check ImageRequest is created and accepted
-2. Verify pull pod starts and completes
-3. Check CRI has the image: `crictl images | grep <image>`
-4. Verify Docker can see the image in launcher
-
-## Best Practices
-
-1. **Use pull-through for private registries**: Leverages Kubernetes secrets properly
-2. **Pre-pull large images**: Reduces topology startup time
-3. **Use registry mirrors**: For faster pulls in large clusters
-4. **Set appropriate pull policies**: `IfNotPresent` for stability, `Always` for latest
-5. **Secure your secrets**: Use RBAC to protect registry credentials
-
-## Configuration Priority
-
-1. The one explicitly referenced LauncherProfile (or the shared profile generated from
-   Topology-level `imagePull` settings)
-2. Global Config CRD `imagePull` settings for fields the profile omits
-3. Default behavior (auto pull-through)
-
-LauncherProfiles are attached through `Node.spec.launcherProfileRef`; there is no label selector
-or multi-profile priority chain.
+If the test Pod fails, fix the Secret or cluster-runtime registry configuration. c9s deliberately
+has no CRI-socket, insecure-registry, pull-through, Docker-config mount, or image-import fallback.
 
 ## Related
 
-- [Example: private-registry.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/advanced/private-registry.yaml)
-- [CRD Reference: ImagePull](/docs/crd/topology)
-- [CRD Reference: ImageRequest](/docs/crd/image-request)
+- [Private registry example](https://github.com/clabernetes/clabernetes/blob/main/examples/advanced/private-registry.yaml)
+- [Topology CRD reference](/docs/crd/topology)
+- [LauncherProfile CRD reference](/docs/crd/launcher-profile)
+- [Config CRD reference](/docs/crd/config)

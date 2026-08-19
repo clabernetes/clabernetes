@@ -92,23 +92,6 @@ RUN --mount=type=secret,id=host_ca,target=/run/host_ca,required=false,mode=0444 
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/cache/apt/archive/*.deb
 
-ARG TARGETARCH
-ARG NERDCTL_VERSION="2.1.4"
-RUN --mount=type=secret,id=host_ca,target=/run/host_ca,required=false,mode=0444 \
-    set -euo pipefail; \
-    curl_args=(); \
-    if [[ -s /run/host_ca ]]; then \
-      curl_args+=(--cacert /run/host_ca); \
-    fi; \
-    TARGET_ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" && \
-    case "${TARGET_ARCH}" in \
-      amd64|arm64) NERDCTL_ARCH="${TARGET_ARCH}" ;; \
-      *) echo "unsupported TARGETARCH for nerdctl: ${TARGET_ARCH}" >&2; exit 1 ;; \
-    esac && \
-    curl "${curl_args[@]}" -L "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION}-linux-${NERDCTL_ARCH}.tar.gz" | \
-      tar -xz -C /usr/bin/ && \
-    rm /usr/bin/containerd-rootless*.sh
-
 # https://github.com/docker/cli/issues/4807
 RUN sed -i 's/ulimit -Hn/# ulimit -Hn/g' /etc/init.d/docker
 
@@ -130,8 +113,6 @@ COPY build/launcher/sshin /usr/local/bin/sshin
 COPY build/launcher/shellin /usr/local/bin/shellin
 
 WORKDIR /clabernetes
-
-RUN mkdir .node .image
 
 COPY --from=builder /clabernetes/build/manager .
 USER root

@@ -31,39 +31,16 @@ data:
   resourcesDefault: |-
     ---
 {{ .Values.globalConfig.deployment.resourcesDefault | toYaml | indent 4 }}
-  resourcesByContainerlabKind: |-
-    ---
-{{ .Values.globalConfig.deployment.resourcesByContainerlabKind | toYaml | indent 4 }}
   nodeSelectorsByImage: |-
 {{ .Values.globalConfig.deployment.nodeSelectorsByImage | toYaml | indent 4 }}
     ---
-  privilegedLauncher: "{{ .Values.globalConfig.deployment.privilegedLauncher }}"
-  containerlabDebug: "{{ .Values.globalConfig.deployment.containerlabDebug }}"
-  {{- if .Values.globalConfig.deployment.containerlabTimeout }}
-  containerlabTimeout: {{ .Values.globalConfig.deployment.containerlabTimeout }}
-  {{- end }}
-  {{- if .Values.globalConfig.deployment.containerlabVersion }}
-  containerlabVersion: {{ .Values.globalConfig.deployment.containerlabVersion }}
-  {{- end }}
   inClusterDNSSuffix: {{ .Values.globalConfig.inClusterDNSSuffix }}
-  imagePullThroughMode: {{ .Values.globalConfig.imagePull.imagePullThroughMode }}
-  {{- if .Values.globalConfig.deployment.launcherImage }}
-  launcherImage: {{ .Values.globalConfig.deployment.launcherImage }}
-  {{- end }}
-  launcherImagePullPolicy: {{ .Values.globalConfig.deployment.launcherImagePullPolicy }}
-  launcherLogLevel: {{ .Values.globalConfig.deployment.launcherLogLevel }}
-  {{- if .Values.globalConfig.imagePull.criSockOverride }}
-  criSockOverride: {{ .Values.globalConfig.imagePull.criSockOverride }}
-  {{- end }}
-  {{- if .Values.globalConfig.imagePull.criKindOverride }}
-  criKindOverride: {{ .Values.globalConfig.imagePull.criKindOverride }}
-  {{- end }}
-  {{- if .Values.globalConfig.imagePull.criHostsDir }}
-  criHostsDir: {{ .Values.globalConfig.imagePull.criHostsDir | quote }}
+  imagePullPolicy: {{ .Values.globalConfig.imagePull.policy }}
+  imagePullSecrets: |-
+{{ .Values.globalConfig.imagePull.pullSecrets | toYaml | indent 4 }}
+  {{- if .Values.globalConfig.imagePull.registryMetadataTrust }}
+  registryMetadataTrust: |-
+{{ .Values.globalConfig.imagePull.registryMetadataTrust | toYaml | indent 4 }}
   {{- end }}
   naming: {{ .Values.globalConfig.naming }}
-  {{- if .Values.globalConfig.deployment.extraEnv }}
-  extraEnv: |-
-{{ .Values.globalConfig.deployment.extraEnv | toYaml | indent 4 }}
-  {{- end }}
 {{- end }}

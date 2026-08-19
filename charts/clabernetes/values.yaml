@@ -31,6 +31,10 @@ manager:
   image: "" # ghcr.io/clabernetes/clabernetes/clabernetes-manager:{{ .Chart.Version }}
   imagePullPolicy: IfNotPresent
 
+  # Temporary nested-runtime image override. This is release deployment policy rather than part
+  # of the Config CR and will be removed together with nested mode.
+  launcherImage: ""
+
   replicaCount: 3
   resources:
     requests:
@@ -41,6 +45,11 @@ manager:
   clientOperationTimeoutMultiplier: 1
   managerLogLevel: info
   controllerLogLevel: info
+
+  # Temporary migration gate. Direct mode fails closed until the complete direct renderer is
+  # available; it never falls back to the nested launcher. This setting will be removed with the
+  # nested runtime after compatibility conformance is complete.
+  deviceRuntimeMode: nested
 
   # pod affinity settings, directly inserted into manager deployment spec; if not provided basic
   # common-sense anti-affinity is applied.
@@ -76,44 +85,33 @@ globalConfig:
   # also set this to "overwrite" for a more declarative option where this bootstrap config data
   # replaces the existing CR entirely.
   #
-  # note: bool values are completely ignored in "merge" mode as we do *not* have pointers to bools
-  # in the config CR; put another way, the bool values (ex: deployment.privilegedLauncher) are
-  # totally ignored in merge mode. if you want to update those values in the config CR you can do
-  # so directly, or use the "overwrite" merge mode.
   mergeMode: merge
 
   inClusterDNSSuffix: svc.cluster.local
 
   imagePull:
-    # imagePullThroughMode defines how the launcher pod tries to pull the image specified in the
-    # topology. The options are: "auto" (default), "always", "never". The "auto" option will
-    # instruct the manager to mount the CRI socket in the launcher pods, and the launcher to always
-    # try to pull via the CRI first; if this fails for some reason, the launcher will try to pull
-    # via the docker daemon in the launcher pod itself. "always" indicates the launcher should
-    # "always" (*only*) ever pull from the CRI socket -- if the CRI is determined (by the manager)
-    # to *not* be homogenous at manager start time (not all nodes in cluster are the same CRI type),
-    # then this mode will cause the launcher to fail since it won't be setup to pull via the CRI
-    # (and in this mode it *only* pulls via the CRI). Lastly, "never" means the launcher should only
-    # ever pull via the docker daemon in the launcher pod itself (bypassing the cluster). Note that
-    # "pull through mode" currently only supports containerd as a CRI.
-    imagePullThroughMode: auto
-    # criSockOverride allows for overriding the path of the CRI sock that is mounted in the
-    # launcher pods (if/when image pull through mode is auto or always). This can be useful if,
-    # for example, the CRI sock is in a "non-standard" location like K3s which puts the containerd
-    # sock at `/run/k3s/containerd/containerd.sock` rather than the "normal" (whatever that means)
-    # location of `/run/containerd/containerd.sock`.
-    # criSockOverride: ""
-    # criKindOverride allows for overriding teh auto discovered cri kind. Probably/hopefully this
-    # won't be needed often, but could come in handy in multi-cri clusters or if nodes for some
-    # reason do not properly report their cri flavor (or we incorrectly parse it?!)
-    # criKindOverride: ""
-    # criHostsDir optionally mounts a host directory containing containerd registry hosts
-    # configuration into pull-through launcher pods. The directory is also mounted at
-    # /etc/containerd/certs.d so nerdctl uses the same mirrors, certificates, and host settings.
-    # criHostsDir: ""
+    # policy is the Kubernetes imagePullPolicy default for direct application containers whose
+    # source Node definition does not explicitly declare one.
+    policy: IfNotPresent
+    # pullSecrets lists same-namespace Docker-config Secrets placed on direct device Pods. Every
+    # listed Secret must exist in each workload namespace inheriting this global default.
+    pullSecrets: []
+    # registryMetadataTrust is a controller-only, exact-registry policy for reading OCI manifests
+    # and configuration blobs. It does not configure kubelets. Configure the same CA or HTTP
+    # endpoint independently in every eligible node runtime.
+    # registryMetadataTrust:
+    #   - registry: registry.example.test:5000
+    #     caBundle: |-
+    #       -----BEGIN CERTIFICATE-----
+    #       ...
+    #       -----END CERTIFICATE-----
+    #   - registry: registry.lab.test:5001
+    #     plainHTTP: true
+    registryMetadataTrust: []
 
   deployment:
-    # resourcesDefault hold the default resources to apply to clabernetes launcher pods.
+    # resourcesDefault hold the default resources to apply to each logical Node's primary direct
+    # application container.
     # for reference fields should be formatted like "normal" k8s resources:
     # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#example-1
     resourcesDefault:
@@ -121,15 +119,8 @@ globalConfig:
         memory: 512Mi
         cpu: 200m
 
-    # resourcesByContainerlabKind is a mapping of containerlab kind/type -> k8s resources/requests
-    # to apply to the launcher pod(s). this expects a normal looking k8s requests/limits block.
-    # the "resourcesByContainerlabKind" key holds a map[string]map[string]k8sresource mapping -- the
-    # outer keys are the containerlab *kind* and the inner keys *type* -- you can specify a
-    # "default" key in the types level as well to just have default resources for a given kind.
-    resourcesByContainerlabKind: {}
-
     # nodeSelectorsByImage is a mapping of image glob patterns (as key) and node label and value
-    # pairs (as value) to apply to the launcher pod(s) as K8s NodeSelectors.
+    # pairs (as value) to apply to direct device workloads as Kubernetes NodeSelectors.
     # Note that in case of multiple matches the longest (with most characters) will take
     # precedence. E.g:
     # {
@@ -139,35 +130,6 @@ globalConfig:
     # }
     # The "nodeSelectorsByImage" key holds a map[string]map[string]string.
     nodeSelectorsByImage: {}
-
-    # privilegedLauncher sets the global default value for "privilegedLauncher" -- that is, if the
-    # launcher pods should run in privileged mode or not.
-    privilegedLauncher: true
-
-    # containerlabDebug sets the global default value for whether launcher pods should have the
-    # containerlab debug flag set.
-    containerlabDebug: false
-
-    # containerlabTimeout sets the global default value for the containerlab timeout value that the
-    # launcher pods should use.
-    containerlabTimeout: ""
-
-    # default image for launcher deployments; if not set here, manager will have this set to a sane
-    # default as an env var that will be applied (this follows same patter as the manager image
-    # itself), so this is here just if you want to override that yourself.
-    launcherImage: ""
-    launcherImagePullPolicy: IfNotPresent
-    launcherLogLevel: info
-
-    # specifying a "custom" containerlab version will cause launcher pods to download and use this
-    # version of containerlab. generally don't set this unless you need to.
-    containerlabVersion: ""
-
-    # extraEnv is a list of k8scorev1.EnvVar that will be set on any launcher pods. Note that any
-    # configured global config env vars will be ignored if a Topology has an extraEnv config.
-    # This is also the place to set HTTP_PROXY/HTTPS_PROXY/NO_PROXY if your cluster needs a proxy
-    # to pull images -- see docs/guides/image-pull.md for details.
-    extraEnv: []
 
   # name is the global setting that governs a Topology's "naming" field when set to "global".
   # valid options are "prefixed" or "non-prefixed", see the api types for more detail.

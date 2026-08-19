@@ -14,14 +14,13 @@ metadata:
   name: private-registry
 spec:
   imagePull:
-    # Use image pull-through mode (auto tries pull-through, falls back to direct)
-    pullThroughOverride: auto
+    # Kubernetes pull policy for direct device containers unless the Node declares one.
+    policy: IfNotPresent
     # Uncomment for private registry:
     # pullSecrets:
     #   - my-registry-secret
-    # Optional: configure insecure registries
-    # insecureRegistries:
-    #   - registry.local:5000
+    # Registry mirrors, private CAs, and HTTP endpoints must also be configured in the kubelet's
+    # container runtime. Controller-only metadata trust belongs in the singleton Config resource.
   definition:
     containerlab: |
       name: private
@@ -37,19 +36,3 @@ spec:
             image: ghcr.io/nokia/srlinux:latest
         links:
           - endpoints: ["srl1:e1-1", "srl2:e1-1"]
----
-# Alternative: Use dockerConfig for registry auth
-# Create a secret with config.json:
-# kubectl create secret generic docker-config \
-#   --from-file=config.json=/path/to/config.json
----
-# apiVersion: c9s.run/v1alpha1
-# kind: Topology
-# metadata:
-#   name: private-with-docker-config
-# spec:
-#   imagePull:
-#     dockerConfig: docker-config  # Secret name containing config.json
-#   definition:
-#     containerlab: |
-#       ...

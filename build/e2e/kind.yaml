@@ -1,9 +1,10 @@
 ---
-# minimal single-node, single-stack KinD config used by the e2e flow (`make
-# test-e2e-local` and CI). single-stack keeps it portable across GitHub runners;
-# no UI port mapping or MetalLB is needed because the e2e tests only assert the
-# rendered kubernetes objects and normalize loadbalancer/status fields away.
+# Single-stack, multi-worker KinD config used by the e2e flow (`make
+# test-e2e-local` and CI). Two schedulable workers are required for direct-runtime
+# connectivity and rescheduling evidence; no UI port mapping or MetalLB is needed.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control-plane
+  - role: worker
+  - role: worker

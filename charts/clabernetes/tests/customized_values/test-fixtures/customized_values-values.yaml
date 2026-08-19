@@ -7,7 +7,12 @@ globalTolerations: &globalTolerations
     effect: PreferNoSchedule
 globalConfig:
   imagePull:
-    criHostsDir: "/etc/cri/hosts"
+    policy: Always
+    pullSecrets:
+      - device-registry
+    registryMetadataTrust:
+      - registry: registry.lab.example:5000
+        plainHTTP: true
 manager:
   deploymentTolerations:
     - key: test_toleration_manager_only

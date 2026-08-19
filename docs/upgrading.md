@@ -49,8 +49,8 @@ which assumes the whole lab on one host.
 `suppress-startup-config` are now available, and `certificate` gained `key-size`,
 `validity-duration`, and `sans`.
 
-These require containerlab 0.78.0, which the launcher image now ships. If you override
-`containerlabVersion`, 0.78.0 is the floor -- older releases reject the new fields outright.
+The direct planner imports containerlab 0.78.0 as its package baseline. There is no per-workload
+version override: updating supported kinds and package behavior is an intentional Go module bump.
 
 ### `ports` are destination ports only
 
@@ -103,7 +103,7 @@ written or selected. Annotation keys retain their existing `clabernetes/...` nam
 This release requires a **full uninstall and reinstall**. Do not `helm upgrade` an existing install
 in place.
 
-Uninstalling c9s deletes all Topology, Node, Link, LauncherProfile, ImageRequest, and Config
+Uninstalling c9s deletes all Topology, Node, Link, LauncherProfile, and Config
 resources when the CRDs are removed.
 
 ### Upgrade steps
@@ -111,7 +111,7 @@ resources when the CRDs are removed.
 1. Export your manifests before uninstalling:
 
    ```bash
-   kubectl get topologies,nodes,links,launcherprofiles,imagerequests,configs -A -o yaml > backup.yaml
+   kubectl get topologies,nodes,links,launcherprofiles,configs -A -o yaml > backup.yaml
    ```
 
 2. Uninstall the existing c9s install and remove its CRDs:

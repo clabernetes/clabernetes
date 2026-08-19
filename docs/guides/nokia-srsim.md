@@ -14,21 +14,20 @@ Nokia SR-SIM is a containerized version of Nokia SR OS, replacing the legacy VM-
 1. **License**: A valid SR-SIM license file is mandatory. The `license` directive must point to the
    path where Clabernetes mounts the license, or the deployment will fail.
 
-2. **Image**: The SR-SIM image must be available to the launcher. Use a registry reachable from
-   the launcher or configure image pull-through from the cluster runtime; loading an image only on
-   the workstation is not sufficient for a remote Kubernetes cluster.
+2. **Image**: The SR-SIM image must be reachable by the kubelet on every eligible worker. Loading
+   an image only on the workstation is not sufficient for a remote Kubernetes cluster.
 
 3. **Resources**: SR-SIM nodes require significant resources. Ensure your cluster nodes have adequate CPU and memory.
 
 ### Private Registry Images
 
-The launcher runs its own Docker daemon inside the launcher Pod. If the cluster cannot pull the
-image through its CRI, provide a Docker `config.json` Secret in the same namespace as the Topology:
+Create a Kubernetes Docker registry Secret in the same namespace as the Topology:
 
 ```bash
-docker login ghcr.io
-kubectl create secret generic srsim-registry \
-  --from-file=config.json="$HOME/.docker/config.json"
+kubectl create secret docker-registry srsim-registry \
+  --docker-server=ghcr.io \
+  --docker-username="$GITHUB_USER" \
+  --docker-password="$GITHUB_TOKEN"
 ```
 
 Reference that Secret from the Topology:
@@ -36,12 +35,13 @@ Reference that Secret from the Topology:
 ```yaml
 spec:
   imagePull:
-    dockerConfig: srsim-registry
+    pullSecrets:
+      - srsim-registry
 ```
 
-The Secret must contain a `config.json` key. `imagePull.pullSecrets` authenticates the cluster CRI
-pull-through path; `imagePull.dockerConfig` supplies credentials directly to the launcher's nested
-Docker daemon when pull-through is unavailable.
+The kubelet receives this name through `Pod.spec.imagePullSecrets`. Configure registry mirrors,
+private CAs, or HTTP endpoints in the worker container runtime; c9s has no nested Docker or image
+import fallback.
 
 ## Supported Configurations
 

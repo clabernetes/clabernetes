@@ -15,4 +15,3 @@ LauncherProfile, Link, and Node objects.
 - [Link](/docs/crd/link) — primary API: one wire between two nodes
 - [LauncherProfile](/docs/crd/launcher-profile) — reusable launcher policy
 - [Config](/docs/crd/config) — cluster-wide defaults
-- [ImageRequest](/docs/crd/image-request) — private image pull helper
