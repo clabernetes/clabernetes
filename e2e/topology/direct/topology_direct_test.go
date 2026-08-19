@@ -21,6 +21,8 @@ func TestMain(m *testing.M) {
 func TestNodeLinkDirect(t *testing.T) {
 	t.Parallel()
 
+	clabernetestesthelper.SkipUnlessDeviceRuntimeMode(t, "direct")
+
 	testName := "topology-direct"
 
 	namespace := clabernetestesthelper.NewTestNamespace(testName)

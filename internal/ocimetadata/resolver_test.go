@@ -113,6 +113,34 @@ func TestResolveImageMetadataWithoutFetchingLayers(t *testing.T) {
 	}
 }
 
+// A reference without a tag selects "latest", matching containerlab and kubelet semantics.
+func TestResolveDefaultsMissingTagToLatest(t *testing.T) {
+	t.Parallel()
+
+	testRegistry := newTestRegistry(t)
+	image, _ := newTestImage(t, Platform{OS: "linux", Architecture: "amd64"}, "amd64")
+	tagged := testRegistry.writeImage(t, "devices/tagless:latest", image)
+
+	metadata, err := (Resolver{Transport: testRegistry.transport}).Resolve(
+		context.Background(),
+		Request{
+			Reference: tagged.Context().Name(),
+			Platform:  Platform{OS: "linux", Architecture: "amd64"},
+			Trust:     testRegistry.plainHTTPTrust(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if !strings.Contains(metadata.DigestReference, "@sha256:") {
+		t.Errorf("digest reference = %q, want immutable sha256 reference", metadata.DigestReference)
+	}
+
+	if _, err = AuthenticationFromPullSecrets(tagged.Context().Name(), nil); err != nil {
+		t.Errorf("AuthenticationFromPullSecrets() tagless reference error = %v", err)
+	}
+}
+
 func TestResolveSelectsRequestedIndexPlatform(t *testing.T) {
 	t.Parallel()
 

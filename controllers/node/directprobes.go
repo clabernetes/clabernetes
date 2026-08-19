@@ -123,6 +123,9 @@ func (r *Reconciler) resolveDirectProbePolicies(
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name, Namespace: owner.GetNamespace(),
 			Labels: map[string]string{
+				// LabelApp keeps the Secret visible to the manager's label-filtered cache so
+				// the owner watch fires for it.
+				clabernetesconstants.LabelApp:            clabernetesconstants.Clabernetes,
 				clabernetesconstants.LabelKubernetesName: "clabernetes-direct-probes",
 				directProbeSecretLabel:                   "credentials",
 				directProbeOwnerUIDLabel:                 string(owner.GetUID()),
@@ -138,7 +141,9 @@ func (r *Reconciler) resolveDirectProbePolicies(
 		Immutable: &immutable, Type: k8scorev1.SecretTypeOpaque, Data: secretData,
 	}
 	existing := &k8scorev1.Secret{}
-	err = r.Client.Get(
+	// Read through the API so a Secret outside the label-filtered cache can never produce a
+	// NotFound -> Create -> AlreadyExists loop.
+	err = r.probeSecretReader().Get(
 		ctx,
 		ctrlruntimeclient.ObjectKey{Namespace: owner.GetNamespace(), Name: name},
 		existing,
@@ -178,13 +183,21 @@ func directProbeSecretName(ownerName, digest string) string {
 	return ownerName + "-probes-" + suffix
 }
 
+func (r *Reconciler) probeSecretReader() ctrlruntimeclient.Reader {
+	if r.apiReader != nil {
+		return r.apiReader
+	}
+
+	return r.Client
+}
+
 func (r *Reconciler) garbageCollectDirectProbeSecrets(
 	ctx context.Context,
 	owner *clabernetesapisv1alpha1.Node,
 	keep string,
 ) error {
 	secrets := &k8scorev1.SecretList{}
-	if err := r.Client.List(
+	if err := r.probeSecretReader().List(
 		ctx,
 		secrets,
 		ctrlruntimeclient.InNamespace(owner.GetNamespace()),

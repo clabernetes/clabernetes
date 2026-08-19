@@ -30,6 +30,10 @@ func TestMain(m *testing.M) {
 func TestSRSimBootsAndReachesLinux(t *testing.T) {
 	t.Parallel()
 
+	// The fixtures authenticate through imagePull.pullSecrets, which only the direct runtime
+	// realizes as Kubernetes imagePullSecrets; the nested launcher no longer receives them.
+	clabernetestesthelper.SkipUnlessDeviceRuntimeMode(t, "direct")
+
 	license := os.Getenv("SRSIM_LICENSE")
 	if strings.TrimSpace(license) == "" {
 		t.Skip("SRSIM_LICENSE is not set")

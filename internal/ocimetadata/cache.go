@@ -358,7 +358,7 @@ func validateMetadata(metadata *Metadata) error {
 }
 
 func referenceRepository(reference string) string {
-	parsed, err := name.ParseReference(reference, name.StrictValidation)
+	parsed, err := name.ParseReference(reference)
 	if err != nil {
 		return ""
 	}

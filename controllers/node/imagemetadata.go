@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
@@ -15,6 +16,9 @@ import (
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// imageMetadataResolveTimeout bounds one registry manifest/config exchange per image.
+const imageMetadataResolveTimeout = 60 * time.Second
 
 func compileRegistryMetadataTrust(
 	entries []clabernetesapisv1alpha1.RegistryMetadataTrustEntry,
@@ -136,10 +140,14 @@ func (r ImageMetadataResolver) Resolve(
 		if r.TrustFor != nil {
 			trust = r.TrustFor(requirement.SourceReference)
 		}
-		metadata, resolveErr := r.Resolver.Resolve(ctx, clabernetesocimetadata.Request{
+		// The reconcile context carries no deadline, so bound each registry exchange here;
+		// a hung registry must fail this Node instead of stalling the shared worker.
+		resolveCtx, cancelResolve := context.WithTimeout(ctx, imageMetadataResolveTimeout)
+		metadata, resolveErr := r.Resolver.Resolve(resolveCtx, clabernetesocimetadata.Request{
 			Reference: requirement.SourceReference, Platform: r.Platform,
 			Authentication: authentication, Trust: trust,
 		})
+		cancelResolve()
 		if resolveErr != nil {
 			return nil, resolveErr
 		}

@@ -156,6 +156,8 @@ func (r *CertificateReconciler) ensureCertificateAuthority(
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name, Namespace: owner.GetNamespace(),
 				Labels: map[string]string{
+					// LabelApp keeps the Secret visible to the manager's label-filtered cache.
+					clabernetesconstants.LabelApp:            clabernetesconstants.Clabernetes,
 					clabernetesconstants.LabelKubernetesName: "clabernetes-direct-certificates",
 					directCertificateLabel:                   directCertificateAuthority,
 				},
@@ -253,6 +255,9 @@ func renderCertificateBundle(
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name, Namespace: owner.GetNamespace(),
 			Labels: map[string]string{
+				// LabelApp keeps the Secret visible to the manager's label-filtered cache so
+				// the owner watch fires for it.
+				clabernetesconstants.LabelApp:            clabernetesconstants.Clabernetes,
 				clabernetesconstants.LabelKubernetesName: "clabernetes-direct-certificates",
 				directCertificateLabel:                   directCertificateBundle,
 			},

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -113,7 +114,7 @@ func (p *RegistryTrustPolicy) ForReference(reference string) *RegistryTrust {
 	if p == nil {
 		return nil
 	}
-	parsed, err := name.ParseReference(strings.TrimSpace(reference), name.StrictValidation)
+	parsed, err := name.ParseReference(strings.TrimSpace(reference))
 	if err != nil {
 		return nil
 	}
@@ -139,11 +140,11 @@ func AuthenticationFromPullSecrets(
 	reference string,
 	secrets []k8scorev1.Secret,
 ) (*Authentication, error) {
-	parsed, err := name.ParseReference(strings.TrimSpace(reference), name.StrictValidation)
+	parsed, err := name.ParseReference(strings.TrimSpace(reference))
 	if err != nil {
 		return nil, &Error{
-			Code:      ErrorInvalidAuthentication,
-			Reference: "<invalid>",
+			Code:      ErrorInvalidRequest,
+			Reference: strings.TrimSpace(reference),
 			Err:       errors.New("image reference is invalid"),
 		}
 	}
@@ -289,11 +290,23 @@ func (a *Authentication) sensitiveValues() []string {
 	return result
 }
 
+// defaultResolverTransport bounds header waits so an unresponsive registry cannot hold a
+// reconcile worker: the resolver's callers otherwise carry no deadline of their own.
+var defaultResolverTransport = func() http.RoundTripper {
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return http.DefaultTransport
+	}
+	cloned := base.Clone()
+	cloned.ResponseHeaderTimeout = 30 * time.Second
+	return cloned
+}()
+
 //nolint:err113 // Callers wrap trust details in the stable InvalidTrust error code.
 func (r Resolver) transportForTrust(trust *RegistryTrust) (http.RoundTripper, error) {
 	transport := r.Transport
 	if transport == nil {
-		transport = http.DefaultTransport
+		transport = defaultResolverTransport
 	}
 	if trust == nil || len(trust.CABundle) == 0 {
 		return transport, nil

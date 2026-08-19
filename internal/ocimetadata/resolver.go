@@ -216,13 +216,14 @@ func (r Resolver) Resolve(ctx context.Context, request Request) (*Metadata, erro
 		)
 	}
 
-	nameOptions := []name.Option{name.StrictValidation}
+	// References parse with Docker semantics: a missing tag selects "latest", matching how
+	// containerlab and the kubelet interpret the same value. Only malformed references fail.
+	nameOptions := []name.Option{}
 	if request.Trust != nil && request.Trust.PlainHTTP {
 		nameOptions = append(nameOptions, name.Insecure)
 	}
 	reference, err := name.ParseReference(request.Reference, nameOptions...)
 	if err != nil {
-		request.Reference = "<invalid>"
 		return nil, resolverError(ErrorInvalidRequest, request, errors.New("reference is invalid"))
 	}
 	securityCode, securityErr := validateRequestSecurity(

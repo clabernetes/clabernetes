@@ -20,6 +20,8 @@ E2E_INSTALL_NAMESPACE ?= c9s-e2e
 E2E_INSTALL_RELEASE ?= c9s-e2e
 CLUSTER ?= kind
 E2E_LOCAL_REBUILD ?= $(if $(filter undefined,$(origin C9S_LOCAL_REBUILD)),1,$(C9S_LOCAL_REBUILD))
+# Selects the manager runtime for the deployed chart and gates the mode-specific test suites.
+E2E_DEVICE_RUNTIME_MODE ?= nested
 
 E2E_BUILD_DIR := build/e2e
 E2E_TOOLS_DIR := $(E2E_BUILD_DIR)/bin
@@ -92,14 +94,14 @@ e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally 
 		--set manager.replicaCount=1 \
 		--set manager.managerLogLevel=debug \
 		--set manager.controllerLogLevel=debug \
-		--set globalConfig.deployment.launcherImage=$(LAUNCHER_IMAGE):$(E2E_IMAGE_TAG) \
-		--set globalConfig.deployment.launcherImagePullPolicy=IfNotPresent \
-		--set globalConfig.deployment.launcherLogLevel=debug
+		--set manager.deviceRuntimeMode=$(E2E_DEVICE_RUNTIME_MODE) \
+		--set manager.launcherImage=$(LAUNCHER_IMAGE):$(E2E_IMAGE_TAG)
 	@$(E2E_KUBECTL) $(E2E_KUBECTL_CONTEXT_ARGS) -n $(E2E_NAMESPACE) rollout status deploy/clabernetes-manager --timeout=$(E2E_TIMEOUT)
 
 .PHONY: e2e-run
 e2e-run: ## Run the e2e Go tests against the caller-selected kube context
-	gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
+	C9S_E2E_DEVICE_RUNTIME_MODE=$(E2E_DEVICE_RUNTIME_MODE) \
+		gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
 
 .PHONY: e2e-test
 e2e-test: e2e-tools install-test-tools ## Run e2e tests using the existing KinD setup

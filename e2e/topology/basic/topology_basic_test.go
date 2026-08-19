@@ -23,6 +23,8 @@ func TestMain(m *testing.M) {
 func TestContainerlabBasic(t *testing.T) {
 	t.Parallel()
 
+	clabernetestesthelper.SkipUnlessDeviceRuntimeMode(t, "nested")
+
 	testName := "topology-basic"
 
 	namespace := clabernetestesthelper.NewTestNamespace(testName)
@@ -164,6 +166,8 @@ func TestContainerlabBasic(t *testing.T) {
 }
 
 func TestSRLinuxDNSFromManagementNamespace(t *testing.T) {
+	clabernetestesthelper.SkipUnlessDeviceRuntimeMode(t, "nested")
+
 	testName := "topology-srlinux-dns"
 	namespace := clabernetestesthelper.NewTestNamespace(testName)
 

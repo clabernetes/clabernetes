@@ -159,6 +159,60 @@ func TestRestrictedManagerRolesCanPublishEventsAndExecDirectContainers(t *testin
 	}
 }
 
+// A restricted install grants exec/log/events per namespace only; the same grants appearing in
+// the ClusterRole would hand the manager cluster-wide exec and defeat restricted RBAC entirely.
+func TestRestrictedClusterRoleDoesNotGrantClusterWideExecLogsOrEvents(t *testing.T) {
+	t.Parallel()
+
+	chartsDir, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := clabernetestesthelper.HelmCommand(
+		t,
+		chartsDir,
+		"template",
+		"./clabernetes",
+		"--namespace",
+		"c9s-system",
+		"--set",
+		"manager.restrictedRBAC.enabled=true",
+		"--show-only",
+		"templates/clusterrole.yaml",
+	)
+	decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(renderedHelmYAML(t, raw)), 4096)
+	seenManagerRole := false
+	for {
+		role := &k8srbacv1.ClusterRole{}
+		if err = decoder.Decode(role); err != nil {
+			if err == io.EOF {
+				break
+			}
+
+			t.Fatal(err)
+		}
+		if role.Kind != "ClusterRole" || role.GetName() != "clabernetes-cluster-role" {
+			continue
+		}
+		seenManagerRole = true
+		for _, rule := range role.Rules {
+			for _, resource := range rule.Resources {
+				switch resource {
+				case "pods/exec", "pods/log", "events":
+					t.Fatalf(
+						"restricted ClusterRole must not grant %q cluster-wide: %#v",
+						resource,
+						rule,
+					)
+				}
+			}
+		}
+	}
+	if !seenManagerRole {
+		t.Fatal("manager ClusterRole is absent")
+	}
+}
+
 func TestDirectHostEndpointDaemonHasMinimalHostAndAPIAuthority(t *testing.T) {
 	t.Parallel()
 

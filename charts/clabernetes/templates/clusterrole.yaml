@@ -107,6 +107,9 @@ rules:
       - patch
       - watch
     {{- end }}
+  {{- if not .Values.manager.restrictedRBAC.enabled }}
+  {{- /* restricted installs grant pods/log, pods/exec, and events per namespace via the
+         namespaced Roles; a cluster-wide exec grant would defeat restricted RBAC. */}}
   - apiGroups:
       - ""
     resources:
@@ -128,6 +131,7 @@ rules:
       - create
       - patch
       - update
+  {{- end }}
   - apiGroups:
       - rbac.authorization.k8s.io
     resources:
