@@ -12,8 +12,9 @@ import (
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Run starts the node-local host-endpoint daemon against in-cluster Kubernetes state.
-func Run(ctx context.Context, nodeName, socketPath string) error {
+// Run starts the node-local host-endpoint daemon against in-cluster Kubernetes state. The node
+// address is this worker's address used as the local VTEP endpoint for cross-worker fabric.
+func Run(ctx context.Context, nodeName, nodeAddress, socketPath string) error {
 	if ctx == nil || nodeName == "" {
 		return fmt.Errorf("host-endpoint daemon identity is incomplete")
 	}
@@ -37,8 +38,9 @@ func Run(ctx context.Context, nodeName, socketPath string) error {
 	}
 
 	return (&Daemon{
-		NodeName:   nodeName,
-		State:      KubernetesState{Client: client},
-		Operations: newOperations(),
+		NodeName:    nodeName,
+		NodeAddress: nodeAddress,
+		State:       KubernetesState{Client: client},
+		Operations:  newOperations(),
 	}).Serve(ctx, socketPath)
 }

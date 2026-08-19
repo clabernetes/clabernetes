@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	claberneteshostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
 	k8scorev1 "k8s.io/api/core/v1"
@@ -32,8 +31,6 @@ const (
 	connectivityAppliedRevisionFile = "applied-revision"
 	directLinkOwnerPrefix           = "c9s:direct:v1:"
 	directVethOwnerType             = "veth"
-	directVXLANOwnerType            = "vxlan"
-	directSlurpeethOwnerType        = "slurpeeth"
 	// ConnectivityRevisionSchemaVersion is the accepted projected revision format.
 	ConnectivityRevisionSchemaVersion = "c9s.direct-connectivity/v1alpha1"
 	// MaximumConnectivityRevisionJSONSize keeps the projected revision below ConfigMap limits.
@@ -49,10 +46,6 @@ const managementRouteTableBase = 10_000
 var (
 	errLocalConnectivityPodIdentity = errors.New("local connectivity Pod identity is invalid")
 	errLocalLinkInventory           = errors.New("local Link ownership inventory is invalid")
-	errVXLANPeerDrift               = errors.New("VXLAN peer address changed")
-	// ErrPeerTransportUnavailable marks a valid remote peer identity that does not currently
-	// resolve to exactly one Pod address. It is a retryable readiness state, not a helper failure.
-	ErrPeerTransportUnavailable = errors.New("remote peer transport is unavailable")
 	// ErrConnectivityRevision classifies a revision that cannot be proven as an interface-only,
 	// planner-produced transition from the Pod's immutable cold plan.
 	ErrConnectivityRevision = errors.New("invalid direct connectivity revision")
@@ -66,11 +59,6 @@ type LinkOperations interface {
 	ListVethInterfaces(ownerPrefix string) ([]VethInterface, error)
 	EnsureVethPair(leftName, rightName string, mtu int, owner string) error
 	DeleteVethPair(name, owner string) error
-	ListVXLANInterfaces(ownerPrefix string) ([]VXLANInterface, error)
-	EnsureVXLANInterface(name string, tunnelID, mtu, destinationPort int, owner string) error
-	ResolvePeerAddress(ctx context.Context, destination string) (string, error)
-	EnsureVXLANPeer(name, address, owner string) error
-	DeleteVXLANInterface(name, owner string) error
 	// ResolvePodTransportInterface selects the one interface carrying the exact kubelet-assigned
 	// Pod address. It never guesses a conventional interface name.
 	ResolvePodTransportInterface(podAddress string) (string, error)
@@ -96,17 +84,6 @@ type VethInterface struct {
 	Name     string
 	PeerName string
 	Owner    string
-}
-
-// VXLANInterface is the bounded owned-state inventory needed to reconcile one remote Link
-// termination. Peer addresses are reconciled separately so Pod rescheduling does not rename or
-// re-own the package-selected device interface.
-type VXLANInterface struct {
-	Name            string
-	Owner           string
-	TunnelID        int
-	MTU             int
-	DestinationPort int
 }
 
 // ConnectivityRevision is the bounded live portion of a planner-produced device plan. It carries
@@ -802,7 +779,12 @@ type hostEndpointPacer struct {
 	mutex         sync.Mutex
 	lastAttempt   time.Time
 	lastSucceeded bool
+	lastReady     bool
 }
+
+// fabricRetryInterval paces steady-state retries while a fabric transport still waits on its
+// peer; converged endpoints re-assert only at hostEndpointReassertInterval.
+const fabricRetryInterval = 5 * time.Second
 
 // due reports whether a steady-state re-assertion should run now.
 func (p *hostEndpointPacer) due(now time.Time) bool {
@@ -811,11 +793,17 @@ func (p *hostEndpointPacer) due(now time.Time) bool {
 	}
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+	if !p.lastSucceeded {
+		return true
+	}
+	if !p.lastReady {
+		return now.Sub(p.lastAttempt) >= fabricRetryInterval
+	}
 
-	return !p.lastSucceeded || now.Sub(p.lastAttempt) >= hostEndpointReassertInterval
+	return now.Sub(p.lastAttempt) >= hostEndpointReassertInterval
 }
 
-func (p *hostEndpointPacer) record(now time.Time, succeeded bool) {
+func (p *hostEndpointPacer) record(now time.Time, succeeded, ready bool) {
 	if p == nil {
 		return
 	}
@@ -823,16 +811,29 @@ func (p *hostEndpointPacer) record(now time.Time, succeeded bool) {
 	defer p.mutex.Unlock()
 	p.lastAttempt = now
 	p.lastSucceeded = succeeded
+	p.lastReady = ready
 }
 
-// HostEndpointReconciler is the narrow node-local RPC boundary used for generic host Links.
-// The request contains only immutable Kubernetes identities and interface intent.
+// lastKnownReady returns the readiness observed by the most recent daemon exchange.
+func (p *hostEndpointPacer) lastKnownReady() bool {
+	if p == nil {
+		return false
+	}
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	return p.lastSucceeded && p.lastReady
+}
+
+// HostEndpointReconciler is the narrow node-local RPC boundary used for generic host Links and
+// cross-Pod fabric endpoints. The request contains only immutable Kubernetes identities and
+// interface intent; the response reports per-Link fabric transport readiness.
 type HostEndpointReconciler interface {
 	Reconcile(
 		ctx context.Context,
 		request claberneteshostendpoint.ReconcileRequest,
 		networkNamespacePath string,
-	) error
+	) ([]claberneteshostendpoint.FabricStatus, error)
 }
 
 // EndpointNamespace keeps a target Pod namespace handle open while one imported endpoint hook
@@ -857,7 +858,6 @@ func RunConnectivity(
 		plan,
 		ConnectivityOptions{StateDirectory: stateDirectory},
 		newLinkOperations(nil),
-		nil,
 		nil,
 	)
 }
@@ -892,7 +892,6 @@ func RunConnectivityWithOptions(
 		options,
 		newLinkOperations(namespace),
 		namespace,
-		nil,
 	)
 }
 
@@ -911,7 +910,6 @@ func RunConnectivityWithOperations(
 		ConnectivityOptions{StateDirectory: stateDirectory},
 		operations,
 		nil,
-		nil,
 	)
 }
 
@@ -925,29 +923,7 @@ func RunConnectivityWithLifecycleOperations(
 	operations LinkOperations,
 	namespace EndpointNamespace,
 ) error {
-	return runConnectivity(ctx, input, plan, options, operations, namespace, nil)
-}
-
-// RunConnectivityWithRuntimeOperations exposes every generic OS/process seam for deterministic
-// connectivity tests. The function takes ownership of namespace and slurpeethRuntime.
-func RunConnectivityWithRuntimeOperations(
-	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
-	options ConnectivityOptions,
-	operations LinkOperations,
-	namespace EndpointNamespace,
-	slurpeethRuntime SlurpeethRuntime,
-) error {
-	return runConnectivity(
-		ctx,
-		input,
-		plan,
-		options,
-		operations,
-		namespace,
-		slurpeethRuntime,
-	)
+	return runConnectivity(ctx, input, plan, options, operations, namespace)
 }
 
 func runConnectivity(
@@ -957,7 +933,6 @@ func runConnectivity(
 	options ConnectivityOptions,
 	operations LinkOperations,
 	namespace EndpointNamespace,
-	slurpeethRuntime SlurpeethRuntime,
 ) (returnErr error) {
 	if namespace != nil {
 		defer func() {
@@ -988,12 +963,6 @@ func runConnectivity(
 		if returnErr != nil {
 			returnErr = errors.Join(returnErr, clearConnectivityMarkers(stateDirectory))
 		}
-	}()
-	if slurpeethRuntime == nil {
-		slurpeethRuntime = newSlurpeethRuntime(stateDirectory)
-	}
-	defer func() {
-		returnErr = errors.Join(returnErr, slurpeethRuntime.Close())
 	}()
 	effectiveInput, effectivePlan, appliedRevision, err := loadConnectivityRevision(
 		input,
@@ -1035,31 +1004,13 @@ func runConnectivity(
 	if err = reconcileLocalInterfaces(&effectivePlan, operations, options.PodUID); err != nil {
 		return err
 	}
-	vxlanReady, err := reconcileVXLANInterfaces(
-		ctx,
-		&effectivePlan,
-		operations,
-		options.PodUID,
-	)
-	if err != nil {
-		return err
-	}
-	if err = reconcileHostEndpoints(
+	connectivityReady, err := reconcileDaemonEndpoints(
 		ctx,
 		effectiveInput,
 		effectivePlan,
 		options,
-		hasHostInterfaces(plan),
+		hasDaemonInterfaces(plan),
 		false,
-	); err != nil {
-		return err
-	}
-	slurpeethReady, err := reconcileSlurpeethInterfaces(
-		ctx,
-		&effectivePlan,
-		operations,
-		slurpeethRuntime,
-		options.PodUID,
 	)
 	if err != nil {
 		return err
@@ -1073,7 +1024,6 @@ func runConnectivity(
 	); err != nil {
 		return err
 	}
-	connectivityReady := vxlanReady && slurpeethReady
 	if connectivityReady {
 		if err = publishConnectivityReadiness(stateDirectory, coldPlanDigest); err != nil {
 			return err
@@ -1092,7 +1042,6 @@ func runConnectivity(
 		operations,
 		namespace,
 		logBroker,
-		slurpeethRuntime,
 		appliedRevision,
 		coldPlanDigest,
 		connectivityReady,
@@ -1264,7 +1213,6 @@ func waitForConnectivityRevisions(
 	operations LinkOperations,
 	namespace EndpointNamespace,
 	logBroker *ApplicationLogBroker,
-	slurpeethRuntime SlurpeethRuntime,
 	appliedRevision string,
 	coldPlanDigest string,
 	connectivityReady bool,
@@ -1272,10 +1220,6 @@ func waitForConnectivityRevisions(
 	var brokerErrors <-chan error
 	if logBroker != nil {
 		brokerErrors = logBroker.Errors()
-	}
-	var slurpeethErrors <-chan error
-	if slurpeethRuntime != nil {
-		slurpeethErrors = slurpeethRuntime.Errors()
 	}
 	var revisionTicks <-chan time.Time
 	var ticker *time.Ticker
@@ -1306,12 +1250,6 @@ func waitForConnectivityRevisions(
 			}
 
 			return fmt.Errorf("application log broker failed: %w", brokerErr)
-		case slurpeethErr, open := <-slurpeethErrors:
-			if !open {
-				return fmt.Errorf("slurpeeth process monitor stopped unexpectedly")
-			}
-
-			return slurpeethErr
 		case <-revisionTicks:
 			nextRevision, nextReady, err := applyProjectedConnectivityRevision(
 				ctx,
@@ -1320,7 +1258,6 @@ func waitForConnectivityRevisions(
 				options,
 				operations,
 				namespace,
-				slurpeethRuntime,
 				appliedRevision,
 			)
 			if err != nil {
@@ -1360,9 +1297,10 @@ func hasRemoteInterfaces(plan clabernetesdeviceplan.Plan) bool {
 	return false
 }
 
-func hasHostInterfaces(plan clabernetesdeviceplan.Plan) bool {
+func hasDaemonInterfaces(plan clabernetesdeviceplan.Plan) bool {
 	for _, intf := range plan.Interfaces {
-		if intf.Connectivity == "host" {
+		if intf.Connectivity == "host" || intf.Connectivity == "vxlan" ||
+			intf.Connectivity == "slurpeeth" {
 			return true
 		}
 	}
@@ -1370,51 +1308,75 @@ func hasHostInterfaces(plan clabernetesdeviceplan.Plan) bool {
 	return false
 }
 
-func reconcileHostEndpoints(
+// reconcileDaemonEndpoints realizes every host Link and cross-Pod fabric endpoint through the
+// node-local daemon, which owns all host-namespace transport state: the Pod side of each
+// endpoint is a plain veth leg, so a device that takes over the Pod's primary interface cannot
+// disturb the transport. The returned readiness covers every fabric endpoint's transport.
+//
+//nolint:funlen,gocyclo // One request carries both endpoint families with shared identity.
+func reconcileDaemonEndpoints(
 	ctx context.Context,
 	input clabernetesdeviceplan.Input,
 	plan clabernetesdeviceplan.Plan,
 	options ConnectivityOptions,
 	reconcileEmpty bool,
 	steadyState bool,
-) error {
+) (bool, error) {
 	if steadyState && !options.hostEndpointPacer.due(time.Now()) {
-		return nil
+		return options.hostEndpointPacer.lastKnownReady(), nil
 	}
 	nodes := make(map[string]clabernetesdeviceplan.NodeInput, len(input.Nodes))
 	for _, node := range input.Nodes {
 		nodes[node.ID] = node
 	}
 	endpoints := []claberneteshostendpoint.Endpoint{}
+	fabric := []claberneteshostendpoint.FabricEndpoint{}
 	for _, intf := range plan.Interfaces {
-		if intf.Connectivity != "host" {
+		if intf.Connectivity != "host" && intf.Connectivity != "vxlan" &&
+			intf.Connectivity != "slurpeeth" {
 			continue
 		}
 		node, exists := nodes[intf.NodeID]
 		if !exists || node.Name == "" {
-			return fmt.Errorf("host Link %q references an unavailable Node identity", intf.LinkID)
+			return false, fmt.Errorf(
+				"Link %q references an unavailable Node identity",
+				intf.LinkID,
+			)
 		}
-		endpoints = append(endpoints, claberneteshostendpoint.Endpoint{
-			Link: claberneteshostendpoint.ObjectIdentity{
-				Namespace: options.PodNamespace,
-				Name:      intf.LinkName,
-				UID:       intf.LinkID,
-			},
-			Node: claberneteshostendpoint.ObjectIdentity{
-				Namespace: options.PodNamespace,
-				Name:      node.Name,
-				UID:       intf.NodeID,
-			},
-			HostInterface: intf.PeerInterface,
-			PodInterface:  intf.Name,
-			MTU:           intf.MTU,
+		link := claberneteshostendpoint.ObjectIdentity{
+			Namespace: options.PodNamespace,
+			Name:      intf.LinkName,
+			UID:       intf.LinkID,
+		}
+		owner := claberneteshostendpoint.ObjectIdentity{
+			Namespace: options.PodNamespace,
+			Name:      node.Name,
+			UID:       intf.NodeID,
+		}
+		if intf.Connectivity == "host" {
+			endpoints = append(endpoints, claberneteshostendpoint.Endpoint{
+				Link:          link,
+				Node:          owner,
+				HostInterface: intf.PeerInterface,
+				PodInterface:  intf.Name,
+				MTU:           intf.MTU,
+			})
+
+			continue
+		}
+		fabric = append(fabric, claberneteshostendpoint.FabricEndpoint{
+			Link:         link,
+			Node:         owner,
+			PodInterface: intf.Name,
+			TunnelID:     intf.TunnelID,
+			MTU:          intf.MTU,
 		})
 	}
-	if len(endpoints) == 0 && !reconcileEmpty {
-		return nil
+	if len(endpoints) == 0 && len(fabric) == 0 && !reconcileEmpty {
+		return true, nil
 	}
 	if options.HostEndpointReconciler == nil {
-		return fmt.Errorf("host Link reconciliation is unavailable")
+		return false, fmt.Errorf("host-endpoint daemon reconciliation is unavailable")
 	}
 	request := claberneteshostendpoint.ReconcileRequest{
 		SchemaVersion: claberneteshostendpoint.SchemaVersion,
@@ -1424,18 +1386,33 @@ func reconcileHostEndpoints(
 			UID:       options.PodUID,
 		},
 		Endpoints: endpoints,
+		Fabric:    fabric,
 	}
-	err := options.HostEndpointReconciler.Reconcile(
+	statuses, err := options.HostEndpointReconciler.Reconcile(
 		ctx,
 		request,
 		podNetworkNamespacePath,
 	)
-	options.hostEndpointPacer.record(time.Now(), err == nil)
+	ready := err == nil
+	if ready {
+		readyByLink := make(map[string]bool, len(statuses))
+		for _, status := range statuses {
+			readyByLink[status.LinkUID] = status.Ready
+		}
+		for _, endpoint := range fabric {
+			if !readyByLink[endpoint.Link.UID] {
+				ready = false
+
+				break
+			}
+		}
+	}
+	options.hostEndpointPacer.record(time.Now(), err == nil, ready)
 	if err != nil {
-		return fmt.Errorf("reconciling host Links: %w", err)
+		return false, fmt.Errorf("reconciling daemon-owned Links: %w", err)
 	}
 
-	return nil
+	return ready, nil
 }
 
 func applyProjectedConnectivityRevision(
@@ -1445,7 +1422,6 @@ func applyProjectedConnectivityRevision(
 	options ConnectivityOptions,
 	operations LinkOperations,
 	namespace EndpointNamespace,
-	slurpeethRuntime SlurpeethRuntime,
 	appliedRevision string,
 ) (string, bool, error) {
 	revisedInput, revisedPlan, desiredDigest, err := loadConnectivityRevision(
@@ -1457,37 +1433,19 @@ func applyProjectedConnectivityRevision(
 		return appliedRevision, false, err
 	}
 	if desiredDigest == appliedRevision {
-		vxlanReady, vxlanErr := reconcileVXLANInterfaces(
-			ctx,
-			&revisedPlan,
-			operations,
-			options.PodUID,
-		)
-		if vxlanErr != nil {
-			return appliedRevision, false, vxlanErr
-		}
-		if err = reconcileHostEndpoints(
+		ready, reconcileErr := reconcileDaemonEndpoints(
 			ctx,
 			revisedInput,
 			revisedPlan,
 			options,
-			hasHostInterfaces(basePlan),
+			hasDaemonInterfaces(basePlan),
 			true,
-		); err != nil {
-			return appliedRevision, false, err
-		}
-		ready, reconcileErr := reconcileSlurpeethInterfaces(
-			ctx,
-			&revisedPlan,
-			operations,
-			slurpeethRuntime,
-			options.PodUID,
 		)
 		if reconcileErr != nil {
 			return appliedRevision, false, reconcileErr
 		}
 
-		return appliedRevision, vxlanReady && ready, nil
+		return appliedRevision, ready, nil
 	}
 	if err = ValidatePlanCapabilities(revisedPlan); err != nil {
 		return appliedRevision, false, err
@@ -1495,34 +1453,16 @@ func applyProjectedConnectivityRevision(
 	if err = reconcileLocalInterfaces(&revisedPlan, operations, options.PodUID); err != nil {
 		return appliedRevision, false, err
 	}
-	vxlanReady, err := reconcileVXLANInterfaces(
-		ctx,
-		&revisedPlan,
-		operations,
-		options.PodUID,
-	)
-	if err != nil {
-		return appliedRevision, false, err
-	}
-	if err = reconcileHostEndpoints(
+	ready, err := reconcileDaemonEndpoints(
 		ctx,
 		revisedInput,
 		revisedPlan,
 		options,
-		hasHostInterfaces(basePlan),
+		hasDaemonInterfaces(basePlan),
 		false,
-	); err != nil {
-		return appliedRevision, false, err
-	}
-	ready, reconcileErr := reconcileSlurpeethInterfaces(
-		ctx,
-		&revisedPlan,
-		operations,
-		slurpeethRuntime,
-		options.PodUID,
 	)
-	if reconcileErr != nil {
-		return appliedRevision, false, reconcileErr
+	if err != nil {
+		return appliedRevision, false, err
 	}
 	if err = reconcileImportedEndpointLifecycle(
 		ctx,
@@ -1534,7 +1474,7 @@ func applyProjectedConnectivityRevision(
 		return appliedRevision, false, err
 	}
 
-	return desiredDigest, vxlanReady && ready, nil
+	return desiredDigest, ready, nil
 }
 
 type kubernetesApplicationLogStreamer struct {
@@ -2203,281 +2143,6 @@ func reconcileLocalInterfaces(
 	}
 
 	return nil
-}
-
-func reconcileVXLANInterfaces(
-	ctx context.Context,
-	plan *clabernetesdeviceplan.Plan,
-	operations LinkOperations,
-	podUID string,
-) (bool, error) {
-	desired := desiredVXLANInterfaces(plan, podUID)
-	if podUID == "" {
-		if len(desired) == 0 {
-			return true, nil
-		}
-
-		return false, errLocalConnectivityPodIdentity
-	}
-	ownerPrefix := directLinkPodOwnerPrefix(podUID, directVXLANOwnerType)
-	desiredByOwner := make(map[string]desiredVXLANInterface, len(desired))
-	for _, intf := range desired {
-		desiredByOwner[intf.owner] = intf
-	}
-	existing, err := operations.ListVXLANInterfaces(ownerPrefix)
-	if err != nil {
-		return false, fmt.Errorf("inventorying Pod-owned VXLAN Links: %w", err)
-	}
-	for _, intf := range existing {
-		desiredInterface, wanted := desiredByOwner[intf.Owner]
-		conforms := wanted && intf.Name == desiredInterface.name &&
-			intf.TunnelID == desiredInterface.tunnelID &&
-			intf.DestinationPort == clabernetesconstants.VXLANServicePort &&
-			(desiredInterface.mtu == 0 || intf.MTU == desiredInterface.mtu)
-		if conforms {
-			continue
-		}
-		if err = operations.DeleteVXLANInterface(intf.Name, intf.Owner); err != nil {
-			return false, fmt.Errorf("removing stale Pod-owned VXLAN Link: %w", err)
-		}
-	}
-	ready := true
-	for _, intf := range desired {
-		if err = operations.EnsureVXLANInterface(
-			intf.name,
-			intf.tunnelID,
-			intf.mtu,
-			clabernetesconstants.VXLANServicePort,
-			intf.owner,
-		); err != nil {
-			return false, fmt.Errorf("preparing VXLAN Link %q: %w", intf.linkUID, err)
-		}
-		peerAddress, resolveErr := operations.ResolvePeerAddress(ctx, intf.peerTransport)
-		if resolveErr != nil {
-			if errors.Is(resolveErr, ErrPeerTransportUnavailable) {
-				ready = false
-
-				continue
-			}
-
-			return false, fmt.Errorf(
-				"resolving current peer for VXLAN Link %q: %w",
-				intf.linkUID,
-				resolveErr,
-			)
-		}
-		peerErr := operations.EnsureVXLANPeer(
-			intf.name,
-			peerAddress,
-			intf.owner,
-		)
-		if errors.Is(peerErr, errVXLANPeerDrift) {
-			if err = operations.DeleteVXLANInterface(intf.name, intf.owner); err == nil {
-				err = operations.EnsureVXLANInterface(
-					intf.name,
-					intf.tunnelID,
-					intf.mtu,
-					clabernetesconstants.VXLANServicePort,
-					intf.owner,
-				)
-			}
-			if err == nil {
-				err = operations.EnsureVXLANPeer(intf.name, peerAddress, intf.owner)
-			}
-			peerErr = err
-		}
-		if peerErr != nil {
-			return false, fmt.Errorf("realizing VXLAN Link %q peer: %w", intf.linkUID, peerErr)
-		}
-	}
-
-	return ready, nil
-}
-
-type desiredVXLANInterface struct {
-	linkUID       string
-	name          string
-	peerTransport string
-	tunnelID      int
-	mtu           int
-	owner         string
-}
-
-func desiredVXLANInterfaces(
-	plan *clabernetesdeviceplan.Plan,
-	podUID string,
-) []desiredVXLANInterface {
-	desired := []desiredVXLANInterface{}
-	for index := range plan.Interfaces {
-		intf := &plan.Interfaces[index]
-		if intf.Connectivity != "vxlan" {
-			continue
-		}
-		desired = append(desired, desiredVXLANInterface{
-			linkUID: intf.LinkID, name: intf.Name, peerTransport: intf.PeerTransport,
-			tunnelID: intf.TunnelID, mtu: intf.MTU,
-			owner: directLinkOwner(
-				podUID,
-				directVXLANOwnerType,
-				intf.LinkID,
-				intf.NodeID,
-				intf.PeerNodeID,
-			),
-		})
-	}
-	slices.SortFunc(desired, func(left, right desiredVXLANInterface) int {
-		return strings.Compare(left.linkUID, right.linkUID)
-	})
-
-	return desired
-}
-
-type desiredSlurpeethInterface struct {
-	linkUID       string
-	name          string
-	transportName string
-	peerTransport string
-	tunnelID      int
-	mtu           int
-	owner         string
-}
-
-func reconcileSlurpeethInterfaces(
-	ctx context.Context,
-	plan *clabernetesdeviceplan.Plan,
-	operations LinkOperations,
-	runtime SlurpeethRuntime,
-	podUID string,
-) (bool, error) {
-	desired := desiredSlurpeethInterfaces(plan, podUID)
-	if podUID == "" {
-		if len(desired) != 0 {
-			return false, errLocalConnectivityPodIdentity
-		}
-
-		if err := runtime.Reconcile(ctx, nil); err != nil {
-			return false, err
-		}
-
-		return runtime.Ready()
-	}
-	ownerPrefix := directLinkPodOwnerPrefix(podUID, directSlurpeethOwnerType)
-	desiredPairs := make(map[string]desiredVethPair, len(desired))
-	for _, intf := range desired {
-		desiredPairs[intf.owner] = desiredVethPair{
-			linkUID: intf.linkUID,
-			left:    intf.name,
-			right:   intf.transportName,
-			mtu:     intf.mtu,
-			owner:   intf.owner,
-		}
-	}
-	existing, err := operations.ListVethInterfaces(ownerPrefix)
-	if err != nil {
-		return false, fmt.Errorf("inventorying Pod-owned slurpeeth Links: %w", err)
-	}
-	stale, err := staleLocalVethPairs(
-		existing,
-		ownerPrefix,
-		desiredPairs,
-	)
-	if err != nil {
-		return false, fmt.Errorf("cleaning Pod-owned slurpeeth Links: %w", err)
-	}
-	stopped := false
-	if len(stale) != 0 {
-		if err = runtime.Reconcile(ctx, nil); err != nil {
-			return false, fmt.Errorf("stopping stale slurpeeth process: %w", err)
-		}
-		stopped = true
-		if err = removeLocalVethPairs(stale, operations); err != nil {
-			return false, fmt.Errorf("cleaning Pod-owned slurpeeth Links: %w", err)
-		}
-	}
-	segments := make([]SlurpeethSegment, 0, len(desired))
-	peersReady := true
-	for _, intf := range desired {
-		if err = operations.EnsureVethPair(
-			intf.name,
-			intf.transportName,
-			intf.mtu,
-			intf.owner,
-		); err != nil {
-			return false, fmt.Errorf("preparing slurpeeth Link %q: %w", intf.linkUID, err)
-		}
-		peerAddress, resolveErr := operations.ResolvePeerAddress(ctx, intf.peerTransport)
-		if resolveErr != nil {
-			if errors.Is(resolveErr, ErrPeerTransportUnavailable) {
-				peersReady = false
-
-				continue
-			}
-
-			return false, fmt.Errorf(
-				"resolving current peer for slurpeeth Link %q: %w",
-				intf.linkUID,
-				resolveErr,
-			)
-		}
-		parsedPeer, parseErr := netip.ParseAddr(peerAddress)
-		if parseErr != nil {
-			return false, fmt.Errorf("resolved slurpeeth peer address is invalid: %w", parseErr)
-		}
-		destination := parsedPeer.Unmap().String()
-		if parsedPeer.Is6() {
-			destination = "[" + destination + "]"
-		}
-		segments = append(segments, SlurpeethSegment{
-			Owner: intf.owner, ID: uint16(intf.tunnelID), //nolint:gosec // Validated above.
-			Interface: intf.transportName, Destination: destination,
-		})
-	}
-	if stopped && len(segments) == 0 {
-		ready, readyErr := runtime.Ready()
-
-		return peersReady && ready, readyErr
-	}
-	if err = runtime.Reconcile(ctx, segments); err != nil {
-		return false, fmt.Errorf("reconciling slurpeeth process: %w", err)
-	}
-
-	ready, err := runtime.Ready()
-	if err != nil {
-		return false, fmt.Errorf("checking slurpeeth process readiness: %w", err)
-	}
-
-	return peersReady && ready, nil
-}
-
-func desiredSlurpeethInterfaces(
-	plan *clabernetesdeviceplan.Plan,
-	podUID string,
-) []desiredSlurpeethInterface {
-	desired := []desiredSlurpeethInterface{}
-	for index := range plan.Interfaces {
-		intf := &plan.Interfaces[index]
-		if intf.Connectivity != "slurpeeth" {
-			continue
-		}
-		owner := directLinkOwner(
-			podUID,
-			directSlurpeethOwnerType,
-			intf.LinkID,
-			intf.NodeID,
-			intf.PeerNodeID,
-		)
-		desired = append(desired, desiredSlurpeethInterface{
-			linkUID: intf.LinkID, name: intf.Name,
-			transportName: "c9ss" + identityDigest(owner)[:11],
-			peerTransport: intf.PeerTransport, tunnelID: intf.TunnelID,
-			mtu: intf.MTU, owner: owner,
-		})
-	}
-	slices.SortFunc(desired, func(left, right desiredSlurpeethInterface) int {
-		return strings.Compare(left.linkUID, right.linkUID)
-	})
-
-	return desired
 }
 
 type desiredVethPair struct {

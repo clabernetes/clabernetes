@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -46,10 +45,8 @@ func TestValidLinuxSysctlName(t *testing.T) {
 
 func TestNetlinkOperationsReconcileVXLANInIsolatedNamespace(t *testing.T) {
 	if os.Getenv(vxlanNetlinkChild) == "1" {
-		testNetlinkOperationsReconcileVXLAN(t)
 		testManagementAddressPreservesPodTransport(t)
 		testManagementDualStackReachability(t)
-		testVXLANDataPlaneAcrossNamespaces(t)
 
 		return
 	}
@@ -280,106 +277,6 @@ func testManagementAddressPreservesPodTransport(t *testing.T) {
 	}
 }
 
-func testVXLANDataPlaneAcrossNamespaces(t *testing.T) {
-	t.Helper()
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	originalNamespace, err := netns.Get()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = originalNamespace.Close()
-	}()
-	peerNamespace, err := netns.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = peerNamespace.Close()
-	}()
-	if err = netns.Set(originalNamespace); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = netns.Set(originalNamespace)
-	}()
-
-	attributes := netlink.NewLinkAttrs()
-	attributes.Name = "underlay-a"
-	veth := netlink.NewVeth(attributes)
-	veth.PeerName = "underlay-b"
-	if err = netlink.LinkAdd(veth); err != nil {
-		t.Fatal(err)
-	}
-	peerLink, err := netlink.LinkByName("underlay-b")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = netlink.LinkSetNsFd(peerLink, int(peerNamespace)); err != nil {
-		t.Fatal(err)
-	}
-	configureTestLink(t, "lo", "")
-	configureTestLink(t, "underlay-a", "172.31.0.1/24")
-	leftOperations := netlinkOperations{}
-	if err = leftOperations.EnsureVXLANInterface(
-		"dataplane-a",
-		91,
-		1400,
-		14789,
-		"c9s:direct:v1:left:vxlan:wire",
-	); err != nil {
-		t.Fatal(err)
-	}
-	if err = leftOperations.EnsureVXLANPeer(
-		"dataplane-a",
-		"172.31.0.2",
-		"c9s:direct:v1:left:vxlan:wire",
-	); err != nil {
-		t.Fatal(err)
-	}
-	configureTestLink(t, "dataplane-a", "198.18.0.1/24")
-
-	if err = netns.Set(peerNamespace); err != nil {
-		t.Fatal(err)
-	}
-	configureTestLink(t, "lo", "")
-	configureTestLink(t, "underlay-b", "172.31.0.2/24")
-	rightOperations := netlinkOperations{}
-	if err = rightOperations.EnsureVXLANInterface(
-		"dataplane-b",
-		91,
-		1400,
-		14789,
-		"c9s:direct:v1:right:vxlan:wire",
-	); err != nil {
-		t.Fatal(err)
-	}
-	if err = rightOperations.EnsureVXLANPeer(
-		"dataplane-b",
-		"172.31.0.1",
-		"c9s:direct:v1:right:vxlan:wire",
-	); err != nil {
-		t.Fatal(err)
-	}
-	configureTestLink(t, "dataplane-b", "198.18.0.2/24")
-	ping, err := exec.LookPath("ping")
-	if err != nil {
-		t.Skip("ping is unavailable")
-	}
-	command := exec.Command( //nolint:gosec // Fixed diagnostic command in the isolated namespace.
-		ping,
-		"-c",
-		"1",
-		"-W",
-		"2",
-		"198.18.0.1",
-	)
-	if output, pingErr := command.CombinedOutput(); pingErr != nil {
-		t.Fatalf("VXLAN dataplane ping failed: %v\n%s", pingErr, output)
-	}
-}
-
 func configureTestLink(t *testing.T, name, address string) {
 	t.Helper()
 	link, err := netlink.LinkByName(name)
@@ -397,96 +294,5 @@ func configureTestLink(t *testing.T, name, address string) {
 	}
 	if err = netlink.LinkSetUp(link); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func testNetlinkOperationsReconcileVXLAN(t *testing.T) {
-	t.Helper()
-	operations := netlinkOperations{}
-	owner := "c9s:direct:v1:test:vxlan:test"
-	if err := operations.EnsureVXLANInterface("package-a", 73, 1450, 14789, owner); err != nil {
-		t.Fatal(err)
-	}
-	interfaces, err := operations.ListVXLANInterfaces("c9s:direct:v1:test:vxlan:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(interfaces) != 1 || interfaces[0].Name != "package-a" ||
-		interfaces[0].Owner != owner || interfaces[0].TunnelID != 73 ||
-		interfaces[0].MTU != 1450 || interfaces[0].DestinationPort != 14789 {
-		links, _ := netlink.LinkList()
-		kernel := []string{}
-		for _, link := range links {
-			kernel = append(kernel, link.Type()+"/"+link.Attrs().Name+"/"+link.Attrs().Alias)
-		}
-		t.Fatalf("VXLAN inventory = %#v; kernel links = %#v", interfaces, kernel)
-	}
-	if err = operations.EnsureVXLANPeer("package-a", "192.0.2.17", owner); err != nil {
-		t.Fatal(err)
-	}
-	assertVXLANFloodPeer(t, "package-a", "192.0.2.17")
-	link, err := netlink.LinkByName("package-a")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = netlink.NeighAppend(&netlink.Neigh{
-		Family: syscall.AF_BRIDGE, LinkIndex: link.Attrs().Index,
-		State: netlink.NUD_REACHABLE, Flags: netlink.NTF_SELF,
-		IP:           net.ParseIP("192.0.2.17"),
-		HardwareAddr: net.HardwareAddr{0x02, 0, 0, 0, 0, 1},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err = operations.EnsureVXLANPeer("package-a", "192.0.2.17", owner); err != nil {
-		t.Fatalf("learned dataplane entry was treated as peer drift: %v", err)
-	}
-	originalIndex := link.Attrs().Index
-	if err = operations.EnsureVXLANPeer("package-a", "192.0.2.31", owner); err != nil {
-		t.Fatal(err)
-	}
-	assertVXLANFloodPeer(t, "package-a", "192.0.2.31")
-	link, err = netlink.LinkByName("package-a")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if link.Attrs().Index != originalIndex {
-		t.Fatalf(
-			"VXLAN peer update replaced interface index %d with %d",
-			originalIndex,
-			link.Attrs().Index,
-		)
-	}
-	if err = operations.DeleteVXLANInterface("package-a", owner); err != nil {
-		t.Fatal(err)
-	}
-	interfaces, err = operations.ListVXLANInterfaces("c9s:direct:v1:test:vxlan:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(interfaces) != 0 {
-		t.Fatalf("deleted VXLAN inventory = %#v", interfaces)
-	}
-}
-
-func assertVXLANFloodPeer(t *testing.T, name, expected string) {
-	t.Helper()
-	link, err := netlink.LinkByName(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	entries, err := netlink.NeighList(link.Attrs().Index, syscall.AF_BRIDGE)
-	if err != nil {
-		t.Fatal(err)
-	}
-	peers := []string{}
-	for index := range entries {
-		entry := &entries[index]
-		if entry.IP != nil && zeroHardwareAddress(entry.HardwareAddr) {
-			peers = append(peers, entry.IP.String())
-		}
-	}
-	slices.Sort(peers)
-	if !slices.Equal(peers, []string{expected}) {
-		t.Fatalf("VXLAN flood peers = %#v, want %q", peers, expected)
 	}
 }

@@ -73,12 +73,17 @@ spec:
             - host-endpoint-daemon
           args:
             - --nodeName=$(C9S_WORKER_NODE_NAME)
+            - --nodeAddress=$(C9S_WORKER_NODE_ADDRESS)
             - --socket=/var/run/clabernetes/host-endpoint/daemon.sock
           env:
             - name: C9S_WORKER_NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: C9S_WORKER_NODE_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
           resources:
             requests:
               cpu: 10m

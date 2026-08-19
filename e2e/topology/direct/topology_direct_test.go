@@ -72,16 +72,34 @@ func TestNodeLinkDirect(t *testing.T) {
 
 	// The embedded startup configuration must have been materialized, planned, prepared, and
 	// committed by the imported package hooks: ethernet-1/1.0 carries the configured address
-	// inside the running device. Dataplane across the vxlan Link is asserted by the linux-kind
-	// test below: SR Linux takes ownership of the Pod's primary interface, which currently
-	// leaves the in-Pod VXLAN underlay without kernel routes -- a recorded generic gap whose
-	// fix is host-namespace fabric termination, not a kind-specific repair.
+	// inside the running device.
 	waitForDeviceCommand(
 		t,
 		namespace,
 		initialPods["srl1"],
 		[]string{"ip", "netns", "exec", "srbase-default", "ip", "-br", "addr", "show"},
 		"192.168.0.0/31",
+	)
+
+	// Dataplane across the Link: fabric transports terminate in the worker host namespace, so
+	// the wire works even though SR Linux takes ownership of the Pod's primary interface.
+	waitForDeviceCommand(
+		t,
+		namespace,
+		initialPods["srl1"],
+		[]string{
+			"ip",
+			"netns",
+			"exec",
+			"srbase-default",
+			"ping",
+			"-c",
+			"2",
+			"-W",
+			"2",
+			"192.168.0.1",
+		},
+		" 0% packet loss",
 	)
 
 	waitForWorkerArtifactCollection(t, namespace)

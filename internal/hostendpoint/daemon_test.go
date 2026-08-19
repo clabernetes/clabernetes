@@ -27,7 +27,7 @@ func TestDaemonRejectsRequestThatDiffersFromKubernetesState(t *testing.T) {
 		Endpoints:     []Endpoint{endpoint},
 	}
 	request.Endpoints[0].HostInterface = "host-b"
-	if err := daemon.Reconcile(context.Background(), request, 1); err == nil {
+	if _, err := daemon.Reconcile(context.Background(), request, 1); err == nil {
 		t.Fatal("unauthorized request was accepted")
 	}
 	if len(state.marked) != 0 || len(operations.events) != 0 {
@@ -58,7 +58,7 @@ func TestDaemonRecordsOwnershipBeforeMutationAndSweepsStaleState(t *testing.T) {
 		return nil
 	}
 	daemon := &Daemon{NodeName: "worker-a", State: state, Operations: operations}
-	err := daemon.Reconcile(context.Background(), ReconcileRequest{
+	_, err := daemon.Reconcile(context.Background(), ReconcileRequest{
 		SchemaVersion: SchemaVersion,
 		Pod:           pod,
 		Endpoints:     []Endpoint{endpoint},
@@ -118,7 +118,7 @@ func TestUnixRPCPassesExactlyOneNetworkNamespaceDescriptor(t *testing.T) {
 	go func() { serveResult <- daemon.Serve(ctx, socketPath) }()
 	waitForSocket(t, socketPath)
 	client := Client{SocketPath: socketPath}
-	if err := client.Reconcile(ctx, ReconcileRequest{
+	if _, err := client.Reconcile(ctx, ReconcileRequest{
 		SchemaVersion: SchemaVersion,
 		Pod:           pod,
 		Endpoints:     []Endpoint{endpoint},
@@ -153,13 +153,21 @@ func waitForSocket(t *testing.T, path string) {
 }
 
 type fakeState struct {
-	mutex      sync.Mutex
-	expected   []Endpoint
-	desired    []Endpoint
-	finalizing []FinalizingLink
-	marked     []Endpoint
-	removed    []ObjectIdentity
-	onMark     func()
+	mutex         sync.Mutex
+	expected      []Endpoint
+	desired       []Endpoint
+	desiredFabric []FabricEndpoint
+	finalizing    []FinalizingLink
+	marked        []Endpoint
+	removed       []ObjectIdentity
+	onMark        func()
+}
+
+func (s *fakeState) DesiredFabricForNode(context.Context, string) ([]FabricEndpoint, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	return slices.Clone(s.desiredFabric), nil
 }
 
 func (s *fakeState) ExpectedForPod(
@@ -216,13 +224,56 @@ func (s *fakeState) RemoveFinalizer(
 }
 
 type fakeOperations struct {
-	mutex    sync.Mutex
-	owned    []OwnedEndpoint
-	ensured  []Endpoint
-	deleted  []OwnedEndpoint
-	events   []string
-	onEnsure func(Endpoint, ObjectIdentity, int) error
-	onDelete func(OwnedEndpoint)
+	mutex         sync.Mutex
+	owned         []OwnedEndpoint
+	ownedFabric   []OwnedFabricObject
+	ensured       []Endpoint
+	ensuredFabric []FabricEndpoint
+	deleted       []OwnedEndpoint
+	deletedFabric []OwnedFabricObject
+	events        []string
+	fabricReady   bool
+	onEnsure      func(Endpoint, ObjectIdentity, int) error
+	onDelete      func(OwnedEndpoint)
+}
+
+func (o *fakeOperations) ListFabric(context.Context) ([]OwnedFabricObject, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	return slices.Clone(o.ownedFabric), nil
+}
+
+func (o *fakeOperations) EnsureFabric(
+	_ context.Context,
+	endpoint FabricEndpoint,
+	_ ObjectIdentity,
+	_ string,
+	_ int,
+) (FabricStatus, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	o.ensuredFabric = append(o.ensuredFabric, endpoint)
+	o.events = append(o.events, "ensureFabric")
+
+	return FabricStatus{LinkUID: endpoint.Link.UID, Ready: o.fabricReady}, nil
+}
+
+func (o *fakeOperations) ReconcileFabricTransports(
+	context.Context,
+	[]FabricEndpoint,
+	string,
+) error {
+	return nil
+}
+
+func (o *fakeOperations) DeleteFabric(_ context.Context, object OwnedFabricObject) error {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	o.deletedFabric = append(o.deletedFabric, object)
+	o.owned = slices.Clone(o.owned)
+
+	return nil
 }
 
 func (o *fakeOperations) List(context.Context) ([]OwnedEndpoint, error) {

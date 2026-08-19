@@ -169,7 +169,7 @@ func TestKubernetesStateSelectsStableWorkerScopedHostInterfaceOwner(t *testing.T
 	}
 	operations := &fakeOperations{}
 	daemon := &Daemon{NodeName: "worker-a", State: state, Operations: operations}
-	err = daemon.Reconcile(context.Background(), ReconcileRequest{
+	_, err = daemon.Reconcile(context.Background(), ReconcileRequest{
 		SchemaVersion: SchemaVersion,
 		Pod:           testIdentity("lab", "loser-pod", "loser-pod-uid"),
 		Endpoints: []Endpoint{{
@@ -228,7 +228,7 @@ func TestDaemonRecoversHostEndpointAfterForcedPodDeletionAndReschedule(t *testin
 		HostInterface: "host1", Ownership: oldOwnership,
 	}}}
 	daemon := &Daemon{NodeName: "worker-a", State: state, Operations: operations}
-	if err = daemon.Reconcile(context.Background(), ReconcileRequest{
+	if _, err = daemon.Reconcile(context.Background(), ReconcileRequest{
 		SchemaVersion: SchemaVersion,
 		Pod:           testIdentity("lab", "router-new", "new-pod-uid"),
 		Endpoints:     newExpected,

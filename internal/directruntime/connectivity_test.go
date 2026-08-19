@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,14 +26,6 @@ type fakeLinkOperations struct {
 	podTransport        string
 	pairSignal          chan struct{}
 	ensurePairError     error
-	vxlanInterfaces     []clabernetesdirectruntime.VXLANInterface
-	vxlanEnsures        []string
-	vxlanPeerAddresses  map[string]string
-	resolvePeer         func(string) (string, error)
-	vxlanPeerEnsures    []string
-	vxlanPeerSignal     chan string
-	vxlanDeletions      []string
-	resolvePeerError    error
 }
 
 func (f *fakeLinkOperations) ResolvePodTransportInterface(podAddress string) (string, error) {
@@ -54,61 +45,35 @@ func (f *fakeLinkOperations) EnsureSysctl(name, value string) error {
 	return nil
 }
 
-type fakeSlurpeethRuntime struct {
-	reconciles chan []clabernetesdirectruntime.SlurpeethSegment
-	errors     chan error
-	ready      func() (bool, error)
-	closed     atomic.Int64
-}
-
 type fakeHostEndpointReconciler struct {
-	requests chan claberneteshostendpoint.ReconcileRequest
-	err      error
+	requests      chan claberneteshostendpoint.ReconcileRequest
+	err           error
+	fabricUnready bool
 }
 
 func (f *fakeHostEndpointReconciler) Reconcile(
 	_ context.Context,
 	request claberneteshostendpoint.ReconcileRequest,
 	networkNamespacePath string,
-) error {
+) ([]claberneteshostendpoint.FabricStatus, error) {
 	if networkNamespacePath != "/proc/self/ns/net" {
-		return fmt.Errorf("network namespace path = %q", networkNamespacePath)
+		return nil, fmt.Errorf("network namespace path = %q", networkNamespacePath)
 	}
 	if f.requests != nil {
 		f.requests <- request
 	}
-
-	return f.err
-}
-
-func (f *fakeSlurpeethRuntime) Reconcile(
-	_ context.Context,
-	segments []clabernetesdirectruntime.SlurpeethSegment,
-) error {
-	cloned := append([]clabernetesdirectruntime.SlurpeethSegment(nil), segments...)
-	if f.reconciles != nil {
-		f.reconciles <- cloned
+	if f.err != nil {
+		return nil, f.err
+	}
+	statuses := make([]claberneteshostendpoint.FabricStatus, 0, len(request.Fabric))
+	for _, endpoint := range request.Fabric {
+		statuses = append(statuses, claberneteshostendpoint.FabricStatus{
+			LinkUID: endpoint.Link.UID,
+			Ready:   !f.fabricUnready,
+		})
 	}
 
-	return nil
-}
-
-func (f *fakeSlurpeethRuntime) Ready() (bool, error) {
-	if f.ready != nil {
-		return f.ready()
-	}
-
-	return true, nil
-}
-
-func (f *fakeSlurpeethRuntime) Errors() <-chan error {
-	return f.errors
-}
-
-func (f *fakeSlurpeethRuntime) Close() error {
-	f.closed.Add(1)
-
-	return nil
+	return statuses, nil
 }
 
 func (f *fakeLinkOperations) EnsureVethPair(left, right string, mtu int, owner string) error {
@@ -159,87 +124,6 @@ func (f *fakeLinkOperations) DeleteVethPair(name, owner string) error {
 		}
 	}
 	f.interfaces = remaining
-
-	return nil
-}
-
-func (f *fakeLinkOperations) ListVXLANInterfaces(
-	ownerPrefix string,
-) ([]clabernetesdirectruntime.VXLANInterface, error) {
-	result := []clabernetesdirectruntime.VXLANInterface{}
-	for _, intf := range f.vxlanInterfaces {
-		if strings.HasPrefix(intf.Owner, ownerPrefix) {
-			result = append(result, intf)
-		}
-	}
-
-	return result, nil
-}
-
-func (f *fakeLinkOperations) EnsureVXLANInterface(
-	name string,
-	tunnelID,
-	mtu,
-	destinationPort int,
-	owner string,
-) error {
-	f.vxlanEnsures = append(
-		f.vxlanEnsures,
-		fmt.Sprintf("%s/%d/%d/%d/%s", name, tunnelID, mtu, destinationPort, owner),
-	)
-	remaining := f.vxlanInterfaces[:0]
-	for _, intf := range f.vxlanInterfaces {
-		if intf.Owner != owner {
-			remaining = append(remaining, intf)
-		}
-	}
-	f.vxlanInterfaces = append(remaining, clabernetesdirectruntime.VXLANInterface{
-		Name: name, Owner: owner, TunnelID: tunnelID, MTU: mtu,
-		DestinationPort: destinationPort,
-	})
-
-	return nil
-}
-
-func (f *fakeLinkOperations) ResolvePeerAddress(
-	_ context.Context,
-	destination string,
-) (string, error) {
-	if f.resolvePeerError != nil {
-		return "", f.resolvePeerError
-	}
-	if f.resolvePeer != nil {
-		return f.resolvePeer(destination)
-	}
-	address := f.vxlanPeerAddresses[destination]
-	if address == "" {
-		return "", clabernetesdirectruntime.ErrPeerTransportUnavailable
-	}
-
-	return address, nil
-}
-
-func (f *fakeLinkOperations) EnsureVXLANPeer(name, address, owner string) error {
-	f.vxlanPeerEnsures = append(f.vxlanPeerEnsures, name+"/"+address+"/"+owner)
-	if f.vxlanPeerSignal != nil {
-		select {
-		case f.vxlanPeerSignal <- address:
-		default:
-		}
-	}
-
-	return nil
-}
-
-func (f *fakeLinkOperations) DeleteVXLANInterface(name, owner string) error {
-	f.vxlanDeletions = append(f.vxlanDeletions, name+"/"+owner)
-	remaining := f.vxlanInterfaces[:0]
-	for _, intf := range f.vxlanInterfaces {
-		if intf.Owner != owner {
-			remaining = append(remaining, intf)
-		}
-	}
-	f.vxlanInterfaces = remaining
 
 	return nil
 }
@@ -626,7 +510,7 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 			},
 		},
 		{
-			name: "vxlan", flavor: "vxlan",
+			name: "vxlan", flavor: "fabric",
 			configure: func(
 				t *testing.T,
 				input *clabernetesdeviceplan.Input,
@@ -636,7 +520,7 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 			},
 		},
 		{
-			name: "slurpeeth", flavor: "slurpeeth",
+			name: "slurpeeth", flavor: "fabric",
 			configure: func(
 				t *testing.T,
 				input *clabernetesdeviceplan.Input,
@@ -656,52 +540,31 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 			input, plan := connectivityTestInputAndPlan(t)
 			testCase.configure(t, &input, &plan)
 			state := t.TempDir()
-			operations := &fakeLinkOperations{
-				vxlanPeerAddresses: map[string]string{"peer-vx": "10.244.2.17"},
-			}
+			operations := &fakeLinkOperations{}
 			hostReconciler := &fakeHostEndpointReconciler{
-				requests: make(chan claberneteshostendpoint.ReconcileRequest, 4),
+				requests: make(chan claberneteshostendpoint.ReconcileRequest, 8),
 			}
 			run := func() error {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
 				options := clabernetesdirectruntime.ConnectivityOptions{
-					StateDirectory: state,
-					PodNamespace:   "lab",
-					PodName:        "router-pod",
-					PodUID:         "pod-uid-a",
+					StateDirectory:         state,
+					PodNamespace:           "lab",
+					PodName:                "router-pod",
+					PodUID:                 "pod-uid-a",
+					HostEndpointReconciler: hostReconciler,
 				}
-				switch testCase.flavor {
-				case "host":
-					options.HostEndpointReconciler = hostReconciler
 
-					return clabernetesdirectruntime.RunConnectivityWithLifecycleOperations(
-						ctx, input, plan, options, operations, nil,
-					)
-				case "slurpeeth":
-					return clabernetesdirectruntime.RunConnectivityWithRuntimeOperations(
-						ctx,
-						input,
-						plan,
-						options,
-						operations,
-						nil,
-						&fakeSlurpeethRuntime{},
-					)
-				default:
-					return clabernetesdirectruntime.RunConnectivityWithLifecycleOperations(
-						ctx, input, plan, options, operations, nil,
-					)
-				}
+				return clabernetesdirectruntime.RunConnectivityWithLifecycleOperations(
+					ctx, input, plan, options, operations, nil,
+				)
 			}
 
 			switch testCase.flavor {
 			case "local":
 				operations.ensurePairError = errors.New("injected local Link failure")
-			case "vxlan", "slurpeeth":
-				operations.resolvePeerError = errors.New("injected peer resolution failure")
-			case "host":
-				hostReconciler.err = errors.New("injected host endpoint failure")
+			case "fabric", "host":
+				hostReconciler.err = errors.New("injected daemon endpoint failure")
 			}
 			if err := run(); err == nil {
 				t.Fatal("partial failure was accepted")
@@ -710,7 +573,6 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 				t.Fatal("partial failure published connectivity readiness")
 			}
 			operations.ensurePairError = nil
-			operations.resolvePeerError = nil
 			hostReconciler.err = nil
 
 			for restart := 0; restart < 2; restart++ {
@@ -723,7 +585,7 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 			}
 
 			switch testCase.flavor {
-			case "local", "slurpeeth":
+			case "local":
 				if len(operations.interfaces) != 2 || len(operations.deletions) != 0 ||
 					len(operations.pairs) < 2 {
 					t.Fatalf(
@@ -738,44 +600,82 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 					strings.SplitN(latest[1], "/", 4)[3] {
 					t.Fatalf("helper restart changed veth ownership: %#v", latest)
 				}
-			case "vxlan":
-				if len(operations.vxlanInterfaces) != 1 || len(operations.vxlanDeletions) != 0 ||
-					len(operations.vxlanPeerEnsures) != 2 {
-					t.Fatalf(
-						"recovered VXLAN state = interfaces %#v, deletions %#v, peers %#v",
-						operations.vxlanInterfaces,
-						operations.vxlanDeletions,
-						operations.vxlanPeerEnsures,
-					)
-				}
-				if strings.SplitN(operations.vxlanPeerEnsures[0], "/", 3)[2] !=
-					strings.SplitN(operations.vxlanPeerEnsures[1], "/", 3)[2] {
-					t.Fatalf(
-						"helper restart changed VXLAN ownership: %#v",
-						operations.vxlanPeerEnsures,
-					)
-				}
-			case "host":
+			case "fabric", "host":
 				requests := []claberneteshostendpoint.ReconcileRequest{}
 				for len(hostReconciler.requests) != 0 {
 					requests = append(requests, <-hostReconciler.requests)
 				}
 				if len(requests) != 3 || !reflect.DeepEqual(requests[1], requests[2]) {
-					t.Fatalf("helper restart host requests = %#v", requests)
+					t.Fatalf("helper restart daemon requests = %#v", requests)
 				}
 			}
 		})
 	}
 }
 
-func TestVXLANConnectivityUsesAllocatedTunnelAndCurrentPeerAddress(t *testing.T) {
+// TestFabricConnectivityRequestsDaemonRealizationBeforeReadiness proves cross-Pod endpoints are
+// realized through the node-local daemon: the Pod side is a plain veth leg, so the request must
+// carry the Link identity, the plan interface name, and the allocated tunnel id.
+func TestFabricConnectivityRequestsDaemonRealizationBeforeReadiness(t *testing.T) {
+	t.Parallel()
+
+	for _, connectivity := range []string{"vxlan", "slurpeeth"} {
+		connectivity := connectivity
+		t.Run(connectivity, func(t *testing.T) {
+			t.Parallel()
+
+			input, plan := connectivityTestInputAndPlan(t)
+			if connectivity == "vxlan" {
+				setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
+			} else {
+				setSlurpeethLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
+			}
+			reconciler := &fakeHostEndpointReconciler{
+				requests: make(chan claberneteshostendpoint.ReconcileRequest, 1),
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			state := t.TempDir()
+			if err := clabernetesdirectruntime.RunConnectivityWithLifecycleOperations(
+				ctx,
+				input,
+				plan,
+				clabernetesdirectruntime.ConnectivityOptions{
+					StateDirectory:         state,
+					PodNamespace:           "lab",
+					PodName:                "router-pod",
+					PodUID:                 "pod-uid-a",
+					HostEndpointReconciler: reconciler,
+				},
+				&fakeLinkOperations{},
+				nil,
+			); err != nil {
+				t.Fatal(err)
+			}
+			request := <-reconciler.requests
+			if len(request.Fabric) != 1 || len(request.Endpoints) != 0 {
+				t.Fatalf("daemon request = %#v", request)
+			}
+			endpoint := request.Fabric[0]
+			if endpoint.Link.Namespace != "lab" || endpoint.Link.UID == "" ||
+				endpoint.PodInterface == "" || endpoint.TunnelID != 73 || endpoint.MTU != 1450 {
+				t.Fatalf("fabric endpoint = %#v", endpoint)
+			}
+			if err := clabernetesdirectruntime.ConnectivityReady(plan, state); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// TestFabricConnectivityStaysUnreadyUntilDaemonReportsPeer holds readiness back while the
+// daemon reports the transport is still waiting on its peer.
+func TestFabricConnectivityStaysUnreadyUntilDaemonReportsPeer(t *testing.T) {
 	t.Parallel()
 
 	input, plan := connectivityTestInputAndPlan(t)
 	setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	operations := &fakeLinkOperations{vxlanPeerAddresses: map[string]string{
-		"peer-vx": "10.244.2.17",
-	}}
+	reconciler := &fakeHostEndpointReconciler{fabricUnready: true}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	state := t.TempDir()
@@ -784,746 +684,19 @@ func TestVXLANConnectivityUsesAllocatedTunnelAndCurrentPeerAddress(t *testing.T)
 		input,
 		plan,
 		clabernetesdirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodUID:         "pod-uid-a",
+			StateDirectory:         state,
+			PodNamespace:           "lab",
+			PodName:                "router-pod",
+			PodUID:                 "pod-uid-a",
+			HostEndpointReconciler: reconciler,
 		},
-		operations,
+		&fakeLinkOperations{},
 		nil,
 	); err != nil {
 		t.Fatal(err)
 	}
-	if len(operations.vxlanEnsures) != 1 ||
-		!strings.HasPrefix(operations.vxlanEnsures[0], "package-a/73/1450/14789/") ||
-		len(operations.vxlanPeerEnsures) != 1 ||
-		!strings.HasPrefix(
-			operations.vxlanPeerEnsures[0],
-			"package-a/10.244.2.17/c9s:direct:v1:",
-		) {
-		t.Fatalf(
-			"VXLAN operations = ensure %#v, peer %#v",
-			operations.vxlanEnsures,
-			operations.vxlanPeerEnsures,
-		)
-	}
-	if err := clabernetesdirectruntime.ConnectivityReady(plan, state); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestVXLANConnectivityPreparesInterfaceButStaysUnreadyWithoutPeer(t *testing.T) {
-	t.Parallel()
-
-	input, plan := connectivityTestInputAndPlan(t)
-	setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	operations := &fakeLinkOperations{
-		resolvePeerError: clabernetesdirectruntime.ErrPeerTransportUnavailable,
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	state := t.TempDir()
-	err := clabernetesdirectruntime.RunConnectivityWithLifecycleOperations(
-		ctx,
-		input,
-		plan,
-		clabernetesdirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodUID:         "pod-uid-a",
-		},
-		operations,
-		nil,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(operations.vxlanEnsures) != 1 || len(operations.vxlanPeerEnsures) != 0 {
-		t.Fatalf(
-			"unresolved VXLAN operations = ensure %#v, peer %#v",
-			operations.vxlanEnsures,
-			operations.vxlanPeerEnsures,
-		)
-	}
-	if err = clabernetesdirectruntime.ConnectivityReady(plan, state); err == nil {
-		t.Fatal("unresolved VXLAN peer published connectivity readiness")
-	}
-}
-
-func TestVXLANConnectivityReconcilesPodRescheduleRewireAndCleanup(t *testing.T) {
-	t.Parallel()
-
-	input, plan := connectivityTestInputAndPlan(t)
-	setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	operations := &fakeLinkOperations{vxlanPeerAddresses: map[string]string{
-		"peer-vx": "10.244.2.17",
-	}}
-	run := func(currentInput clabernetesdeviceplan.Input, currentPlan clabernetesdeviceplan.Plan) {
-		t.Helper()
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		if err := clabernetesdirectruntime.RunConnectivityWithLifecycleOperations(
-			ctx,
-			currentInput,
-			currentPlan,
-			clabernetesdirectruntime.ConnectivityOptions{
-				StateDirectory: t.TempDir(),
-				PodUID:         "pod-uid-a",
-			},
-			operations,
-			nil,
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
-	run(input, plan)
-	firstOwner := operations.vxlanInterfaces[0].Owner
-	operations.vxlanPeerAddresses["peer-vx"] = "10.244.7.31"
-	run(input, plan)
-	if len(operations.vxlanDeletions) != 0 ||
-		!strings.Contains(operations.vxlanPeerEnsures[1], "/10.244.7.31/") {
-		t.Fatalf(
-			"Pod reschedule operations = deletes %#v, peers %#v",
-			operations.vxlanDeletions,
-			operations.vxlanPeerEnsures,
-		)
-	}
-
-	rewiredInput, rewiredPlan := connectivityTestInputAndPlan(t)
-	setVXLANLink(t, &rewiredInput, &rewiredPlan, "replacement-peer-uid", "replacement-vx", 81, 1400)
-	operations.vxlanPeerAddresses["replacement-vx"] = "10.244.9.44"
-	run(rewiredInput, rewiredPlan)
-	if len(operations.vxlanDeletions) != 1 ||
-		!strings.HasSuffix(operations.vxlanDeletions[0], "/"+firstOwner) ||
-		operations.vxlanInterfaces[0].Owner == firstOwner {
-		t.Fatalf(
-			"VXLAN rewire did not replace exact UID ownership: deletes %#v, state %#v",
-			operations.vxlanDeletions,
-			operations.vxlanInterfaces,
-		)
-	}
-
-	emptyInput, emptyPlan := connectivityTestInputAndPlan(t)
-	run(emptyInput, emptyPlan)
-	if len(operations.vxlanDeletions) != 2 || len(operations.vxlanInterfaces) != 0 {
-		t.Fatalf(
-			"VXLAN cleanup = deletes %#v, state %#v",
-			operations.vxlanDeletions,
-			operations.vxlanInterfaces,
-		)
-	}
-}
-
-func TestVXLANConnectivityTracksHeadlessPeerAddressWithoutPlanChange(t *testing.T) {
-	t.Parallel()
-
-	input, plan := connectivityTestInputAndPlan(t)
-	setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	revision, err := clabernetesdirectruntime.NewConnectivityRevision(input, plan, input, plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, err := revision.CanonicalJSON()
-	if err != nil {
-		t.Fatal(err)
-	}
-	revisionPath := filepath.Join(t.TempDir(), "revision.json")
-	writeConnectivityRevisionFile(t, revisionPath, raw)
-	var currentAddress atomic.Value
-	currentAddress.Store("10.244.2.17")
-	operations := &fakeLinkOperations{
-		resolvePeer: func(string) (string, error) {
-			return currentAddress.Load().(string), nil
-		},
-		vxlanPeerSignal: make(chan string, 8),
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- clabernetesdirectruntime.RunConnectivityWithLifecycleOperations(
-			ctx,
-			input,
-			plan,
-			clabernetesdirectruntime.ConnectivityOptions{
-				StateDirectory:           t.TempDir(),
-				PodUID:                   "pod-uid-a",
-				ConnectivityRevisionPath: revisionPath,
-				RevisionPollInterval:     5 * time.Millisecond,
-			},
-			operations,
-			nil,
-		)
-	}()
-	t.Cleanup(cancel)
-	select {
-	case address := <-operations.vxlanPeerSignal:
-		if address != "10.244.2.17" {
-			t.Fatalf("initial VXLAN peer = %q", address)
-		}
-	case runErr := <-errCh:
-		t.Fatalf("connectivity helper exited before initial peer: %v", runErr)
-	case <-time.After(time.Second):
-		t.Fatal("connectivity helper did not resolve initial peer")
-	}
-	currentAddress.Store("10.244.7.31")
-	deadline := time.NewTimer(time.Second)
-	defer deadline.Stop()
-	for {
-		select {
-		case address := <-operations.vxlanPeerSignal:
-			if address != "10.244.7.31" {
-				continue
-			}
-			cancel()
-			if runErr := <-errCh; runErr != nil {
-				t.Fatal(runErr)
-			}
-
-			return
-		case runErr := <-errCh:
-			t.Fatalf("connectivity helper exited before peer reschedule: %v", runErr)
-		case <-deadline.C:
-			t.Fatal("connectivity helper did not reconcile rescheduled peer")
-		}
-	}
-}
-
-func TestConnectivityHelperAppliesProjectedVXLANRewireWithoutRestart(t *testing.T) {
-	t.Parallel()
-
-	baseInput, basePlan := connectivityTestInputAndPlan(t)
-	setVXLANLink(t, &baseInput, &basePlan, "peer-node-uid", "peer-vx", 73, 1450)
-	desiredInput, desiredPlan := connectivityTestInputAndPlan(t)
-	setVXLANLink(
-		t,
-		&desiredInput,
-		&desiredPlan,
-		"replacement-peer-uid",
-		"replacement-vx",
-		81,
-		1400,
-	)
-	initialRevision, err := clabernetesdirectruntime.NewConnectivityRevision(
-		baseInput,
-		basePlan,
-		baseInput,
-		basePlan,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	desiredRevision, err := clabernetesdirectruntime.NewConnectivityRevision(
-		baseInput,
-		basePlan,
-		desiredInput,
-		desiredPlan,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	initialRaw, err := initialRevision.CanonicalJSON()
-	if err != nil {
-		t.Fatal(err)
-	}
-	desiredRaw, err := desiredRevision.CanonicalJSON()
-	if err != nil {
-		t.Fatal(err)
-	}
-	revisionPath := filepath.Join(t.TempDir(), "revision.json")
-	writeConnectivityRevisionFile(t, revisionPath, initialRaw)
-	state := t.TempDir()
-	operations := &fakeLinkOperations{
-		vxlanPeerAddresses: map[string]string{
-			"peer-vx":        "10.244.2.17",
-			"replacement-vx": "10.244.9.44",
-		},
-		vxlanPeerSignal: make(chan string, 8),
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- clabernetesdirectruntime.RunConnectivityWithLifecycleOperations(
-			ctx,
-			baseInput,
-			basePlan,
-			clabernetesdirectruntime.ConnectivityOptions{
-				StateDirectory:           state,
-				PodUID:                   "pod-uid-a",
-				ConnectivityRevisionPath: revisionPath,
-				RevisionPollInterval:     5 * time.Millisecond,
-			},
-			operations,
-			nil,
-		)
-	}()
-	t.Cleanup(cancel)
-	select {
-	case address := <-operations.vxlanPeerSignal:
-		if address != "10.244.2.17" {
-			t.Fatalf("initial VXLAN peer = %q", address)
-		}
-	case runErr := <-errCh:
-		t.Fatalf("connectivity helper exited before initial VXLAN readiness: %v", runErr)
-	case <-time.After(time.Second):
-		t.Fatal("connectivity helper did not realize initial VXLAN peer")
-	}
-	writeConnectivityRevisionFile(t, revisionPath, desiredRaw)
-	deadline := time.NewTimer(time.Second)
-	defer deadline.Stop()
-	for {
-		select {
-		case address := <-operations.vxlanPeerSignal:
-			if address != "10.244.9.44" {
-				continue
-			}
-			for clabernetesdirectruntime.ConnectivityReadyWithRevision(
-				basePlan,
-				state,
-				revisionPath,
-			) != nil {
-				select {
-				case runErr := <-errCh:
-					t.Fatalf("connectivity helper exited before revision readiness: %v", runErr)
-				case <-deadline.C:
-					t.Fatal("connectivity helper did not publish VXLAN revision readiness")
-				case <-time.After(5 * time.Millisecond):
-				}
-			}
-			cancel()
-			if runErr := <-errCh; runErr != nil {
-				t.Fatal(runErr)
-			}
-			if len(operations.vxlanDeletions) != 1 ||
-				len(operations.vxlanInterfaces) != 1 ||
-				operations.vxlanInterfaces[0].TunnelID != 81 {
-				t.Fatalf(
-					"projected VXLAN rewire = deletes %#v, state %#v",
-					operations.vxlanDeletions,
-					operations.vxlanInterfaces,
-				)
-			}
-
-			return
-		case runErr := <-errCh:
-			t.Fatalf("connectivity helper exited before projected VXLAN rewire: %v", runErr)
-		case <-deadline.C:
-			t.Fatal("connectivity helper did not apply projected VXLAN rewire")
-		}
-	}
-}
-
-func TestSlurpeethConnectivityUsesOwnedVethAndCurrentPeerAddress(t *testing.T) {
-	t.Parallel()
-
-	input, plan := connectivityTestInputAndPlan(t)
-	setSlurpeethLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	operations := &fakeLinkOperations{vxlanPeerAddresses: map[string]string{
-		"peer-vx": "10.244.2.17",
-	}}
-	runtime := &fakeSlurpeethRuntime{
-		reconciles: make(chan []clabernetesdirectruntime.SlurpeethSegment, 1),
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	state := t.TempDir()
-	if err := clabernetesdirectruntime.RunConnectivityWithRuntimeOperations(
-		ctx,
-		input,
-		plan,
-		clabernetesdirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodUID:         "pod-uid-a",
-		},
-		operations,
-		nil,
-		runtime,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if len(operations.pairs) != 1 ||
-		!strings.HasPrefix(operations.pairs[0], "package-a/c9ss") ||
-		!strings.Contains(operations.pairs[0], "/1450/c9s:direct:v1:") ||
-		!strings.Contains(operations.pairs[0], ":slurpeeth:") {
-		t.Fatalf("slurpeeth veth operations = %#v", operations.pairs)
-	}
-	segments := <-runtime.reconciles
-	if len(segments) != 1 || segments[0].ID != 73 ||
-		!strings.HasPrefix(segments[0].Interface, "c9ss") ||
-		segments[0].Destination != "10.244.2.17" ||
-		!strings.Contains(segments[0].Owner, ":slurpeeth:") {
-		t.Fatalf("slurpeeth segments = %#v", segments)
-	}
-	if runtime.closed.Load() != 1 {
-		t.Fatalf("slurpeeth runtime close count = %d", runtime.closed.Load())
-	}
-	if err := clabernetesdirectruntime.ConnectivityReady(plan, state); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestSlurpeethPendingPeerKeepsHelperAliveAndTogglesReadiness(t *testing.T) {
-	t.Parallel()
-
-	input, plan := connectivityTestInputAndPlan(t)
-	setSlurpeethLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	operations := &fakeLinkOperations{vxlanPeerAddresses: map[string]string{
-		"peer-vx": "10.244.2.17",
-	}}
-	var peerReady atomic.Bool
-	runtime := &fakeSlurpeethRuntime{
-		reconciles: make(chan []clabernetesdirectruntime.SlurpeethSegment, 1024),
-		errors:     make(chan error, 1),
-		ready: func() (bool, error) {
-			return peerReady.Load(), nil
-		},
-	}
-	state := t.TempDir()
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- clabernetesdirectruntime.RunConnectivityWithRuntimeOperations(
-			ctx,
-			input,
-			plan,
-			clabernetesdirectruntime.ConnectivityOptions{
-				StateDirectory: state, PodUID: "pod-uid-a", RevisionPollInterval: 5 * time.Millisecond,
-			},
-			operations,
-			nil,
-			runtime,
-		)
-	}()
-	t.Cleanup(cancel)
-	select {
-	case <-runtime.reconciles:
-	case runErr := <-errCh:
-		t.Fatalf("connectivity helper exited while slurpeeth peer was pending: %v", runErr)
-	case <-time.After(time.Second):
-		t.Fatal("connectivity helper did not configure pending slurpeeth peer")
-	}
 	if err := clabernetesdirectruntime.ConnectivityReady(plan, state); err == nil {
-		t.Fatal("pending slurpeeth peer published connectivity readiness")
-	}
-	peerReady.Store(true)
-	deadline := time.Now().Add(time.Second)
-	for clabernetesdirectruntime.ConnectivityReady(plan, state) != nil {
-		select {
-		case runErr := <-errCh:
-			t.Fatalf("connectivity helper exited before slurpeeth peer became ready: %v", runErr)
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("connected slurpeeth peer did not publish connectivity readiness")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	peerReady.Store(false)
-	deadline = time.Now().Add(time.Second)
-	for clabernetesdirectruntime.ConnectivityReady(plan, state) == nil {
-		select {
-		case runErr := <-errCh:
-			t.Fatalf("connectivity helper exited after slurpeeth peer loss: %v", runErr)
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("lost slurpeeth peer retained connectivity readiness")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	cancel()
-	if runErr := <-errCh; runErr != nil {
-		t.Fatal(runErr)
-	}
-}
-
-func TestSlurpeethConnectivityPreparesInterfaceButStaysUnreadyWithoutPeer(t *testing.T) {
-	t.Parallel()
-
-	input, plan := connectivityTestInputAndPlan(t)
-	setSlurpeethLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	operations := &fakeLinkOperations{
-		resolvePeerError: clabernetesdirectruntime.ErrPeerTransportUnavailable,
-	}
-	runtime := &fakeSlurpeethRuntime{
-		reconciles: make(chan []clabernetesdirectruntime.SlurpeethSegment, 1),
-	}
-	state := t.TempDir()
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	err := clabernetesdirectruntime.RunConnectivityWithRuntimeOperations(
-		ctx,
-		input,
-		plan,
-		clabernetesdirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodUID:         "pod-uid-a",
-		},
-		operations,
-		nil,
-		runtime,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(operations.pairs) != 1 {
-		t.Fatalf("unresolved slurpeeth veth operations = %#v", operations.pairs)
-	}
-	select {
-	case segments := <-runtime.reconciles:
-		if len(segments) != 0 {
-			t.Fatalf("unresolved slurpeeth peer started process with %#v", segments)
-		}
-	default:
-	}
-	if err = clabernetesdirectruntime.ConnectivityReady(plan, state); err == nil {
-		t.Fatal("unresolved slurpeeth peer published connectivity readiness")
-	}
-}
-
-func TestSlurpeethConnectivityTracksPeerAddressWithoutPlanChange(t *testing.T) {
-	t.Parallel()
-
-	input, plan := connectivityTestInputAndPlan(t)
-	setSlurpeethLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	revision, err := clabernetesdirectruntime.NewConnectivityRevision(input, plan, input, plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, err := revision.CanonicalJSON()
-	if err != nil {
-		t.Fatal(err)
-	}
-	desiredInput, desiredPlan := connectivityTestInputAndPlan(t)
-	setSlurpeethLink(
-		t,
-		&desiredInput,
-		&desiredPlan,
-		"replacement-peer-uid",
-		"replacement-vx",
-		81,
-		1400,
-	)
-	desiredRevision, err := clabernetesdirectruntime.NewConnectivityRevision(
-		input,
-		plan,
-		desiredInput,
-		desiredPlan,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	desiredRaw, err := desiredRevision.CanonicalJSON()
-	if err != nil {
-		t.Fatal(err)
-	}
-	revisionPath := filepath.Join(t.TempDir(), "revision.json")
-	writeConnectivityRevisionFile(t, revisionPath, raw)
-	var currentAddress atomic.Value
-	currentAddress.Store("10.244.2.17")
-	operations := &fakeLinkOperations{resolvePeer: func(destination string) (string, error) {
-		if destination == "replacement-vx" {
-			return "10.244.9.44", nil
-		}
-
-		return currentAddress.Load().(string), nil
-	}}
-	runtime := &fakeSlurpeethRuntime{
-		reconciles: make(chan []clabernetesdirectruntime.SlurpeethSegment, 8),
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- clabernetesdirectruntime.RunConnectivityWithRuntimeOperations(
-			ctx,
-			input,
-			plan,
-			clabernetesdirectruntime.ConnectivityOptions{
-				StateDirectory:           t.TempDir(),
-				PodUID:                   "pod-uid-a",
-				ConnectivityRevisionPath: revisionPath,
-				RevisionPollInterval:     5 * time.Millisecond,
-			},
-			operations,
-			nil,
-			runtime,
-		)
-	}()
-	t.Cleanup(cancel)
-	select {
-	case segments := <-runtime.reconciles:
-		if len(segments) != 1 || segments[0].Destination != "10.244.2.17" {
-			t.Fatalf("initial slurpeeth segments = %#v", segments)
-		}
-		firstOwner := segments[0].Owner
-		currentAddress.Store("10.244.7.31")
-		deadline := time.NewTimer(time.Second)
-		defer deadline.Stop()
-		for {
-			select {
-			case current := <-runtime.reconciles:
-				if len(current) != 1 || current[0].Destination != "10.244.7.31" {
-					continue
-				}
-
-				writeConnectivityRevisionFile(t, revisionPath, desiredRaw)
-				for {
-					select {
-					case rewired := <-runtime.reconciles:
-						if len(rewired) != 1 || rewired[0].ID != 81 ||
-							rewired[0].Destination != "10.244.9.44" {
-							continue
-						}
-						if rewired[0].Owner == firstOwner || len(operations.deletions) != 1 {
-							t.Fatalf(
-								"projected slurpeeth rewire = segments %#v deletions %#v",
-								rewired,
-								operations.deletions,
-							)
-						}
-						cancel()
-						if runErr := <-errCh; runErr != nil {
-							t.Fatal(runErr)
-						}
-
-						return
-					case runErr := <-errCh:
-						t.Fatalf("connectivity helper exited before projected rewire: %v", runErr)
-					case <-deadline.C:
-						t.Fatal("connectivity helper did not apply projected slurpeeth rewire")
-					}
-				}
-			case runErr := <-errCh:
-				t.Fatalf("connectivity helper exited before peer reschedule: %v", runErr)
-			case <-deadline.C:
-				t.Fatal("connectivity helper did not reconcile rescheduled slurpeeth peer")
-			}
-		}
-	case runErr := <-errCh:
-		t.Fatalf("connectivity helper exited before initial peer: %v", runErr)
-	case <-time.After(time.Second):
-		t.Fatal("connectivity helper did not configure initial slurpeeth peer")
-	}
-}
-
-func TestSlurpeethConnectivityReconcilesUIDRewireAndCleanup(t *testing.T) {
-	t.Parallel()
-
-	operations := &fakeLinkOperations{vxlanPeerAddresses: map[string]string{
-		"peer-vx":        "10.244.2.17",
-		"replacement-vx": "10.244.9.44",
-	}}
-	runtime := &fakeSlurpeethRuntime{
-		reconciles: make(chan []clabernetesdirectruntime.SlurpeethSegment, 3),
-	}
-	run := func(input clabernetesdeviceplan.Input, plan clabernetesdeviceplan.Plan) {
-		t.Helper()
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		if err := clabernetesdirectruntime.RunConnectivityWithRuntimeOperations(
-			ctx,
-			input,
-			plan,
-			clabernetesdirectruntime.ConnectivityOptions{
-				StateDirectory: t.TempDir(), PodUID: "pod-uid-a",
-			},
-			operations,
-			nil,
-			runtime,
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
-	input, plan := connectivityTestInputAndPlan(t)
-	setSlurpeethLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	run(input, plan)
-	first := <-runtime.reconciles
-	firstOwner := first[0].Owner
-
-	rewiredInput, rewiredPlan := connectivityTestInputAndPlan(t)
-	setSlurpeethLink(
-		t,
-		&rewiredInput,
-		&rewiredPlan,
-		"replacement-peer-uid",
-		"replacement-vx",
-		81,
-		1400,
-	)
-	run(rewiredInput, rewiredPlan)
-	stopped := <-runtime.reconciles
-	rewired := <-runtime.reconciles
-	if len(operations.deletions) != 1 ||
-		!strings.HasSuffix(operations.deletions[0], "/"+firstOwner) ||
-		len(stopped) != 0 ||
-		len(rewired) != 1 || rewired[0].Owner == firstOwner || rewired[0].ID != 81 {
-		t.Fatalf(
-			"slurpeeth rewire = deletes %#v stop %#v segments %#v",
-			operations.deletions,
-			stopped,
-			rewired,
-		)
-	}
-
-	emptyInput, emptyPlan := connectivityTestInputAndPlan(t)
-	run(emptyInput, emptyPlan)
-	cleaned := <-runtime.reconciles
-	if len(operations.deletions) != 2 || len(operations.interfaces) != 0 || len(cleaned) != 0 {
-		t.Fatalf(
-			"slurpeeth cleanup = deletes %#v interfaces %#v segments %#v",
-			operations.deletions,
-			operations.interfaces,
-			cleaned,
-		)
-	}
-}
-
-func TestSlurpeethProcessFailureClearsConnectivityReadiness(t *testing.T) {
-	t.Parallel()
-
-	input, plan := connectivityTestInputAndPlan(t)
-	setSlurpeethLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-	operations := &fakeLinkOperations{vxlanPeerAddresses: map[string]string{
-		"peer-vx": "10.244.2.17",
-	}}
-	runtime := &fakeSlurpeethRuntime{
-		reconciles: make(chan []clabernetesdirectruntime.SlurpeethSegment, 1),
-		errors:     make(chan error, 1),
-	}
-	state := t.TempDir()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- clabernetesdirectruntime.RunConnectivityWithRuntimeOperations(
-			ctx,
-			input,
-			plan,
-			clabernetesdirectruntime.ConnectivityOptions{
-				StateDirectory: state, PodUID: "pod-uid-a",
-			},
-			operations,
-			nil,
-			runtime,
-		)
-	}()
-	select {
-	case <-runtime.reconciles:
-	case runErr := <-errCh:
-		t.Fatalf("connectivity helper exited before slurpeeth readiness: %v", runErr)
-	case <-time.After(time.Second):
-		t.Fatal("connectivity helper did not reconcile slurpeeth")
-	}
-	deadline := time.Now().Add(time.Second)
-	for clabernetesdirectruntime.ConnectivityReady(plan, state) != nil {
-		if time.Now().After(deadline) {
-			t.Fatal("connectivity helper did not publish readiness")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	processErr := errors.New("slurpeeth child exited")
-	runtime.errors <- processErr
-	if runErr := <-errCh; !errors.Is(runErr, processErr) {
-		t.Fatalf("connectivity helper error = %v", runErr)
-	}
-	if err := clabernetesdirectruntime.ConnectivityReady(plan, state); err == nil {
-		t.Fatal("failed slurpeeth process retained connectivity readiness")
+		t.Fatal("pending fabric transport published connectivity readiness")
 	}
 }
 

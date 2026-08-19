@@ -33,6 +33,7 @@ type State interface {
 		pod ObjectIdentity,
 	) ([]Endpoint, error)
 	DesiredForNode(ctx context.Context, nodeName string) ([]Endpoint, error)
+	DesiredFabricForNode(ctx context.Context, nodeName string) ([]FabricEndpoint, error)
 	MarkPending(ctx context.Context, nodeName string, pod ObjectIdentity, endpoint Endpoint) error
 	FinalizingLinks(ctx context.Context, nodeName string) ([]FinalizingLink, error)
 	RemoveFinalizer(
@@ -341,6 +342,160 @@ func (s KubernetesState) RemoveFinalizer(
 
 		return s.Client.Update(ctx, link)
 	})
+}
+
+// DesiredFabricForNode reconstructs the cross-Pod fabric endpoints whose Pod runs on this
+// worker, including each endpoint's authoritative peer placement.
+//
+//nolint:funlen,gocognit,gocyclo // Each branch rejects one stale or ambiguous identity.
+func (s KubernetesState) DesiredFabricForNode(
+	ctx context.Context,
+	nodeName string,
+) ([]FabricEndpoint, error) {
+	if s.Client == nil || nodeName == "" {
+		return nil, fmt.Errorf("host-endpoint Kubernetes state is unavailable")
+	}
+	links := &clabernetesapisv1alpha1.LinkList{}
+	if err := s.Client.List(ctx, links); err != nil {
+		return nil, fmt.Errorf("listing fabric Links: %w", err)
+	}
+	nodes := &clabernetesapisv1alpha1.NodeList{}
+	if err := s.Client.List(ctx, nodes); err != nil {
+		return nil, fmt.Errorf("listing fabric Nodes: %w", err)
+	}
+	pods := &k8scorev1.PodList{}
+	if err := s.Client.List(
+		ctx,
+		pods,
+		ctrlruntimeclient.HasLabels{clabernetesconstants.LabelDirectWorkload},
+	); err != nil {
+		return nil, fmt.Errorf("listing direct workload Pods: %w", err)
+	}
+	nodesByKey := make(map[string]*clabernetesapisv1alpha1.Node, len(nodes.Items))
+	for index := range nodes.Items {
+		node := &nodes.Items[index]
+		nodesByKey[namespacedKey(node.GetNamespace(), node.GetName())] = node
+	}
+	podsByWorkload := map[string][]*k8scorev1.Pod{}
+	for index := range pods.Items {
+		pod := &pods.Items[index]
+		workload := pod.GetLabels()[clabernetesconstants.LabelDirectWorkload]
+		if workload == "" || !pod.GetDeletionTimestamp().IsZero() || pod.GetUID() == "" {
+			continue
+		}
+		key := namespacedKey(pod.GetNamespace(), workload)
+		podsByWorkload[key] = append(podsByWorkload[key], pod)
+	}
+	singlePod := func(namespace, workload string) *k8scorev1.Pod {
+		candidates := podsByWorkload[namespacedKey(namespace, workload)]
+		if len(candidates) != 1 {
+			return nil
+		}
+
+		return candidates[0]
+	}
+	result := []FabricEndpoint{}
+	for index := range links.Items {
+		link := &links.Items[index]
+		if !link.GetDeletionTimestamp().IsZero() || link.Status.Error != "" ||
+			link.Status.ResolvedEndpoints == nil || isHostLinkSpec(link) ||
+			link.Status.TunnelID < 1 || link.Status.TunnelID > maximumTunnelID {
+			continue
+		}
+		sides := [2]struct {
+			spec     clabernetesapisv1alpha1.LinkEndpointSpec
+			resolved clabernetesapisv1alpha1.LinkResolvedEndpointStatus
+		}{
+			{spec: link.Spec.EndpointA, resolved: link.Status.ResolvedEndpoints.EndpointA},
+			{spec: link.Spec.EndpointB, resolved: link.Status.ResolvedEndpoints.EndpointB},
+		}
+		type sidePlacement struct {
+			node     *clabernetesapisv1alpha1.Node
+			workload string
+			pod      *k8scorev1.Pod
+			valid    bool
+		}
+		placements := [2]sidePlacement{}
+		for sideIndex, side := range sides {
+			node := nodesByKey[namespacedKey(link.GetNamespace(), side.spec.NodeName)]
+			if node == nil || node.GetUID() == "" ||
+				string(node.GetUID()) != string(side.resolved.UID) ||
+				side.resolved.NodeName != side.spec.NodeName {
+				continue
+			}
+			workload, resolveErr := directWorkloadName(node, nodesByKey)
+			if resolveErr != nil {
+				return nil, fmt.Errorf(
+					"resolving fabric Link %q workload: %w",
+					link.GetName(),
+					resolveErr,
+				)
+			}
+			placements[sideIndex] = sidePlacement{
+				node:     node,
+				workload: workload,
+				pod:      singlePod(link.GetNamespace(), workload),
+				valid:    true,
+			}
+		}
+		if !placements[0].valid || !placements[1].valid ||
+			placements[0].workload == placements[1].workload {
+			// Unresolved sides wait; a shared workload Pod is a same-Pod Link the connectivity
+			// helper realizes locally without host-namespace state.
+			continue
+		}
+		for sideIndex := range placements {
+			local := placements[sideIndex]
+			remote := placements[1-sideIndex]
+			if local.pod == nil || local.pod.Spec.NodeName != nodeName {
+				continue
+			}
+			peer := fabricPeer{}
+			if remote.pod != nil {
+				peer.present = true
+				if remote.pod.Spec.NodeName == nodeName {
+					peer.sameNode = true
+					peer.ownership = Ownership{
+						LinkUID: string(link.GetUID()),
+						NodeUID: string(remote.node.GetUID()),
+						PodUID:  string(remote.pod.GetUID()),
+					}
+				} else {
+					peer.nodeAddress = remote.pod.Status.HostIP
+				}
+			}
+			result = append(result, FabricEndpoint{
+				Link: ObjectIdentity{
+					Namespace: link.GetNamespace(),
+					Name:      link.GetName(),
+					UID:       string(link.GetUID()),
+				},
+				Node: ObjectIdentity{
+					Namespace: local.node.GetNamespace(),
+					Name:      local.node.GetName(),
+					UID:       string(local.node.GetUID()),
+				},
+				PodInterface: sides[sideIndex].spec.InterfaceName,
+				TunnelID:     link.Status.TunnelID,
+				MTU:          link.Spec.MTU,
+				pod: ObjectIdentity{
+					Namespace: local.pod.GetNamespace(),
+					Name:      local.pod.GetName(),
+					UID:       string(local.pod.GetUID()),
+				},
+				peer: peer,
+			})
+		}
+	}
+	slices.SortFunc(result, func(left, right FabricEndpoint) int {
+		if compared := strings.Compare(left.Link.UID, right.Link.UID); compared != 0 {
+			return compared
+		}
+
+		return strings.Compare(left.Node.UID, right.Node.UID)
+	})
+
+	return result, nil
 }
 
 func hostLinkSides(

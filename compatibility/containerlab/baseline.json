@@ -409,7 +409,7 @@
       "inputs": ["Link.spec.endpointA", "Link.spec.endpointB", "Link.spec.mtu", "Link.spec.connectivity", "Link.status.tunnelID", "Pod peer"],
       "requiredCapabilities": ["connectivity"],
       "scenarios": ["link-slurpeeth"],
-      "sourcePaths": ["controllers/link/allocate.go", "internal/directruntime/connectivity.go", "internal/directruntime/slurpeeth_linux.go", "internal/directruntime/slurpeeth_transport_linux.go", "launcher/connectivity/slurpeeth.go"],
+      "sourcePaths": ["controllers/link/allocate.go", "internal/directruntime/connectivity.go", "internal/hostendpoint/operations_linux.go", "launcher/connectivity/slurpeeth.go"],
       "state": "partial"
     },
     {

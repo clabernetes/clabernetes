@@ -6,12 +6,17 @@ Define direct, restart-safe connectivity for all supported Link flavors across g
 
 ### Requirement: Every Link flavor has one direct realization
 
-The runtime SHALL directly realize VXLAN, slurpeeth, same-Pod, loopback, and host Links with the requested endpoint names and MTU. No Link flavor MAY use a nested network-device container or silently select another flavor.
+The runtime SHALL directly realize same-Pod, loopback, host, and cross-Pod Links with the requested endpoint names and MTU. Cross-Pod transports terminate in the worker host network namespace, owned by the node-local daemon: the device receives a plain veth leg, so a kind that takes ownership of the Pod's primary interface cannot disturb the transport. The `vxlan` and `slurpeeth` connectivity values remain accepted input and both select this controller-owned realization (a local host-namespace patch when both endpoints share a worker, a node-addressed VTEP otherwise). No Link flavor MAY use a nested network-device container.
 
 #### Scenario: Realize each supported flavor
 
 - **WHEN** a valid Link selects VXLAN, slurpeeth, same-Pod, loopback, or host connectivity
 - **THEN** the declared interfaces and dataplane are realized in the endpoint namespaces with the requested MTU
+
+#### Scenario: Device owns the Pod primary interface
+
+- **WHEN** a device kind renames or re-addresses the Pod's primary interface at boot
+- **THEN** cross-Pod Link transports keep working because they terminate outside the Pod network namespace
 
 #### Scenario: Flavor cannot be realized
 

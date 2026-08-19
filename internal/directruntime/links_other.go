@@ -29,32 +29,6 @@ func (unsupportedLinkOperations) DeleteVethPair(_, _ string) error {
 	return fmt.Errorf("direct veth connectivity requires Linux")
 }
 
-func (unsupportedLinkOperations) ListVXLANInterfaces(string) ([]VXLANInterface, error) {
-	return nil, fmt.Errorf("direct VXLAN connectivity requires Linux")
-}
-
-func (unsupportedLinkOperations) EnsureVXLANInterface(
-	string,
-	int,
-	int,
-	int,
-	string,
-) error {
-	return fmt.Errorf("direct VXLAN connectivity requires Linux")
-}
-
-func (unsupportedLinkOperations) ResolvePeerAddress(context.Context, string) (string, error) {
-	return "", fmt.Errorf("direct VXLAN connectivity requires Linux")
-}
-
-func (unsupportedLinkOperations) EnsureVXLANPeer(_, _, _ string) error {
-	return fmt.Errorf("direct VXLAN connectivity requires Linux")
-}
-
-func (unsupportedLinkOperations) DeleteVXLANInterface(_, _ string) error {
-	return fmt.Errorf("direct VXLAN connectivity requires Linux")
-}
-
 func (unsupportedLinkOperations) ResolvePodTransportInterface(_ string) (string, error) {
 	return "", fmt.Errorf("direct management interface discovery requires Linux")
 }

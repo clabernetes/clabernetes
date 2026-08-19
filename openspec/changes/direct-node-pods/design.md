@@ -138,6 +138,38 @@ Alternatives considered:
 - A cluster-wide chained CNI affects every worker's primary networking and is unnecessary unless the complete matrix proves Pod-sandbox preparation insufficient.
 - A node agent for all links increases host privilege and makes ordinary Pod cleanup less automatic.
 
+### 5a. Revision: fabric transports terminate in the worker host namespace
+
+Direct SR Linux dataplane evidence invalidated the in-Pod transport assumption of decision 5:
+kinds that take ownership of the Pod's primary interface (SR Linux renames it and strips its
+address) leave the Pod network namespace without underlay routes, so a VTEP or TCP transport
+terminated inside that namespace cannot reach its peer even though the device itself keeps
+working. This is a generic property of interface-owning kinds, not a vendor defect, so the
+transport moved out of the device-owned namespace entirely.
+
+Every cross-Pod Link endpoint is now realized by the node-local host-endpoint daemon as a plain
+veth leg into the Pod - exactly the mechanism host Links already use - plus a host-namespace
+transport the daemon owns and selects:
+
+- both endpoints on one worker: a tc mirred patch between the two host-side legs, no
+  encapsulation at all;
+- endpoints on different workers: a VTEP per endpoint (VNI = the Link's allocated tunnel id,
+  underlay = worker node addresses) patched to the host-side leg.
+
+The device always sees a plain veth, which every kind tolerates; Pod-IP churn never touches the
+device-visible interface; the daemon re-derives desired state from Links, Nodes, and Pods,
+labels every object with immutable UID ownership, sweeps orphans, and reports per-Link
+transport readiness back to the connectivity helper, which holds cold-start readiness until
+every fabric transport converges. Peer moves (rescheduling) converge through the daemon's
+periodic sweep without waiting for the owning helper's next request.
+
+`Link.spec.connectivity` values `vxlan` and `slurpeeth` are retained as accepted input and both
+map onto this controller-selected realization; the slurpeeth userspace TCP transport and the
+in-Pod VXLAN termination are removed from the direct runtime. This is an intentional
+compatibility change: the wire semantics (L2 point-to-point, MTU intent, live rewire, cleanup,
+rescheduling) are preserved, while the transport flavor becomes a c9s implementation detail the
+way the goal's portable-semantics rule prescribes.
+
 ### 6. Render portable policy directly and reject Docker-only semantics
 
 The planner/renderer maps OCI and Node intent to Kubernetes fields with explicit rules:

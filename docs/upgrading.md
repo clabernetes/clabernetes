@@ -27,6 +27,14 @@ clabernetes upgrade-preflight
 The tool never rewrites objects: several removed launcher fields have no automatic replacement,
 and silently retargeting launcher policy onto device containers would change behavior.
 
+In direct mode, `Link.spec.connectivity: vxlan | slurpeeth` no longer selects a transport
+implementation. Both values remain accepted, and the controller realizes every cross-Pod wire
+through the node-local daemon: the device sees a plain veth interface, same-worker endpoints are
+patched in the worker's host network namespace without encapsulation, and cross-worker endpoints
+use a node-addressed VXLAN tunnel keyed by the Link's allocated tunnel id. Wire semantics (L2
+point-to-point, MTU intent, live rewires, cleanup, rescheduling) are unchanged; the slurpeeth
+userspace TCP transport is retired.
+
 ## Node spec is a curated containerlab subset
 
 **Breaking change:** The Node spec no longer mirrors the whole containerlab node definition. It now

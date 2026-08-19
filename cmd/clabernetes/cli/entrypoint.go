@@ -66,10 +66,9 @@ const (
 	deviceRuntimePodUID               = "podUID"
 	deviceRuntimePodAddress           = "podAddress"
 	deviceRuntimeConnectivityRevision = "connectivityRevision"
-	deviceRuntimeSlurpeethConfig      = "config"
-	deviceRuntimeSlurpeethReady       = "ready"
 	deviceRuntimeHostEndpointSocket   = "socket"
 	deviceRuntimeWorkerNodeName       = "nodeName"
+	deviceRuntimeWorkerNodeAddress    = "nodeAddress"
 	deviceRuntimeRequest              = "request"
 	deviceRuntimeSignal               = "signal"
 	deviceRuntimeNodeID               = "nodeID"
@@ -301,6 +300,7 @@ func deviceRuntimeCommand() *cli.Command {
 				Hidden: true,
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: deviceRuntimeWorkerNodeName, Required: true},
+					&cli.StringFlag{Name: deviceRuntimeWorkerNodeAddress, Required: true},
 					&cli.StringFlag{
 						Name:  deviceRuntimeHostEndpointSocket,
 						Value: claberneteshostendpoint.DefaultSocketPath,
@@ -315,22 +315,8 @@ func deviceRuntimeCommand() *cli.Command {
 					return claberneteshostendpoint.Run(
 						ctx,
 						c.String(deviceRuntimeWorkerNodeName),
+						c.String(deviceRuntimeWorkerNodeAddress),
 						c.String(deviceRuntimeHostEndpointSocket),
-					)
-				},
-			},
-			{
-				Name:   "slurpeeth-daemon",
-				Usage:  "run the supervised direct slurpeeth transport",
-				Hidden: true,
-				Flags: []cli.Flag{
-					&cli.StringFlag{Name: deviceRuntimeSlurpeethConfig, Required: true},
-					&cli.StringFlag{Name: deviceRuntimeSlurpeethReady, Required: true},
-				},
-				Action: func(c *cli.Context) error {
-					return clabernetesdirectruntime.RunSlurpeethDaemon(
-						c.String(deviceRuntimeSlurpeethConfig),
-						c.String(deviceRuntimeSlurpeethReady),
 					)
 				},
 			},
