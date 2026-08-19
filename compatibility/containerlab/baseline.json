@@ -1,0 +1,521 @@
+{
+  "schemaVersion": "v1alpha1",
+  "planSchemaVersion": "v1alpha1",
+  "containerlab": {
+    "module": "github.com/srl-labs/containerlab",
+    "version": "0.78.0",
+    "moduleVersion": "v0.78.0",
+    "moduleSum": "h1:e7BDYYyDNgqOm/ODtbpkIXpiedw5NfDpbWBpzLE1glY=",
+    "commit": "601b0a2368a5412ef5534f68593ab2810014ea66",
+    "registrySource": "core/register.go",
+    "registrySourceSHA256": "sha256:dc4bc118b9bf38d6d7c10d70368f336559aa267136994a1094e320a4d83bf701"
+  },
+  "versionReferences": [
+	{"path": "go.mod", "pattern": "github.com/srl-labs/containerlab v{{version}}"},
+    {"path": "apis/v1alpha1/containerlabvocabulary_test.go", "pattern": "const pinnedContainerlabVersion = \"{{version}}\""},
+    {"path": "build/launcher.Dockerfile", "pattern": "ARG CONTAINERLAB_VERSION=\"{{version}}+\""},
+    {"path": "docs/upgrading.md", "pattern": "containerlab {{version}}"},
+    {"path": "openspec/changes/direct-node-pods/design.md", "pattern": "currently installs containerlab {{version}}"}
+  ],
+  "capabilities": [
+    {
+      "id": "kind-plan",
+      "description": "A deterministic direct-runtime plan covers the kind's default realization; detailed behavior capabilities remain to be inventoried."
+    },
+    {
+      "id": "process",
+      "description": "Images, entrypoints, commands, users, environment, ports, and stop behavior are planned and realized."
+    },
+    {
+      "id": "configuration",
+      "description": "Startup configuration, variables, licenses, certificates, and vendor file transformations are preserved."
+    },
+    {
+      "id": "filesystem",
+      "description": "Payloads, binds, tmpfs, shared memory, and persistence have defined direct-Pod semantics."
+    },
+    {
+      "id": "security",
+      "description": "Devices, capabilities, privilege, security profiles, and sysctls are enforced or rejected."
+    },
+    {
+      "id": "resource-policy",
+      "description": "Application and component resources and scheduling policy are represented in Kubernetes."
+    },
+    {
+      "id": "management",
+      "description": "Management addressing, routes, DNS, and exposure are directly realized."
+    },
+    {
+      "id": "components",
+      "description": "Grouped Nodes and chassis expand into visible application containers with validated namespace ownership."
+    },
+    {
+      "id": "readiness",
+      "description": "Preparation, containers, components, connectivity, image health, and probes contribute to readiness."
+    },
+    {
+      "id": "connectivity",
+      "description": "Every Link flavor has ordered, live, restart-safe, and cleanup-safe direct realization."
+    },
+    {
+      "id": "image-pull",
+      "description": "The kubelet pulls device images with native policy and Secrets while c9s resolves metadata."
+    },
+    {
+      "id": "lifecycle",
+      "description": "Post-start, restart or recreate policy, save, and lifecycle actions target direct containers."
+    },
+    {
+      "id": "operations",
+      "description": "Logs, exec, events, save, and packet capture operate on direct containers and interfaces."
+    },
+    {
+      "id": "entry-path",
+      "description": "Direct resources, Topology, and clabverter produce equivalent labs."
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "plan-default",
+      "description": "Generate and verify the default direct-runtime plan for the canonical kind and every alias."
+    },
+    {
+      "id": "node-image-process",
+      "description": "Preserve kind, type, image, entrypoint, command, user, environment, and image defaults."
+    },
+    {
+      "id": "node-startup-configuration",
+      "description": "Generate, enforce, suppress, mount, and validate startup configuration, variables, licenses, and certificates."
+    },
+    {
+      "id": "node-post-start-exec",
+      "description": "Run declared post-start commands against the direct device container and report failures."
+    },
+    {
+      "id": "node-payloads-binds",
+      "description": "Stage ConfigMap, Secret, URL, environment-file, bind, and vendor payloads with exact destination and mode semantics."
+    },
+    {
+      "id": "node-security",
+      "description": "Enforce or reject devices, capabilities, privilege, security options, and sysctls."
+    },
+    {
+      "id": "node-memory-filesystems",
+      "description": "Realize tmpfs and shared-memory sizing and cleanup."
+    },
+    {
+      "id": "node-exposure",
+      "description": "Allocate destination ports and route Services to the direct application container."
+    },
+    {
+      "id": "node-management",
+      "description": "Realize static IPv4 and IPv6 intent, DNS, routes, and certificates while preserving Kubernetes transport."
+    },
+    {
+      "id": "node-grouping",
+      "description": "Realize network-mode container groups as application containers in one Pod."
+    },
+    {
+      "id": "node-imported-extras",
+      "description": "Plan and apply generic extra operations emitted by imported containerlab hooks."
+    },
+    {
+      "id": "node-components",
+      "description": "Expand and observe component or distributed-chassis containers without a nested runtime."
+    },
+    {
+      "id": "node-profile-policy",
+      "description": "Apply reusable scheduling, resources, image pull, exposure, persistence, and probe policy."
+    },
+    {
+      "id": "global-config-policy",
+      "description": "Apply global metadata, DNS suffix, image pull, deployment defaults, and naming without nested-runtime settings."
+    },
+    {
+      "id": "runtime-selection",
+      "description": "Select nested or direct migration mode explicitly and fail closed without automatic fallback."
+    },
+    {
+      "id": "node-persistence",
+      "description": "Preserve declared device state across direct Pod recreation."
+    },
+    {
+      "id": "node-image-pull",
+      "description": "Pull public and private images through Kubernetes and reject unsupported registry policy."
+    },
+    {
+      "id": "node-bootstrap",
+      "description": "Prepare and start devices without dockerd, containerlab, image import, or nested discovery."
+    },
+    {
+      "id": "launcher-host-preparation",
+      "description": "Replace launcher cgroup, proc, sysfs, module, and remount preparation with direct portable behavior."
+    },
+    {
+      "id": "node-readiness",
+      "description": "Report logical readiness from direct container, component, connectivity, and probe observations."
+    },
+    {
+      "id": "link-same-pod",
+      "description": "Create and remove same-Pod endpoint interfaces with exact name and MTU."
+    },
+    {
+      "id": "link-vxlan",
+      "description": "Carry traffic and recover direct VXLAN Links across workers."
+    },
+    {
+      "id": "link-slurpeeth",
+      "description": "Carry traffic and recover direct slurpeeth Links across workers."
+    },
+    {
+      "id": "link-host",
+      "description": "Create, reconcile, and clean up UID-owned host Links."
+    },
+    {
+      "id": "link-loopback",
+      "description": "Create, reconcile, and clean up loopback Links."
+    },
+    {
+      "id": "link-live-reconcile",
+      "description": "Apply add, rewire, delete, restart, recreate, reschedule, and recovery behavior idempotently."
+    },
+    {
+      "id": "operation-logs",
+      "description": "Read the actual device container logs through Kubernetes."
+    },
+    {
+      "id": "operation-exec",
+      "description": "Execute commands in the selected direct device or component container."
+    },
+    {
+      "id": "operation-save",
+      "description": "Save device configuration through the planned direct lifecycle action."
+    },
+    {
+      "id": "operation-events",
+      "description": "Report direct device and connectivity lifecycle events."
+    },
+    {
+      "id": "operation-packet-capture",
+      "description": "Capture packets on a resolved direct device interface."
+    },
+    {
+      "id": "entry-direct-resources",
+      "description": "Direct Node, Link, and LauncherProfile resources produce a running direct lab."
+    },
+    {
+      "id": "entry-topology",
+      "description": "Topology compilation preserves representable semantics and produces a running direct lab."
+    },
+    {
+      "id": "entry-clabverter",
+      "description": "Clabverter produces equivalent direct resources or rejects semantic loss."
+    }
+  ],
+  "behaviors": [
+    {
+      "id": "node-image-process",
+      "category": "node-intent",
+      "inputs": ["Node.spec.kind", "Node.spec.type", "Node.spec.image", "Node.spec.entrypoint", "Node.spec.cmd", "Node.spec.user", "Node.spec.env", "Node.spec.env-files"],
+      "requiredCapabilities": ["kind-plan", "process"],
+      "scenarios": ["node-image-process"],
+      "sourcePaths": ["apis/v1alpha1/containerlab.go", "launcher/materialize.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-startup-configuration",
+      "category": "node-intent",
+      "inputs": ["Node.spec.startup-config", "Node.spec.enforce-startup-config", "Node.spec.suppress-startup-config", "Node.spec.config", "Node.spec.license", "Node.spec.certificate"],
+      "requiredCapabilities": ["configuration"],
+      "scenarios": ["node-startup-configuration"],
+      "sourcePaths": ["apis/v1alpha1/containerlab.go", "launcher/files.go", "launcher/materialize.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-post-start-exec",
+      "category": "node-intent",
+      "inputs": ["Node.spec.exec"],
+      "requiredCapabilities": ["lifecycle"],
+      "scenarios": ["node-post-start-exec"],
+      "sourcePaths": ["apis/v1alpha1/containerlab.go", "launcher/materialize.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-payloads-binds",
+      "category": "node-intent",
+      "inputs": ["Node.spec.binds", "Node.spec.env-files", "Node.spec.filesFromConfigMap", "Node.spec.filesFromSecret", "Node.spec.filesFromURL"],
+      "requiredCapabilities": ["configuration", "filesystem"],
+      "scenarios": ["node-payloads-binds"],
+      "sourcePaths": ["apis/v1alpha1/node.go", "controllers/node/deployment.go", "launcher/files.go"],
+      "state": "partial"
+    },
+    {
+      "id": "node-security",
+      "category": "node-intent",
+      "inputs": ["Node.spec.devices", "Node.spec.cap-add", "Node.spec.privileged", "Node.spec.security-opts", "Node.spec.sysctls"],
+      "requiredCapabilities": ["security"],
+      "scenarios": ["node-security"],
+      "sourcePaths": ["apis/v1alpha1/containerlab.go", "controllers/node/deployment.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-memory-filesystems",
+      "category": "node-intent",
+      "inputs": ["Node.spec.tmpfs", "Node.spec.shm-size"],
+      "requiredCapabilities": ["filesystem"],
+      "scenarios": ["node-memory-filesystems"],
+      "sourcePaths": ["apis/v1alpha1/containerlab.go", "launcher/materialize.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-exposure",
+      "category": "kubernetes-policy",
+      "inputs": ["Node.spec.ports", "LauncherProfile.spec.expose", "Node.status.exposedPorts"],
+      "requiredCapabilities": ["management", "process"],
+      "scenarios": ["node-exposure"],
+      "sourcePaths": ["controllers/node/expose.go", "controllers/node/service.go", "launcher/proxy.go"],
+      "state": "partial"
+    },
+    {
+      "id": "node-management",
+      "category": "node-intent",
+      "inputs": ["Node.spec.mgmt-ipv4", "Node.spec.mgmt-ipv6", "Node.spec.dns", "Node.spec.certificate", "LauncherProfile.spec.mgmt"],
+      "requiredCapabilities": ["management"],
+      "scenarios": ["node-management"],
+      "sourcePaths": ["apis/v1alpha1/containerlab.go", "launcher/materialize.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-grouping",
+      "category": "node-intent",
+      "inputs": ["Node.spec.network-mode"],
+      "requiredCapabilities": ["components"],
+      "scenarios": ["node-grouping"],
+      "sourcePaths": ["util/containerlab/grouping.go", "controllers/node/reconcile.go", "launcher/materialize.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-imported-extras",
+      "category": "node-intent",
+      "inputs": ["Node.spec.extras"],
+      "requiredCapabilities": ["configuration", "kind-plan"],
+      "scenarios": ["node-imported-extras"],
+      "sourcePaths": ["apis/v1alpha1/containerlab.go", "launcher/materialize.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-components",
+      "category": "node-intent",
+      "inputs": ["Node.spec.components"],
+      "requiredCapabilities": ["components", "kind-plan", "readiness"],
+      "scenarios": ["node-components"],
+      "sourcePaths": ["apis/v1alpha1/containerlab.go", "launcher/docker.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-profile-policy",
+      "category": "kubernetes-policy",
+      "inputs": ["Node.spec.launcherProfileRef", "LauncherProfile.spec.resources", "LauncherProfile.spec.scheduling", "LauncherProfile.spec.expose", "LauncherProfile.spec.statusProbes"],
+      "requiredCapabilities": ["resource-policy", "readiness"],
+      "scenarios": ["node-profile-policy"],
+      "sourcePaths": ["apis/v1alpha1/launcherprofile.go", "controllers/node/profile.go", "controllers/node/deployment.go"],
+      "state": "partial"
+    },
+    {
+      "id": "global-config-policy",
+      "category": "kubernetes-policy",
+      "inputs": ["Config.spec.metadata", "Config.spec.inClusterDNSSuffix", "Config.spec.imagePull", "Config.spec.deployment", "Config.spec.naming"],
+      "requiredCapabilities": ["image-pull", "management", "resource-policy"],
+      "scenarios": ["global-config-policy"],
+      "sourcePaths": ["apis/v1alpha1/config.go", "apis/v1alpha1/configspec.go", "config", "controllers/node/profile.go"],
+      "state": "partial"
+    },
+    {
+      "id": "node-persistence",
+      "category": "kubernetes-policy",
+      "inputs": ["LauncherProfile.spec.deployment"],
+      "requiredCapabilities": ["filesystem"],
+      "scenarios": ["node-persistence"],
+      "sourcePaths": ["controllers/node/persistentvolumeclaim.go", "controllers/node/deployment.go"],
+      "state": "partial"
+    },
+    {
+      "id": "node-image-pull",
+      "category": "runtime",
+      "inputs": ["Node.spec.image", "LauncherProfile.spec.imagePull", "Config.spec.imagePull"],
+      "requiredCapabilities": ["image-pull"],
+      "scenarios": ["node-image-pull"],
+      "sourcePaths": ["apis/v1alpha1/configspec.go", "apis/v1alpha1/launcherprofile.go", "controllers/node/direct.go", "controllers/node/imagemetadata.go", "internal/directpod", "internal/ocimetadata"],
+      "state": "partial"
+    },
+    {
+      "id": "runtime-selection",
+      "category": "runtime",
+      "inputs": ["manager.deviceRuntimeMode", "DEVICE_RUNTIME_MODE"],
+      "requiredCapabilities": ["lifecycle"],
+      "scenarios": ["runtime-selection"],
+      "sourcePaths": ["charts/clabernetes/templates/_manager_container_common_env.tpl", "charts/clabernetes/values.schema.json", "charts/clabernetes/values.yaml", "controllers/node/reconcile.go", "internal/deviceruntime"],
+      "state": "partial"
+    },
+    {
+      "id": "node-bootstrap",
+      "category": "runtime",
+      "inputs": ["resolved Node group", "accepted Links", "launcher environment"],
+      "requiredCapabilities": ["configuration", "kind-plan", "process"],
+      "scenarios": ["node-bootstrap"],
+      "sourcePaths": ["controllers/node/planconfigmap.go", "launcher/clabernetes.go", "launcher/containerlab.go", "launcher/docker.go", "launcher/materialize.go"],
+      "state": "partial"
+    },
+    {
+      "id": "launcher-host-preparation",
+      "category": "runtime",
+      "inputs": ["launcher /proc and /sys mounts", "cgroup version", "kernel modules", "mount propagation"],
+      "requiredCapabilities": ["filesystem", "security"],
+      "scenarios": ["launcher-host-preparation"],
+      "sourcePaths": ["controllers/node/deployment.go", "launcher/os.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "node-readiness",
+      "category": "runtime",
+      "inputs": ["Docker container status", "Docker healthcheck", "component status", "TCP probe", "SSH probe"],
+      "requiredCapabilities": ["readiness"],
+      "scenarios": ["node-readiness"],
+      "sourcePaths": ["controllers/node/status.go", "launcher/clabernetes.go", "launcher/docker.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "link-same-pod",
+      "category": "link",
+      "inputs": ["Link.spec.endpointA", "Link.spec.endpointB", "Link.spec.mtu"],
+      "requiredCapabilities": ["connectivity"],
+      "scenarios": ["link-same-pod"],
+      "sourcePaths": ["internal/directruntime/connectivity.go", "internal/directruntime/links_linux.go", "launcher/materialize.go"],
+      "state": "partial"
+    },
+    {
+      "id": "link-vxlan",
+      "category": "link",
+      "inputs": ["Link.spec.endpointA", "Link.spec.endpointB", "Link.spec.mtu", "Link.spec.connectivity", "Link.status.tunnelID", "Pod peer"],
+      "requiredCapabilities": ["connectivity"],
+      "scenarios": ["link-vxlan"],
+      "sourcePaths": ["controllers/link/allocate.go", "internal/directruntime/connectivity.go", "internal/directruntime/links_linux.go", "launcher/connectivity/vxlan.go"],
+      "state": "partial"
+    },
+    {
+      "id": "link-slurpeeth",
+      "category": "link",
+      "inputs": ["Link.spec.endpointA", "Link.spec.endpointB", "Link.spec.mtu", "Link.spec.connectivity", "Link.status.tunnelID", "Pod peer"],
+      "requiredCapabilities": ["connectivity"],
+      "scenarios": ["link-slurpeeth"],
+      "sourcePaths": ["controllers/link/allocate.go", "internal/directruntime/connectivity.go", "internal/directruntime/slurpeeth_linux.go", "internal/directruntime/slurpeeth_transport_linux.go", "launcher/connectivity/slurpeeth.go"],
+      "state": "partial"
+    },
+    {
+      "id": "link-host",
+      "category": "link",
+      "inputs": ["Link.spec.endpointA", "Link.spec.endpointB", "Link.spec.mtu"],
+      "requiredCapabilities": ["connectivity"],
+      "scenarios": ["link-host"],
+      "sourcePaths": ["controllers/link/allocate.go", "launcher/materialize.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "link-loopback",
+      "category": "link",
+      "inputs": ["Link.spec.endpointA", "Link.spec.endpointB", "Link.spec.mtu"],
+      "requiredCapabilities": ["connectivity"],
+      "scenarios": ["link-loopback"],
+      "sourcePaths": ["apis/v1alpha1/link.go", "controllers/link/allocate.go", "internal/directruntime/connectivity.go", "internal/directruntime/links_linux.go"],
+      "state": "partial"
+    },
+    {
+      "id": "link-live-reconcile",
+      "category": "link",
+      "inputs": ["Link create", "Link update", "Link delete", "Pod recreation", "Pod rescheduling", "controller restart"],
+      "requiredCapabilities": ["connectivity", "lifecycle"],
+      "scenarios": ["link-live-reconcile"],
+      "sourcePaths": ["controllers/node/digest.go", "launcher/connectivity/dispatcher.go", "launcher/connectivity/watch.go"],
+      "state": "partial"
+    },
+    {
+      "id": "operation-logs",
+      "category": "operation",
+      "inputs": ["Node identity", "container identity"],
+      "requiredCapabilities": ["operations"],
+      "scenarios": ["operation-logs"],
+      "sourcePaths": ["launcher/containerlab.go", "launcher/docker.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "operation-exec",
+      "category": "operation",
+      "inputs": ["Node identity", "component identity", "command"],
+      "requiredCapabilities": ["operations"],
+      "scenarios": ["operation-exec"],
+      "sourcePaths": ["launcher/docker.go"],
+      "state": "nested-only"
+    },
+    {
+      "id": "operation-save",
+      "category": "operation",
+      "inputs": ["Node identity", "kind save behavior", "persistence destination"],
+      "requiredCapabilities": ["lifecycle", "operations"],
+      "scenarios": ["operation-save"],
+      "sourcePaths": ["launcher/containerlab.go"],
+      "state": "missing"
+    },
+    {
+      "id": "operation-events",
+      "category": "operation",
+      "inputs": ["Node identity", "container lifecycle", "connectivity lifecycle"],
+      "requiredCapabilities": ["operations"],
+      "scenarios": ["operation-events"],
+      "sourcePaths": ["controllers/node/status.go", "launcher/clabernetes.go"],
+      "state": "partial"
+    },
+    {
+      "id": "operation-packet-capture",
+      "category": "operation",
+      "inputs": ["Node identity", "interface identity", "capture options"],
+      "requiredCapabilities": ["operations"],
+      "scenarios": ["operation-packet-capture"],
+      "sourcePaths": ["apis/v1alpha1/link.go", "launcher/connectivity"],
+      "state": "missing"
+    },
+    {
+      "id": "entry-direct-resources",
+      "category": "entry-path",
+      "inputs": ["Node", "Link", "LauncherProfile"],
+      "requiredCapabilities": ["entry-path"],
+      "scenarios": ["entry-direct-resources"],
+      "sourcePaths": ["controllers/node", "controllers/link", "e2e/topology/direct"],
+      "state": "controller-native"
+    },
+    {
+      "id": "entry-topology",
+      "category": "entry-path",
+      "inputs": ["Topology"],
+      "requiredCapabilities": ["entry-path"],
+      "scenarios": ["entry-topology"],
+      "sourcePaths": ["controllers/topology", "e2e/topology/basic"],
+      "state": "controller-native"
+    },
+    {
+      "id": "entry-clabverter",
+      "category": "entry-path",
+      "inputs": ["containerlab topology", "clabverter options"],
+      "requiredCapabilities": ["entry-path"],
+      "scenarios": ["entry-clabverter"],
+      "sourcePaths": ["clabverter", "e2e/clabverter"],
+      "state": "controller-native"
+    }
+  ],
+  "invalidation": {
+    "planner": "unavailable",
+    "renderer": "nested-launcher",
+    "preparation": "nested-containerlab",
+    "connectivity": "direct-connectivity-helper-revision"
+  }
+}
