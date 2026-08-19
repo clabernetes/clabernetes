@@ -105,6 +105,20 @@ func (r *ServiceReconciler) RenderFabricService(
 	return service
 }
 
+// RenderDirectFabricService publishes the current direct Pod address even while its connectivity
+// startup gate is pending. Headless discovery avoids pinning VXLAN peers to a Service virtual IP
+// and follows Pod replacement without granting helpers Pod list/watch authority.
+func (r *ServiceReconciler) RenderDirectFabricService(
+	node *clabernetesapisv1alpha1.Node,
+	launcherNode string,
+) *k8scorev1.Service {
+	service := r.RenderFabricService(node, launcherNode)
+	service.Spec.ClusterIP = k8scorev1.ClusterIPNone
+	service.Spec.PublishNotReadyAddresses = true
+
+	return service
+}
+
 // RenderExposeService renders the expose service for the given node from the *allocations* in
 // exposedPorts (see ResolveExposedPorts) -- allocations are made into the node status first and
 // the service is programmed from them. Returns nil if the node exposes nothing (no ports, or
@@ -155,6 +169,25 @@ func (r *ServiceReconciler) RenderExposeService(
 	return service
 }
 
+// RenderDirectExposeService targets ports bound in the shared Pod namespace directly. Unlike the
+// nested runtime, there is no launcher-side Docker publication port between the Service and device.
+func (r *ServiceReconciler) RenderDirectExposeService(
+	node *clabernetesapisv1alpha1.Node,
+	launcherNode string,
+	resolvedProfile *ResolvedProfile,
+	exposedPorts *clabernetesapisv1alpha1.NodeExposedPorts,
+) *k8scorev1.Service {
+	service := r.RenderExposeService(node, launcherNode, resolvedProfile, exposedPorts)
+	if service == nil {
+		return nil
+	}
+	for index := range service.Spec.Ports {
+		service.Spec.Ports[index].TargetPort = intstr.FromInt32(service.Spec.Ports[index].Port)
+	}
+
+	return service
+}
+
 // Conforms asserts if a given service conforms with a rendered service -- this isn't checking
 // if the services are exactly the same, just checking that the parts clabernetes cares about
 // are the same.
@@ -172,6 +205,11 @@ func (r *ServiceReconciler) Conforms( //nolint:gocyclo
 	}
 
 	if serviceIsHeadless(existingService) != serviceIsHeadless(renderedService) {
+		return false
+	}
+
+	if existingService.Spec.PublishNotReadyAddresses !=
+		renderedService.Spec.PublishNotReadyAddresses {
 		return false
 	}
 

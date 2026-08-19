@@ -166,23 +166,6 @@ func NormalizeDeployment(t *testing.T, objectData []byte) []byte {
 		`(.spec.template.spec.containers[].env[] | `+
 			`select(.name == "LAUNCHER_LOGGER_LEVEL").value) = "debug"`,
 	)
-	// CRI discovery and socket paths vary by cluster runtime. They are covered by focused unit
-	// tests, while these e2e goldens assert the runtime-independent launcher Deployment shape.
-	objectData = YQCommand(
-		t,
-		objectData,
-		`del(.spec.template.spec.containers[].env[] | select(.name == "LAUNCHER_CRI_KIND"))`,
-	)
-	objectData = YQCommand(
-		t,
-		objectData,
-		`del(.spec.template.spec.containers[].volumeMounts[] | select(.name == "cri-sock"))`,
-	)
-	objectData = YQCommand(
-		t,
-		objectData,
-		`del(.spec.template.spec.volumes[] | select(.name == "cri-sock"))`,
-	)
 	// these fields are defaulted differently across Kubernetes versions
 	objectData = YQCommand(t, objectData, "del(.spec.template.metadata.creationTimestamp)")
 	objectData = YQCommand(t, objectData, ".status = {}")

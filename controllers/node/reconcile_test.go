@@ -1,13 +1,17 @@
+//nolint:noinlineerr,wsl_v5 // Reconciler tests use compact fail-fast assertions.
 package node //nolint:testpackage // tests exercise unexported reconciliation helpers
 
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesinternaldeviceruntime "github.com/clabernetes/clabernetes/internal/deviceruntime"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	k8sappsv1 "k8s.io/api/apps/v1"
@@ -33,6 +37,12 @@ type conflictOnceClient struct {
 	beforeConflict func(context.Context, ctrlruntimeclient.Object) error
 }
 
+type conflictOnceStatusWriter struct {
+	ctrlruntimeclient.StatusWriter
+
+	client *conflictOnceClient
+}
+
 type countingNodeReader struct {
 	ctrlruntimeclient.Reader
 
@@ -52,11 +62,124 @@ func (r *countingNodeReader) Get(
 
 var errInjectedNodeConflict = errors.New("injected conflict")
 
-func (c *conflictOnceClient) Update(
+func TestDirectModeFailsClosedWithoutNestedFallback(t *testing.T) {
+	scheme := nodeReconcileTestScheme(t)
+	node := nodeReconcileTestNode()
+	existingDeployment := &k8sappsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        node.GetName(),
+			Namespace:   node.GetNamespace(),
+			Annotations: map[string]string{"existing": "nested-workload"},
+		},
+		Spec: k8sappsv1.DeploymentSpec{
+			Template: k8scorev1.PodTemplateSpec{
+				Spec: k8scorev1.PodSpec{
+					Containers: []k8scorev1.Container{
+						{Name: "launcher", Image: "existing-launcher:unchanged"},
+					},
+				},
+			},
+		},
+	}
+	expectedDeployment := existingDeployment.DeepCopy()
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(node, existingDeployment).
+		Build()
+	reconciler := NewReconciler(
+		&claberneteslogging.FakeInstance{},
+		client,
+		client,
+		"clabernetes",
+		"clabernetes",
+		clabernetesinternaldeviceruntime.ModeDirect,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	err := reconciler.Reconcile(context.Background(), node)
+	if !errors.Is(err, clabernetesinternaldeviceruntime.ErrDirectRuntimeUnavailable) {
+		t.Fatalf("Reconcile() error = %v, want ErrDirectRuntimeUnavailable", err)
+	}
+	if !strings.Contains(err.Error(), "no nested fallback was attempted") {
+		t.Fatalf("Reconcile() error does not make fail-closed behavior explicit: %v", err)
+	}
+
+	actualDeployment := &k8sappsv1.Deployment{}
+	if err = client.Get(context.Background(), ctrlruntimeclient.ObjectKeyFromObject(existingDeployment), actualDeployment); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(actualDeployment.Spec, expectedDeployment.Spec) ||
+		!reflect.DeepEqual(actualDeployment.Annotations, expectedDeployment.Annotations) {
+		t.Fatalf(
+			"direct failure mutated the last nested workload:\nactual: %#v\nexpected: %#v",
+			actualDeployment,
+			expectedDeployment,
+		)
+	}
+
+	services := &k8scorev1.ServiceList{}
+	if err = client.List(context.Background(), services, ctrlruntimeclient.InNamespace(node.GetNamespace())); err != nil {
+		t.Fatal(err)
+	}
+	claims := &k8scorev1.PersistentVolumeClaimList{}
+	if err = client.List(context.Background(), claims, ctrlruntimeclient.InNamespace(node.GetNamespace())); err != nil {
+		t.Fatal(err)
+	}
+	serviceAccounts := &k8scorev1.ServiceAccountList{}
+	if err = client.List(context.Background(), serviceAccounts, ctrlruntimeclient.InNamespace(node.GetNamespace())); err != nil {
+		t.Fatal(err)
+	}
+	if len(services.Items) != 0 || len(claims.Items) != 0 || len(serviceAccounts.Items) != 0 {
+		t.Fatalf(
+			"direct failure created nested resources: services=%d claims=%d serviceAccounts=%d",
+			len(services.Items),
+			len(claims.Items),
+			len(serviceAccounts.Items),
+		)
+	}
+
+	actualNode := &clabernetesapisv1alpha1.Node{}
+	if err = client.Get(context.Background(), ctrlruntimeclient.ObjectKeyFromObject(node), actualNode); err != nil {
+		t.Fatal(err)
+	}
+	if len(actualNode.Status.Conditions) != 0 {
+		t.Fatalf("direct failure mutated Node status: %#v", actualNode.Status)
+	}
+}
+
+func TestReconcileRejectsUnknownRuntimeMode(t *testing.T) {
+	scheme := nodeReconcileTestScheme(t)
+	node := nodeReconcileTestNode()
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
+	reconciler := NewReconciler(
+		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "clabernetes",
+		clabernetesinternaldeviceruntime.Mode("auto"),
+		clabernetesconfig.GetFakeManager,
+	)
+
+	err := reconciler.Reconcile(context.Background(), node)
+	if !errors.Is(err, clabernetesinternaldeviceruntime.ErrInvalidMode) {
+		t.Fatalf("Reconcile() error = %v, want ErrInvalidMode", err)
+	}
+	deployments := &k8sappsv1.DeploymentList{}
+	if listErr := client.List(context.Background(), deployments); listErr != nil {
+		t.Fatal(listErr)
+	}
+	if len(deployments.Items) != 0 {
+		t.Fatalf("invalid runtime mode created %d deployments", len(deployments.Items))
+	}
+}
+
+func (c *conflictOnceClient) Status() ctrlruntimeclient.StatusWriter {
+	return &conflictOnceStatusWriter{StatusWriter: c.Client.Status(), client: c}
+}
+
+func (w *conflictOnceStatusWriter) Update(
 	ctx context.Context,
 	obj ctrlruntimeclient.Object,
-	opts ...ctrlruntimeclient.UpdateOption,
+	opts ...ctrlruntimeclient.SubResourceUpdateOption,
 ) error {
+	c := w.client
 	c.updateCalls++
 	if c.updateCalls == 1 {
 		if c.beforeConflict != nil {
@@ -73,7 +196,7 @@ func (c *conflictOnceClient) Update(
 		)
 	}
 
-	return c.Client.Update(ctx, obj, opts...)
+	return w.StatusWriter.Update(ctx, obj, opts...)
 }
 
 func TestUpdateNodeStatusRetriesResourceVersionConflict(t *testing.T) {
@@ -81,7 +204,8 @@ func TestUpdateNodeStatusRetriesResourceVersionConflict(t *testing.T) {
 
 	scheme := nodeReconcileTestScheme(t)
 	node := nodeReconcileTestNode()
-	baseClient := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
+	baseClient := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).Build()
 	client := &conflictOnceClient{
 		Client: baseClient,
 		beforeConflict: func(ctx context.Context, obj ctrlruntimeclient.Object) error {
@@ -94,7 +218,7 @@ func TestUpdateNodeStatusRetriesResourceVersionConflict(t *testing.T) {
 
 			current.Status.Readiness = clabernetesconstants.NodeStatusNotReady
 
-			return baseClient.Update(ctx, current)
+			return baseClient.Status().Update(ctx, current)
 		},
 	}
 	apiReader := &countingNodeReader{Reader: baseClient}
@@ -191,6 +315,27 @@ func TestReconcileFabricServicePreservesClusterAllocation(t *testing.T) {
 
 	if actual.Spec.Selector[clabernetesconstants.LabelName] != node.GetName() {
 		t.Fatalf("expected desired selector applied, got %v", actual.Spec.Selector)
+	}
+}
+
+func TestRenderDirectFabricServicePublishesCurrentPodBeforeReadiness(t *testing.T) {
+	t.Parallel()
+
+	node := nodeReconcileTestNode()
+	service := NewServiceReconciler(
+		&claberneteslogging.FakeInstance{},
+		clabernetesconfig.GetFakeManager,
+	).RenderDirectFabricService(node, node.GetName())
+
+	if service.Spec.ClusterIP != k8scorev1.ClusterIPNone ||
+		!service.Spec.PublishNotReadyAddresses {
+		t.Fatalf(
+			"direct fabric service does not provide headless early discovery: %+v",
+			service.Spec,
+		)
+	}
+	if service.Spec.Selector[clabernetesconstants.LabelTopologyNode] != node.GetName() {
+		t.Fatalf("direct fabric selector = %v", service.Spec.Selector)
 	}
 }
 
@@ -394,7 +539,6 @@ func TestReconcilePersistentVolumeClaimAdoptsLegacyClaim(t *testing.T) {
 		&claberneteslogging.FakeInstance{},
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
 		clabernetesconfig.GetFakeManager,
 	)
 	deployment := deploymentReconciler.Render(&RenderInput{
@@ -436,6 +580,7 @@ func TestReconcileFailsClosedForMissingLauncherProfile(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
 		WithObjects(node).
 		Build()
 	reconciler := NewReconciler(
@@ -444,7 +589,7 @@ func TestReconcileFailsClosedForMissingLauncherProfile(t *testing.T) {
 		client,
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesinternaldeviceruntime.ModeNested,
 		clabernetesconfig.GetFakeManager,
 	)
 
@@ -655,6 +800,7 @@ func TestReconcileGroupedNodesInheritPrimaryLauncherProfile(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
 		WithObjects(primary, secondary, profile).
 		Build()
 	reconciler := NewReconciler(
@@ -663,7 +809,7 @@ func TestReconcileGroupedNodesInheritPrimaryLauncherProfile(t *testing.T) {
 		client,
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesinternaldeviceruntime.ModeNested,
 		clabernetesconfig.GetFakeManager,
 	)
 
@@ -711,6 +857,7 @@ func TestReconcileRejectsGroupedLauncherProfileConflict(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
 		WithObjects(primary, secondary).
 		Build()
 	reconciler := NewReconciler(
@@ -719,7 +866,7 @@ func TestReconcileRejectsGroupedLauncherProfileConflict(t *testing.T) {
 		client,
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
+		clabernetesinternaldeviceruntime.ModeNested,
 		clabernetesconfig.GetFakeManager,
 	)
 

@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +39,7 @@ func (c *Controller) Reconcile(
 	err = ValidateLink(link)
 	if err != nil {
 		// terminally invalid until the spec changes -- clear any stale allocation and stamp the
-		// rejection so no node controller or launcher can continue realizing it. A binding whose
+		// rejection so no direct endpoint reconciler can continue realizing it. A binding whose
 		// endpoint names still match remains authoritative through the transient error.
 		c.BaseController.Log.Criticalf(
 			"link '%s/%s' is invalid and will not be processed: %s",
@@ -48,10 +51,14 @@ func (c *Controller) Reconcile(
 		return ctrlruntime.Result{}, c.updateLinkStatus(
 			ctx,
 			link,
-			clabernetesapisv1alpha1.LinkStatus{
-				ResolvedEndpoints: resolvedEndpoints,
-				Error:             err.Error(),
-			},
+			desiredLinkStatus(
+				link,
+				0,
+				resolvedEndpoints,
+				metav1.ConditionFalse,
+				"InvalidSpec",
+				err.Error(),
+			),
 		)
 	}
 
@@ -74,10 +81,14 @@ func (c *Controller) Reconcile(
 		return ctrlruntime.Result{}, c.updateLinkStatus(
 			ctx,
 			link,
-			clabernetesapisv1alpha1.LinkStatus{
-				ResolvedEndpoints: resolvedEndpoints,
-				Error:             err.Error(),
-			},
+			desiredLinkStatus(
+				link,
+				0,
+				resolvedEndpoints,
+				metav1.ConditionFalse,
+				"EndpointsUnresolved",
+				err.Error(),
+			),
 		)
 	}
 
@@ -95,11 +106,31 @@ func (c *Controller) Reconcile(
 		return ctrlruntime.Result{}, c.updateLinkStatus(
 			ctx,
 			link,
-			clabernetesapisv1alpha1.LinkStatus{
-				ResolvedEndpoints: resolvedEndpoints,
-				Error:             conflictError,
-			},
+			desiredLinkStatus(
+				link,
+				0,
+				resolvedEndpoints,
+				metav1.ConditionFalse,
+				"EndpointConflict",
+				conflictError,
+			),
 		)
+	}
+
+	if IsHostLink(link) && !slices.Contains(
+		link.GetFinalizers(),
+		clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
+	) {
+		link.SetFinalizers(append(
+			slices.Clone(link.GetFinalizers()),
+			clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
+		))
+
+		if err = c.BaseController.Client.Update(ctx, link); err != nil {
+			return ctrlruntime.Result{}, fmt.Errorf("adding host-endpoint finalizer: %w", err)
+		}
+
+		return ctrlruntime.Result{}, nil
 	}
 
 	desiredTunnelID, err := ResolveDesiredTunnelID(
@@ -113,10 +144,21 @@ func (c *Controller) Reconcile(
 		return ctrlruntime.Result{}, err
 	}
 
-	desiredStatus := clabernetesapisv1alpha1.LinkStatus{
-		TunnelID:          desiredTunnelID,
-		ResolvedEndpoints: resolvedEndpoints,
+	acceptedMessage := "Link endpoints and direct connectivity policy are accepted"
+	if desiredTunnelID != 0 {
+		acceptedMessage = fmt.Sprintf(
+			"Link endpoints are resolved and direct tunnel ID %d is allocated",
+			desiredTunnelID,
+		)
 	}
+	desiredStatus := desiredLinkStatus(
+		link,
+		desiredTunnelID,
+		resolvedEndpoints,
+		metav1.ConditionTrue,
+		"Accepted",
+		acceptedMessage,
+	)
 
 	if reflect.DeepEqual(desiredStatus, link.Status) {
 		c.BaseController.LogReconcileCompleteSuccess(req)
@@ -147,6 +189,30 @@ func (c *Controller) Reconcile(
 	c.BaseController.LogReconcileCompleteSuccess(req)
 
 	return ctrlruntime.Result{}, nil
+}
+
+func desiredLinkStatus(
+	link *clabernetesapisv1alpha1.Link,
+	tunnelID int,
+	resolvedEndpoints *clabernetesapisv1alpha1.LinkResolvedEndpointsStatus,
+	conditionStatus metav1.ConditionStatus,
+	reason,
+	message string,
+) clabernetesapisv1alpha1.LinkStatus {
+	status := clabernetesapisv1alpha1.LinkStatus{
+		TunnelID:          tunnelID,
+		ResolvedEndpoints: resolvedEndpoints,
+		Conditions:        slices.Clone(link.Status.Conditions),
+	}
+	if conditionStatus == metav1.ConditionFalse {
+		status.Error = message
+	}
+	apimachinerymeta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type: clabernetesapisv1alpha1.LinkConditionAccepted, Status: conditionStatus,
+		ObservedGeneration: link.GetGeneration(), Reason: reason, Message: message,
+	})
+
+	return status
 }
 
 type reconcileInput struct {
@@ -274,7 +340,7 @@ func (c *Controller) updateLinkStatus(
 
 	link.Status = desiredStatus
 
-	return c.BaseController.Client.Update(ctx, link)
+	return c.BaseController.Client.Status().Update(ctx, link)
 }
 
 // resolveLinkEndpoints returns the all-or-nothing endpoint identity binding desired for the

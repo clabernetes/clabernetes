@@ -1,7 +1,9 @@
+//nolint:noinlineerr,wsl_v5 // Reconcile guards are clearer without whitespace-only expansion.
 package node
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -10,6 +12,9 @@ import (
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceruntime "github.com/clabernetes/clabernetes/internal/deviceruntime"
+	clabernetesocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	k8sappsv1 "k8s.io/api/apps/v1"
@@ -18,6 +23,7 @@ import (
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	clientgoevents "k8s.io/client-go/tools/events"
 	clientretry "k8s.io/client-go/util/retry"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,6 +31,16 @@ import (
 )
 
 const topologyOwnerKind = "Topology"
+
+// DirectContainerExecutor addresses one kubelet-owned application/helper container without a
+// runtime socket. The production implementation uses the Kubernetes Pod exec subresource.
+type DirectContainerExecutor func(
+	ctx context.Context,
+	namespace,
+	podName,
+	containerName string,
+	command []string,
+) error
 
 // Reconciler is the node reconciler -- it holds the sub-reconcilers for all the objects a
 // (launcher) Node projects into the cluster and orchestrates a full reconcile of a node group.
@@ -34,13 +50,30 @@ type Reconciler struct {
 
 	configManagerGetter clabernetesconfig.ManagerGetterFunc
 	apiReader           ctrlruntimeclient.Reader
+	runtimeMode         clabernetesinternaldeviceruntime.Mode
 
 	namespaceResourcesReconciler *NamespaceResourcesReconciler
 
 	// exposed for testing purposes
-	DeploymentReconciler            *DeploymentReconciler
-	ServiceReconciler               *ServiceReconciler
-	PersistentVolumeClaimReconciler *PersistentVolumeClaimReconciler
+	DeploymentReconciler                    *DeploymentReconciler
+	PlanConfigMapReconciler                 *PlanConfigMapReconciler
+	ConnectivityRevisionConfigMapReconciler *ConnectivityRevisionConfigMapReconciler
+	ServiceReconciler                       *ServiceReconciler
+	PersistentVolumeClaimReconciler         *PersistentVolumeClaimReconciler
+	ImageDiscoveryReconciler                *ImageDiscoveryReconciler
+	ImageMetadataResolver                   *ImageMetadataResolver
+	CertificateReconciler                   *CertificateReconciler
+	EntropyReconciler                       *EntropyReconciler
+	PlannerReconciler                       *PlannerReconciler
+	EventRecorder                           clientgoevents.EventRecorder
+	DirectContainerExecutor                 DirectContainerExecutor
+
+	// DirectRuntimeImage is the c9s manager image containing only the generic package adapter and
+	// helpers. DirectCompatibility is injectable so tests do not invent a kind inventory.
+	DirectRuntimeImage        string
+	DirectCompatibility       func() (clabernetesdeviceplan.Compatibility, error)
+	DirectPlatform            clabernetesocimetadata.Platform
+	directInitializationError error
 }
 
 // NewReconciler creates a new node Reconciler.
@@ -48,16 +81,17 @@ func NewReconciler(
 	log claberneteslogging.Instance,
 	client ctrlruntimeclient.Client,
 	apiReader ctrlruntimeclient.Reader,
-	managerAppName,
-	managerNamespace,
-	criKind string,
+	managerAppName string,
+	managerNamespace string,
+	runtimeMode clabernetesinternaldeviceruntime.Mode,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) *Reconciler {
-	return &Reconciler{
+	reconciler := &Reconciler{
 		Log:                 log,
 		Client:              client,
 		configManagerGetter: configManagerGetter,
 		apiReader:           apiReader,
+		runtimeMode:         runtimeMode,
 		namespaceResourcesReconciler: NewNamespaceResourcesReconciler(
 			log,
 			client,
@@ -68,9 +102,14 @@ func NewReconciler(
 			log,
 			managerAppName,
 			managerNamespace,
-			criKind,
 			configManagerGetter,
 		),
+		PlanConfigMapReconciler: &PlanConfigMapReconciler{Client: client},
+		ConnectivityRevisionConfigMapReconciler: &ConnectivityRevisionConfigMapReconciler{
+			Client: client,
+		},
+		CertificateReconciler: &CertificateReconciler{Client: client, Reader: apiReader},
+		EntropyReconciler:     &EntropyReconciler{Client: client, Reader: apiReader},
 		ServiceReconciler: NewServiceReconciler(
 			log,
 			configManagerGetter,
@@ -80,6 +119,9 @@ func NewReconciler(
 			configManagerGetter,
 		),
 	}
+	reconciler.initializeDirectDependencies()
+
+	return reconciler
 }
 
 // Reconcile handles reconciliation for this controller.
@@ -135,6 +177,21 @@ func (r *Reconciler) Reconcile(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
 ) error {
+	if err := r.runtimeMode.Validate(); err != nil {
+		return err
+	}
+	if r.runtimeMode == clabernetesinternaldeviceruntime.ModeDirect {
+		err := r.reconcileDirect(ctx, node)
+		if err == nil {
+			return nil
+		}
+		if statusErr := r.reportDirectPreflightFailure(ctx, node, err); statusErr != nil {
+			return stderrors.Join(err, statusErr)
+		}
+
+		return err
+	}
+
 	err := r.namespaceResourcesReconciler.Reconcile(ctx, node.GetNamespace())
 	if err != nil {
 		r.Log.Criticalf("failed reconciling namespace launcher resources, err: %s", err)
@@ -481,7 +538,7 @@ func (r *Reconciler) updateNodeStatus(
 
 		current.Status = desiredStatus
 
-		updateErr := r.Client.Update(ctx, current)
+		updateErr := r.Client.Status().Update(ctx, current)
 		if updateErr == nil {
 			updated = current
 		}
@@ -686,6 +743,24 @@ func (r *Reconciler) reconcileFabricService(
 ) error {
 	rendered := r.ServiceReconciler.RenderFabricService(node, launcherNode)
 
+	return r.reconcileRenderedFabricService(ctx, node, rendered)
+}
+
+func (r *Reconciler) reconcileDirectFabricService(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+	launcherNode string,
+) error {
+	rendered := r.ServiceReconciler.RenderDirectFabricService(node, launcherNode)
+
+	return r.reconcileRenderedFabricService(ctx, node, rendered)
+}
+
+func (r *Reconciler) reconcileRenderedFabricService(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+	rendered *k8scorev1.Service,
+) error {
 	err := ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
 	if err != nil {
 		return err
@@ -732,6 +807,14 @@ func (r *Reconciler) reconcileExposeService(
 ) (string, error) {
 	rendered := r.ServiceReconciler.RenderExposeService(node, launcherNode, profile, exposedPorts)
 
+	return r.reconcileRenderedExposeService(ctx, node, rendered)
+}
+
+func (r *Reconciler) reconcileRenderedExposeService(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+	rendered *k8scorev1.Service,
+) (string, error) {
 	if rendered == nil {
 		// nothing to expose (anymore) -- prune a leftover expose service if we own one
 		return "", r.deleteIfOwned(ctx, node, &k8scorev1.Service{}, node.GetName())

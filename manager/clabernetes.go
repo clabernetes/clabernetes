@@ -1,3 +1,4 @@
+//nolint:wsl_v5 // Manager bootstrap keeps closely related configuration assignments together.
 package manager
 
 import (
@@ -9,6 +10,7 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
 	claberneteshttp "github.com/clabernetes/clabernetes/http"
+	clabernetesinternaldeviceruntime "github.com/clabernetes/clabernetes/internal/deviceruntime"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
@@ -56,6 +58,12 @@ func StartClabernetes(initializer bool) {
 	ctrlruntimelog.SetLogger(klog.NewKlogr())
 
 	ctx, cancel := clabernetesutil.SignalHandledContext(clabernetesLogger.Criticalf)
+	runtimeMode, err := clabernetesinternaldeviceruntime.ParseMode(
+		os.Getenv(clabernetesconstants.DeviceRuntimeModeEnv),
+	)
+	if err != nil {
+		clabernetesLogger.Fatalf("invalid device runtime configuration: %s", err)
+	}
 
 	clabernetesInstance = &clabernetes{
 		baseCtx:       ctx,
@@ -64,8 +72,10 @@ func StartClabernetes(initializer bool) {
 			clabernetesconstants.AppNameEnv,
 			clabernetesconstants.AppNameDefault,
 		),
-		initializer: initializer,
-		logger:      clabernetesLogger,
+		initializer:        initializer,
+		logger:             clabernetesLogger,
+		runtimeMode:        runtimeMode,
+		deviceRuntimeImage: os.Getenv(clabernetesconstants.DeviceRuntimeImageEnv),
 	}
 
 	clabernetesInstance.start()
@@ -90,7 +100,8 @@ type clabernetes struct {
 	kubeClient            *kubernetes.Clientset
 	kubeClabernetesClient *clabernetesgeneratedclientset.Clientset
 
-	criKind string
+	runtimeMode        clabernetesinternaldeviceruntime.Mode
+	deviceRuntimeImage string
 
 	scheme *apimachineryruntime.Scheme
 	mgr    ctrlruntime.Manager
@@ -121,8 +132,12 @@ func (c *clabernetes) GetNamespace() string {
 	return c.namespace
 }
 
-func (c *clabernetes) GetClusterCRIKind() string {
-	return c.criKind
+func (c *clabernetes) GetDeviceRuntimeMode() clabernetesinternaldeviceruntime.Mode {
+	return c.runtimeMode
+}
+
+func (c *clabernetes) GetDeviceRuntimeImage() string {
+	return c.deviceRuntimeImage
 }
 
 func (c *clabernetes) IsInitializer() bool {

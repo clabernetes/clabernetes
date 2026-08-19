@@ -26,12 +26,24 @@ func launcherRoleBindingName() string {
 	return fmt.Sprintf("%s-launcher-role-binding", clabernetesconstants.Clabernetes)
 }
 
-// NamespaceResourcesReconciler ensures the per-namespace launcher plumbing (the launcher service
-// account and its role binding) exists and conforms. These objects are shared by every launcher
-// pod in the namespace and are deliberately *not* owner-ref'd to any Node -- with potentially
-// thousands of nodes per namespace an owner reference per node would make these objects grow
-// with topology size. They are tiny, inert without launcher pods, and vanish with the
-// namespace.
+func directRuntimeServiceAccountName() string {
+	return fmt.Sprintf("%s-direct-runtime-service-account", clabernetesconstants.Clabernetes)
+}
+
+func directRuntimeRoleBindingName() string {
+	return fmt.Sprintf("%s-direct-runtime-role-binding", clabernetesconstants.Clabernetes)
+}
+
+type namespaceRuntimeIdentity struct {
+	serviceAccountName string
+	roleBindingName    string
+	clusterRoleName    string
+	description        string
+}
+
+// NamespaceResourcesReconciler ensures per-namespace runtime service accounts and role bindings
+// exist and conform. These objects are shared by workloads in the namespace and are deliberately
+// not owner-referenced to individual Nodes, so their metadata does not grow with topology size.
 type NamespaceResourcesReconciler struct {
 	log                 claberneteslogging.Instance
 	client              ctrlruntimeclient.Client
@@ -54,19 +66,46 @@ func NewNamespaceResourcesReconciler(
 	}
 }
 
-// Reconcile ensures the launcher service account and role binding exist (and conform) in the
-// given namespace.
+// Reconcile ensures the legacy launcher identity exists for nested runtime Pods.
 func (r *NamespaceResourcesReconciler) Reconcile(ctx context.Context, namespace string) error {
-	err := r.reconcileServiceAccount(ctx, namespace)
+	return r.reconcileIdentity(ctx, namespace, namespaceRuntimeIdentity{
+		serviceAccountName: launcherServiceAccountName(),
+		roleBindingName:    launcherRoleBindingName(),
+		clusterRoleName:    fmt.Sprintf("%s-launcher-role", r.appName),
+		description:        "launcher",
+	})
+}
+
+// ReconcileDirect ensures the read-only direct connectivity identity exists without granting
+// legacy image-import or nested-runtime permissions.
+func (r *NamespaceResourcesReconciler) ReconcileDirect(
+	ctx context.Context,
+	namespace string,
+) error {
+	return r.reconcileIdentity(ctx, namespace, namespaceRuntimeIdentity{
+		serviceAccountName: directRuntimeServiceAccountName(),
+		roleBindingName:    directRuntimeRoleBindingName(),
+		clusterRoleName:    fmt.Sprintf("%s-direct-runtime-role", r.appName),
+		description:        "direct runtime",
+	})
+}
+
+func (r *NamespaceResourcesReconciler) reconcileIdentity(
+	ctx context.Context,
+	namespace string,
+	identity namespaceRuntimeIdentity,
+) error {
+	err := r.reconcileServiceAccount(ctx, namespace, identity)
 	if err != nil {
 		return err
 	}
 
-	return r.reconcileRoleBinding(ctx, namespace)
+	return r.reconcileRoleBinding(ctx, namespace, identity)
 }
 
 func (r *NamespaceResourcesReconciler) renderServiceAccount(
-	namespace string,
+	namespace,
+	name string,
 ) *k8scorev1.ServiceAccount {
 	annotations, globalLabels := r.configManagerGetter().GetAllMetadata()
 
@@ -78,7 +117,7 @@ func (r *NamespaceResourcesReconciler) renderServiceAccount(
 
 	return &k8scorev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        launcherServiceAccountName(),
+			Name:        name,
 			Namespace:   namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -86,7 +125,10 @@ func (r *NamespaceResourcesReconciler) renderServiceAccount(
 	}
 }
 
-func (r *NamespaceResourcesReconciler) renderRoleBinding(namespace string) *k8srbacv1.RoleBinding {
+func (r *NamespaceResourcesReconciler) renderRoleBinding(
+	namespace string,
+	identity namespaceRuntimeIdentity,
+) *k8srbacv1.RoleBinding {
 	annotations, globalLabels := r.configManagerGetter().GetAllMetadata()
 
 	labels := map[string]string{
@@ -97,7 +139,7 @@ func (r *NamespaceResourcesReconciler) renderRoleBinding(namespace string) *k8sr
 
 	return &k8srbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        launcherRoleBindingName(),
+			Name:        identity.roleBindingName,
 			Namespace:   namespace,
 			Labels:      labels,
 			Annotations: annotations,
@@ -105,14 +147,14 @@ func (r *NamespaceResourcesReconciler) renderRoleBinding(namespace string) *k8sr
 		Subjects: []k8srbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      launcherServiceAccountName(),
+				Name:      identity.serviceAccountName,
 				Namespace: namespace,
 			},
 		},
 		RoleRef: k8srbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     fmt.Sprintf("%s-launcher-role", r.appName),
+			Name:     identity.clusterRoleName,
 		},
 	}
 }
@@ -120,8 +162,9 @@ func (r *NamespaceResourcesReconciler) renderRoleBinding(namespace string) *k8sr
 func (r *NamespaceResourcesReconciler) reconcileServiceAccount(
 	ctx context.Context,
 	namespace string,
+	identity namespaceRuntimeIdentity,
 ) error {
-	rendered := r.renderServiceAccount(namespace)
+	rendered := r.renderServiceAccount(namespace, identity.serviceAccountName)
 
 	existing := &k8scorev1.ServiceAccount{}
 
@@ -132,7 +175,11 @@ func (r *NamespaceResourcesReconciler) reconcileServiceAccount(
 	)
 	if err != nil {
 		if apimachineryerrors.IsNotFound(err) {
-			r.log.Infof("creating launcher service account in namespace %q", namespace)
+			r.log.Infof(
+				"creating %s service account in namespace %q",
+				identity.description,
+				namespace,
+			)
 
 			return r.client.Create(ctx, rendered)
 		}
@@ -156,8 +203,9 @@ func (r *NamespaceResourcesReconciler) reconcileServiceAccount(
 func (r *NamespaceResourcesReconciler) reconcileRoleBinding(
 	ctx context.Context,
 	namespace string,
+	identity namespaceRuntimeIdentity,
 ) error {
-	rendered := r.renderRoleBinding(namespace)
+	rendered := r.renderRoleBinding(namespace, identity)
 
 	existing := &k8srbacv1.RoleBinding{}
 
@@ -168,7 +216,11 @@ func (r *NamespaceResourcesReconciler) reconcileRoleBinding(
 	)
 	if err != nil {
 		if apimachineryerrors.IsNotFound(err) {
-			r.log.Infof("creating launcher role binding in namespace %q", namespace)
+			r.log.Infof(
+				"creating %s role binding in namespace %q",
+				identity.description,
+				namespace,
+			)
 
 			return r.client.Create(ctx, rendered)
 		}

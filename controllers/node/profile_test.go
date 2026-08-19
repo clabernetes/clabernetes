@@ -65,9 +65,12 @@ func TestResolveExplicitLauncherProfile(t *testing.T) {
 		"custom",
 		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
 			spec.Deployment = &clabernetesapisv1alpha1.LauncherProfileDeployment{
-				LauncherLogLevel:    "debug",
-				ContainerlabTimeout: clabernetesutil.ToPointer("5m"),
-				PrivilegedLauncher:  clabernetesutil.ToPointer(false),
+				Persistence: &clabernetesapisv1alpha1.Persistence{
+					Enabled: true, ClaimSize: "10Gi",
+				},
+			}
+			spec.ImagePull = &clabernetesapisv1alpha1.LauncherProfileImagePull{
+				Policy: string(k8scorev1.PullNever),
 			}
 			spec.Expose = &clabernetesapisv1alpha1.LauncherProfileExpose{
 				DisableAutoExpose: clabernetesutil.ToPointer(true),
@@ -95,12 +98,9 @@ func TestResolveExplicitLauncherProfile(t *testing.T) {
 		)
 	}
 
-	if resolved.LauncherLogLevel != "debug" || resolved.ContainerlabTimeout != "5m" {
-		t.Fatalf("expected explicit deployment overrides, got %+v", resolved)
-	}
-
-	if resolved.PrivilegedLauncher {
-		t.Fatal("expected explicit false to override the Config true default")
+	if !resolved.Persistence.Enabled || resolved.Persistence.ClaimSize != "10Gi" ||
+		resolved.ImagePullPolicy != string(k8scorev1.PullNever) {
+		t.Fatalf("expected direct workload overrides, got %+v", resolved)
 	}
 
 	if !resolved.DisableAutoExpose {
@@ -113,40 +113,33 @@ func TestResolveProfilePreservesExplicitEmptyValues(t *testing.T) {
 		"empty-values",
 		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
 			spec.ImagePull = &clabernetesapisv1alpha1.LauncherProfileImagePull{
-				InsecureRegistries: []string{},
-				PullSecrets:        []string{},
-				DockerDaemonConfig: clabernetesutil.ToPointer(""),
-				DockerConfig:       clabernetesutil.ToPointer(""),
+				PullSecrets: []string{},
 			}
 			spec.Scheduling = &clabernetesapisv1alpha1.Scheduling{
 				NodeSelector: map[string]string{},
 				Tolerations:  []k8scorev1.Toleration{},
 			}
-			spec.Deployment = &clabernetesapisv1alpha1.LauncherProfileDeployment{
-				ContainerlabTimeout: clabernetesutil.ToPointer(""),
-				ContainerlabVersion: clabernetesutil.ToPointer(""),
-				ExtraEnv:            []k8scorev1.EnvVar{},
-			}
 		},
 	)
+	getter := func() clabernetesconfig.Manager {
+		return clabernetesconfig.NewFakeManager(
+			clabernetesconfig.WithImagePullSecrets([]string{"global-registry"}),
+		)
+	}
 
 	resolved, err := clabernetescontrollersnode.ResolveProfile(
 		testProfileNode("srl1", nil),
 		profile,
-		clabernetesconfig.GetFakeManager,
+		getter,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	if resolved.InsecureRegistries == nil || resolved.PullSecrets == nil ||
-		resolved.NodeSelector == nil || resolved.Tolerations == nil ||
-		resolved.ExtraEnv == nil {
+	if resolved.PullSecrets == nil || resolved.NodeSelector == nil || resolved.Tolerations == nil {
 		t.Fatalf("expected explicit empty collections to remain non-nil, got %+v", resolved)
 	}
-
-	if resolved.DockerDaemonConfig != "" || resolved.DockerConfig != "" ||
-		resolved.ContainerlabTimeout != "" || resolved.ContainerlabVersion != "" {
-		t.Fatalf("expected explicit empty scalar overrides, got %+v", resolved)
+	if len(resolved.PullSecrets) != 0 {
+		t.Fatalf("expected profile to clear global pull Secrets, got %+v", resolved.PullSecrets)
 	}
 }

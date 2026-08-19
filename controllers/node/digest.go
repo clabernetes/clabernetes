@@ -19,7 +19,7 @@ func ConfigDigest(
 	groupMembers []string,
 	nodes map[string]*clabernetesapisv1alpha1.Node,
 	exposedPorts map[string]*clabernetesapisv1alpha1.NodeExposedPorts,
-	mgmt *clabernetesapisv1alpha1.MgmtNet,
+	mgmt *clabernetesapisv1alpha1.ManagementPolicy,
 ) (string, error) {
 	sortedMembers := make([]string, len(groupMembers))
 

@@ -70,12 +70,10 @@ func StartClabernetes() {
 			clabernetesconstants.AppNameEnv,
 			clabernetesconstants.AppNameDefault,
 		),
-		nodeName:             os.Getenv(clabernetesconstants.LauncherNodeNameEnv),
-		logger:               clabernetesLogger,
-		containerlabLogger:   containerlabLogger,
-		nodeLogger:           nodeLogger,
-		imageName:            os.Getenv(clabernetesconstants.LauncherNodeImageEnv),
-		imagePullThroughMode: os.Getenv(clabernetesconstants.LauncherImagePullThroughModeEnv),
+		nodeName:           os.Getenv(clabernetesconstants.LauncherNodeNameEnv),
+		logger:             clabernetesLogger,
+		containerlabLogger: containerlabLogger,
+		nodeLogger:         nodeLogger,
 	}
 
 	clabernetesInstance.startup()
@@ -95,9 +93,6 @@ type clabernetes struct {
 	logger             claberneteslogging.Instance
 	containerlabLogger claberneteslogging.Instance
 	nodeLogger         claberneteslogging.Instance
-
-	imageName            string
-	imagePullThroughMode string
 
 	// containerIDs holds *all* ids of containers running --in theory we could have other side-car
 	// type stuff running so just catching all them here so we know if/when things fail
@@ -135,7 +130,6 @@ func (c *clabernetes) startup() {
 	c.fetchNodeResources()
 	c.containerlabVersion()
 	c.setup()
-	c.image()
 	c.launch()
 
 	if c.ctx.Err() != nil {
@@ -144,7 +138,6 @@ func (c *clabernetes) startup() {
 
 	c.connectivity()
 
-	go c.imageCleanup()
 	go c.runProbes()
 	go c.watchContainers()
 

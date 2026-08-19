@@ -6,6 +6,7 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	clabtypes "github.com/srl-labs/containerlab/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,7 +40,7 @@ type (
 	// MDAS is a list of MDA objects.
 	MDAS = clabernetesapisv1alpha1.MDAS
 	// MgmtNet struct defines the management network options.
-	MgmtNet = clabernetesapisv1alpha1.MgmtNet
+	MgmtNet = clabtypes.MgmtNet
 )
 
 // Config defines lab configuration as it is provided in the YAML file.

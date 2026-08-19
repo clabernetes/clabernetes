@@ -60,9 +60,8 @@ func daemonConfigExists() bool {
 }
 
 type daemonConfig struct {
-	StorageDriver      string               `json:"storage-driver"`
-	InsecureRegistries []string             `json:"insecure-registries,omitempty"`
-	Proxies            *daemonProxiesConfig `json:"proxies,omitempty"`
+	StorageDriver string               `json:"storage-driver"`
+	Proxies       *daemonProxiesConfig `json:"proxies,omitempty"`
 }
 
 type daemonProxiesConfig struct {
@@ -114,12 +113,7 @@ func handleDockerDaemonConfig() error {
 		Proxies:       getProxiesConfig(),
 	}
 
-	insecureRegistries := os.Getenv(clabernetesconstants.LauncherInsecureRegistries)
-	if insecureRegistries != "" {
-		config.InsecureRegistries = strings.Split(insecureRegistries, ",")
-	}
-
-	if config.Proxies == nil && config.InsecureRegistries == nil {
+	if config.Proxies == nil {
 		// nothing to configure, leave the daemon config alone (unset)
 		return nil
 	}

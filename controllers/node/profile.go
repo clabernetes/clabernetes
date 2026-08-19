@@ -23,11 +23,8 @@ type ResolvedProfile struct {
 	UseNodeMgmtIpv6Address bool
 
 	// image pull policy
-	InsecureRegistries  []string
-	PullThroughOverride string
-	PullSecrets         []string
-	DockerDaemonConfig  string
-	DockerConfig        string
+	ImagePullPolicy string
+	PullSecrets     []string
 
 	// launcher Pod resources -- nil means use the Config by-containerlab-kind lookup
 	Resources *k8scorev1.ResourceRequirements
@@ -51,7 +48,7 @@ type ResolvedProfile struct {
 	StatusProbes clabernetesapisv1alpha1.StatusProbes
 
 	// management network settings for the launcher's Pod-local Docker network
-	Mgmt *clabernetesapisv1alpha1.MgmtNet
+	Mgmt *clabernetesapisv1alpha1.ManagementPolicy
 }
 
 // ResolveProfile resolves Config defaults plus at most one explicitly selected LauncherProfile.
@@ -64,9 +61,8 @@ func ResolveProfile(
 
 	resolved := &ResolvedProfile{
 		ExposeType:              "LoadBalancer",
-		PullThroughOverride:     configManager.GetImagePullThroughMode(),
-		DockerDaemonConfig:      configManager.GetDockerDaemonConfig(),
-		DockerConfig:            configManager.GetDockerConfig(),
+		ImagePullPolicy:         configManager.GetApplicationImagePullPolicy(),
+		PullSecrets:             configManager.GetImagePullSecrets(),
 		PrivilegedLauncher:      configManager.GetPrivilegedLauncher(),
 		ContainerlabDebug:       configManager.GetContainerlabDebug(),
 		ContainerlabTimeout:     configManager.GetContainerlabTimeout(),
@@ -162,25 +158,12 @@ func applyProfileImagePull(
 		return
 	}
 
-	// Nil means inherit; a non-nil empty collection means explicitly clear.
-	if imagePull.InsecureRegistries != nil {
-		resolved.InsecureRegistries = append([]string{}, imagePull.InsecureRegistries...)
-	}
-
-	if imagePull.PullThroughOverride != "" {
-		resolved.PullThroughOverride = imagePull.PullThroughOverride
+	if imagePull.Policy != "" {
+		resolved.ImagePullPolicy = imagePull.Policy
 	}
 
 	if imagePull.PullSecrets != nil {
 		resolved.PullSecrets = append([]string{}, imagePull.PullSecrets...)
-	}
-
-	if imagePull.DockerDaemonConfig != nil {
-		resolved.DockerDaemonConfig = *imagePull.DockerDaemonConfig
-	}
-
-	if imagePull.DockerConfig != nil {
-		resolved.DockerConfig = *imagePull.DockerConfig
 	}
 }
 
@@ -192,39 +175,7 @@ func applyProfileDeployment(
 		return
 	}
 
-	if deployment.PrivilegedLauncher != nil {
-		resolved.PrivilegedLauncher = *deployment.PrivilegedLauncher
-	}
-
 	if deployment.Persistence != nil {
 		resolved.Persistence = *deployment.Persistence.DeepCopy()
-	}
-
-	if deployment.ContainerlabDebug != nil {
-		resolved.ContainerlabDebug = *deployment.ContainerlabDebug
-	}
-
-	if deployment.ContainerlabTimeout != nil {
-		resolved.ContainerlabTimeout = *deployment.ContainerlabTimeout
-	}
-
-	if deployment.ContainerlabVersion != nil {
-		resolved.ContainerlabVersion = *deployment.ContainerlabVersion
-	}
-
-	if deployment.LauncherImage != "" {
-		resolved.LauncherImage = deployment.LauncherImage
-	}
-
-	if deployment.LauncherImagePullPolicy != "" {
-		resolved.LauncherImagePullPolicy = deployment.LauncherImagePullPolicy
-	}
-
-	if deployment.LauncherLogLevel != "" {
-		resolved.LauncherLogLevel = deployment.LauncherLogLevel
-	}
-
-	if deployment.ExtraEnv != nil {
-		resolved.ExtraEnv = append([]k8scorev1.EnvVar{}, deployment.ExtraEnv...)
 	}
 }

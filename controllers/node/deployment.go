@@ -28,7 +28,6 @@ const (
 	probePeriodSeconds                  = 10
 	probeReadinessFailureThreshold      = 3
 	probeDefaultStartupFailureThreshold = 90
-	criHostsVolumeName                  = "cri-hosts"
 )
 
 // DeploymentReconciler renders/validates the launcher deployment for a Node -- exposed for
@@ -37,23 +36,20 @@ type DeploymentReconciler struct {
 	log                 claberneteslogging.Instance
 	managerAppName      string
 	managerNamespace    string
-	criKind             string
 	configManagerGetter clabernetesconfig.ManagerGetterFunc
 }
 
 // NewDeploymentReconciler returns an instance of DeploymentReconciler.
 func NewDeploymentReconciler(
 	log claberneteslogging.Instance,
-	managerAppName,
-	managerNamespace,
-	criKind string,
+	managerAppName string,
+	managerNamespace string,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) *DeploymentReconciler {
 	return &DeploymentReconciler{
 		log:                 log,
 		managerAppName:      managerAppName,
 		managerNamespace:    managerNamespace,
-		criKind:             criKind,
 		configManagerGetter: configManagerGetter,
 	}
 }
@@ -404,95 +400,6 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 		},
 	}
 
-	criPath, criSubPath := r.renderDeploymentVolumesGetCRISockPath(input.Profile)
-
-	if criPath != "" && criSubPath != "" {
-		volumes = append(
-			volumes,
-			k8scorev1.Volume{
-				Name: "cri-sock",
-				VolumeSource: k8scorev1.VolumeSource{
-					HostPath: &k8scorev1.HostPathVolumeSource{
-						Path: criPath,
-						Type: clabernetesutil.ToPointer(k8scorev1.HostPathType("")),
-					},
-				},
-			},
-		)
-
-		volumeMountsFromCommonSpec = append(
-			volumeMountsFromCommonSpec,
-			k8scorev1.VolumeMount{
-				Name:     "cri-sock",
-				ReadOnly: true,
-				MountPath: fmt.Sprintf(
-					"%s/%s",
-					clabernetesconstants.LauncherCRISockPath,
-					criSubPath,
-				),
-				SubPath: criSubPath,
-			},
-		)
-	}
-
-	volumes, volumeMountsFromCommonSpec = r.renderDeploymentCRIHostsVolumes(
-		input.Profile,
-		volumes,
-		volumeMountsFromCommonSpec,
-	)
-
-	if input.Profile.DockerDaemonConfig != "" {
-		volumes = append(
-			volumes,
-			k8scorev1.Volume{
-				Name: "docker-daemon-config",
-				VolumeSource: k8scorev1.VolumeSource{
-					Secret: &k8scorev1.SecretVolumeSource{
-						SecretName: input.Profile.DockerDaemonConfig,
-						DefaultMode: clabernetesutil.ToPointer(
-							int32(clabernetesconstants.PermissionsEveryoneReadWriteOwnerExecute),
-						),
-					},
-				},
-			},
-		)
-
-		volumeMountsFromCommonSpec = append(
-			volumeMountsFromCommonSpec,
-			k8scorev1.VolumeMount{
-				Name:      "docker-daemon-config",
-				ReadOnly:  true,
-				MountPath: "/etc/docker",
-			},
-		)
-	}
-
-	if input.Profile.DockerConfig != "" {
-		volumes = append(
-			volumes,
-			k8scorev1.Volume{
-				Name: "docker-config",
-				VolumeSource: k8scorev1.VolumeSource{
-					Secret: &k8scorev1.SecretVolumeSource{
-						SecretName: input.Profile.DockerConfig,
-						DefaultMode: clabernetesutil.ToPointer(
-							int32(clabernetesconstants.PermissionsEveryoneReadWriteOwnerExecute),
-						),
-					},
-				},
-			},
-		)
-
-		volumeMountsFromCommonSpec = append(
-			volumeMountsFromCommonSpec,
-			k8scorev1.VolumeMount{
-				Name:      "docker-config",
-				ReadOnly:  true,
-				MountPath: "/root/.docker",
-			},
-		)
-	}
-
 	mountedPayloadPaths := map[string]struct{}{}
 
 	for _, memberName := range input.GroupMembers {
@@ -575,110 +482,6 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 	return volumeMountsFromCommonSpec
 }
 
-func (r *DeploymentReconciler) effectiveCRIKind() string {
-	criKind := r.configManagerGetter().GetImagePullCriKindOverride()
-	if criKind != "" {
-		return criKind
-	}
-
-	return r.criKind
-}
-
-func (r *DeploymentReconciler) renderDeploymentCRIHostsVolumes(
-	profile *ResolvedProfile,
-	volumes []k8scorev1.Volume,
-	volumeMounts []k8scorev1.VolumeMount,
-) ([]k8scorev1.Volume, []k8scorev1.VolumeMount) {
-	configuredCRIHostsDir := r.configManagerGetter().GetImagePullCriHostsDir()
-	if profile.PullThroughOverride == clabernetesconstants.ImagePullThroughModeNever ||
-		configuredCRIHostsDir == "" ||
-		r.effectiveCRIKind() != clabernetesconstants.KubernetesCRIContainerd {
-		return volumes, volumeMounts
-	}
-
-	criHostsDir := filepath.Clean(configuredCRIHostsDir)
-	if !filepath.IsAbs(criHostsDir) || criHostsDir == string(filepath.Separator) {
-		r.log.Warnf("ignoring invalid CRI hosts directory %q", configuredCRIHostsDir)
-
-		return volumes, volumeMounts
-	}
-
-	volumes = append(
-		volumes,
-		k8scorev1.Volume{
-			Name: criHostsVolumeName,
-			VolumeSource: k8scorev1.VolumeSource{
-				HostPath: &k8scorev1.HostPathVolumeSource{
-					Path: criHostsDir,
-					Type: clabernetesutil.ToPointer(k8scorev1.HostPathDirectory),
-				},
-			},
-		},
-	)
-
-	volumeMounts = append(
-		volumeMounts,
-		k8scorev1.VolumeMount{
-			Name:      criHostsVolumeName,
-			ReadOnly:  true,
-			MountPath: criHostsDir,
-		},
-	)
-
-	if criHostsDir != clabernetesconstants.ContainerdCertsDir {
-		volumeMounts = append(
-			volumeMounts,
-			k8scorev1.VolumeMount{
-				Name:      criHostsVolumeName,
-				ReadOnly:  true,
-				MountPath: clabernetesconstants.ContainerdCertsDir,
-			},
-		)
-	}
-
-	return volumes, volumeMounts
-}
-
-func (r *DeploymentReconciler) renderDeploymentVolumesGetCRISockPath(
-	profile *ResolvedProfile,
-) (path, subPath string) {
-	if profile.PullThroughOverride == clabernetesconstants.ImagePullThroughModeNever {
-		// image pull through is never, no cri sock needed
-		return path, subPath
-	}
-
-	criKind := r.effectiveCRIKind()
-	if criKind != clabernetesconstants.KubernetesCRIContainerd {
-		r.log.Warnf(
-			"image pull through mode is auto or always but cri kind is not containerd!"+
-				" got cri kind %q",
-			criKind,
-		)
-
-		return path, subPath
-	}
-
-	criSockOverrideFullPath := r.configManagerGetter().GetImagePullCriSockOverride()
-	if criSockOverrideFullPath != "" {
-		path, subPath = filepath.Split(criSockOverrideFullPath)
-
-		if path == "" {
-			r.log.Warn(
-				"image pull cri path override is set, but failed to parse path/subpath," +
-					" will skip mounting cri sock",
-			)
-
-			return path, subPath
-		}
-	} else {
-		path = clabernetesconstants.KubernetesCRISockContainerdPath
-
-		subPath = clabernetesconstants.KubernetesCRISockContainerd
-	}
-
-	return path, subPath
-}
-
 func (r *DeploymentReconciler) renderDeploymentContainer(
 	deployment *k8sappsv1.Deployment,
 	nodeName string,
@@ -726,17 +529,6 @@ func (r *DeploymentReconciler) renderDeploymentContainerEnv( //nolint: funlen
 	nodeName := input.Node.GetName()
 	profile := input.Profile
 
-	criKind := r.effectiveCRIKind()
-
-	nodeImage := input.Node.Spec.Image
-	if nodeImage == "" {
-		r.log.Warnf(
-			"node %q has no image set -- the node spec must be self contained (defaults/kinds"+
-				" expanded); the launcher will likely fail to launch this node",
-			nodeName,
-		)
-	}
-
 	envs := []k8scorev1.EnvVar{
 		{
 			Name: clabernetesconstants.NodeNameEnv,
@@ -774,24 +566,12 @@ func (r *DeploymentReconciler) renderDeploymentContainerEnv( //nolint: funlen
 			Value: r.managerNamespace,
 		},
 		{
-			Name:  clabernetesconstants.LauncherCRIKindEnv,
-			Value: criKind,
-		},
-		{
-			Name:  clabernetesconstants.LauncherImagePullThroughModeEnv,
-			Value: profile.PullThroughOverride,
-		},
-		{
 			Name:  clabernetesconstants.LauncherLoggerLevelEnv,
 			Value: profile.LauncherLogLevel,
 		},
 		{
 			Name:  clabernetesconstants.LauncherNodeNameEnv,
 			Value: nodeName,
-		},
-		{
-			Name:  clabernetesconstants.LauncherNodeImageEnv,
-			Value: nodeImage,
 		},
 		{
 			Name:  clabernetesconstants.LauncherInClusterDNSSuffixEnv,
@@ -832,16 +612,6 @@ func (r *DeploymentReconciler) renderDeploymentContainerEnv( //nolint: funlen
 		}
 	}
 
-	if len(profile.PullSecrets) > 0 {
-		envs = append(
-			envs,
-			k8scorev1.EnvVar{
-				Name:  clabernetesconstants.LauncherPullSecretsEnv,
-				Value: strings.Join(profile.PullSecrets, ","),
-			},
-		)
-	}
-
 	if profile.ContainerlabDebug {
 		envs = append(
 			envs,
@@ -858,16 +628,6 @@ func (r *DeploymentReconciler) renderDeploymentContainerEnv( //nolint: funlen
 			k8scorev1.EnvVar{
 				Name:  clabernetesconstants.LauncherContainerlabPersist,
 				Value: clabernetesconstants.True,
-			},
-		)
-	}
-
-	if len(profile.InsecureRegistries) > 0 {
-		envs = append(
-			envs,
-			k8scorev1.EnvVar{
-				Name:  clabernetesconstants.LauncherInsecureRegistries,
-				Value: strings.Join(profile.InsecureRegistries, ","),
 			},
 		)
 	}
@@ -897,10 +657,7 @@ func (r *DeploymentReconciler) renderDeploymentContainerResources(
 		return
 	}
 
-	resources := r.configManagerGetter().GetResourcesForContainerlabKind(
-		input.Node.Spec.Kind,
-		input.Node.Spec.Type,
-	)
+	resources := r.configManagerGetter().GetDefaultResources()
 
 	if resources != nil {
 		deployment.Spec.Template.Spec.Containers[0].Resources = *resources

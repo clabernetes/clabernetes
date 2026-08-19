@@ -3,6 +3,7 @@ package link //nolint:testpackage // tests exercise the unexported reconcile sta
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
@@ -25,6 +27,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 		nodes     []clabernetesapisv1alpha1.Node
 		target    string
 		errorPart string
+		reason    string
 	}{
 		{
 			name: "invalid",
@@ -33,6 +36,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 			},
 			target:    "bad-link",
 			errorPart: "to itself",
+			reason:    "InvalidSpec",
 		},
 		{
 			name: "endpoint-conflict",
@@ -47,6 +51,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 			},
 			target:    "z-loser",
 			errorPart: "a-winner",
+			reason:    "EndpointConflict",
 		},
 		{
 			name: "unresolved-endpoint",
@@ -56,6 +61,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 			nodes:     []clabernetesapisv1alpha1.Node{reconcileTestNode("srl1")},
 			target:    "unresolved",
 			errorPart: "missing",
+			reason:    "EndpointsUnresolved",
 		},
 	}
 
@@ -83,6 +89,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 
 			client := ctrlruntimefake.NewClientBuilder().
 				WithScheme(scheme).
+				WithStatusSubresource(&clabernetesapisv1alpha1.Link{}).
 				WithObjects(objects...).
 				Build()
 
@@ -133,6 +140,16 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 					actual.Status.Error,
 				)
 			}
+
+			condition := apimachinerymeta.FindStatusCondition(
+				actual.Status.Conditions,
+				clabernetesapisv1alpha1.LinkConditionAccepted,
+			)
+			if condition == nil || condition.Status != metav1.ConditionFalse ||
+				condition.Reason != testCase.reason ||
+				!strings.Contains(condition.Message, testCase.errorPart) {
+				t.Fatalf("rejected Link Accepted condition = %#v", condition)
+			}
 		})
 	}
 }
@@ -159,6 +176,7 @@ func TestReconcileUnresolvedLinkDoesNotReserveInterface(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Link{}).
 		WithObjects(&unresolved, &valid, &srl1, &srl2).
 		Build()
 	controller := &Controller{
@@ -199,6 +217,14 @@ func TestReconcileUnresolvedLinkDoesNotReserveInterface(t *testing.T) {
 			"expected valid Link to allocate despite unresolved conflict, got %+v",
 			actual.Status,
 		)
+	}
+	condition := apimachinerymeta.FindStatusCondition(
+		actual.Status.Conditions,
+		clabernetesapisv1alpha1.LinkConditionAccepted,
+	)
+	if condition == nil || condition.Status != metav1.ConditionTrue ||
+		condition.Reason != "Accepted" || condition.ObservedGeneration != actual.GetGeneration() {
+		t.Fatalf("valid Link Accepted condition = %#v", condition)
 	}
 }
 
@@ -308,6 +334,7 @@ func TestReconcileBindsHostEndpointWithoutNodeUID(t *testing.T) {
 	controller, client := newLifecycleTestController(t, &link, &srl1)
 
 	reconcileLifecycleLink(t, controller, link.GetName())
+	reconcileLifecycleLink(t, controller, link.GetName())
 
 	actual := getLifecycleTestLink(t, client, link.GetName())
 	if actual.Status.ResolvedEndpoints == nil {
@@ -333,6 +360,13 @@ func TestReconcileBindsHostEndpointWithoutNodeUID(t *testing.T) {
 
 	if actual.Status.Error != "" || actual.Status.TunnelID != 0 {
 		t.Fatalf("expected valid local host Link status, got %+v", actual.Status)
+	}
+
+	if !slices.Contains(
+		actual.GetFinalizers(),
+		clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
+	) {
+		t.Fatalf("host Link finalizers = %v", actual.GetFinalizers())
 	}
 }
 
@@ -453,6 +487,7 @@ func newLifecycleTestController(
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Link{}).
 		WithObjects(objects...).
 		Build()
 

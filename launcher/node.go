@@ -177,9 +177,8 @@ func mgmtNetworkFromEnv(c *clabernetes) *clabernetesutilcontainerlab.MgmtNet {
 	return mgmt
 }
 
-// writeNodeFiles writes the materialized topology, the files-from-url data (the union over all
-// group members), and the configured pull secrets to the places the rest of the launcher (and
-// containerlab itself) expects them.
+// writeNodeFiles writes the materialized topology and files-from-url data (the union over all
+// group members) to the places the rest of the launcher and containerlab expect them.
 func (c *clabernetes) writeNodeFiles(
 	config *clabernetesutilcontainerlab.Config,
 	members map[string]*clabernetesapisv1alpha1.Node,
@@ -200,22 +199,9 @@ func (c *clabernetes) writeNodeFiles(
 		c.logger.Fatalf("failed marshaling files from url data, err: %s", err)
 	}
 
-	var pullSecrets []string
-
-	rawPullSecrets := os.Getenv(clabernetesconstants.LauncherPullSecretsEnv)
-	if rawPullSecrets != "" {
-		pullSecrets = strings.Split(rawPullSecrets, ",")
-	}
-
-	pullSecretsBytes, err := yaml.Marshal(pullSecrets)
-	if err != nil {
-		c.logger.Fatalf("failed marshaling image pull secrets data, err: %s", err)
-	}
-
 	for fileName, contents := range map[string][]byte{
-		"topo.clab.yaml":               configBytes,
-		"files-from-url.yaml":          filesFromURLBytes,
-		"configured-pull-secrets.yaml": pullSecretsBytes,
+		"topo.clab.yaml":      configBytes,
+		"files-from-url.yaml": filesFromURLBytes,
 	} {
 		err = os.WriteFile(
 			fileName,

@@ -86,6 +86,47 @@ func TestLauncherProfileEventEnqueuesOnlyReferencingGroups(t *testing.T) {
 	}
 }
 
+func TestNodeGroupMoveResolvesFormerAndNewPrimaryWorkloads(t *testing.T) {
+	scheme := apimachineryruntime.NewScheme()
+	if err := clabernetesapisv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	namespace := "clabernetes"
+	firstPrimary := &clabernetesapisv1alpha1.Node{ObjectMeta: metav1.ObjectMeta{
+		Name: "primary-a", Namespace: namespace,
+	}}
+	secondPrimary := &clabernetesapisv1alpha1.Node{ObjectMeta: metav1.ObjectMeta{
+		Name: "primary-b", Namespace: namespace,
+	}}
+	current := &clabernetesapisv1alpha1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "secondary", Namespace: namespace},
+		Spec: clabernetesapisv1alpha1.NodeSpec{
+			NodeDefinition: clabernetesapisv1alpha1.NodeDefinition{
+				NetworkMode: "container:primary-b",
+			},
+		},
+	}
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(firstPrimary, secondPrimary, current).
+		Build()
+	controller := &Controller{BaseController: &clabernetescontrollers.BaseController{
+		Client: client, Log: &claberneteslogging.FakeInstance{},
+	}}
+	former := current.DeepCopy()
+	former.Spec.NetworkMode = "container:primary-a"
+
+	formerRequests := controller.enqueueLauncherFor(context.Background(), former)
+	currentRequests := controller.enqueueLauncherFor(context.Background(), current)
+	if got := requestNames(formerRequests); !reflect.DeepEqual(got, []string{"primary-a"}) {
+		t.Fatalf("former group requests = %v", got)
+	}
+	if got := requestNames(currentRequests); !reflect.DeepEqual(got, []string{"primary-b"}) {
+		t.Fatalf("new group requests = %v", got)
+	}
+}
+
 func TestLinkUpdateEnqueuesOldAndNewEndpointLaunchers(t *testing.T) {
 	scheme := apimachineryruntime.NewScheme()
 
@@ -164,6 +205,85 @@ func TestLinkConnectivityUpdateEnqueuesTerminatingLaunchers(t *testing.T) {
 	)
 	if got := requestNames(requests); !reflect.DeepEqual(got, []string{"r1", "r2"}) {
 		t.Fatalf("expected both terminating launchers for connectivity change, got %v", got)
+	}
+}
+
+func TestPayloadObjectEventEnqueuesReferencingLauncherGroups(t *testing.T) {
+	scheme := apimachineryruntime.NewScheme()
+	if err := clabernetesapisv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := k8scorev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	namespace := "clabernetes"
+	primary := &clabernetesapisv1alpha1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "primary", Namespace: namespace},
+	}
+	secondary := &clabernetesapisv1alpha1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "secondary", Namespace: namespace},
+		Spec: clabernetesapisv1alpha1.NodeSpec{
+			NodeDefinition: clabernetesapisv1alpha1.NodeDefinition{
+				NetworkMode: "container:primary",
+			},
+			FilesFromSecret: []clabernetesapisv1alpha1.FileFromSecret{{
+				SecretName: "device-license",
+			}},
+		},
+	}
+	standalone := &clabernetesapisv1alpha1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "standalone", Namespace: namespace},
+		Spec: clabernetesapisv1alpha1.NodeSpec{
+			FilesFromSecret: []clabernetesapisv1alpha1.FileFromSecret{{
+				SecretName: "device-license",
+			}},
+			FilesFromConfigMap: []clabernetesapisv1alpha1.FileFromConfigMap{{
+				ConfigMapName: "startup-config",
+			}},
+		},
+	}
+	unrelated := &clabernetesapisv1alpha1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: namespace},
+		Spec: clabernetesapisv1alpha1.NodeSpec{
+			FilesFromSecret: []clabernetesapisv1alpha1.FileFromSecret{{
+				SecretName: "other-license",
+			}},
+		},
+	}
+
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(primary, secondary, standalone, unrelated).
+		Build()
+	controller := &Controller{
+		BaseController: &clabernetescontrollers.BaseController{
+			Client: client,
+			Log:    &claberneteslogging.FakeInstance{},
+		},
+	}
+
+	secretRequests := controller.enqueueLaunchersForPayloadObject(
+		context.Background(),
+		&k8scorev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: "device-license", Namespace: namespace,
+		}},
+	)
+	if got := requestNames(secretRequests); !reflect.DeepEqual(
+		got,
+		[]string{"primary", "standalone"},
+	) {
+		t.Fatalf("Secret event launcher requests = %v", got)
+	}
+
+	configMapRequests := controller.enqueueLaunchersForPayloadObject(
+		context.Background(),
+		&k8scorev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+			Name: "startup-config", Namespace: namespace,
+		}},
+	)
+	if got := requestNames(configMapRequests); !reflect.DeepEqual(got, []string{"standalone"}) {
+		t.Fatalf("ConfigMap event launcher requests = %v", got)
 	}
 }
 

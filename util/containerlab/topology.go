@@ -12,18 +12,15 @@ import (
 // yamlUnknownFieldMarker is how yaml.v3 phrases a key that has no home in the target struct. It
 // reports one such entry per unknown key, in the same TypeError that carries genuine type errors,
 // which is why the two have to be told apart by message. If a yaml.v3 bump changes this wording,
-// TestLoadContainerlabConfigWarnsOnUnknownFields fails rather than unknown fields quietly
-// becoming hard errors.
+// TestLoadContainerlabConfigReportsUnknownFields catches the parser-contract change.
 const yamlUnknownFieldMarker = " not found in type "
 
-// LoadContainerlabConfig loads a containerlab config definition from a raw containerlab config,
-// returning a warning for every field that clabernetes does not know.
+// LoadContainerlabConfig loads a raw containerlab definition and returns one diagnostic string for
+// every field that the c9s projection does not know.
 //
-// Unknown fields are deliberately *not* fatal: a Topology definition is native containerlab, so it
-// may legitimately carry vocabulary clabernetes has no home for -- stages, or anything added by a
-// newer containerlab than this build knows. Such fields are dropped (they never reach the Node
-// objects or the launcher's rendered topology) and reported to the caller to surface, so pasting a
-// working containerlab topology keeps working.
+// Unknown fields are collected separately from parsing errors so the Topology compiler can report
+// every unsupported location in one deterministic error. They are absent from the returned typed
+// projection; callers that would emit that projection MUST reject a non-empty diagnostic list.
 //
 // Everything else stays an error. Malformed yaml, or a field clabernetes *does* know holding the
 // wrong type, is a mistake worth failing on: dropping a field the user spelled correctly would
@@ -59,7 +56,7 @@ func LoadContainerlabConfig(rawConfig string) (*Config, []string, error) {
 			unknownFields = append(
 				unknownFields,
 				fmt.Sprintf(
-					"%s is not supported by clabernetes and was omitted from the topology",
+					"%s is not supported by clabernetes",
 					unknownField,
 				),
 			)

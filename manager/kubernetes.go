@@ -47,14 +47,6 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 							},
 						},
 					},
-					// we need to cache all our image request crs too of course
-					&clabernetesapisv1alpha1.ImageRequest{}: {
-						Namespaces: map[string]ctrlruntimecache.Config{
-							ctrlruntimecache.AllNamespaces: {
-								LabelSelector: labels.Everything(),
-							},
-						},
-					},
 					// nodes/links/launcher profiles are the primary api -- they are created by
 					// users (or tooling) and carry no c9s.run/app label, so they must be
 					// cached unconditionally

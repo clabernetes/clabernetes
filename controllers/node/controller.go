@@ -1,8 +1,10 @@
 package node
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"net/http"
 	"sort"
 
 	clabernetesapis "github.com/clabernetes/clabernetes/apis"
@@ -14,7 +16,12 @@ import (
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
+	k8snetworkingv1 "k8s.io/api/networking/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	clientgorest "k8s.io/client-go/rest"
+	clientgoremotecommand "k8s.io/client-go/tools/remotecommand"
 	clientgoworkqueue "k8s.io/client-go/util/workqueue"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -46,17 +53,86 @@ func NewController(
 		clabernetes.GetCtrlRuntimeClient(),
 	)
 
+	reconciler := NewReconciler(
+		baseController.Log,
+		baseController.Client,
+		clabernetes.GetCtrlRuntimeMgr().GetAPIReader(),
+		clabernetes.GetAppName(),
+		clabernetes.GetNamespace(),
+		clabernetes.GetDeviceRuntimeMode(),
+		clabernetesconfig.GetManager,
+	)
+	reconciler.DirectRuntimeImage = clabernetes.GetDeviceRuntimeImage()
+	reconciler.DirectContainerExecutor = newDirectContainerExecutor(
+		clabernetes.GetKubeConfig(),
+		clabernetes.GetKubeClient(),
+	)
+	readLogs := PlannerLogReader(func(
+		ctx context.Context,
+		namespace,
+		podName,
+		containerName string,
+	) ([]byte, error) {
+		return clabernetes.GetKubeClient().CoreV1().Pods(namespace).GetLogs(
+			podName,
+			&k8scorev1.PodLogOptions{Container: containerName},
+		).DoRaw(ctx)
+	})
+	reconciler.ImageDiscoveryReconciler.ReadLogs = readLogs
+	reconciler.PlannerReconciler.ReadLogs = readLogs
+
 	return &Controller{
 		BaseController: baseController,
-		reconciler: NewReconciler(
-			baseController.Log,
-			baseController.Client,
-			clabernetes.GetCtrlRuntimeMgr().GetAPIReader(),
-			clabernetes.GetAppName(),
-			clabernetes.GetNamespace(),
-			clabernetes.GetClusterCRIKind(),
-			clabernetesconfig.GetManager,
-		),
+		reconciler:     reconciler,
+	}
+}
+
+func newDirectContainerExecutor(
+	config *clientgorest.Config,
+	client *kubernetes.Clientset,
+) DirectContainerExecutor {
+	return func(
+		ctx context.Context,
+		namespace,
+		podName,
+		containerName string,
+		command []string,
+	) error {
+		if config == nil || client == nil || namespace == "" || podName == "" ||
+			containerName == "" || len(command) == 0 {
+			return fmt.Errorf("direct container exec identity is incomplete")
+		}
+		request := client.CoreV1().RESTClient().Post().
+			Namespace(namespace).
+			Resource("pods").
+			Name(podName).
+			SubResource("exec").
+			VersionedParams(&k8scorev1.PodExecOptions{
+				Container: containerName,
+				Command:   command,
+				Stdout:    true,
+				Stderr:    true,
+			}, clientgoscheme.ParameterCodec)
+		executor, err := clientgoremotecommand.NewSPDYExecutor(
+			config,
+			http.MethodPost,
+			request.URL(),
+		)
+		if err != nil {
+			return fmt.Errorf("creating direct container executor: %w", err)
+		}
+		var stderr bytes.Buffer
+		if err = executor.StreamWithContext(ctx, clientgoremotecommand.StreamOptions{
+			Stdout: &bytes.Buffer{}, Stderr: &stderr,
+		}); err != nil {
+			return fmt.Errorf(
+				"executing direct container command: %w: %s",
+				err,
+				stderr.String(),
+			)
+		}
+
+		return nil
 	}
 }
 
@@ -66,6 +142,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		"setting up %s controller with manager",
 		clabernetesapis.Node,
 	)
+	c.reconciler.EventRecorder = mgr.GetEventRecorder("clabernetes-node-controller")
 
 	err := mgr.GetFieldIndexer().IndexField(
 		c.Ctx,
@@ -110,6 +187,40 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// owned objects
 		Watches(
 			&k8sappsv1.Deployment{},
+			ctrlruntimehandler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&clabernetesapisv1alpha1.Node{},
+			),
+		).
+		Watches(
+			&k8scorev1.ConfigMap{},
+			ctrlruntimehandler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&clabernetesapisv1alpha1.Node{},
+			),
+		).
+		// referenced payload objects are not Node-owned; changes must still re-plan the
+		// launcher group that consumes them.
+		Watches(
+			&k8scorev1.ConfigMap{},
+			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueLaunchersForPayloadObject),
+		).
+		Watches(
+			&k8scorev1.Secret{},
+			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueLaunchersForPayloadObject),
+		).
+		Watches(
+			&k8scorev1.Secret{},
+			ctrlruntimehandler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&clabernetesapisv1alpha1.Node{},
+			),
+		).
+		Watches(
+			&k8snetworkingv1.NetworkPolicy{},
 			ctrlruntimehandler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
@@ -367,6 +478,83 @@ func (c *Controller) enqueueAllNodes(
 				Name:      nodes.Items[idx].GetName(),
 			},
 		}
+	}
+
+	return requests
+}
+
+// enqueueLaunchersForPayloadObject maps a same-namespace ConfigMap or Secret change to every
+// launcher group whose Node declarations reference that object. Payload objects are deliberately
+// not owned by Nodes, so owner watches cannot provide this invalidation path.
+func (c *Controller) enqueueLaunchersForPayloadObject(
+	ctx context.Context,
+	obj ctrlruntimeclient.Object,
+) []ctrlruntimereconcile.Request {
+	references := func(node *clabernetesapisv1alpha1.Node) bool { return false }
+
+	switch payloadObject := obj.(type) {
+	case *k8scorev1.ConfigMap:
+		references = func(node *clabernetesapisv1alpha1.Node) bool {
+			for _, declaration := range node.Spec.FilesFromConfigMap {
+				if declaration.ConfigMapName == payloadObject.GetName() {
+					return true
+				}
+			}
+
+			return false
+		}
+	case *k8scorev1.Secret:
+		references = func(node *clabernetesapisv1alpha1.Node) bool {
+			for _, declaration := range node.Spec.FilesFromSecret {
+				if declaration.SecretName == payloadObject.GetName() {
+					return true
+				}
+			}
+
+			return false
+		}
+	default:
+		return nil
+	}
+
+	nodes := &clabernetesapisv1alpha1.NodeList{}
+	if err := c.Client.List(
+		ctx,
+		nodes,
+		ctrlruntimeclient.InNamespace(obj.GetNamespace()),
+	); err != nil {
+		c.Log.Criticalf("failed listing Nodes for payload object enqueue, err: %s", err)
+
+		return nil
+	}
+
+	nodesByName := clabernetesutilcontainerlab.NodesByName(nodes.Items)
+	launcherNames := map[string]bool{}
+
+	for idx := range nodes.Items {
+		node := &nodes.Items[idx]
+		if references(node) {
+			launcherNames[clabernetesutilcontainerlab.ResolveLauncherNode(
+				nodesByName,
+				node.GetName(),
+			)] = true
+		}
+	}
+
+	names := make([]string, 0, len(launcherNames))
+	for name := range launcherNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	requests := make([]ctrlruntimereconcile.Request, 0, len(names))
+	for _, name := range names {
+		requests = append(requests, ctrlruntimereconcile.Request{
+			NamespacedName: apimachinerytypes.NamespacedName{
+				Namespace: obj.GetNamespace(),
+				Name:      name,
+			},
+		})
 	}
 
 	return requests

@@ -56,7 +56,6 @@ func TestRenderDeployment(t *testing.T) {
 		&claberneteslogging.FakeInstance{},
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
 		clabernetesconfig.GetFakeManager,
 	)
 
@@ -163,7 +162,6 @@ func TestRenderDeploymentDeduplicatesGroupedPayloadMountPaths(t *testing.T) {
 		&claberneteslogging.FakeInstance{},
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
 		clabernetesconfig.GetFakeManager,
 	)
 
@@ -227,7 +225,6 @@ func TestValidateGroupedPayloadMounts(t *testing.T) {
 		&claberneteslogging.FakeInstance{},
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
 		clabernetesconfig.GetFakeManager,
 	)
 
@@ -270,20 +267,24 @@ func assertRenderedContainer(t *testing.T, container *k8scorev1.Container) {
 		t.Fatalf("expected group members env 'sim-a,sim-b', got %+v", groupMembersEnv)
 	}
 
-	nodeImageEnv := findEnv(container.Env, clabernetesconstants.LauncherNodeImageEnv)
-	if nodeImageEnv == nil || nodeImageEnv.Value != "ghcr.io/nokia/srlinux:latest" {
-		t.Fatalf("expected node image env, got %+v", nodeImageEnv)
-	}
-
 	for _, env := range container.Env {
-		if env.Name == "LAUNCHER_CONNECTIVITY_KIND" {
+		switch env.Name {
+		case "LAUNCHER_CONNECTIVITY_KIND":
 			t.Fatal("connectivity is Link-owned and must not be injected as launcher-wide env")
+		case "LAUNCHER_CRI_KIND", "LAUNCHER_IMAGE_PULL_THROUGH_MODE", "LAUNCHER_NODE_IMAGE",
+			"LAUNCHER_PULL_SECRETS":
+			t.Fatalf("obsolete image-import environment variable %q was rendered", env.Name)
 		}
 	}
 
 	var podinfoMounted bool
 
 	for _, mount := range container.VolumeMounts {
+		switch mount.Name {
+		case "cri-sock", "cri-hosts", "docker-config", "docker-daemon-config":
+			t.Fatalf("obsolete image-import volume mount %q was rendered", mount.Name)
+		}
+
 		if mount.Name == "podinfo" && mount.MountPath == "/clabernetes/podinfo" {
 			podinfoMounted = true
 		}
@@ -304,7 +305,6 @@ func TestRenderDeploymentStandaloneHasNoGroupEnv(t *testing.T) {
 		&claberneteslogging.FakeInstance{},
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
 		clabernetesconfig.GetFakeManager,
 	)
 
@@ -323,252 +323,6 @@ func TestRenderDeploymentStandaloneHasNoGroupEnv(t *testing.T) {
 	}
 }
 
-func TestRenderDeploymentCRIHostsDir(t *testing.T) {
-	t.Parallel()
-
-	const customHostsDir = "/etc/cri/conf.d/hosts"
-
-	for _, tt := range []struct {
-		name           string
-		criHostsDir    string
-		clusterCRIKind string
-		pullThrough    string
-		wantHostPath   string
-		wantMountPaths []string
-	}{
-		{
-			name:           "always mounts custom directory at both paths",
-			criHostsDir:    customHostsDir,
-			pullThrough:    clabernetesconstants.ImagePullThroughModeAlways,
-			wantHostPath:   customHostsDir,
-			wantMountPaths: []string{customHostsDir, clabernetesconstants.ContainerdCertsDir},
-		},
-		{
-			name:           "auto mounts custom directory at both paths",
-			criHostsDir:    customHostsDir,
-			pullThrough:    clabernetesconstants.ImagePullThroughModeAuto,
-			wantHostPath:   customHostsDir,
-			wantMountPaths: []string{customHostsDir, clabernetesconstants.ContainerdCertsDir},
-		},
-		{
-			name:        "never skips configured directory",
-			criHostsDir: customHostsDir,
-			pullThrough: clabernetesconstants.ImagePullThroughModeNever,
-		},
-		{
-			name:        "unset directory is skipped",
-			pullThrough: clabernetesconstants.ImagePullThroughModeAlways,
-		},
-		{
-			name:           "default directory is mounted once",
-			criHostsDir:    clabernetesconstants.ContainerdCertsDir,
-			pullThrough:    clabernetesconstants.ImagePullThroughModeAlways,
-			wantHostPath:   clabernetesconstants.ContainerdCertsDir,
-			wantMountPaths: []string{clabernetesconstants.ContainerdCertsDir},
-		},
-		{
-			name:        "root-equivalent directory is rejected",
-			criHostsDir: "//",
-			pullThrough: clabernetesconstants.ImagePullThroughModeAlways,
-		},
-		{
-			name:        "relative directory is rejected defensively",
-			criHostsDir: "etc/cri/hosts",
-			pullThrough: clabernetesconstants.ImagePullThroughModeAlways,
-		},
-		{
-			name:           "non-containerd cri skips configured directory",
-			criHostsDir:    customHostsDir,
-			clusterCRIKind: clabernetesconstants.KubernetesCRICrio,
-			pullThrough:    clabernetesconstants.ImagePullThroughModeAuto,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			node := &clabernetesapisv1alpha1.Node{}
-			node.Name = "node"
-			node.Namespace = "clabernetes"
-			node.Spec.Image = "registry.example/image:latest"
-
-			clusterCRIKind := tt.clusterCRIKind
-			if clusterCRIKind == "" {
-				clusterCRIKind = clabernetesconstants.KubernetesCRIContainerd
-			}
-
-			configManager := clabernetesconfig.NewFakeManager(
-				clabernetesconfig.WithCRIHostsDir(tt.criHostsDir),
-			)
-			reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
-				&claberneteslogging.FakeInstance{},
-				"clabernetes",
-				"clabernetes",
-				clusterCRIKind,
-				func() clabernetesconfig.Manager {
-					return configManager
-				},
-			)
-
-			deployment := reconciler.Render(
-				&clabernetescontrollersnode.RenderInput{
-					Node: node,
-					Profile: testResolvedProfile(
-						t,
-						func(profile *clabernetescontrollersnode.ResolvedProfile) {
-							profile.PullThroughOverride = tt.pullThrough
-						},
-					),
-					GroupMembers: []string{"node"},
-				},
-			)
-
-			assertCRIHostsDir(
-				t,
-				deployment.Spec.Template.Spec.Volumes,
-				deployment.Spec.Template.Spec.Containers[0].VolumeMounts,
-				tt.wantHostPath,
-				tt.wantMountPaths,
-			)
-		})
-	}
-}
-
-func TestRenderDeploymentCRIKindOverride(t *testing.T) {
-	t.Parallel()
-
-	const customHostsDir = "/etc/cri/conf.d/hosts"
-
-	node := &clabernetesapisv1alpha1.Node{}
-	node.Name = "node"
-	node.Namespace = "clabernetes"
-	node.Spec.Image = "registry.example/image:latest"
-
-	configManager := clabernetesconfig.NewFakeManager(
-		clabernetesconfig.WithCRIHostsDir(customHostsDir),
-		clabernetesconfig.WithCRIKindOverride(
-			clabernetesconstants.KubernetesCRIContainerd,
-		),
-	)
-	reconciler := clabernetescontrollersnode.NewDeploymentReconciler(
-		&claberneteslogging.FakeInstance{},
-		"clabernetes",
-		"clabernetes",
-		clabernetesconstants.KubernetesCRIUnknown,
-		func() clabernetesconfig.Manager {
-			return configManager
-		},
-	)
-
-	deployment := reconciler.Render(
-		&clabernetescontrollersnode.RenderInput{
-			Node: node,
-			Profile: testResolvedProfile(
-				t,
-				func(profile *clabernetescontrollersnode.ResolvedProfile) {
-					profile.PullThroughOverride = clabernetesconstants.ImagePullThroughModeAuto
-				},
-			),
-			GroupMembers: []string{"node"},
-		},
-	)
-
-	if findVolumeByName(deployment.Spec.Template.Spec.Volumes, "cri-sock") == nil {
-		t.Fatal("expected containerd override to render the default CRI socket")
-	}
-
-	assertCRIHostsDir(
-		t,
-		deployment.Spec.Template.Spec.Volumes,
-		deployment.Spec.Template.Spec.Containers[0].VolumeMounts,
-		customHostsDir,
-		[]string{customHostsDir, clabernetesconstants.ContainerdCertsDir},
-	)
-
-	criKindEnv := findEnv(
-		deployment.Spec.Template.Spec.Containers[0].Env,
-		clabernetesconstants.LauncherCRIKindEnv,
-	)
-	if criKindEnv == nil || criKindEnv.Value != clabernetesconstants.KubernetesCRIContainerd {
-		t.Fatalf("expected effective containerd CRI env, got %+v", criKindEnv)
-	}
-}
-
-func assertCRIHostsDir(
-	t *testing.T,
-	volumes []k8scorev1.Volume,
-	volumeMounts []k8scorev1.VolumeMount,
-	wantHostPath string,
-	wantMountPaths []string,
-) {
-	t.Helper()
-
-	hostsVolume := findVolumeByName(volumes, "cri-hosts")
-	hostsMounts := filterVolumeMountsByName(volumeMounts, "cri-hosts")
-
-	if wantHostPath == "" {
-		if hostsVolume != nil {
-			t.Fatalf("expected no CRI hosts volume, got %+v", hostsVolume)
-		}
-
-		if len(hostsMounts) != 0 {
-			t.Fatalf("expected no CRI hosts mounts, got %+v", hostsMounts)
-		}
-
-		return
-	}
-
-	if hostsVolume == nil || hostsVolume.HostPath == nil ||
-		hostsVolume.HostPath.Path != wantHostPath {
-		t.Fatalf("unexpected CRI hosts volume: %+v", hostsVolume)
-	}
-
-	if hostsVolume.HostPath.Type == nil ||
-		*hostsVolume.HostPath.Type != k8scorev1.HostPathDirectory {
-		t.Fatalf("expected CRI hosts volume to require a directory: %+v", hostsVolume)
-	}
-
-	if len(hostsMounts) != len(wantMountPaths) {
-		t.Fatalf("expected %d CRI hosts mounts, got %+v", len(wantMountPaths), hostsMounts)
-	}
-
-	mountPaths := map[string]bool{}
-
-	for _, mount := range hostsMounts {
-		mountPaths[mount.MountPath] = mount.ReadOnly
-	}
-
-	for _, wantMountPath := range wantMountPaths {
-		if !mountPaths[wantMountPath] {
-			t.Fatalf("expected read-only mount at %q, got %v", wantMountPath, mountPaths)
-		}
-	}
-}
-
-func findVolumeByName(volumes []k8scorev1.Volume, name string) *k8scorev1.Volume {
-	for idx := range volumes {
-		if volumes[idx].Name == name {
-			return &volumes[idx]
-		}
-	}
-
-	return nil
-}
-
-func filterVolumeMountsByName(
-	volumeMounts []k8scorev1.VolumeMount,
-	name string,
-) []k8scorev1.VolumeMount {
-	filtered := []k8scorev1.VolumeMount{}
-
-	for _, mount := range volumeMounts {
-		if mount.Name == name {
-			filtered = append(filtered, mount)
-		}
-	}
-
-	return filtered
-}
-
 func TestRenderDeploymentGenericStatusProbes(t *testing.T) {
 	node := &clabernetesapisv1alpha1.Node{}
 	node.Name = "generic-node"
@@ -579,7 +333,6 @@ func TestRenderDeploymentGenericStatusProbes(t *testing.T) {
 		&claberneteslogging.FakeInstance{},
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
 		clabernetesconfig.GetFakeManager,
 	)
 
@@ -646,7 +399,6 @@ func TestRenderDeploymentSRLinuxRuntimeReadinessWhenStatusProbesDisabled(t *test
 		&claberneteslogging.FakeInstance{},
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
 		clabernetesconfig.GetFakeManager,
 	)
 	deployment := reconciler.Render(
@@ -678,7 +430,6 @@ func TestRenderDeploymentRoundsCustomStartupAllowanceUp(t *testing.T) {
 		&claberneteslogging.FakeInstance{},
 		"clabernetes",
 		"clabernetes",
-		clabernetesconstants.KubernetesCRIContainerd,
 		clabernetesconfig.GetFakeManager,
 	)
 	deployment := reconciler.Render(
