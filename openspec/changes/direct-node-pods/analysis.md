@@ -350,10 +350,17 @@ Step 0 and Step 1 of §7 are done; the work now lives in reviewable commits on `
   host-endpoint RPC pacing (30s re-assertion); direct-mode auto-expose parity with the nested
   default port set (found by the clabverter e2e, which exercises a host link in direct mode).
 - **Validated**: full unit suite, `-race` on the four changed packages, `make verify-generated`,
-  `make check-docs`, and the rewritten `e2e/topology/direct` against the live cluster — two
-  unmodified SR Linux images boot as direct device Pods, dataplane ping crosses the vxlan link,
-  planning workers are collected, and a live rewire lands without a Pod roll (evidence:
+  `make check-docs`, and the rewritten `e2e/topology/direct` + `e2e/clabverter` suites against
+  the live cluster — unmodified SR Linux images boot as direct device Pods with embedded
+  startup configs applied, a linux-kind pair passes dataplane ping across a direct vxlan Link,
+  host Links and auto-exposed Services materialize through the clabverter flow, planning
+  workers are collected, and a live rewire lands without a Pod roll (evidence:
   `evidence/direct-runtime-remediation-e2e.md`).
+- **New recorded generic gap**: kinds that take ownership of the Pod primary interface (SR
+  Linux renames `eth0` and strips its address) leave the Pod network namespace without
+  underlay routes, so in-Pod VTEPs cannot encapsulate — SR Linux dataplane over vxlan needs
+  fabric termination in the worker host namespace (via the existing host-endpoint daemon,
+  veth into the Pod like host Links) as a reviewed design revision before task 10.2 can close.
 - **Still open**: `make lint` (branch-wide pre-existing style debt, task 12.4), the §4 cut list
   beyond the items above (xattr recording, provenance layer, compatibility-matrix shrink,
   certificate self-verification, entropy Secret, reconcile fast path, log-broker gating,
