@@ -85,6 +85,9 @@ func (a Adapter) RunSave(
 	}
 	config.Index = nodeIndex
 	config.LabDir = targetLabDir
+	if err = materializeEmbeddedStartupConfig(targetInput.ID, config); err != nil {
+		return err
+	}
 	management := managementForNode(normalizedInput.Management, targetInput.ID)
 	applyManagementInput(config, management)
 	implementation, err := registry.NewNodeOfKind(targetInput.Kind)

@@ -86,6 +86,9 @@ func (a Adapter) CheckReadiness(
 	}
 	config.Index = nodeIndex
 	config.LabDir = workspace
+	if err = materializeEmbeddedStartupConfig(nodeInput.ID, config); err != nil {
+		return err
+	}
 	management := managementForNode(normalizedInput.Management, nodeInput.ID)
 	applyManagementInput(config, management)
 	runtime := newRecordingRuntime(normalizedInput.Images, management, workspace)

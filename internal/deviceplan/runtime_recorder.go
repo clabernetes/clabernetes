@@ -717,11 +717,17 @@ func (r *recordingRuntime) CopyToContainer(
 			Message: "cannot create a controlled runtime-copy artifact directory", cause: err,
 		})
 	}
+	// The imported container runtime realizes CopyToContainer with a fixed world-readable
+	// mode regardless of the source file's permissions (its tar header is always 0666), and
+	// package hooks rely on that: configuration blobs staged from private temp files must be
+	// readable by unprivileged device users. Record the mode the runtime contract realizes,
+	// applied explicitly so the process umask cannot skew the captured artifact metadata.
+	const runtimeCopyMode = 0o666
 	file, err := os.OpenFile(
 		snapshotPath,
 		os.O_WRONLY|os.O_CREATE|os.O_EXCL,
-		info.Mode().Perm(),
-	) //nolint:gosec // Imported mode is preserved inside private scratch.
+		runtimeCopyMode,
+	) //nolint:gosec // The runtime-contract mode is realized inside private scratch.
 	if err != nil {
 		return r.failLocked(&Error{
 			Code: ErrorSideEffect, Field: "copy.snapshot", Behavior: operation,
@@ -729,9 +735,10 @@ func (r *recordingRuntime) CopyToContainer(
 		})
 	}
 	if _, err = file.Write(content); err == nil {
-		err = file.Close()
-	} else {
-		_ = file.Close()
+		err = file.Chmod(runtimeCopyMode)
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
 	}
 	if err != nil {
 		return r.failLocked(&Error{

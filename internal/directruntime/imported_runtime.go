@@ -638,7 +638,11 @@ func (r *importedApplicationRuntime) CopyToContainer(
 	temporaryName := temporary.Name()
 	defer os.Remove(temporaryName)
 	if _, err = temporary.Write(content); err == nil {
-		err = temporary.Chmod(info.Mode().Perm())
+		// The imported container runtime realizes CopyToContainer with a fixed world-readable
+		// mode regardless of the source file's permissions (its tar header is always 0666);
+		// package hooks stage configuration from private temp files and then read it back as
+		// unprivileged device users, so preserving the source mode breaks them.
+		err = temporary.Chmod(0o666)
 	}
 	if closeErr := temporary.Close(); err == nil {
 		err = closeErr

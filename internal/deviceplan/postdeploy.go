@@ -299,6 +299,15 @@ func (a Adapter) rehydrateImportedDeployment(
 		if nodeInput.ID == targetNode.ID {
 			config.LabDir = targetLabDir
 		}
+		// Embedded startup configuration must exist as a workspace file here exactly as it did
+		// during planning and preparation; for the target this rewrite is idempotent with the
+		// prepared artifact.
+		if embeddedErr := materializeEmbeddedStartupConfig(
+			nodeInput.ID,
+			config,
+		); embeddedErr != nil {
+			return nil, embeddedErr
+		}
 		management := managementForNode(normalizedInput.Management, nodeInput.ID)
 		applyManagementInput(config, management)
 		implementation, constructErr := registry.NewNodeOfKind(nodeInput.Kind)
