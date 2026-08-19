@@ -155,7 +155,19 @@ func appendEvaluatedNode(
 			return err
 		}
 	}
+	// Imported lifecycle hooks execute against the node's root implementation, so their actions
+	// must run inside the container carrying the root's runtime identity: a component kind may
+	// record its namespace parent before the root container, and an application-local exec from
+	// the wrong sibling cannot reach the root's processes.
 	primaryContainerID := nodeContainerIDs[0]
+	for index, recorded := range node.Containers {
+		if recorded.Config != nil && node.Config != nil &&
+			recorded.Config.LongName == node.Config.LongName {
+			primaryContainerID = nodeContainerIDs[index]
+
+			break
+		}
+	}
 	// Every imported lifecycle is rehydrated with a package LabDir, even when the package emitted
 	// no preparation artifact. Keep that runtime-owned directory generic and plan-scoped rather
 	// than making its existence depend on kind-specific file generation.

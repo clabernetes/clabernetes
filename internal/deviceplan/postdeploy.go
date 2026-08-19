@@ -290,6 +290,17 @@ func (a Adapter) rehydrateImportedDeployment(
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
+		// Payload destinations exist only inside device containers; re-run hooks read the
+		// preparer-staged, digest-verified bytes from the shared artifact tree instead.
+		if rewriteErr := rewriteStagedPayloadPaths(
+			nodeInput.ID,
+			definition,
+			normalizedInput,
+			normalizedPlan,
+			artifactRoot,
+		); rewriteErr != nil {
+			return nil, rewriteErr
+		}
 		config, configErr := nodeConfigFromDefinition(nodeInput, definition, entry)
 		if configErr != nil {
 			return nil, configErr

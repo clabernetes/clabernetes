@@ -1187,6 +1187,54 @@ func rewriteExplicitPayloadPaths(
 	return rewriteImportedStringLeaves(reflect.ValueOf(definition), rewrite)
 }
 
+// rewriteStagedPayloadPaths repoints definition fields that name payload destinations at the
+// preparer-staged artifact bytes, so imported hooks re-run inside lifecycle workers read the
+// same digest-verified content without a payload projection mount.
+func rewriteStagedPayloadPaths(
+	nodeID string,
+	definition *clabtypes.NodeDefinition,
+	input Input,
+	plan Plan,
+	artifactRoot string,
+) error {
+	payloadFiles := map[string]FilePlan{}
+	for _, file := range plan.Files {
+		if file.SourceKind == FileSourcePayload {
+			payloadFiles[file.SourceReference] = file
+		}
+	}
+	byDestination := map[string]string{}
+	for _, payload := range input.Payloads {
+		if payload.NodeID != nodeID {
+			continue
+		}
+		file, staged := payloadFiles[payload.ID]
+		destination := normalizedPayloadPath(payload.Destination)
+		if !staged || destination == "" {
+			continue
+		}
+		byDestination[destination] = filepath.Join(
+			artifactRoot,
+			ArtifactNodeDirectory(file.NodeID),
+			filepath.FromSlash(file.ArtifactPath),
+		)
+	}
+	if len(byDestination) == 0 {
+		return nil
+	}
+
+	return rewriteImportedStringLeaves(
+		reflect.ValueOf(definition),
+		func(value string) (string, error) {
+			if staged, exists := byDestination[normalizedPayloadPath(value)]; exists {
+				return staged, nil
+			}
+
+			return value, nil
+		},
+	)
+}
+
 func normalizedPayloadPath(value string) string {
 	if value == "" || strings.ContainsRune(value, '\x00') {
 		return ""
