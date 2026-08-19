@@ -12,10 +12,8 @@ const (
 	topoSpecFile         = "topoSpecFile"
 	outputDirectory      = "outputDirectory"
 	destinationNamespace = "destinationNamespace"
-	insecureRegistries   = "insecureRegistries"
 	imagePullSecrets     = "imagePullSecrets"
 	naming               = "naming"
-	containerlabVersion  = "containerlabVersion"
 	disableExpose        = "disableExpose"
 	emitCRs              = "emitCRs"
 	debug                = "debug"
@@ -59,12 +57,6 @@ func Entrypoint() *cli.App {
 				Value:    "",
 			},
 			&cli.StringFlag{
-				Name:     insecureRegistries,
-				Usage:    "comma separated list of insecure registries",
-				Required: false,
-				Value:    "",
-			},
-			&cli.StringFlag{
 				Name:     imagePullSecrets,
 				Usage:    "comma separated list of registry secrets",
 				Required: false,
@@ -88,12 +80,6 @@ func Entrypoint() *cli.App {
 				Usage:    "naming scheme to use for clabernetes resources",
 				Required: false,
 				Value:    "prefixed",
-			},
-			&cli.StringFlag{
-				Name:     containerlabVersion,
-				Usage:    "an explicit containerlab version to use (example: 0.51.1)",
-				Required: false,
-				Value:    "",
 			},
 			&cli.BoolFlag{
 				Name:     debug,
@@ -122,8 +108,6 @@ func Entrypoint() *cli.App {
 				c.String(outputDirectory),
 				c.String(destinationNamespace),
 				c.String(naming),
-				c.String(containerlabVersion),
-				c.String(insecureRegistries),
 				c.String(imagePullSecrets),
 				c.Bool(disableExpose),
 				c.Bool(emitCRs),
