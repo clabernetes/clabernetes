@@ -70,6 +70,10 @@ func TestNodeLinkDirect(t *testing.T) {
 		initialPods[nodeName] = observation
 	}
 
+	// Dataplane over the vxlan Link: the startup configs address ethernet-1/1 on both ends, so
+	// srl1 must reach srl2 across the tunnel from inside the actual device container.
+	waitForDataplanePing(t, namespace, initialPods["srl1"], "192.168.0.1")
+
 	waitForWorkerArtifactCollection(t, namespace)
 
 	initialDigest := nodePlanDigest(t, namespace, "srl1")
@@ -103,8 +107,62 @@ func TestNodeLinkDirect(t *testing.T) {
 }
 
 type devicePodObservation struct {
-	podName string
-	image   string
+	podName       string
+	containerName string
+	image         string
+}
+
+// waitForDataplanePing execs into the device container and pings the peer's link address from
+// the device's default network instance until it answers or the deadline passes.
+func waitForDataplanePing(
+	t *testing.T,
+	namespace string,
+	device devicePodObservation,
+	target string,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(directNodeReadyTimeout)
+
+	var lastOutput []byte
+	for time.Now().Before(deadline) {
+		cmd := exec.CommandContext( //nolint:gosec
+			t.Context(),
+			"kubectl",
+			"exec",
+			"--namespace",
+			namespace,
+			device.podName,
+			"-c",
+			device.containerName,
+			"--",
+			"ip",
+			"netns",
+			"exec",
+			"srbase-default",
+			"ping",
+			"-c",
+			"2",
+			"-W",
+			"2",
+			target,
+		)
+
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			return
+		}
+		lastOutput = output
+
+		time.Sleep(directPollInterval)
+	}
+
+	t.Fatalf(
+		"device %q never reached %q across the link: %s",
+		device.podName,
+		target,
+		strings.TrimSpace(string(lastOutput)),
+	)
 }
 
 func waitForDirectNodeReady(t *testing.T, namespace, nodeName string) {
@@ -176,16 +234,22 @@ func observeDevicePod(t *testing.T, namespace, nodeName string) devicePodObserva
 	}
 
 	image := ""
+	containerName := ""
 	for _, container := range pod.Spec.Containers {
 		if strings.HasPrefix(container.Name, "device-") {
 			image = container.Image
+			containerName = container.Name
 		}
 	}
 	if image == "" {
 		t.Fatalf("device Pod %q has no device application container", pod.Metadata.Name)
 	}
 
-	return devicePodObservation{podName: pod.Metadata.Name, image: image}
+	return devicePodObservation{
+		podName:       pod.Metadata.Name,
+		containerName: containerName,
+		image:         image,
+	}
 }
 
 // waitForWorkerArtifactCollection asserts that completed planning and image-discovery worker

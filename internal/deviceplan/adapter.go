@@ -374,6 +374,9 @@ func evaluateNode(
 		strings.TrimPrefix(Digest([]byte(nodeInput.ID)), "sha256:"),
 	)
 	config.LabDir = scratchLabDir
+	if err = materializeEmbeddedStartupConfig(nodeInput.ID, config); err != nil {
+		return nil, err
+	}
 	management := managementForNode(input.Management, nodeInput.ID)
 	applyManagementInput(config, management)
 
@@ -979,11 +982,48 @@ func scanGeneratedArtifacts(root string) ([]GeneratedArtifact, error) {
 	return artifacts, nil
 }
 
+// embeddedStartupConfigFilename holds an inline startup-configuration blob inside the node's
+// workspace so imported hooks consume it through the same file semantics containerlab itself
+// realizes for embedded configuration content.
+const embeddedStartupConfigFilename = "embedded-startup-config.partial.cfg"
+
+// materializeEmbeddedStartupConfig writes an inline startup-configuration value into the node
+// workspace and repoints the configuration at that file. Containerlab treats any reference with
+// a newline as embedded content and materializes it before kinds run; this boundary owns the
+// same generic step because it constructs NodeConfig directly from the definition. Single-line
+// values stay untouched: they are payload paths verified by the imported hook itself.
+func materializeEmbeddedStartupConfig(nodeID string, config *clabtypes.NodeConfig) error {
+	if strings.Count(config.StartupConfig, "\n") < 1 {
+		return nil
+	}
+	if err := os.MkdirAll(config.LabDir, 0o700); err != nil {
+		return &Error{
+			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
+			Behavior: "imported-startup-config",
+			Message:  "cannot prepare the workspace for embedded startup configuration",
+			cause:    err,
+		}
+	}
+	destination := filepath.Join(config.LabDir, embeddedStartupConfigFilename)
+	if err := os.WriteFile(destination, []byte(config.StartupConfig), 0o600); err != nil {
+		return &Error{
+			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
+			Behavior: "imported-startup-config",
+			Message:  "cannot materialize embedded startup configuration",
+			cause:    err,
+		}
+	}
+	config.StartupConfig = destination
+
+	return nil
+}
+
 func rewriteWorkspacePaths(config *clabtypes.NodeConfig, scratchRoot, stableRoot string) {
 	rewrite := func(value string) string {
 		return strings.ReplaceAll(value, scratchRoot, stableRoot)
 	}
 	config.LabDir = stableRoot
+	config.StartupConfig = rewrite(config.StartupConfig)
 	config.ResStartupConfig = rewrite(config.ResStartupConfig)
 	for index := range config.Binds {
 		config.Binds[index] = rewrite(config.Binds[index])

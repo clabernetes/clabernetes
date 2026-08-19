@@ -328,3 +328,34 @@ gap hides. Keep the evidence-file discipline from task 5.7 — it worked.
 - Checks run: `go build ./...` ✅, unit tests (all packages except `e2e/`) ✅,
   `e2e/topology/direct` ❌ (P0-1). Not run: `make lint`, `make verify-generated`, `make test-race`,
   image builds, `make test-e2e-local` (known broken, P0-2).
+
+## 9. Remediation status (updated 2026-08-19, same day, follow-up session)
+
+Step 0 and Step 1 of §7 are done; the work now lives in reviewable commits on `direct-c9s`:
+
+- **Committed in 9 slices** (deps/compat gate, deviceplan, ocimetadata, direct runtime,
+  API migration, node controller, topology/clabverter, charts/docs, openspec artifacts),
+  followed by fix commits.
+- **P0/P1 fixed and verified live**: tag-less image handling plus verbatim reference identity
+  through metadata resolution; `.mk/e2e.mk` Helm values plus an `E2E_DEVICE_RUNTIME_MODE` knob
+  and mode-gated suites; probe/cert Secret cache visibility (labels + API-reader reads);
+  payload ConfigMap/Secret caching with data stripped so payload edits re-plan; restricted-RBAC
+  gating of cluster-wide exec/log/events with a negative chart test; worker records persisted
+  in output ConfigMaps (log-rotation-proof, negative-cache for deterministic failures,
+  delete-and-retry for transient ones); prompt worker Pod/NetworkPolicy deletion plus an
+  owner-scoped sweep (verified: the 84 leaked Pods in `direct-links-e2e` were collected within
+  one pass); resolver HTTP deadlines; 60s direct-mode watchdog requeue; worker log framing;
+  slurpeeth shutdown order; entropy read serialization; the `direct.go` shadowing bug; the
+  mapper's `CLAB_INTFS` clobber; the dead transport-namespace broker (−451 LOC); steady-state
+  host-endpoint RPC pacing (30s re-assertion); direct-mode auto-expose parity with the nested
+  default port set (found by the clabverter e2e, which exercises a host link in direct mode).
+- **Validated**: full unit suite, `-race` on the four changed packages, `make verify-generated`,
+  `make check-docs`, and the rewritten `e2e/topology/direct` against the live cluster — two
+  unmodified SR Linux images boot as direct device Pods, dataplane ping crosses the vxlan link,
+  planning workers are collected, and a live rewire lands without a Pod roll (evidence:
+  `evidence/direct-runtime-remediation-e2e.md`).
+- **Still open**: `make lint` (branch-wide pre-existing style debt, task 12.4), the §4 cut list
+  beyond the items above (xattr recording, provenance layer, compatibility-matrix shrink,
+  certificate self-verification, entropy Secret, reconcile fast path, log-broker gating,
+  container-name UX, `/proc/1/ns` narrowing), vendor conformance beyond SR Linux (tasks
+  10.3–10.9), nested-runtime removal (11.x), and the remaining docs/acceptance work (12.x).

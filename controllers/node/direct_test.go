@@ -117,8 +117,14 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 			if err = client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(node), service); err != nil {
 				t.Fatalf("reading direct expose Service: %v", err)
 			}
-			if len(service.Spec.Ports) != 1 || service.Spec.Ports[0].Port != 9273 ||
-				service.Spec.Ports[0].TargetPort.IntVal != 9273 {
+			// Auto expose keeps nested parity: the planned port plus the default NOS set.
+			planned := false
+			for _, port := range service.Spec.Ports {
+				if port.Port == 9273 && port.TargetPort.IntVal == 9273 {
+					planned = true
+				}
+			}
+			if !planned || len(service.Spec.Ports) != len(defaultExposePorts())+1 {
 				t.Fatalf("direct expose Service ports = %#v", service.Spec.Ports)
 			}
 			fabricService := &k8scorev1.Service{}
@@ -1456,7 +1462,7 @@ func TestMergeResolvedImageInputsPreservesPackageRolesAndDetectsTagDrift(t *test
 	}
 }
 
-func TestCompileDirectExposedPortsUsesOnlyGenericPlanPorts(t *testing.T) {
+func TestCompileDirectExposedPortsKeepsAutoExposeParity(t *testing.T) {
 	node := planInputTestNode("future-a", "uid-future-a", "opaque-package-kind", "example/device:1")
 	plan := clabernetesdeviceplan.Plan{Containers: []clabernetesdeviceplan.ContainerPlan{{
 		ID: "container-a", NodeID: string(node.GetUID()),
@@ -1474,7 +1480,10 @@ func TestCompileDirectExposedPortsUsesOnlyGenericPlanPorts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ports[node.GetName()] == nil || len(ports[node.GetName()].Ports) != 2 {
+	// Both planned ports are members of the default auto-expose set, so the union is exactly
+	// the default list -- nested parity without double entries.
+	if ports[node.GetName()] == nil ||
+		len(ports[node.GetName()].Ports) != len(defaultExposePorts()) {
 		t.Fatalf("direct exposed ports = %#v", ports)
 	}
 	for _, port := range ports[node.GetName()].Ports {
@@ -1486,13 +1495,30 @@ func TestCompileDirectExposedPortsUsesOnlyGenericPlanPorts(t *testing.T) {
 		&claberneteslogging.FakeInstance{},
 		clabernetesconfig.GetFakeManager,
 	).RenderDirectExposeService(node, node.GetName(), &ResolvedProfile{}, ports[node.GetName()])
-	if service == nil || len(service.Spec.Ports) != 2 {
+	if service == nil || len(service.Spec.Ports) != len(defaultExposePorts()) {
 		t.Fatalf("direct expose Service = %#v", service)
 	}
 	for _, port := range service.Spec.Ports {
 		if port.TargetPort.IntVal != port.Port {
 			t.Fatalf("direct Service port still targets launcher publication: %#v", port)
 		}
+	}
+
+	// Disabling auto expose keeps exactly the planned ports.
+	explicitOnly, err := compileDirectExposedPorts(
+		plan,
+		&ResolvedProfile{DisableAutoExpose: true},
+		[]string{node.GetName()},
+		map[string]*clabernetesapisv1alpha1.Node{node.GetName(): node},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if explicitOnly[node.GetName()] != nil {
+		t.Fatalf(
+			"auto-expose disabled without explicit ports still exposed: %#v",
+			explicitOnly[node.GetName()],
+		)
 	}
 }
 

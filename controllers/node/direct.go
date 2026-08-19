@@ -699,6 +699,43 @@ func compileDirectExposedPorts(
 			}
 		}
 	}
+	// Auto expose keeps nested parity: unless disabled, every member also exposes the default
+	// NOS port set. The group shares one Pod network namespace, so a destination port already
+	// planned, declared, or claimed by an earlier member is skipped -- first member wins,
+	// matching the nested launcher's first-come allocation.
+	if !profile.DisableAutoExpose {
+		claimed := map[string]bool{}
+		for _, ports := range portsByNode {
+			for key := range ports {
+				claimed[key] = true
+			}
+		}
+		sortedMembers := slices.Clone(groupMembers)
+		slices.Sort(sortedMembers)
+		for _, name := range sortedMembers {
+			node := nodesByName[name]
+			if node == nil {
+				continue
+			}
+			nodeID := string(node.GetUID())
+			for _, port := range defaultExposePorts() {
+				protocol := strings.ToUpper(port.Protocol)
+				key := fmt.Sprintf("%d/%s", port.DestinationPort, protocol)
+				if claimed[key] {
+					continue
+				}
+				claimed[key] = true
+				if portsByNode[nodeID] == nil {
+					portsByNode[nodeID] = map[string]clabernetesapisv1alpha1.NodeExposedPort{}
+				}
+				portsByNode[nodeID][key] = clabernetesapisv1alpha1.NodeExposedPort{
+					DestinationPort: port.DestinationPort,
+					ExposePort:      port.DestinationPort,
+					Protocol:        protocol,
+				}
+			}
+		}
+	}
 	owners := map[string]string{}
 	for _, name := range groupMembers {
 		node := nodesByName[name]

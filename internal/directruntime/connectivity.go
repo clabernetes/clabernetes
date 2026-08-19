@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
@@ -786,6 +787,42 @@ type ConnectivityOptions struct {
 	ConnectivityRevisionPath string
 	RevisionPollInterval     time.Duration
 	HostEndpointReconciler   HostEndpointReconciler
+
+	// hostEndpointPacer rate-limits steady-state host endpoint re-assertion; the daemon owns
+	// drift correction, so unchanged ticks do not need a per-second RPC fan-out.
+	hostEndpointPacer *hostEndpointPacer
+}
+
+// hostEndpointReassertInterval bounds how often an unchanged revision re-asserts host
+// endpoints against the node daemon. Cold starts, revision changes, and failures always
+// reconcile immediately.
+const hostEndpointReassertInterval = 30 * time.Second
+
+type hostEndpointPacer struct {
+	mutex         sync.Mutex
+	lastAttempt   time.Time
+	lastSucceeded bool
+}
+
+// due reports whether a steady-state re-assertion should run now.
+func (p *hostEndpointPacer) due(now time.Time) bool {
+	if p == nil {
+		return true
+	}
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	return !p.lastSucceeded || now.Sub(p.lastAttempt) >= hostEndpointReassertInterval
+}
+
+func (p *hostEndpointPacer) record(now time.Time, succeeded bool) {
+	if p == nil {
+		return
+	}
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.lastAttempt = now
+	p.lastSucceeded = succeeded
 }
 
 // HostEndpointReconciler is the narrow node-local RPC boundary used for generic host Links.
@@ -933,6 +970,7 @@ func runConnectivity(
 	if operations == nil {
 		return fmt.Errorf("connectivity link operations are nil")
 	}
+	options.hostEndpointPacer = &hostEndpointPacer{}
 	if err := validateIdentity(input, plan); err != nil {
 		return err
 	}
@@ -1012,6 +1050,7 @@ func runConnectivity(
 		effectivePlan,
 		options,
 		hasHostInterfaces(plan),
+		false,
 	); err != nil {
 		return err
 	}
@@ -1337,7 +1376,11 @@ func reconcileHostEndpoints(
 	plan clabernetesdeviceplan.Plan,
 	options ConnectivityOptions,
 	reconcileEmpty bool,
+	steadyState bool,
 ) error {
+	if steadyState && !options.hostEndpointPacer.due(time.Now()) {
+		return nil
+	}
 	nodes := make(map[string]clabernetesdeviceplan.NodeInput, len(input.Nodes))
 	for _, node := range input.Nodes {
 		nodes[node.ID] = node
@@ -1382,11 +1425,13 @@ func reconcileHostEndpoints(
 		},
 		Endpoints: endpoints,
 	}
-	if err := options.HostEndpointReconciler.Reconcile(
+	err := options.HostEndpointReconciler.Reconcile(
 		ctx,
 		request,
 		podNetworkNamespacePath,
-	); err != nil {
+	)
+	options.hostEndpointPacer.record(time.Now(), err == nil)
+	if err != nil {
 		return fmt.Errorf("reconciling host Links: %w", err)
 	}
 
@@ -1427,6 +1472,7 @@ func applyProjectedConnectivityRevision(
 			revisedPlan,
 			options,
 			hasHostInterfaces(basePlan),
+			true,
 		); err != nil {
 			return appliedRevision, false, err
 		}
@@ -1464,6 +1510,7 @@ func applyProjectedConnectivityRevision(
 		revisedPlan,
 		options,
 		hasHostInterfaces(basePlan),
+		false,
 	); err != nil {
 		return appliedRevision, false, err
 	}

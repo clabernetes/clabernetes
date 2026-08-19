@@ -31,6 +31,14 @@ spec:
   image: ghcr.io/nokia/srlinux
   launcherProfileRef:
     name: direct
+  startup-config: |
+    set / interface ethernet-1/1 admin-state enable
+    set / interface ethernet-1/1 subinterface 0
+    set / interface ethernet-1/1 subinterface 0 ipv4
+    set / interface ethernet-1/1 subinterface 0 ipv4 admin-state enable
+    set / interface ethernet-1/1 subinterface 0 ipv4 address 192.168.0.0/31
+    set / network-instance default
+    set / network-instance default interface ethernet-1/1.0
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Node
@@ -43,3 +51,11 @@ spec:
   image: ghcr.io/nokia/srlinux
   launcherProfileRef:
     name: direct
+  startup-config: |
+    set / interface ethernet-1/1 admin-state enable
+    set / interface ethernet-1/1 subinterface 0
+    set / interface ethernet-1/1 subinterface 0 ipv4
+    set / interface ethernet-1/1 subinterface 0 ipv4 admin-state enable
+    set / interface ethernet-1/1 subinterface 0 ipv4 address 192.168.0.1/31
+    set / network-instance default
+    set / network-instance default interface ethernet-1/1.0
