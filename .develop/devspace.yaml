@@ -101,8 +101,6 @@ images:
     context: ../
     dockerfile: dev.Dockerfile
     rebuildStrategy: ignoreContextChanges
-    buildArgs:
-      BUILDPLATFORM: ${TARGET_PLATFORM}
     buildKit:
       command: ["docker", "buildx"]
       args:
@@ -119,7 +117,6 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
-      BUILDPLATFORM: ${TARGET_PLATFORM}
     buildKit:
       command: ["docker", "buildx"]
       args:
@@ -136,7 +133,6 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
-      BUILDPLATFORM: ${TARGET_PLATFORM}
     buildKit:
       command: ["docker", "buildx"]
       args:
@@ -154,7 +150,6 @@ images:
     rebuildStrategy: ignoreContextChanges
     buildArgs:
       VERSION: ${VERSION}-${COMMIT_HASH}
-      BUILDPLATFORM: ${TARGET_PLATFORM}
     buildKit:
       command: ["docker", "buildx"]
       args:

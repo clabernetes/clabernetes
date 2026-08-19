@@ -105,10 +105,13 @@ flow passes that to builds as:
 - `docker buildx --platform=${TARGET_PLATFORM}` when pushing to an external registry (`LOCAL_REGISTRY=0`)
 - `build-for-local-registry.sh` (`docker buildx --load` + host `docker push`) for the in-cluster registry path
 
-Dockerfiles default `BUILDPLATFORM` for the local-registry path:
+The application image Dockerfiles use BuildKit's automatic `BUILDPLATFORM` value so the Go
+toolchain runs natively on the build machine. The development base image leaves `FROM` unpinned
+because its only stage is also the runtime image; BuildKit then selects the requested target
+platform. The build commands select the cluster's `TARGET_PLATFORM` for the output image:
 
 ```dockerfile
-ARG BUILDPLATFORM=linux/amd64
+ARG BUILDPLATFORM
 FROM --platform=${BUILDPLATFORM} golang:1.25-bookworm AS builder
 ```
 
@@ -204,8 +207,8 @@ active and that the custom build command is being used.
 The in-cluster registry path must use `build-for-local-registry.sh` (custom buildx). If builds log
 `engine 'localregistry'`, the project-managed registry profile is not being used.
 
-Empty `BUILDPLATFORM` usually means a build without `--platform` / `BUILDPLATFORM` build-arg.
-Ensure Dockerfiles declare `ARG BUILDPLATFORM=...` and builds use buildx.
+BuildKit supplies `BUILDPLATFORM` automatically; do not set it to `TARGET_PLATFORM` when those
+platforms differ. Always use buildx for these Dockerfiles.
 
 ### Leftover registry after experiments
 

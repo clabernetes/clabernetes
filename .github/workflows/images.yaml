@@ -12,11 +12,6 @@ on:
         description: "value for the VERSION build-arg"
         type: string
         required: true
-      amd64-only:
-        description: "skip the (much slower) arm64 builds -- for build-only runs, ie push: false"
-        type: boolean
-        required: false
-        default: false
       tags:
         description: "docker/metadata-action tag rules applied to every image"
         type: string
@@ -47,12 +42,13 @@ jobs:
           - name: clabverter
             file: build/clabverter.Dockerfile
             context: "."
-        # same two entries as a plain yaml list would be, just selected by expression so callers can
-        # drop arm64. note that yaml lists cannot be conditional, hence the inline json.
-        platform: >-
-          ${{ inputs.amd64-only
-          && fromJSON('[{"arch":"amd64","target":"linux/amd64","runner":"ubuntu-24.04"}]')
-          || fromJSON('[{"arch":"amd64","target":"linux/amd64","runner":"ubuntu-24.04"},{"arch":"arm64","target":"linux/arm64","runner":"ubuntu-24.04-arm"}]') }}
+        platform:
+          - arch: amd64
+            target: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            target: linux/arm64
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.platform.runner }}
     steps:
       - name: checkout
