@@ -39,6 +39,13 @@ func (a Adapter) RunSave(
 	if err = ValidatePlanInputIdentity(normalizedInput, normalizedPlan); err != nil {
 		return err
 	}
+	normalizedInput.Management = completeRuntimeManagement(
+		normalizedInput.Management,
+		normalizedInput.Nodes,
+		normalizedPlan.Management,
+		a.PodAddress,
+		a.PodGateway,
+	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
 		return err
@@ -170,9 +177,9 @@ func importedSaveTarget(
 			break
 		}
 	}
-	if node.ID == "" || len(node.ContainerIDs) == 0 || node.ContainerIDs[0] != containerID {
+	if node.ID == "" || !nodeOwnsContainer(node, containerID) {
 		return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-			fmt.Errorf("save target is not the primary container of a planned logical Node")
+			fmt.Errorf("save target is not a container of a planned logical Node")
 	}
 	actionCount := 0
 	for _, action := range plan.Actions {

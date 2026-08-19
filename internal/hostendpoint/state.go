@@ -34,6 +34,7 @@ type State interface {
 	) ([]Endpoint, error)
 	DesiredForNode(ctx context.Context, nodeName string) ([]Endpoint, error)
 	DesiredFabricForNode(ctx context.Context, nodeName string) ([]FabricEndpoint, error)
+	DesiredManagementForNode(ctx context.Context, nodeName string) ([]ManagementEndpoint, error)
 	MarkPending(ctx context.Context, nodeName string, pod ObjectIdentity, endpoint Endpoint) error
 	FinalizingLinks(ctx context.Context, nodeName string) ([]FinalizingLink, error)
 	RemoveFinalizer(
@@ -496,6 +497,67 @@ func (s KubernetesState) DesiredFabricForNode(
 		}
 
 		return strings.Compare(left.Node.UID, right.Node.UID)
+	})
+
+	return result, nil
+}
+
+// DesiredManagementForNode returns one management loop intent per direct workload Pod on this
+// worker. The loop keys on the workload's primary logical Node so a replacement Pod adopts the
+// same host leg. PodInterface stays empty here: the Pod-side name lives only inside the
+// requesting Pod's own namespace and is therefore supplied by the helper's request.
+func (s KubernetesState) DesiredManagementForNode(
+	ctx context.Context,
+	nodeName string,
+) ([]ManagementEndpoint, error) {
+	if s.Client == nil || nodeName == "" {
+		return nil, fmt.Errorf("host-endpoint Kubernetes state is unavailable")
+	}
+	nodes := &clabernetesapisv1alpha1.NodeList{}
+	if err := s.Client.List(ctx, nodes); err != nil {
+		return nil, fmt.Errorf("listing management Nodes: %w", err)
+	}
+	pods := &k8scorev1.PodList{}
+	if err := s.Client.List(
+		ctx,
+		pods,
+		ctrlruntimeclient.MatchingFields{"spec.nodeName": nodeName},
+		ctrlruntimeclient.HasLabels{clabernetesconstants.LabelDirectWorkload},
+	); err != nil {
+		return nil, fmt.Errorf("listing direct workload Pods on node %q: %w", nodeName, err)
+	}
+	nodesByKey := make(map[string]*clabernetesapisv1alpha1.Node, len(nodes.Items))
+	for index := range nodes.Items {
+		node := &nodes.Items[index]
+		nodesByKey[namespacedKey(node.GetNamespace(), node.GetName())] = node
+	}
+	result := []ManagementEndpoint{}
+	for index := range pods.Items {
+		pod := &pods.Items[index]
+		workload := pod.GetLabels()[clabernetesconstants.LabelDirectWorkload]
+		if workload == "" || !pod.GetDeletionTimestamp().IsZero() || pod.GetUID() == "" {
+			continue
+		}
+		node := nodesByKey[namespacedKey(pod.GetNamespace(), workload)]
+		if node == nil || node.GetUID() == "" {
+			continue
+		}
+		result = append(result, ManagementEndpoint{
+			Node: ObjectIdentity{
+				Namespace: node.GetNamespace(),
+				Name:      node.GetName(),
+				UID:       string(node.GetUID()),
+			},
+			PodAddress: pod.Status.PodIP,
+			pod: ObjectIdentity{
+				Namespace: pod.GetNamespace(),
+				Name:      pod.GetName(),
+				UID:       string(pod.GetUID()),
+			},
+		})
+	}
+	slices.SortFunc(result, func(left, right ManagementEndpoint) int {
+		return strings.Compare(left.pod.UID, right.pod.UID)
 	})
 
 	return result, nil

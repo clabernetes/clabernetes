@@ -27,7 +27,7 @@ func TestDaemonRejectsRequestThatDiffersFromKubernetesState(t *testing.T) {
 		Endpoints:     []Endpoint{endpoint},
 	}
 	request.Endpoints[0].HostInterface = "host-b"
-	if _, err := daemon.Reconcile(context.Background(), request, 1); err == nil {
+	if _, _, err := daemon.Reconcile(context.Background(), request, 1); err == nil {
 		t.Fatal("unauthorized request was accepted")
 	}
 	if len(state.marked) != 0 || len(operations.events) != 0 {
@@ -58,7 +58,7 @@ func TestDaemonRecordsOwnershipBeforeMutationAndSweepsStaleState(t *testing.T) {
 		return nil
 	}
 	daemon := &Daemon{NodeName: "worker-a", State: state, Operations: operations}
-	_, err := daemon.Reconcile(context.Background(), ReconcileRequest{
+	_, _, err := daemon.Reconcile(context.Background(), ReconcileRequest{
 		SchemaVersion: SchemaVersion,
 		Pod:           pod,
 		Endpoints:     []Endpoint{endpoint},
@@ -118,7 +118,7 @@ func TestUnixRPCPassesExactlyOneNetworkNamespaceDescriptor(t *testing.T) {
 	go func() { serveResult <- daemon.Serve(ctx, socketPath) }()
 	waitForSocket(t, socketPath)
 	client := Client{SocketPath: socketPath}
-	if _, err := client.Reconcile(ctx, ReconcileRequest{
+	if _, _, err := client.Reconcile(ctx, ReconcileRequest{
 		SchemaVersion: SchemaVersion,
 		Pod:           pod,
 		Endpoints:     []Endpoint{endpoint},
@@ -161,6 +161,13 @@ type fakeState struct {
 	marked        []Endpoint
 	removed       []ObjectIdentity
 	onMark        func()
+}
+
+func (s *fakeState) DesiredManagementForNode(
+	context.Context,
+	string,
+) ([]ManagementEndpoint, error) {
+	return nil, nil
 }
 
 func (s *fakeState) DesiredFabricForNode(context.Context, string) ([]FabricEndpoint, error) {
@@ -264,6 +271,23 @@ func (o *fakeOperations) ReconcileFabricTransports(
 	[]FabricEndpoint,
 	string,
 ) error {
+	return nil
+}
+
+func (o *fakeOperations) ListManagement(context.Context) ([]OwnedManagementObject, error) {
+	return nil, nil
+}
+
+func (o *fakeOperations) EnsureManagement(
+	context.Context,
+	ManagementEndpoint,
+	ObjectIdentity,
+	int,
+) (ManagementStatus, error) {
+	return ManagementStatus{Ready: true}, nil
+}
+
+func (o *fakeOperations) DeleteManagement(context.Context, OwnedManagementObject) error {
 	return nil
 }
 

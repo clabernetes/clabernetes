@@ -99,3 +99,22 @@ Standalone Nodes SHALL have distinct network namespaces. Only explicitly grouped
 
 - **WHEN** a Node and Pod are deleted and replacements are created with the same names but different UIDs
 - **THEN** stale connectivity is removed and cannot be attached to the replacements without new resolution
+
+### Requirement: Management identity and reachability are always realized
+
+The direct runtime SHALL realize containerlab's always-addressed management model: every logical Node whose management address the controller left unallocated carries its Pod address as its runtime management identity, completed only inside the Pod after the immutable input identity is validated. Each direct Pod SHALL additionally keep a kind-opaque management loop — a host-terminated path through the worker network namespace — so application-local hooks can reach the Pod's own management address even after a device implementation takes ownership of the Pod's primary interface.
+
+#### Scenario: Imported hook dials the management address
+
+- **WHEN** an imported package hook running inside an application container dials the logical Node's management address after the device stripped the Pod's primary interface addresses and routes
+- **THEN** the dial reaches the device's management plane through the management loop without any kind- or vendor-specific handling
+
+#### Scenario: Operator declares a management policy
+
+- **WHEN** the operator allocates explicit management addresses through a management policy
+- **THEN** the controller-allocated addresses are used unchanged and runtime completion adds nothing
+
+#### Scenario: Management loop cleanup
+
+- **WHEN** a direct Pod is deleted or replaced
+- **THEN** the worker daemon removes only that Pod's management loop state, and a replacement Pod adopts a fresh loop keyed to the same logical Node

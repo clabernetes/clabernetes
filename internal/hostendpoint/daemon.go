@@ -49,6 +49,14 @@ type Operations interface {
 		nodeAddress string,
 	) error
 	DeleteFabric(ctx context.Context, object OwnedFabricObject) error
+	ListManagement(ctx context.Context) ([]OwnedManagementObject, error)
+	EnsureManagement(
+		ctx context.Context,
+		endpoint ManagementEndpoint,
+		pod ObjectIdentity,
+		namespaceFD int,
+	) (ManagementStatus, error)
+	DeleteManagement(ctx context.Context, object OwnedManagementObject) error
 }
 
 // Daemon reconciles one Kubernetes worker's c9s-owned host endpoint objects.
@@ -63,38 +71,42 @@ type Daemon struct {
 
 // Reconcile validates one Pod's complete desired set, removes stale node state, and realizes the
 // exact requested endpoints using the supplied Pod network-namespace descriptor. The returned
-// statuses report per-Link fabric transport readiness.
+// statuses report per-Link fabric transport and management loop readiness.
 func (d *Daemon) Reconcile(
 	ctx context.Context,
 	request ReconcileRequest,
 	namespaceFD int,
-) ([]FabricStatus, error) {
+) ([]FabricStatus, *ManagementStatus, error) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
 	return d.reconcile(ctx, request, namespaceFD)
 }
 
-//nolint:gocyclo // Host and fabric endpoint families validate and realize independently.
+//nolint:gocyclo // Host, fabric, and management endpoint families validate independently.
 func (d *Daemon) reconcile(
 	ctx context.Context,
 	request ReconcileRequest,
 	namespaceFD int,
-) ([]FabricStatus, error) {
+) ([]FabricStatus, *ManagementStatus, error) {
 	if ctx == nil || d.State == nil || d.Operations == nil || d.NodeName == "" || namespaceFD < 0 {
-		return nil, fmt.Errorf("host-endpoint daemon boundary is incomplete")
+		return nil, nil, fmt.Errorf("host-endpoint daemon boundary is incomplete")
 	}
 	normalized, err := normalizeRequest(request)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	expected, err := d.State.ExpectedForPod(ctx, d.NodeName, normalized.Pod)
 	if err != nil {
-		return nil, fmt.Errorf("authorizing host-endpoint request: %w", err)
+		return nil, nil, fmt.Errorf("authorizing host-endpoint request: %w", err)
 	}
 	expectedFabric, err := d.expectedFabricForPod(ctx, normalized.Pod)
 	if err != nil {
-		return nil, fmt.Errorf("authorizing fabric request: %w", err)
+		return nil, nil, fmt.Errorf("authorizing fabric request: %w", err)
+	}
+	expectedManagement, err := d.expectedManagementForPod(ctx, normalized.Pod)
+	if err != nil {
+		return nil, nil, fmt.Errorf("authorizing management request: %w", err)
 	}
 	// The Pod-side interface name is plan-produced helper input confined to the requester's own
 	// namespace; adopt it from the (already Linux-validated) request per Link identity so the
@@ -107,36 +119,62 @@ func (d *Daemon) reconcile(
 		expectedFabric[index].PodInterface = requestedInterfaces[expectedFabric[index].Link.UID]
 	}
 	if len(expectedFabric) != len(normalized.Fabric) {
-		return nil, fmt.Errorf("fabric request differs from authoritative Kubernetes state")
+		return nil, nil, fmt.Errorf("fabric request differs from authoritative Kubernetes state")
+	}
+	if normalized.Management != nil {
+		if expectedManagement == nil {
+			return nil, nil, fmt.Errorf(
+				"management request differs from authoritative Kubernetes state",
+			)
+		}
+		// The Pod-side interface name is helper input confined to the requester's own namespace;
+		// adopt it from the (already Linux-validated) request so the authoritative intent can
+		// normalize and compare.
+		expectedManagement.PodInterface = normalized.Management.PodInterface
+		if expectedManagement.Node != normalized.Management.Node ||
+			expectedManagement.PodAddress != normalized.Management.PodAddress {
+			return nil, nil, fmt.Errorf(
+				"management request differs from authoritative Kubernetes state",
+			)
+		}
+	}
+	// Authoritative management intent enters the normalized comparison only when the helper
+	// requested it: its Pod-side interface name exists only inside the requesting namespace.
+	comparableManagement := expectedManagement
+	if normalized.Management == nil {
+		comparableManagement = nil
 	}
 	expectedRequest, err := normalizeRequest(ReconcileRequest{
 		SchemaVersion: SchemaVersion,
 		Pod:           normalized.Pod,
 		Endpoints:     expected,
 		Fabric:        expectedFabric,
+		Management:    comparableManagement,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("normalizing authoritative host-endpoint state: %w", err)
+		return nil, nil, fmt.Errorf("normalizing authoritative host-endpoint state: %w", err)
 	}
 	if !slices.Equal(expectedRequest.Endpoints, normalized.Endpoints) {
-		return nil, fmt.Errorf("host-endpoint request differs from authoritative Kubernetes state")
+		return nil, nil, fmt.Errorf(
+			"host-endpoint request differs from authoritative Kubernetes state",
+		)
 	}
 	if !fabricEndpointsEqual(expectedRequest.Fabric, normalized.Fabric) {
-		return nil, fmt.Errorf("fabric request differs from authoritative Kubernetes state")
+		return nil, nil, fmt.Errorf("fabric request differs from authoritative Kubernetes state")
 	}
 	// Persist the owner node before mutation. An unannotated finalizer therefore proves that no
 	// daemon-created host state can exist for that Link.
 	for _, endpoint := range normalized.Endpoints {
 		if err = d.State.MarkPending(ctx, d.NodeName, normalized.Pod, endpoint); err != nil {
-			return nil, fmt.Errorf("recording host-endpoint ownership: %w", err)
+			return nil, nil, fmt.Errorf("recording host-endpoint ownership: %w", err)
 		}
 	}
 	if err = d.sweep(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, endpoint := range normalized.Endpoints {
 		if err = d.Operations.Ensure(ctx, endpoint, normalized.Pod, namespaceFD); err != nil {
-			return nil, fmt.Errorf("realizing host Link %q: %w", endpoint.Link.Name, err)
+			return nil, nil, fmt.Errorf("realizing host Link %q: %w", endpoint.Link.Name, err)
 		}
 	}
 	statuses := make([]FabricStatus, 0, len(expectedRequest.Fabric))
@@ -149,12 +187,50 @@ func (d *Daemon) reconcile(
 			namespaceFD,
 		)
 		if fabricErr != nil {
-			return nil, fmt.Errorf("realizing fabric Link %q: %w", endpoint.Link.Name, fabricErr)
+			return nil, nil, fmt.Errorf(
+				"realizing fabric Link %q: %w",
+				endpoint.Link.Name,
+				fabricErr,
+			)
 		}
 		statuses = append(statuses, status)
 	}
+	var managementStatus *ManagementStatus
+	if normalized.Management != nil && expectedRequest.Management != nil {
+		status, managementErr := d.Operations.EnsureManagement(
+			ctx,
+			*expectedRequest.Management,
+			normalized.Pod,
+			namespaceFD,
+		)
+		if managementErr != nil {
+			return nil, nil, fmt.Errorf("realizing management loop: %w", managementErr)
+		}
+		managementStatus = &status
+	}
 
-	return statuses, d.finalizeAbsentLinks(ctx)
+	return statuses, managementStatus, d.finalizeAbsentLinks(ctx)
+}
+
+// expectedManagementForPod returns this Pod's authoritative management loop intent, or nil when
+// the Pod is not a direct workload Pod on this worker.
+func (d *Daemon) expectedManagementForPod(
+	ctx context.Context,
+	pod ObjectIdentity,
+) (*ManagementEndpoint, error) {
+	desired, err := d.State.DesiredManagementForNode(ctx, d.NodeName)
+	if err != nil {
+		return nil, err
+	}
+	for index := range desired {
+		if desired[index].pod == pod {
+			endpoint := desired[index]
+
+			return &endpoint, nil
+		}
+	}
+
+	return nil, nil
 }
 
 // expectedFabricForPod returns this Pod's authoritative fabric endpoints with their internal
@@ -239,8 +315,37 @@ func (d *Daemon) sweep(ctx context.Context) error {
 	if err = d.sweepFabric(ctx); err != nil {
 		return err
 	}
+	if err = d.sweepManagement(ctx); err != nil {
+		return err
+	}
 
 	return d.finalizeAbsentLinks(ctx)
+}
+
+// sweepManagement removes management loops whose owning Pod no longer exists on this worker.
+func (d *Daemon) sweepManagement(ctx context.Context) error {
+	desired, err := d.State.DesiredManagementForNode(ctx, d.NodeName)
+	if err != nil {
+		return fmt.Errorf("reconstructing desired management loops: %w", err)
+	}
+	desiredOwners := make(map[string]bool, len(desired))
+	for _, endpoint := range desired {
+		desiredOwners[endpoint.Node.UID+"\x00"+endpoint.pod.UID] = true
+	}
+	existing, err := d.Operations.ListManagement(ctx)
+	if err != nil {
+		return fmt.Errorf("inventorying owned management loops: %w", err)
+	}
+	for _, object := range existing {
+		if desiredOwners[object.NodeUID+"\x00"+object.PodUID] {
+			continue
+		}
+		if err = d.Operations.DeleteManagement(ctx, object); err != nil {
+			return fmt.Errorf("sweeping stale management loop %q: %w", object.Name, err)
+		}
+	}
+
+	return nil
 }
 
 // sweepFabric removes fabric objects whose ownership is no longer desired on this worker and
@@ -395,12 +500,13 @@ func (d *Daemon) handleConnection(ctx context.Context, connection *net.UnixConn)
 		return writeResponse(
 			connection,
 			nil,
+			nil,
 			fmt.Errorf("host-endpoint request exceeds size limit"),
 		)
 	}
 	fds, err := receivedFileDescriptors(control[:controlRead])
 	if err != nil {
-		return writeResponse(connection, nil, err)
+		return writeResponse(connection, nil, nil, err)
 	}
 	defer func() {
 		for _, fd := range fds {
@@ -411,16 +517,17 @@ func (d *Daemon) handleConnection(ctx context.Context, connection *net.UnixConn)
 		return writeResponse(
 			connection,
 			nil,
+			nil,
 			fmt.Errorf("request requires one network-namespace handle"),
 		)
 	}
 	request, err := decodeRequest(payload[:read])
 	if err != nil {
-		return writeResponse(connection, nil, fmt.Errorf("decoding host-endpoint request"))
+		return writeResponse(connection, nil, nil, fmt.Errorf("decoding host-endpoint request"))
 	}
-	statuses, err := d.Reconcile(ctx, request, fds[0])
+	statuses, management, err := d.Reconcile(ctx, request, fds[0])
 
-	return writeResponse(connection, statuses, err)
+	return writeResponse(connection, statuses, management, err)
 }
 
 func receivedFileDescriptors(control []byte) ([]int, error) {
@@ -443,9 +550,10 @@ func receivedFileDescriptors(control []byte) ([]int, error) {
 func writeResponse(
 	connection *net.UnixConn,
 	statuses []FabricStatus,
+	management *ManagementStatus,
 	requestErr error,
 ) error {
-	response := Response{Fabric: statuses}
+	response := Response{Fabric: statuses, Management: management}
 	if requestErr != nil {
 		response.Error = requestErr.Error()
 	}
@@ -542,31 +650,31 @@ type Client struct {
 }
 
 // Reconcile performs one bounded node-local RPC and returns the daemon's per-Link fabric
-// transport statuses.
+// transport statuses and the Pod's management loop status.
 //
 //nolint:gocyclo // Each guard validates one bounded transport invariant.
 func (c Client) Reconcile(
 	ctx context.Context,
 	request ReconcileRequest,
 	networkNamespacePath string,
-) ([]FabricStatus, error) {
+) ([]FabricStatus, *ManagementStatus, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("host-endpoint client context is nil")
+		return nil, nil, fmt.Errorf("host-endpoint client context is nil")
 	}
 	normalized, err := normalizeRequest(request)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	payload, err := json.Marshal(normalized)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(payload) > maximumMessage {
-		return nil, fmt.Errorf("host-endpoint request exceeds size limit")
+		return nil, nil, fmt.Errorf("host-endpoint request exceeds size limit")
 	}
 	namespace, err := os.Open(networkNamespacePath) //nolint:gosec // Explicit self netns path.
 	if err != nil {
-		return nil, fmt.Errorf("opening Pod network namespace: %w", err)
+		return nil, nil, fmt.Errorf("opening Pod network namespace: %w", err)
 	}
 	defer func() { _ = namespace.Close() }()
 	socketPath := c.SocketPath
@@ -579,7 +687,7 @@ func (c Client) Reconcile(
 		&net.UnixAddr{Name: socketPath, Net: "unixpacket"},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("connecting to host-endpoint daemon: %w", err)
+		return nil, nil, fmt.Errorf("connecting to host-endpoint daemon: %w", err)
 	}
 	defer func() { _ = connection.Close() }()
 	deadline := time.Now().Add(requestTimeout)
@@ -587,32 +695,34 @@ func (c Client) Reconcile(
 		deadline = contextDeadline
 	}
 	if err = connection.SetDeadline(deadline); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	namespaceFD := namespace.Fd()
 	if namespaceFD > uintptr(math.MaxInt) {
-		return nil, fmt.Errorf("Pod network-namespace descriptor is outside the supported range")
+		return nil, nil, fmt.Errorf(
+			"Pod network-namespace descriptor is outside the supported range",
+		)
 	}
 	rights := unix.UnixRights(int(namespaceFD))
 	written, controlWritten, err := connection.WriteMsgUnix(payload, rights, nil)
 	if err != nil {
-		return nil, fmt.Errorf("sending host-endpoint request: %w", err)
+		return nil, nil, fmt.Errorf("sending host-endpoint request: %w", err)
 	}
 	if written != len(payload) || controlWritten != len(rights) {
-		return nil, fmt.Errorf("sending host-endpoint request was incomplete")
+		return nil, nil, fmt.Errorf("sending host-endpoint request was incomplete")
 	}
 	responseRaw := make([]byte, maximumMessage+1)
 	read, err := connection.Read(responseRaw)
 	if err != nil {
-		return nil, fmt.Errorf("reading host-endpoint response: %w", err)
+		return nil, nil, fmt.Errorf("reading host-endpoint response: %w", err)
 	}
 	response, decodeErr := decodeResponse(responseRaw[:read])
 	if read > maximumMessage || decodeErr != nil {
-		return nil, fmt.Errorf("host-endpoint response is invalid")
+		return nil, nil, fmt.Errorf("host-endpoint response is invalid")
 	}
 	if response.Error != "" {
-		return nil, fmt.Errorf("host-endpoint daemon rejected request: %s", response.Error)
+		return nil, nil, fmt.Errorf("host-endpoint daemon rejected request: %s", response.Error)
 	}
 
-	return response.Fabric, nil
+	return response.Fabric, response.Management, nil
 }

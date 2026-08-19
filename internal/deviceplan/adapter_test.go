@@ -215,7 +215,8 @@ func (n *syntheticImportedNode) Deploy(
 		)
 	}
 	if n.Config().NodeType != "multi-container-test" &&
-		n.Config().NodeType != "multi-container-operations-test" {
+		n.Config().NodeType != "multi-container-operations-test" &&
+		n.Config().NodeType != "component-exec-target-test" {
 		return n.DefaultNode.Deploy(ctx, params)
 	}
 
@@ -257,13 +258,22 @@ func (n *syntheticImportedNode) GetContainers(
 	ctx context.Context,
 ) ([]clabruntime.GenericContainer, error) {
 	if n.Config().NodeType != "multi-container-test" &&
-		n.Config().NodeType != "multi-container-operations-test" {
+		n.Config().NodeType != "multi-container-operations-test" &&
+		n.Config().NodeType != "component-exec-target-test" {
 		return n.DefaultNode.GetContainers(ctx)
 	}
 
 	return n.Runtime.ListContainers(ctx, []*clabtypes.GenericFilter{{
 		FilterType: "name", Match: n.Config().LongName + "-root",
 	}})
+}
+
+func (n *syntheticImportedNode) GetContainerName() string {
+	if n.Config().NodeType == "component-exec-target-test" {
+		return n.Config().LongName + "-component"
+	}
+
+	return n.DefaultNode.GetContainerName()
 }
 
 func (n *syntheticImportedNode) DeployEndpoints(ctx context.Context) error {
@@ -373,6 +383,9 @@ func (n *syntheticImportedNode) PostDeploy(
 	runtimeID := n.Config().LongName
 	if n.Config().NodeType == "multi-container-test" {
 		runtimeID += "-root"
+	}
+	if n.Config().NodeType == "component-exec-target-test" {
+		runtimeID += "-component"
 	}
 	hostsPath, err := n.Runtime.GetHostsPath(ctx, runtimeID)
 	if err != nil {

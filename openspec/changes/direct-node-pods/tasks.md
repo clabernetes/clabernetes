@@ -92,9 +92,9 @@
 ## 10. Kind and Behavior Conformance
 
 - [ ] 10.1 Add automated direct boot, management, dataplane, readiness, and cleanup coverage for every generally obtainable baseline image.
-- [ ] 10.2 Validate Linux and Nokia SR Linux native-container families through real boot, management, DNS, Service, external-reachability, and dataplane tests, running SR Linux first without any nested-launcher forwarding replacement and rejecting kind-specific c9s remediation as evidence.
-- [ ] 10.3 Validate Nokia SR OS/SR-SIM component behavior, shared namespaces, licensing, management, and dataplane tests.
-- [ ] 10.4 Validate Arista cEOS configuration, interface fixups, management, and dataplane tests.
+- [x] 10.2 Validate Linux and Nokia SR Linux native-container families through real boot, management, DNS, Service, external-reachability, and dataplane tests, running SR Linux first without any nested-launcher forwarding replacement and rejecting kind-specific c9s remediation as evidence.
+- [x] 10.3 Validate Nokia SR OS/SR-SIM component behavior, shared namespaces, licensing, management, and dataplane tests.
+- [x] 10.4 Validate Arista cEOS configuration, interface fixups, management, and dataplane tests.
 - [ ] 10.5 Validate a Cisco XR/vrnetlab family with KVM/tap, configuration, management, and dataplane tests.
 - [ ] 10.6 Validate Juniper VM-based families with components where applicable, KVM/tap, configuration, management, and dataplane tests.
 - [ ] 10.7 Add repeatable restricted-image harnesses and current recorded evidence for every commercial/license-gated matrix entry before marking it compatible.

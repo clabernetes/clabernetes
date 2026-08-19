@@ -41,6 +41,15 @@ type Adapter struct {
 	// digests are explicit normalized inputs. Kind-specific issuance requests still originate
 	// solely from imported package hooks.
 	CertificateRoot string
+	// PodAddress is the runtime-discovered management identity of the direct Pod executing this
+	// boundary. In-Pod lifecycle boundaries set it so every logical Node the controller left
+	// unaddressed carries the Pod address — matching containerlab's always-addressed management
+	// model — after the immutable input identity was validated. Planning leaves it empty because
+	// the address exists only at runtime.
+	PodAddress string
+	// PodGateway is the Pod's own default gateway, completing the runtime management identity
+	// for packages that consume a management gateway.
+	PodGateway string
 	// CheckDeploymentConditions runs the imported package's generic preflight hook. It is enabled
 	// only by the preparation worker after Kubernetes has scheduled the direct Pod onto its target
 	// node, so host CPU, kernel, memory, and device observations describe the actual worker.
@@ -1410,6 +1419,58 @@ func nodeConfigFromDefinition(
 	return config, nil
 }
 
+// completeRuntimeManagement fills the management entry of every logical Node the controller
+// left unaddressed with the executing Pod's own address: a plan input group is exactly one Pod,
+// so the Pod address is the management identity of every member. Callers apply it only after
+// validating the immutable input identity — the completion is a runtime realization, never an
+// input change.
+func completeRuntimeManagement(
+	values []ManagementInput,
+	nodes []NodeInput,
+	plans []ManagementPlan,
+	podAddress string,
+	podGateway string,
+) []ManagementInput {
+	interfaces := map[string]string{}
+	for _, plan := range plans {
+		if plan.InterfaceName != "" {
+			interfaces[plan.NodeID] = plan.InterfaceName
+		}
+	}
+	result := slices.Clone(values)
+	covered := map[string]bool{}
+	for index := range result {
+		covered[result[index].NodeID] = true
+		// The package-declared management interface recorded at planning survives rehydration
+		// even when the controller allocation omitted it.
+		if result[index].InterfaceName == "" {
+			result[index].InterfaceName = interfaces[result[index].NodeID]
+		}
+	}
+	address := strings.TrimSpace(podAddress)
+	if address == "" {
+		return result
+	}
+	for _, node := range nodes {
+		if covered[node.ID] {
+			continue
+		}
+		entry := ManagementInput{
+			NodeID:        node.ID,
+			InterfaceName: interfaces[node.ID],
+			IPv4Gateway:   podGateway,
+		}
+		if strings.Contains(address, ":") {
+			entry.IPv6 = address
+		} else {
+			entry.IPv4 = address
+		}
+		result = append(result, entry)
+	}
+
+	return result
+}
+
 func managementForNode(values []ManagementInput, nodeID string) *ManagementInput {
 	for index := range values {
 		if values[index].NodeID == nodeID {
@@ -1429,10 +1490,23 @@ func applyManagementInput(config *clabtypes.NodeConfig, input *ManagementInput) 
 	if input.InterfaceName != "" {
 		config.MgmtIntf = input.InterfaceName
 	}
-	config.MgmtIPv4Address = input.IPv4
+	// Imported packages consume the address and prefix length as separate fields (they dial the
+	// bare address and template "<address>/<length>"), so a CIDR-formed allocation is split here.
+	config.MgmtIPv4Address, config.MgmtIPv4PrefixLength = splitManagementAddress(input.IPv4)
 	config.MgmtIPv4Gateway = input.IPv4Gateway
-	config.MgmtIPv6Address = input.IPv6
+	config.MgmtIPv6Address, config.MgmtIPv6PrefixLength = splitManagementAddress(input.IPv6)
 	config.MgmtIPv6Gateway = input.IPv6Gateway
+}
+
+func splitManagementAddress(value string) (string, int) {
+	address, prefix, found := strings.Cut(value, "/")
+	if !found {
+		return value, 0
+	}
+	length := 0
+	_, _ = fmt.Sscanf(prefix, "%d", &length)
+
+	return address, length
 }
 
 func mapImageReferences(values map[string]string) []ImageReference {

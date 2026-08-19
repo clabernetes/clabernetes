@@ -155,17 +155,20 @@ func appendEvaluatedNode(
 			return err
 		}
 	}
-	// Imported lifecycle hooks execute against the node's root implementation, so their actions
-	// must run inside the container carrying the root's runtime identity: a component kind may
-	// record its namespace parent before the root container, and an application-local exec from
-	// the wrong sibling cannot reach the root's processes.
+	// Imported lifecycle hooks execute against the runtime identity the package itself declares
+	// through GetContainerName (a component kind routes execs to a specific member container),
+	// so their actions must run inside the container carrying that identity: an
+	// application-local exec from the wrong sibling cannot reach the declared target's
+	// processes.
 	primaryContainerID := nodeContainerIDs[0]
-	for index, recorded := range node.Containers {
-		if recorded.Config != nil && node.Config != nil &&
-			recorded.Config.LongName == node.Config.LongName {
-			primaryContainerID = nodeContainerIDs[index]
+	if named, ok := node.implementation.(interface{ GetContainerName() string }); ok {
+		declaredRuntimeID := named.GetContainerName()
+		for index, recorded := range node.Containers {
+			if declaredRuntimeID != "" && recorded.RuntimeID == declaredRuntimeID {
+				primaryContainerID = nodeContainerIDs[index]
 
-			break
+				break
+			}
 		}
 	}
 	// Every imported lifecycle is rehydrated with a package LabDir, even when the package emitted
@@ -1001,27 +1004,28 @@ func appendExecActions(
 	return nil
 }
 
+// appendManagementPlan records one management entry per logical Node even when the controller
+// allocated no addresses: the package-declared management interface must ride the plan so
+// runtime completion can rehydrate it after planning.
 func appendManagementPlan(plan *Plan, node *EvaluatedNode, values []ManagementInput) {
-	for _, value := range values {
-		if value.NodeID != node.Input.ID {
-			continue
-		}
-		interfaceSelector := ManagementInterfaceSelector("")
-		if node.Config.MgmtIntf == "" {
-			interfaceSelector = ManagementInterfacePodTransport
-		}
-		plan.Management = append(plan.Management, ManagementPlan{
-			ID:                "management/" + node.Input.ID,
-			NodeID:            node.Input.ID,
-			InterfaceName:     node.Config.MgmtIntf,
-			InterfaceSelector: interfaceSelector,
-			IPv4:              value.IPv4,
-			IPv4Gateway:       value.IPv4Gateway,
-			IPv6:              value.IPv6,
-			IPv6Gateway:       value.IPv6Gateway,
-			DNS:               value.DNS,
-		})
+	interfaceSelector := ManagementInterfaceSelector("")
+	if node.Config.MgmtIntf == "" {
+		interfaceSelector = ManagementInterfacePodTransport
 	}
+	entry := ManagementPlan{
+		ID:                "management/" + node.Input.ID,
+		NodeID:            node.Input.ID,
+		InterfaceName:     node.Config.MgmtIntf,
+		InterfaceSelector: interfaceSelector,
+	}
+	if value := managementForNode(values, node.Input.ID); value != nil {
+		entry.IPv4 = value.IPv4
+		entry.IPv4Gateway = value.IPv4Gateway
+		entry.IPv6 = value.IPv6
+		entry.IPv6Gateway = value.IPv6Gateway
+		entry.DNS = value.DNS
+	}
+	plan.Management = append(plan.Management, entry)
 }
 
 func appendInterfacePlans(

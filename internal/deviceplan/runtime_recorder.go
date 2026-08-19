@@ -431,7 +431,10 @@ func (r *recordingRuntime) Config() clabruntime.RuntimeConfig {
 func (r *recordingRuntime) GetName() string {
 	r.allowed("runtime.GetName")
 
-	return "clabernetes-plan-recorder"
+	// The recorder reports the same runtime-CLI surface the live application runtime presents
+	// ("docker", realized application-locally by the direct shim), so packages that branch on
+	// the runtime name behave identically while recording and while rehydrating.
+	return "docker"
 }
 
 func (r *recordingRuntime) GetHostsPath(_ context.Context, runtimeID string) (string, error) {
@@ -903,6 +906,14 @@ func genericManagement(config *clabtypes.NodeConfig) clabruntime.GenericMgmtIPs 
 	}
 	result.IPv4addr, result.IPv4pLen = splitManagementPrefix(config.MgmtIPv4Address)
 	result.IPv6addr, result.IPv6pLen = splitManagementPrefix(config.MgmtIPv6Address)
+	// A bare address carries its prefix in the split config fields; packages refresh their
+	// Cfg from these network settings, so a lost prefix here would zero it there.
+	if result.IPv4pLen == 0 {
+		result.IPv4pLen = config.MgmtIPv4PrefixLength
+	}
+	if result.IPv6pLen == 0 {
+		result.IPv6pLen = config.MgmtIPv6PrefixLength
+	}
 
 	return result
 }

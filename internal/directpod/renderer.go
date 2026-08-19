@@ -51,22 +51,22 @@ const (
 	hostNetworkNamespaceMountPath    = "/var/run/clabernetes/host-network-namespaces"
 	hostEndpointSocketVolumeName     = "host-endpoint-socket"
 	lifecycleVolumeName              = "device-lifecycle-manager"
-	lifecycleBinaryRoot              = "/var/run/clabernetes/lifecycle-bin"
+	lifecycleBinaryRoot              = "/var/lib/clabernetes/lifecycle-bin"
 	lifecycleBinaryPath              = lifecycleBinaryRoot + "/manager"
 	runtimeBinaryPath                = "/clabernetes/manager"
-	lifecyclePlanRoot                = "/var/run/clabernetes/lifecycle-plan"
-	lifecycleInputRoot               = "/var/run/clabernetes/lifecycle-input"
-	lifecycleArtifactRoot            = "/var/run/clabernetes/lifecycle-artifacts"
-	lifecycleCertificateRoot         = "/var/run/clabernetes/lifecycle-certificates"
-	lifecycleEntropyRoot             = "/var/run/clabernetes/lifecycle-entropy"
+	lifecyclePlanRoot                = "/var/lib/clabernetes/lifecycle-plan"
+	lifecycleInputRoot               = "/var/lib/clabernetes/lifecycle-input"
+	lifecycleArtifactRoot            = "/var/lib/clabernetes/lifecycle-artifacts"
+	lifecycleCertificateRoot         = "/var/lib/clabernetes/lifecycle-certificates"
+	lifecycleEntropyRoot             = "/var/lib/clabernetes/lifecycle-entropy"
 	lifecycleScratchName             = "device-lifecycle-scratch"
-	lifecycleScratchRoot             = "/var/run/clabernetes/lifecycle-scratch"
+	lifecycleScratchRoot             = "/var/lib/clabernetes/lifecycle-scratch"
 	applicationRuntimeAPIName        = "device-runtime-api"
-	applicationRuntimeAPIRoot        = "/var/run/clabernetes/runtime-api"
+	applicationRuntimeAPIRoot        = "/var/lib/clabernetes/runtime-api"
 	applicationRuntimeCredentialName = "device-runtime-credentials"
 	applicationRuntimeCredentialRoot = "/var/run/secrets/kubernetes.io/serviceaccount"
 	probeSecretVolumeName            = "device-probe-secrets"
-	probePasswordPath                = "/var/run/clabernetes/probe-secret/password"
+	probePasswordPath                = "/var/lib/clabernetes/probe-secret/password"
 	preparationName                  = "prepare-device-plan"
 	connectivityName                 = "device-connectivity"
 	directWorkloadLabel              = clabernetesconstants.LabelDirectWorkload
@@ -1347,17 +1347,23 @@ func ApplicationSaveCommand(
 	if container == nil {
 		return nil, fmt.Errorf("application save container is absent from the accepted plan")
 	}
-	primary := false
+	owned := false
 	for _, node := range normalized.Nodes {
-		if node.ID == container.NodeID && len(node.ContainerIDs) > 0 &&
-			node.ContainerIDs[0] == containerID {
-			primary = true
-
-			break
+		if node.ID != container.NodeID {
+			continue
 		}
+		for _, candidate := range node.ContainerIDs {
+			if candidate == containerID {
+				owned = true
+
+				break
+			}
+		}
+
+		break
 	}
-	if !primary {
-		return nil, fmt.Errorf("application save target is not a logical Node primary container")
+	if !owned {
+		return nil, fmt.Errorf("application save target is not a logical Node container")
 	}
 	actionCount := 0
 	for _, action := range normalized.Actions {
@@ -1532,6 +1538,16 @@ func renderContainer(
 	if err != nil {
 		return k8scorev1.Container{}, nil, fmt.Errorf("container %q: %w", planned.ID, err)
 	}
+	// Every application container learns the Pod's own cluster address through the downward API:
+	// it is the runtime management identity of every logical Node the controller left
+	// unaddressed. A planned variable of the same name wins because Kubernetes resolves the last
+	// occurrence.
+	container.Env = append(container.Env, k8scorev1.EnvVar{
+		Name: clabernetesdirectruntime.PodAddressEnvironmentVariable,
+		ValueFrom: &k8scorev1.EnvVarSource{FieldRef: &k8scorev1.ObjectFieldSelector{
+			FieldPath: "status.podIP",
+		}},
+	})
 	for _, variable := range planned.Environment {
 		if errors := validation.IsEnvVarName(variable.Name); len(errors) != 0 {
 			return k8scorev1.Container{}, nil, fmt.Errorf("invalid environment variable name")
@@ -2173,6 +2189,14 @@ func renderHelpers(
 			Name: preparationName, Image: options.PreparationImage,
 			Command: []string{"/clabernetes/manager", "device-runtime", "prepare"},
 			Args:    preparationArgs,
+			// Preparation records the Pod's prefixed management identity while the primary
+			// interface is still pristine; devices may strip it at boot.
+			Env: []k8scorev1.EnvVar{{
+				Name: clabernetesdirectruntime.PodAddressEnvironmentVariable,
+				ValueFrom: &k8scorev1.EnvVarSource{FieldRef: &k8scorev1.ObjectFieldSelector{
+					FieldPath: "status.podIP",
+				}},
+			}},
 			SecurityContext: &k8scorev1.SecurityContext{
 				AllowPrivilegeEscalation: &falseValue, ReadOnlyRootFilesystem: &trueValue,
 				RunAsUser: &rootUser,

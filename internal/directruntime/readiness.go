@@ -65,12 +65,14 @@ func RunReadiness(
 	if target == nil {
 		return fmt.Errorf("readiness target container is absent from the plan")
 	}
+	prepareImportedRuntimeCLI(normalized, containerID)
 	if err = runOCIHealthcheck(ctx, target.Healthcheck); err != nil {
 		return fmt.Errorf("OCI healthcheck is not healthy: %w", err)
 	}
 
 	if err = (clabernetesdeviceplan.Adapter{
 		Revision: revision, EntropyRoot: entropyRoot,
+		PodAddress: runtimePodAddress(),
 	}).CheckReadiness(
 		ctx,
 		input,

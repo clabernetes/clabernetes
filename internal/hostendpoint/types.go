@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"net/netip"
 	"slices"
 	"strings"
 )
@@ -27,6 +28,16 @@ const (
 	fabricRoleLeg     = "leg"
 	fabricRolePod     = "pod"
 	fabricRoleVTEP    = "vtep"
+
+	mgmtOwnerPrefix = "c9s:mgmt:v1:"
+	mgmtRoleLeg     = "leg"
+	mgmtRolePod     = "pod"
+	// ManagementPodInterface is the fixed Pod-side name of the management loop leg. It is a
+	// c9s-reserved name no imported kind maps to a device port.
+	ManagementPodInterface = "c9smgmt0"
+	// managementLoopPairs bounds the worker-local /31 assignments carved from
+	// managementLoopRange for Pod management loops.
+	managementLoopPairs = 32768
 	// FabricTunnelPort is the fixed host-namespace UDP port fabric VTEPs terminate on. Every
 	// worker uses the same port; tunnels are separated by their Link-allocated VNI.
 	FabricTunnelPort = 14789
@@ -90,18 +101,46 @@ type FabricStatus struct {
 	Reason  string `json:"reason,omitempty"`
 }
 
-// ReconcileRequest replaces all host and fabric endpoints owned by one immutable Pod identity.
+// ManagementEndpoint requests the Pod's host-terminated management loop: one veth pair through
+// which the Pod's kernel keeps reaching the Pod's own cluster address even after a device
+// implementation takes ownership of the Pod's primary interface. The loop hairpins through the
+// worker host namespace and carries no kind or vendor information.
+type ManagementEndpoint struct {
+	Node         ObjectIdentity `json:"node"`
+	PodInterface string         `json:"podInterface"`
+	PodAddress   string         `json:"podAddress"`
+	pod          ObjectIdentity
+}
+
+// ManagementStatus reports the Pod's management loop readiness back to the requesting helper.
+type ManagementStatus struct {
+	Ready  bool   `json:"ready"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// OwnedManagementObject is one c9s-owned management loop interface found in the host network
+// namespace.
+type OwnedManagementObject struct {
+	Name    string
+	NodeUID string
+	PodUID  string
+}
+
+// ReconcileRequest replaces all host, fabric, and management endpoints owned by one immutable
+// Pod identity.
 type ReconcileRequest struct {
-	SchemaVersion string           `json:"schemaVersion"`
-	Pod           ObjectIdentity   `json:"pod"`
-	Endpoints     []Endpoint       `json:"endpoints,omitempty"`
-	Fabric        []FabricEndpoint `json:"fabric,omitempty"`
+	SchemaVersion string              `json:"schemaVersion"`
+	Pod           ObjectIdentity      `json:"pod"`
+	Endpoints     []Endpoint          `json:"endpoints,omitempty"`
+	Fabric        []FabricEndpoint    `json:"fabric,omitempty"`
+	Management    *ManagementEndpoint `json:"management,omitempty"`
 }
 
 // Response is the bounded one-request/one-response wire result.
 type Response struct {
-	Error  string         `json:"error,omitempty"`
-	Fabric []FabricStatus `json:"fabric,omitempty"`
+	Error      string            `json:"error,omitempty"`
+	Fabric     []FabricStatus    `json:"fabric,omitempty"`
+	Management *ManagementStatus `json:"management,omitempty"`
 }
 
 // Ownership is the immutable metadata carried by each c9s-owned host object.
@@ -200,6 +239,21 @@ func normalizeRequest(request ReconcileRequest) (ReconcileRequest, error) {
 		seenLinks[endpoint.Link.UID] = true
 		seenPodInterfaces[endpoint.PodInterface] = true
 	}
+	if request.Management != nil {
+		management := *request.Management
+		if err := validateObjectIdentity(management.Node); err != nil ||
+			management.Node.Namespace != request.Pod.Namespace {
+			return ReconcileRequest{}, fmt.Errorf("management Node identity is invalid")
+		}
+		if !validInterfaceName(management.PodInterface) ||
+			seenPodInterfaces[management.PodInterface] {
+			return ReconcileRequest{}, fmt.Errorf("management interface intent is invalid")
+		}
+		if _, err := netip.ParseAddr(management.PodAddress); err != nil {
+			return ReconcileRequest{}, fmt.Errorf("management Pod address is invalid")
+		}
+		request.Management = &management
+	}
 
 	return request, nil
 }
@@ -271,6 +325,33 @@ func fabricObjectName(prefix, linkUID, nodeUID string) string {
 	digest := sha256.Sum256([]byte(prefix + "\x00" + linkUID + "\x00" + nodeUID))
 
 	return prefix + hex.EncodeToString(digest[:])[:11]
+}
+
+// mgmtLegName is the deterministic host-side veth name for one logical Node's management loop.
+// It is stable across Pod recreations on the same worker so a replacement Pod adopts the leg.
+func mgmtLegName(nodeUID string) string {
+	return fabricObjectName("c9sm", "management", nodeUID)
+}
+
+func mgmtOwnerAlias(role, nodeUID, podUID string) (string, error) {
+	if (role != mgmtRoleLeg && role != mgmtRolePod) || !validUID(nodeUID) || !validUID(podUID) {
+		return "", fmt.Errorf("management ownership is invalid")
+	}
+
+	return mgmtOwnerPrefix + role + ":" + nodeUID + ":" + podUID, nil
+}
+
+func parseMgmtOwnerAlias(value, role string) (nodeUID, podUID string, owned bool) {
+	parts := strings.Split(value, ":")
+	if len(parts) != 6 || parts[0] != "c9s" || parts[1] != "mgmt" || parts[2] != "v1" ||
+		parts[3] != role {
+		return "", "", false
+	}
+	if !validUID(parts[4]) || !validUID(parts[5]) {
+		return "", "", false
+	}
+
+	return parts[4], parts[5], true
 }
 
 func ownershipFor(endpoint Endpoint, pod ObjectIdentity) Ownership {

@@ -135,6 +135,31 @@ func TestRenderAppliesProfilePullDefaultWithoutOverwritingExplicitNodePolicy(t *
 	}
 }
 
+func TestRenderGivesEveryApplicationContainerThePodAddress(t *testing.T) {
+	t.Parallel()
+
+	deployment, err := clabernetesdirectpod.Render(renderablePlan(), clabernetesdirectpod.Options{
+		Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+		InputConfigMapName:                "device-a-plan-input-abc",
+		ConnectivityRevisionConfigMapName: "device-a-connectivity",
+		PreparationImage:                  "example/c9s@sha256:1111",
+		ConnectivityImage:                 "example/c9s@sha256:1111",
+		EnableContainerStopSignals:        true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, image := range []string{
+		"example/device@sha256:" + strings.Repeat("a", 64),
+		"example/component@sha256:" + strings.Repeat("b", 64),
+	} {
+		container := containerByImage(t, deployment.Spec.Template.Spec.Containers, image)
+		if !hasDownwardEnvironment(*container, "C9S_POD_ADDRESS", "status.podIP") {
+			t.Fatalf("application container %q has no Pod address identity", container.Name)
+		}
+	}
+}
+
 func TestRenderCreatesDirectApplicationContainersFromGenericPlan(t *testing.T) {
 	t.Parallel()
 
@@ -391,7 +416,7 @@ func TestApplicationRestartCommandUsesPlanScopedShellIndependentBoundary(t *test
 		t.Fatal(err)
 	}
 	for _, value := range []string{
-		"/var/run/clabernetes/lifecycle-bin/manager",
+		"/var/lib/clabernetes/lifecycle-bin/manager",
 		"restart",
 		"--request",
 		digest,
@@ -571,8 +596,8 @@ func TestRenderProjectsOpaqueEntropyIntoImportedHookBoundaries(t *testing.T) {
 		!hasReadOnlyMount(connectivity, "/var/run/clabernetes/entropy") || root == nil ||
 		root.ReadinessProbe == nil || root.ReadinessProbe.Exec == nil ||
 		!slices.Contains(root.ReadinessProbe.Exec.Command, "--entropy") ||
-		!hasReadOnlyMount(*root, "/var/run/clabernetes/lifecycle-entropy") || component == nil ||
-		hasMount(*component, "/var/run/clabernetes/lifecycle-entropy") {
+		!hasReadOnlyMount(*root, "/var/lib/clabernetes/lifecycle-entropy") || component == nil ||
+		hasMount(*component, "/var/lib/clabernetes/lifecycle-entropy") {
 		t.Fatalf(
 			"entropy boundaries = preparation %#v connectivity %#v root %#v component %#v",
 			preparation,
@@ -769,17 +794,17 @@ func TestRenderMakesImportedSaveBoundaryAvailableInPrimaryApplicationContainer(t
 		deployment.Spec.Template.Spec.Containers,
 		"example/device@sha256:"+strings.Repeat("a", 64),
 	)
-	if root == nil || !hasReadOnlyMount(*root, "/var/run/clabernetes/lifecycle-bin") ||
+	if root == nil || !hasReadOnlyMount(*root, "/var/lib/clabernetes/lifecycle-bin") ||
 		!hasWritableMount(
 			*root,
-			"/var/run/clabernetes/lifecycle-artifacts/"+
+			"/var/lib/clabernetes/lifecycle-artifacts/"+
 				clabernetesdeviceplan.ArtifactNodeDirectory("node-a"),
 		) {
 		t.Fatalf("imported save lifecycle mounts = %#v", root)
 	}
 }
 
-func TestApplicationSaveCommandTargetsOnlyPlannedPrimaryWithoutKindKnowledge(t *testing.T) {
+func TestApplicationSaveCommandTargetsOnlyPlanDeclaredContainerWithoutKindKnowledge(t *testing.T) {
 	t.Parallel()
 
 	plan := renderablePlan()
@@ -801,11 +826,11 @@ func TestApplicationSaveCommandTargetsOnlyPlannedPrimaryWithoutKindKnowledge(t *
 	if !slices.Contains(command, string(clabernetesdeviceplan.PhaseSave)) ||
 		!slices.Contains(command, "node-a/root") ||
 		slices.Contains(command, "future-package-kind") ||
-		command[0] != "/var/run/clabernetes/lifecycle-bin/manager" {
+		command[0] != "/var/lib/clabernetes/lifecycle-bin/manager" {
 		t.Fatalf("application save command = %#v", command)
 	}
 	if _, err = clabernetesdirectpod.ApplicationSaveCommand(plan, "node-a/component"); err == nil ||
-		!strings.Contains(err.Error(), "not a logical Node primary") {
+		!strings.Contains(err.Error(), "exactly one imported save action") {
 		t.Fatalf("component save error = %v", err)
 	}
 }
@@ -951,22 +976,22 @@ func TestRenderProjectsOnlyNodeCertificateMaterialIntoImportedLifecycleTarget(t 
 	if target == nil || target.Lifecycle == nil || target.Lifecycle.PostStart == nil ||
 		target.Lifecycle.PostStart.Exec == nil ||
 		!slices.Contains(target.Lifecycle.PostStart.Exec.Command, "--certificates") ||
-		!hasReadOnlyMount(*target, "/var/run/clabernetes/lifecycle-certificates") ||
-		!hasReadOnlyMount(*target, "/var/run/clabernetes/lifecycle-input") ||
-		!hasWritableMount(*target, "/var/run/clabernetes/lifecycle-scratch") ||
+		!hasReadOnlyMount(*target, "/var/lib/clabernetes/lifecycle-certificates") ||
+		!hasReadOnlyMount(*target, "/var/lib/clabernetes/lifecycle-input") ||
+		!hasWritableMount(*target, "/var/lib/clabernetes/lifecycle-scratch") ||
 		!hasWritableMount(
 			*target,
-			"/var/run/clabernetes/lifecycle-artifacts/"+
+			"/var/lib/clabernetes/lifecycle-artifacts/"+
 				clabernetesdeviceplan.ArtifactNodeDirectory("node-a"),
 		) {
 		t.Fatalf("imported lifecycle certificate target = %#v", target)
 	}
-	if component == nil || hasMount(*component, "/var/run/clabernetes/lifecycle-certificates") {
+	if component == nil || hasMount(*component, "/var/lib/clabernetes/lifecycle-certificates") {
 		t.Fatalf("component received another container's certificate material: %#v", component)
 	}
 	if pod.ServiceAccountName != "direct-runtime" ||
-		!hasReadOnlyMount(*target, "/var/run/clabernetes/runtime-api") ||
-		hasMount(*component, "/var/run/clabernetes/runtime-api") {
+		!hasReadOnlyMount(*target, "/var/lib/clabernetes/runtime-api") ||
+		hasMount(*component, "/var/lib/clabernetes/runtime-api") {
 		t.Fatalf(
 			"plan-scoped application runtime API = target %#v component %#v",
 			target,
@@ -983,7 +1008,7 @@ func TestRenderProjectsOnlyNodeCertificateMaterialIntoImportedLifecycleTarget(t 
 	}
 	connectivity := pod.InitContainers[1]
 	if !hasReadOnlyMount(connectivity, "/var/run/secrets/kubernetes.io/serviceaccount") ||
-		!hasWritableMount(connectivity, "/var/run/clabernetes/runtime-api") ||
+		!hasWritableMount(connectivity, "/var/lib/clabernetes/runtime-api") ||
 		!slices.Contains(connectivity.Args, "--applicationRuntimeSocket") {
 		t.Fatalf("connectivity log broker boundary = %#v", connectivity)
 	}
@@ -1100,8 +1125,8 @@ func TestRenderMapsGenericPostStartActionsIntoTargetApplicationContainer(t *test
 		t.Fatalf("non-target lifecycle = %#v", component)
 	}
 	for _, mountPath := range []string{
-		"/var/run/clabernetes/lifecycle-bin",
-		"/var/run/clabernetes/lifecycle-plan",
+		"/var/lib/clabernetes/lifecycle-bin",
+		"/var/lib/clabernetes/lifecycle-plan",
 	} {
 		if !hasReadOnlyMount(*root, mountPath) {
 			t.Fatalf("target lacks read-only lifecycle mount %q: %#v", mountPath, root.VolumeMounts)
@@ -1110,7 +1135,7 @@ func TestRenderMapsGenericPostStartActionsIntoTargetApplicationContainer(t *test
 			t.Fatalf("restart-capable component lacks lifecycle mount %q", mountPath)
 		}
 	}
-	artifactMount := "/var/run/clabernetes/lifecycle-artifacts/" +
+	artifactMount := "/var/lib/clabernetes/lifecycle-artifacts/" +
 		clabernetesdeviceplan.ArtifactNodeDirectory("node-a")
 	if !hasReadOnlyMount(*root, artifactMount) || hasMount(*component, artifactMount) {
 		t.Fatalf(
@@ -1120,13 +1145,13 @@ func TestRenderMapsGenericPostStartActionsIntoTargetApplicationContainer(t *test
 		)
 	}
 	for _, container := range []*k8scorev1.Container{root, component} {
-		if !hasWritableMount(*container, "/var/run/clabernetes/lifecycle-scratch") {
+		if !hasWritableMount(*container, "/var/lib/clabernetes/lifecycle-scratch") {
 			t.Fatalf("restart-capable container lacks lifecycle state: %#v", container.VolumeMounts)
 		}
 	}
 	preparation := pod.InitContainers[0]
 	if !slices.Contains(preparation.Args, "--lifecycleBinary") ||
-		!hasWritableMount(preparation, "/var/run/clabernetes/lifecycle-bin") {
+		!hasWritableMount(preparation, "/var/lib/clabernetes/lifecycle-bin") {
 		t.Fatalf("preparation lifecycle installation = %#v", preparation)
 	}
 	foundLifecycleVolume := false
@@ -1213,7 +1238,7 @@ func TestRenderRunsGenericTmpfsMountBeforeImageEntrypoint(t *testing.T) {
 	)
 	if root == nil || !slices.Contains(root.Command, "launch") ||
 		!slices.Contains(root.Command, "node-a/root") || len(root.Args) != 0 ||
-		!hasReadOnlyMount(*root, "/var/run/clabernetes/lifecycle-plan") {
+		!hasReadOnlyMount(*root, "/var/lib/clabernetes/lifecycle-plan") {
 		t.Fatalf("synchronous application launch = %#v", root)
 	}
 }
@@ -1266,7 +1291,7 @@ func TestRenderUsesGenericLaunchHelperForStartupDelay(t *testing.T) {
 	)
 	if component == nil || !slices.Contains(component.Command, "launch") ||
 		!slices.Contains(component.Command, "node-a/component") ||
-		!hasReadOnlyMount(*component, "/var/run/clabernetes/lifecycle-plan") {
+		!hasReadOnlyMount(*component, "/var/lib/clabernetes/lifecycle-plan") {
 		t.Fatalf("startup-delay application wrapper = %#v", component)
 	}
 }
@@ -1356,11 +1381,11 @@ func TestRenderImportedReadinessComposesOCIProbeWithoutLosingTiming(t *testing.T
 	}
 	if !slices.Contains(container.ReadinessProbe.Exec.Command, "readiness") ||
 		!slices.Contains(container.ReadinessProbe.Exec.Command, "renderer-test") ||
-		!hasReadOnlyMount(*container, "/var/run/clabernetes/lifecycle-input") ||
+		!hasReadOnlyMount(*container, "/var/lib/clabernetes/lifecycle-input") ||
 		!hasWritableEmptyDirMount(
 			deployment.Spec.Template.Spec,
 			*container,
-			"/var/run/clabernetes/lifecycle-scratch",
+			"/var/lib/clabernetes/lifecycle-scratch",
 		) {
 		t.Fatalf("imported readiness execution boundary = %#v", container)
 	}
@@ -1369,7 +1394,7 @@ func TestRenderImportedReadinessComposesOCIProbeWithoutLosingTiming(t *testing.T
 		deployment.Spec.Template.Spec.Containers,
 		"example/component@sha256:"+strings.Repeat("b", 64),
 	)
-	if component == nil || hasMount(*component, "/var/run/clabernetes/lifecycle-input") {
+	if component == nil || hasMount(*component, "/var/lib/clabernetes/lifecycle-input") {
 		t.Fatalf("readiness input leaked to non-target component = %#v", component)
 	}
 }
@@ -1414,7 +1439,7 @@ func TestRenderExplicitProbePolicyUsesRoundedStartupAndSecretProjection(t *testi
 	command := container.ReadinessProbe.Exec.Command
 	for _, expected := range []string{
 		"--tcpPort", "830", "--sshUsername", "operator", "--sshPort", "22",
-		"--sshPasswordFile", "/var/run/clabernetes/probe-secret/password",
+		"--sshPasswordFile", "/var/lib/clabernetes/probe-secret/password",
 	} {
 		if !slices.Contains(command, expected) {
 			t.Fatalf("application probe command = %#v", command)
@@ -1422,7 +1447,7 @@ func TestRenderExplicitProbePolicyUsesRoundedStartupAndSecretProjection(t *testi
 	}
 	foundPasswordMount := false
 	for _, mount := range container.VolumeMounts {
-		if mount.MountPath == "/var/run/clabernetes/probe-secret/password" {
+		if mount.MountPath == "/var/lib/clabernetes/probe-secret/password" {
 			foundPasswordMount = mount.ReadOnly && mount.SubPath == "ssh-node-a"
 		}
 	}

@@ -55,15 +55,19 @@ func (f *fakeHostEndpointReconciler) Reconcile(
 	_ context.Context,
 	request claberneteshostendpoint.ReconcileRequest,
 	networkNamespacePath string,
-) ([]claberneteshostendpoint.FabricStatus, error) {
+) (
+	[]claberneteshostendpoint.FabricStatus,
+	*claberneteshostendpoint.ManagementStatus,
+	error,
+) {
 	if networkNamespacePath != "/proc/self/ns/net" {
-		return nil, fmt.Errorf("network namespace path = %q", networkNamespacePath)
+		return nil, nil, fmt.Errorf("network namespace path = %q", networkNamespacePath)
 	}
 	if f.requests != nil {
 		f.requests <- request
 	}
 	if f.err != nil {
-		return nil, f.err
+		return nil, nil, f.err
 	}
 	statuses := make([]claberneteshostendpoint.FabricStatus, 0, len(request.Fabric))
 	for _, endpoint := range request.Fabric {
@@ -72,8 +76,12 @@ func (f *fakeHostEndpointReconciler) Reconcile(
 			Ready:   !f.fabricUnready,
 		})
 	}
+	var management *claberneteshostendpoint.ManagementStatus
+	if request.Management != nil {
+		management = &claberneteshostendpoint.ManagementStatus{Ready: true}
+	}
 
-	return statuses, nil
+	return statuses, management, nil
 }
 
 func (f *fakeLinkOperations) EnsureVethPair(left, right string, mtu int, owner string) error {
@@ -768,8 +776,9 @@ func TestManagementConnectivityAddsPackageSelectedAddressesBeforeReadiness(t *te
 		input,
 		plan,
 		clabernetesdirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodAddress:     "10.244.0.12",
+			StateDirectory:         state,
+			PodAddress:             "10.244.0.12",
+			HostEndpointReconciler: &fakeHostEndpointReconciler{},
 		},
 		operations,
 		nil,

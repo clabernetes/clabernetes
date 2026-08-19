@@ -366,6 +366,13 @@ func deviceRuntimeCommand() *cli.Command {
 					if err != nil || c.String(deviceRuntimeBinary) == "" {
 						return err
 					}
+					// Record the Pod's prefixed management identity while the primary
+					// interface is still pristine; devices may strip it at boot.
+					if err = clabernetesdirectruntime.RecordPodAddress(
+						c.String(deviceRuntimeArtifacts),
+					); err != nil {
+						return err
+					}
 
 					return clabernetesdirectruntime.InstallLifecycleBinary(
 						c.String(deviceRuntimeBinary),

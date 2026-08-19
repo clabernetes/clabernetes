@@ -18,7 +18,7 @@ import (
 const (
 	// ApplicationRuntimeSocketPath is mounted into application lifecycle workers without the
 	// Kubernetes credentials held by the connectivity sidecar.
-	ApplicationRuntimeSocketPath = "/var/run/clabernetes/runtime-api/runtime.sock"
+	ApplicationRuntimeSocketPath = "/var/lib/clabernetes/runtime-api/runtime.sock"
 	applicationLogPath           = "/v1/logs"
 	maxBrokerErrorBytes          = 4096
 )

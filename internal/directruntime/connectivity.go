@@ -825,15 +825,16 @@ func (p *hostEndpointPacer) lastKnownReady() bool {
 	return p.lastSucceeded && p.lastReady
 }
 
-// HostEndpointReconciler is the narrow node-local RPC boundary used for generic host Links and
-// cross-Pod fabric endpoints. The request contains only immutable Kubernetes identities and
-// interface intent; the response reports per-Link fabric transport readiness.
+// HostEndpointReconciler is the narrow node-local RPC boundary used for generic host Links,
+// cross-Pod fabric endpoints, and the Pod's management loop. The request contains only immutable
+// Kubernetes identities and interface intent; the response reports per-Link fabric transport and
+// management loop readiness.
 type HostEndpointReconciler interface {
 	Reconcile(
 		ctx context.Context,
 		request claberneteshostendpoint.ReconcileRequest,
 		networkNamespacePath string,
-	) ([]claberneteshostendpoint.FabricStatus, error)
+	) ([]claberneteshostendpoint.FabricStatus, *claberneteshostendpoint.ManagementStatus, error)
 }
 
 // EndpointNamespace keeps a target Pod namespace handle open while one imported endpoint hook
@@ -1372,7 +1373,8 @@ func reconcileDaemonEndpoints(
 			MTU:          intf.MTU,
 		})
 	}
-	if len(endpoints) == 0 && len(fabric) == 0 && !reconcileEmpty {
+	management := desiredManagementEndpoint(input, options)
+	if len(endpoints) == 0 && len(fabric) == 0 && management == nil && !reconcileEmpty {
 		return true, nil
 	}
 	if options.HostEndpointReconciler == nil {
@@ -1385,10 +1387,11 @@ func reconcileDaemonEndpoints(
 			Name:      options.PodName,
 			UID:       options.PodUID,
 		},
-		Endpoints: endpoints,
-		Fabric:    fabric,
+		Endpoints:  endpoints,
+		Fabric:     fabric,
+		Management: management,
 	}
-	statuses, err := options.HostEndpointReconciler.Reconcile(
+	statuses, managementStatus, err := options.HostEndpointReconciler.Reconcile(
 		ctx,
 		request,
 		podNetworkNamespacePath,
@@ -1406,6 +1409,9 @@ func reconcileDaemonEndpoints(
 				break
 			}
 		}
+		if management != nil && (managementStatus == nil || !managementStatus.Ready) {
+			ready = false
+		}
 	}
 	options.hostEndpointPacer.record(time.Now(), err == nil, ready)
 	if err != nil {
@@ -1413,6 +1419,37 @@ func reconcileDaemonEndpoints(
 	}
 
 	return ready, nil
+}
+
+// desiredManagementEndpoint is the Pod's management loop intent: it keys on the workload's
+// primary logical Node and carries the Pod's own IPv4 cluster address, which is the management
+// identity the direct runtime realizes when the operator declared no management policy. IPv6
+// Pod addresses are not requested yet.
+func desiredManagementEndpoint(
+	input clabernetesdeviceplan.Input,
+	options ConnectivityOptions,
+) *claberneteshostendpoint.ManagementEndpoint {
+	address, err := netip.ParseAddr(options.PodAddress)
+	if err != nil || !address.Is4() {
+		return nil
+	}
+	for _, node := range input.Nodes {
+		if node.GroupOwner != "" || node.Name == "" || node.ID == "" {
+			continue
+		}
+
+		return &claberneteshostendpoint.ManagementEndpoint{
+			Node: claberneteshostendpoint.ObjectIdentity{
+				Namespace: options.PodNamespace,
+				Name:      node.Name,
+				UID:       node.ID,
+			},
+			PodInterface: claberneteshostendpoint.ManagementPodInterface,
+			PodAddress:   address.String(),
+		}
+	}
+
+	return nil
 }
 
 func applyProjectedConnectivityRevision(
@@ -1641,6 +1678,7 @@ func reconcileImportedEndpointLifecycle(
 		}
 		if err = (clabernetesdeviceplan.Adapter{
 			Revision: options.Revision, EntropyRoot: options.EntropyRoot,
+			PodAddress: options.PodAddress,
 		}).RunDeployEndpoints(
 			ctx,
 			input,
@@ -1975,6 +2013,12 @@ func reconcileManagementAddresses(
 	}
 	podTransportInterface := ""
 	for index, item := range management {
+		if item.IPv4 == "" && item.IPv6 == "" && item.IPv4Gateway == "" &&
+			item.IPv6Gateway == "" && len(item.Routes) == 0 {
+			// Interface-identity-only entries exist so the package-declared management
+			// interface rides the plan; they realize nothing here.
+			continue
+		}
 		interfaceName := item.InterfaceName
 		if item.InterfaceSelector == clabernetesdeviceplan.ManagementInterfacePodTransport {
 			if podTransportInterface == "" {
@@ -2397,7 +2441,22 @@ func validateIdentity(
 	}
 	for _, planned := range normalizedPlan.Management {
 		supplied, exists := inputManagement[planned.NodeID]
-		if !exists || supplied.IPv4 != planned.IPv4 ||
+		if !exists {
+			// Every logical Node carries a management plan entry so the package-declared
+			// interface identity survives planning; without a controller allocation the entry
+			// must carry identity only.
+			if planned.IPv4 != "" || planned.IPv4Gateway != "" || planned.IPv6 != "" ||
+				planned.IPv6Gateway != "" || len(planned.Routes) != 0 ||
+				!reflect.DeepEqual(planned.DNS, clabernetesdeviceplan.DNSConfig{}) {
+				return fmt.Errorf(
+					"connectivity management plan %q differs from accepted input",
+					planned.ID,
+				)
+			}
+
+			continue
+		}
+		if supplied.IPv4 != planned.IPv4 ||
 			supplied.IPv4Gateway != planned.IPv4Gateway ||
 			supplied.IPv6 != planned.IPv6 ||
 			supplied.IPv6Gateway != planned.IPv6Gateway ||

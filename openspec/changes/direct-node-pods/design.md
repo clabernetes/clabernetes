@@ -170,6 +170,61 @@ compatibility change: the wire semantics (L2 point-to-point, MTU intent, live re
 rescheduling) are preserved, while the transport flavor becomes a c9s implementation detail the
 way the goal's portable-semantics rule prescribes.
 
+### 5b. Revision: management identity is always addressed and reachable in-Pod
+
+Direct SR OS evidence exposed the management-plane half of the same interface-ownership
+property: imported post-deploy hooks run application-locally, and upstream packages dial the
+node's management address from there (SR OS waits on NETCONF and saves its config through it).
+Two generic gaps broke this. First, the controller allocated management addresses only when the
+operator declared a management policy, while containerlab always addresses management; in
+direct mode the Pod address is the real management plane (SR-SIM adopts the Pod's primary
+interface address into its BOF), but it exists only at runtime. Second, a kind that owns the
+Pod's primary interface strips the Pod namespace of addresses and routes, so no in-Pod dial to
+the Pod's own address can even leave the kernel.
+
+Both are closed kind-opaquely:
+
+- every application container learns the Pod address through the downward API, and every
+  in-Pod lifecycle boundary (post-deploy, deploy-endpoints, readiness, save) completes the
+  management entry of any logical Node the controller left unaddressed with that address -
+  after the immutable input identity is validated, so the completion is a runtime realization,
+  never an input change;
+- the host-endpoint daemon gives each direct Pod a management loop: one owned veth pair whose
+  host side hairpins traffic for the Pod's own address through the worker namespace back into
+  the Pod's primary interface, addressed from a worker-local /31 out of 198.18.0.0/16
+  (RFC 2544 space). The Pod-side route is a single /32 for the Pod's own address, inert for
+  kinds that leave the primary interface alone (the kernel's local route wins) and
+  load-bearing the moment a device strips it.
+
+The connectivity helper requests the loop with its Pod identity, the daemon authorizes it
+against live Kubernetes state, reports readiness the helper gates on, and sweeps loops whose
+Pods are gone. Operator-declared management policies keep precedence; runtime completion adds
+entries only where the controller allocated nothing.
+
+The identity must survive the whole pipeline: the plan records one management entry per logical
+Node so the package-declared management interface rides into rehydration; CIDR allocations are
+split into the bare-address and prefix-length fields packages consume; the deployment-replay
+recorder reports the prefix through its network settings (packages refresh their Cfg from
+them); and the preparation container records the Pod's address, prefix, and default gateway
+while the primary interface is still pristine, because interface-owning devices strip it before
+the PostStart boundary runs.
+
+### 5c. Revision: systemd images and runtime-CLI sessions
+
+Arista cEOS conformance exposed two more generic properties of imported packages. First,
+systemd-based NOS images mount a fresh tmpfs over `/run` at boot, shadowing anything mounted
+below `/var/run`; every application-visible c9s lifecycle mount therefore lives under
+`/var/lib/clabernetes`. Second, packages open interactive CLI sessions by spawning their
+container runtime's CLI (`docker exec -it <container> <cli>`) and screen-scraping it. The
+direct application runtime presents that surface — its runtime name is `docker` and the
+lifecycle binary publishes `docker`/`podman` links to itself — through a fail-closed shim that
+accepts exactly `exec` against the plan-declared target container and runs the command on its
+own pseudo-terminal, application-locally, since the lifecycle boundary already executes inside
+that container. The shim behaves as the terminal: terminal-directed side-band sequences
+(OSC and capability queries) are stripped from the forwarded stream and echo is disabled, so
+screen-scraping callers see only application output; c9s's own processes run terminal-silent
+(`TERM=dumb`) at these boundaries while the session command receives a real terminal identity.
+
 ### 6. Render portable policy directly and reject Docker-only semantics
 
 The planner/renderer maps OCI and Node intent to Kubernetes fields with explicit rules:

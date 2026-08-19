@@ -51,3 +51,20 @@ func (unsupportedOperations) ReconcileFabricTransports(
 func (unsupportedOperations) DeleteFabric(context.Context, OwnedFabricObject) error {
 	return fmt.Errorf("fabric endpoints require Linux")
 }
+
+func (unsupportedOperations) ListManagement(context.Context) ([]OwnedManagementObject, error) {
+	return nil, fmt.Errorf("management loops require Linux")
+}
+
+func (unsupportedOperations) EnsureManagement(
+	context.Context,
+	ManagementEndpoint,
+	ObjectIdentity,
+	int,
+) (ManagementStatus, error) {
+	return ManagementStatus{}, fmt.Errorf("management loops require Linux")
+}
+
+func (unsupportedOperations) DeleteManagement(context.Context, OwnedManagementObject) error {
+	return fmt.Errorf("management loops require Linux")
+}

@@ -451,7 +451,11 @@ func (r *importedApplicationRuntime) Config() clabruntime.RuntimeConfig {
 	return r.runtimeConfig
 }
 
-func (*importedApplicationRuntime) GetName() string { return "clabernetes-direct-application" }
+// GetName presents the docker runtime-CLI surface: imported packages construct application CLI
+// sessions as `<runtime name> exec -it <container> <command>`, and the direct runtime realizes
+// exactly that surface application-locally through its published shim. Any docker operation
+// outside that surface still fails closed at this runtime's typed boundaries.
+func (*importedApplicationRuntime) GetName() string { return "docker" }
 
 func (r *importedApplicationRuntime) GetHostsPath(
 	_ context.Context,

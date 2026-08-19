@@ -45,6 +45,13 @@ func (a Adapter) RunPostDeploy(
 	if err = ValidatePlanInputIdentity(normalizedInput, normalizedPlan); err != nil {
 		return err
 	}
+	normalizedInput.Management = completeRuntimeManagement(
+		normalizedInput.Management,
+		normalizedInput.Nodes,
+		normalizedPlan.Management,
+		a.PodAddress,
+		a.PodGateway,
+	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
 		return err
@@ -138,6 +145,13 @@ func (a Adapter) RunDeployEndpoints(
 	if err = ValidatePlanInputIdentity(normalizedInput, normalizedPlan); err != nil {
 		return err
 	}
+	normalizedInput.Management = completeRuntimeManagement(
+		normalizedInput.Management,
+		normalizedInput.Nodes,
+		normalizedPlan.Management,
+		a.PodAddress,
+		a.PodGateway,
+	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
 		return err
@@ -815,9 +829,9 @@ func importedPostDeployTarget(
 			break
 		}
 	}
-	if !foundNode || len(node.ContainerIDs) == 0 || node.ContainerIDs[0] != containerID {
+	if !foundNode || !nodeOwnsContainer(node, containerID) {
 		return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-			fmt.Errorf("post-deploy target is not the primary container of a planned logical Node")
+			fmt.Errorf("post-deploy target is not a container of a planned logical Node")
 	}
 	actionCount := 0
 	for _, action := range plan.Actions {
@@ -842,6 +856,19 @@ func importedPostDeployTarget(
 
 	return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
 		fmt.Errorf("post-deploy target Node is absent from the normalized input")
+}
+
+// nodeOwnsContainer reports whether the planned logical Node owns the given container. Imported
+// lifecycle targets are whichever member container the package declared as its exec identity, so
+// ownership — not position — is the plan invariant.
+func nodeOwnsContainer(node NodePlan, containerID string) bool {
+	for _, candidate := range node.ContainerIDs {
+		if candidate == containerID {
+			return true
+		}
+	}
+
+	return false
 }
 
 func importedDeployEndpointsTarget(

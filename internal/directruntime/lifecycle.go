@@ -99,6 +99,17 @@ func InstallLifecycleBinary(destination string) error {
 	if err = os.Rename(temporaryName, destination); err != nil {
 		return fmt.Errorf("cannot publish lifecycle binary: %w", err)
 	}
+	// Imported packages open CLI sessions through their container runtime's CLI; publish those
+	// names as links to the lifecycle binary so the shim realizes them application-locally.
+	for _, name := range runtimeCLINames {
+		linkPath := filepath.Join(parent, name)
+		if err = os.Remove(linkPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("cannot replace runtime CLI link %q: %w", name, err)
+		}
+		if err = os.Symlink(filepath.Base(destination), linkPath); err != nil {
+			return fmt.Errorf("cannot publish runtime CLI link %q: %w", name, err)
+		}
+	}
 
 	return nil
 }
@@ -247,6 +258,9 @@ func runLifecycle(
 	if !containerExists {
 		return fmt.Errorf("lifecycle target container is absent from the plan")
 	}
+	if validateInput {
+		prepareImportedRuntimeCLI(normalized, containerID)
+	}
 	root := filepath.Clean(artifactRoot)
 	if !filepath.IsAbs(root) || root == string(filepath.Separator) {
 		return fmt.Errorf("lifecycle artifact root must be a scoped absolute path")
@@ -282,8 +296,10 @@ func runLifecycle(
 			if runtimeErr != nil {
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, runtimeErr)
 			}
+			podAddress, podGateway := runtimePodAddressWithRecord(root)
 			if err = (clabernetesdeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
+				PodAddress: podAddress, PodGateway: podGateway,
 			}).RunPostDeploy(
 				ctx,
 				input,
@@ -320,8 +336,10 @@ func runLifecycle(
 			if runtimeErr != nil {
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, runtimeErr)
 			}
+			podAddress, podGateway := runtimePodAddressWithRecord(root)
 			if err = (clabernetesdeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
+				PodAddress: podAddress, PodGateway: podGateway,
 			}).RunSave(
 				ctx,
 				input,

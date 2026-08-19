@@ -882,3 +882,241 @@ func ensureFabricRedirect(handle *netlink.Handle, from, to netlink.Link) error {
 
 	return nil
 }
+
+// managementLoopBase is 198.18.0.0 (RFC 2544 benchmark space): the worker-local range from
+// which each Pod management loop's /31 is assigned. The addresses never leave one worker and
+// its Pods.
+const managementLoopBase = uint32(0xC6120000)
+
+func (linuxOperations) ListManagement(ctx context.Context) ([]OwnedManagementObject, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	handle, err := netlink.NewHandle(unix.NETLINK_ROUTE)
+	if err != nil {
+		return nil, fmt.Errorf("opening host netlink handle: %w", err)
+	}
+	defer handle.Close()
+	links, err := handle.LinkList()
+	if err != nil {
+		return nil, fmt.Errorf("listing host interfaces: %w", err)
+	}
+	result := []OwnedManagementObject{}
+	for _, link := range links {
+		nodeUID, podUID, owned := parseMgmtOwnerAlias(link.Attrs().Alias, mgmtRoleLeg)
+		if !owned {
+			continue
+		}
+		if link.Type() != hostEndpointLinkType {
+			return nil, fmt.Errorf(
+				"owned management interface %q is not a veth",
+				link.Attrs().Name,
+			)
+		}
+		result = append(result, OwnedManagementObject{
+			Name:    link.Attrs().Name,
+			NodeUID: nodeUID,
+			PodUID:  podUID,
+		})
+	}
+	slices.SortFunc(result, func(left, right OwnedManagementObject) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+
+	return result, nil
+}
+
+// EnsureManagement realizes one Pod's management loop: a veth pair whose host side lets the Pod
+// kernel hairpin to the Pod's own cluster address through the worker host namespace, keeping
+// application-local management dials working after a device implementation takes ownership of
+// the Pod's primary interface.
+//
+//nolint:funlen // One transaction realizes the pair, its addressing, and the hairpin route.
+func (linuxOperations) EnsureManagement(
+	ctx context.Context,
+	endpoint ManagementEndpoint,
+	pod ObjectIdentity,
+	namespaceFD int,
+) (ManagementStatus, error) {
+	status := ManagementStatus{}
+	if err := ctx.Err(); err != nil {
+		return status, err
+	}
+	if namespaceFD < 0 {
+		return status, fmt.Errorf("Pod network-namespace handle is invalid")
+	}
+	podAddress := net.ParseIP(endpoint.PodAddress)
+	if podAddress == nil {
+		return status, fmt.Errorf("management Pod address is invalid")
+	}
+	if podAddress.To4() == nil {
+		status.Reason = "IPv6 Pod management addresses are not yet supported"
+
+		return status, nil
+	}
+	legAlias, err := mgmtOwnerAlias(mgmtRoleLeg, endpoint.Node.UID, pod.UID)
+	if err != nil {
+		return status, err
+	}
+	podAlias, err := mgmtOwnerAlias(mgmtRolePod, endpoint.Node.UID, pod.UID)
+	if err != nil {
+		return status, err
+	}
+	hostHandle, err := netlink.NewHandle(unix.NETLINK_ROUTE)
+	if err != nil {
+		return status, fmt.Errorf("opening host netlink handle: %w", err)
+	}
+	defer hostHandle.Close()
+	podHandle, err := netlink.NewHandleAt(netns.NsHandle(namespaceFD), unix.NETLINK_ROUTE)
+	if err != nil {
+		return status, fmt.Errorf("opening Pod netlink handle: %w", err)
+	}
+	defer podHandle.Close()
+	legLink, podLink, err := ensureOwnedVethPair(hostHandle, podHandle, vethPairIntent{
+		hostName:  mgmtLegName(endpoint.Node.UID),
+		podName:   endpoint.PodInterface,
+		hostAlias: legAlias,
+		podAlias:  podAlias,
+	})
+	if err != nil {
+		return status, err
+	}
+	pairIndex, err := managementPairIndex(hostHandle, legLink)
+	if err != nil {
+		return status, err
+	}
+	hostAddress := managementLoopAddress(2*uint32(pairIndex) + 1)  //nolint:gosec // Bounded index.
+	podLoopAddress := managementLoopAddress(2 * uint32(pairIndex)) //nolint:gosec // Bounded index.
+	if err = ensureInterfaceAddress(hostHandle, legLink, hostAddress); err != nil {
+		return status, err
+	}
+	if err = ensureInterfaceAddress(podHandle, podLink, podLoopAddress); err != nil {
+		return status, err
+	}
+	if err = podHandle.RouteReplace(&netlink.Route{
+		LinkIndex: podLink.Attrs().Index,
+		Dst:       &net.IPNet{IP: podAddress.To4(), Mask: net.CIDRMask(32, 32)},
+		Gw:        hostAddress,
+	}); err != nil {
+		return status, fmt.Errorf("installing management hairpin route: %w", err)
+	}
+	status.Ready = true
+
+	return status, nil
+}
+
+// DeleteManagement removes one owned management loop after re-verifying its ownership alias.
+func (linuxOperations) DeleteManagement(ctx context.Context, object OwnedManagementObject) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !validInterfaceName(object.Name) {
+		return fmt.Errorf("owned management interface name is invalid")
+	}
+	alias, err := mgmtOwnerAlias(mgmtRoleLeg, object.NodeUID, object.PodUID)
+	if err != nil {
+		return err
+	}
+	handle, err := netlink.NewHandle(unix.NETLINK_ROUTE)
+	if err != nil {
+		return fmt.Errorf("opening host netlink handle: %w", err)
+	}
+	defer handle.Close()
+	link, exists, err := linkByName(handle, object.Name)
+	if err != nil || !exists {
+		return err
+	}
+	if link.Type() != hostEndpointLinkType || link.Attrs().Alias != alias {
+		return fmt.Errorf(
+			"host interface %q is not the requested owned management object",
+			object.Name,
+		)
+	}
+	if err = handle.LinkDel(link); err != nil {
+		return fmt.Errorf("deleting owned management interface %q: %w", object.Name, err)
+	}
+
+	return nil
+}
+
+// managementPairIndex adopts the /31 already carried by this leg, or assigns the lowest index
+// unused by any other owned management leg on this worker. Assignments are recoverable from the
+// interfaces themselves, so the daemon holds no allocation state.
+func managementPairIndex(handle *netlink.Handle, legLink netlink.Link) (int, error) {
+	if index, adopted := managementLegPairIndex(handle, legLink); adopted {
+		return index, nil
+	}
+	links, err := handle.LinkList()
+	if err != nil {
+		return 0, fmt.Errorf("listing host interfaces: %w", err)
+	}
+	used := map[int]bool{}
+	for _, link := range links {
+		if _, _, owned := parseMgmtOwnerAlias(link.Attrs().Alias, mgmtRoleLeg); !owned {
+			continue
+		}
+		if index, adopted := managementLegPairIndex(handle, link); adopted {
+			used[index] = true
+		}
+	}
+	for index := range managementLoopPairs {
+		if !used[index] {
+			return index, nil
+		}
+	}
+
+	return 0, fmt.Errorf("management loop address range is exhausted")
+}
+
+func managementLegPairIndex(handle *netlink.Handle, link netlink.Link) (int, bool) {
+	addresses, err := handle.AddrList(link, netlink.FAMILY_V4)
+	if err != nil {
+		return 0, false
+	}
+	for _, address := range addresses {
+		value := address.IP.To4()
+		if value == nil {
+			continue
+		}
+		numeric := uint32(value[0])<<24 | uint32(value[1])<<16 |
+			uint32(value[2])<<8 | uint32(value[3])
+		offset := numeric - managementLoopBase
+		if numeric < managementLoopBase || offset >= 2*managementLoopPairs || offset%2 != 1 {
+			continue
+		}
+
+		return int(offset / 2), true
+	}
+
+	return 0, false
+}
+
+func managementLoopAddress(offset uint32) net.IP {
+	value := managementLoopBase + offset
+
+	return net.IPv4(byte(value>>24), byte(value>>16), byte(value>>8), byte(value))
+}
+
+// ensureInterfaceAddress idempotently installs one /31 loop address on an owned interface.
+func ensureInterfaceAddress(
+	handle *netlink.Handle,
+	link netlink.Link,
+	address net.IP,
+) error {
+	desired := &netlink.Addr{IPNet: &net.IPNet{IP: address.To4(), Mask: net.CIDRMask(31, 32)}}
+	addresses, err := handle.AddrList(link, netlink.FAMILY_V4)
+	if err != nil {
+		return fmt.Errorf("listing %q addresses: %w", link.Attrs().Name, err)
+	}
+	for _, existing := range addresses {
+		if existing.IP.Equal(desired.IP) && existing.IPNet != nil &&
+			slices.Equal(existing.IPNet.Mask, desired.IPNet.Mask) {
+			return nil
+		}
+	}
+	if err = handle.AddrAdd(link, desired); err != nil {
+		return fmt.Errorf("installing %q loop address: %w", link.Attrs().Name, err)
+	}
+
+	return nil
+}

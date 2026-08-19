@@ -366,3 +366,28 @@ Step 0 and Step 1 of §7 are done; the work now lives in reviewable commits on `
   certificate self-verification, entropy Secret, reconcile fast path, log-broker gating,
   container-name UX, `/proc/1/ns` narrowing), vendor conformance beyond SR Linux (tasks
   10.3–10.9), nested-runtime removal (11.x), and the remaining docs/acceptance work (12.x).
+
+### 9a. Vendor conformance round (later the same day)
+
+- Fabric redesign (design 5a) is proven live: SR Linux dataplane over a cross-worker Link
+  passes (`TestNodeLinkDirect` 65s, `TestLinuxDataplaneDirect` 44s).
+- SR OS/SR-SIM (task 10.3) passes end to end (`TestSRSimBootsAndReachesLinux`, 83s) after four
+  generic fixes: imported hooks target the container the package declares through
+  `GetContainerName()` (ownership, not position, is the validator invariant); management is
+  always addressed — the Pod address completes any Node the controller left unaddressed, at the
+  in-Pod boundaries after input-identity validation (design 5b); a host-terminated management
+  loop restores in-Pod reachability to the Pod's own address for interface-owning kinds; and
+  `applyManagementInput` splits CIDR allocations into the bare-address + prefix-length fields
+  imported packages consume. Evidence: `evidence/task-10.3-srsim-direct.md`.
+- Arista cEOS (task 10.4) passes (Ready ~40s: startup-config, interface fixups, hook-applied
+  management addressing, fabric dataplane ping) after three more generic fixes: systemd-based
+  NOS images mount a fresh tmpfs over `/run`, shadowing every c9s mount under
+  `/var/run/clabernetes` — application-visible lifecycle mounts moved to
+  `/var/lib/clabernetes`; imported packages open CLI sessions by spawning their container
+  runtime's CLI (`docker exec -it <c> Cli`, retried forever) — the direct runtime presents the
+  docker runtime-CLI surface and a fail-closed terminal shim realizes the session
+  application-locally with terminal-directed side-band sequences stripped; and the management
+  identity now survives end to end (per-Node plan entries carry the package-declared
+  management interface, CIDR allocations split into address + prefix fields, the replay
+  recorder reports the prefix, and preparation records address/prefix/gateway before a device
+  strips the primary interface). Evidence: `evidence/task-10.4-ceos-direct.md`.

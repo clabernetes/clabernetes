@@ -239,8 +239,8 @@ func TestNewRegistryKindLifecycleFlowsThroughGenericDirectPodRenderer(t *testing
 	if application.StartupProbe == nil || application.ReadinessProbe == nil ||
 		application.StartupProbe.Exec == nil || application.ReadinessProbe.Exec == nil ||
 		!slices.Contains(application.ReadinessProbe.Exec.Command, "readiness") ||
-		!hasReadOnlyMountAt(application, "/var/run/clabernetes/lifecycle-input") ||
-		!hasWritableMountAt(application, "/var/run/clabernetes/lifecycle-scratch") {
+		!hasReadOnlyMountAt(application, "/var/lib/clabernetes/lifecycle-input") ||
+		!hasWritableMountAt(application, "/var/lib/clabernetes/lifecycle-scratch") {
 		t.Fatalf("new package kind readiness rendering = %#v", application)
 	}
 }
@@ -587,6 +587,60 @@ func TestPlanMapsRecordedComponentContainersWithoutKindDispatch(t *testing.T) {
 		want,
 	) {
 		t.Fatalf("package component readiness inventory = %#v, want %#v", got, want)
+	}
+}
+
+func TestPlanTargetsImportedHooksAtPackageDeclaredExecContainer(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Type = "component-exec-target-test"
+	input.Nodes[0].Definition = mustJSON(t, map[string]any{
+		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
+	})
+	input.Images = append(input.Images, clabernetesdeviceplan.ImageInput{
+		NodeID:          "node-a",
+		ComponentID:     "component-a",
+		SourceReference: "example/future-component:1",
+		DigestReference: "example/future-component@sha256:" + strings.Repeat("b", 64),
+		Platform:        clabernetesdeviceplan.Platform{OS: "linux", Architecture: "amd64"},
+	})
+	plan, err := (clabernetesdeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t),
+		Revision: "exec-target-v1",
+	}).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var declared string
+	for index := range plan.Containers {
+		if plan.Containers[index].Image == "example/future-component:1" {
+			declared = plan.Containers[index].ID
+		}
+	}
+	if declared == "" {
+		t.Fatalf("declared exec-target container was not planned: %#v", plan.Containers)
+	}
+
+	verified := 0
+	for _, action := range plan.Actions {
+		switch action.Kind {
+		case clabernetesdeviceplan.ActionImportedPostDeploy,
+			clabernetesdeviceplan.ActionImportedReadiness:
+			if action.Target.ContainerID != declared {
+				t.Fatalf(
+					"imported hook %s targets %s, want package-declared %s",
+					action.Kind,
+					action.Target.ContainerID,
+					declared,
+				)
+			}
+			verified++
+		}
+	}
+	if verified != 2 {
+		t.Fatalf("imported hook actions verified = %d, want 2", verified)
 	}
 }
 

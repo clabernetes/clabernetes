@@ -35,6 +35,13 @@ func (a Adapter) CheckReadiness(
 	if err = ValidatePlanInputIdentity(normalizedInput, normalizedPlan); err != nil {
 		return err
 	}
+	normalizedInput.Management = completeRuntimeManagement(
+		normalizedInput.Management,
+		normalizedInput.Nodes,
+		normalizedPlan.Management,
+		a.PodAddress,
+		a.PodGateway,
+	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
 		return err
