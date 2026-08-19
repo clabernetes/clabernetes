@@ -112,17 +112,18 @@ func (r *PlannerReconciler) Reconcile(
 	if deadlineSeconds == 0 {
 		deadlineSeconds = defaultPlannerDeadlineSeconds
 	}
-	inputConfigMap, inputDigest, err := (&PlannerInputConfigMapReconciler{
-		Client: r.Client, MaxInputBytes: maxInputBytes,
-	}).Ensure(ctx, attempt.Node, PlannerInputArtifact{
+	inputArtifact := PlannerInputArtifact{
 		CanonicalInput: canonicalInput, SensitiveValues: attempt.SensitiveValues,
-	})
+	}
+	inputRendered, inputDigest, err := (&PlannerInputConfigMapReconciler{
+		Client: r.Client, MaxInputBytes: maxInputBytes,
+	}).Render(attempt.Node, inputArtifact)
 	if err != nil {
 		return nil, err
 	}
 	renderInput := PlannerPodInput{
 		Node: attempt.Node, Image: attempt.Image,
-		InputConfigMapName: inputConfigMap.GetName(), InputDigest: inputDigest,
+		InputConfigMapName: inputRendered.GetName(), InputDigest: inputDigest,
 		PlannerRevision: attempt.PlannerRevision, WorkerCommand: plannerWorkerPlan,
 		MaxInputBytes:   int64(maxInputBytes),
 		DeadlineSeconds: deadlineSeconds, ImagePullSecrets: attempt.ImagePullSecrets,
@@ -130,35 +131,102 @@ func (r *PlannerReconciler) Reconcile(
 		CertificateSecretName: attempt.CertificateSecretName,
 		EntropySecretName:     attempt.EntropySecretName,
 	}
-	podName, err := plannerPodName(attempt.Node.GetName(), renderInput)
+	frame, podName, pending, err := r.executeWorkerAttempt(
+		ctx,
+		attempt.Node,
+		renderInput,
+		"-planner-",
+		inputArtifact,
+		maxInputBytes,
+	)
+	result := &PlannerResult{
+		State: PlannerStatePending, PodName: podName,
+		InputConfigMapName: inputRendered.GetName(), InputDigest: inputDigest,
+	}
 	if err != nil {
 		return nil, err
 	}
+	if pending {
+		return result, nil
+	}
+	if clabernetesdeviceplan.FrameKind(frame) == clabernetesdeviceplan.WorkerFrameError {
+		diagnostic, decodeErr := clabernetesdeviceplan.DecodeWorkerError(frame, maxPlanBytes)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+
+		return nil, errors.Join(ErrPlannerFailed, diagnostic)
+	}
+	plan, decodeErr := clabernetesdeviceplan.DecodeWorkerOutput(frame, maxPlanBytes)
+	if decodeErr != nil {
+		return nil, decodeErr
+	}
+	if plan.InputDigest != inputDigest ||
+		!reflect.DeepEqual(plan.Compatibility, attempt.Input.Compatibility) ||
+		plan.Planner.Revision != attempt.PlannerRevision {
+		return nil, fmt.Errorf(
+			"%w: worker output identity differs from its request",
+			ErrPlannerFailed,
+		)
+	}
+	result.State = PlannerStateSucceeded
+	result.Plan = &plan
+
+	return result, nil
+}
+
+// executeWorkerAttempt advances one content-addressed worker attempt to a persisted framed
+// record. A persisted record short-circuits all Pod work; a completed Pod has its record stored
+// and its Pod, NetworkPolicy, and input ConfigMap removed; a Pod that terminated without any
+// framed record is deleted so controller backoff retries it instead of caching the failure.
+func (r *PlannerReconciler) executeWorkerAttempt(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+	renderInput PlannerPodInput,
+	separator string,
+	inputArtifact PlannerInputArtifact,
+	maxInputBytes int,
+) (frame []byte, podName string, pending bool, err error) {
+	podName, err = contentAddressedPlannerObjectName(node.GetName(), separator, renderInput)
+	if err != nil {
+		return nil, "", false, err
+	}
 	renderInput.Name = podName
-	result := &PlannerResult{
-		State: PlannerStatePending, PodName: podName,
-		InputConfigMapName: inputConfigMap.GetName(), InputDigest: inputDigest,
+	store := workerOutputStore{Client: r.Client}
+	frame, found, err := store.Lookup(ctx, node, podName)
+	if err != nil {
+		return nil, podName, false, err
+	}
+	if found {
+		return frame, podName, false, nil
+	}
+	if _, _, err = (&PlannerInputConfigMapReconciler{
+		Client: r.Client, MaxInputBytes: maxInputBytes,
+	}).Ensure(ctx, node, inputArtifact); err != nil {
+		return nil, podName, false, err
 	}
 	policy, err := RenderPlannerNetworkPolicy(renderInput)
 	if err != nil {
-		return nil, err
+		return nil, podName, false, err
 	}
 	policyCreated, err := r.ensurePlannerNetworkPolicy(ctx, policy)
 	if err != nil || policyCreated {
-		return result, err
+		return nil, podName, true, err
 	}
 	pod, err := RenderPlannerPod(renderInput)
 	if err != nil {
-		return nil, err
+		return nil, podName, false, err
 	}
 	existingPod, podCreated, err := r.ensurePlannerPod(ctx, pod)
 	if err != nil || podCreated {
-		return result, err
+		return nil, podName, true, err
 	}
 	switch existingPod.Status.Phase {
-	case k8scorev1.PodSucceeded:
+	case k8scorev1.PodSucceeded, k8scorev1.PodFailed:
 		if r.ReadLogs == nil {
-			return nil, fmt.Errorf("planner log reader is required for a completed worker")
+			return nil, podName, false, fmt.Errorf(
+				"planner log reader is required for a completed worker",
+			)
 		}
 		logs, readErr := r.ReadLogs(
 			ctx,
@@ -166,61 +234,49 @@ func (r *PlannerReconciler) Reconcile(
 			existingPod.GetName(),
 			plannerContainerName,
 		)
-		if readErr != nil {
-			return nil, fmt.Errorf("reading completed planner output: %w", readErr)
-		}
-		plan, decodeErr := clabernetesdeviceplan.DecodeWorkerOutput(logs, maxPlanBytes)
-		if decodeErr != nil {
-			return nil, decodeErr
-		}
-		if plan.InputDigest != inputDigest ||
-			!reflect.DeepEqual(plan.Compatibility, attempt.Input.Compatibility) ||
-			plan.Planner.Revision != attempt.PlannerRevision {
-			return nil, fmt.Errorf(
-				"%w: worker output identity differs from its request",
+		extracted, ok := clabernetesdeviceplan.ExtractWorkerFrame(logs)
+		if readErr != nil || !ok {
+			// Unreadable logs or a terminal Pod without any framed record (deadline, eviction,
+			// OOM, log rotation) is indistinguishable from a transient failure: remove the Pod
+			// so the next reconcile runs a fresh attempt instead of caching the condition.
+			if deleteErr := r.Client.Delete(
+				ctx, existingPod,
+			); deleteErr != nil && !apimachineryerrors.IsNotFound(deleteErr) {
+				return nil, podName, false, fmt.Errorf(
+					"deleting worker Pod without a usable record: %w",
+					deleteErr,
+				)
+			}
+
+			return nil, podName, false, fmt.Errorf(
+				"%w: worker Pod %s terminated without a usable framed record; retrying",
 				ErrPlannerFailed,
+				podName,
 			)
 		}
-		result.State = PlannerStateSucceeded
-		result.Plan = &plan
-
-		return result, nil
-	case k8scorev1.PodFailed:
-		return nil, failedWorkerDiagnostic(
+		if err = store.Persist(
 			ctx,
-			r.ReadLogs,
-			existingPod,
-			maxPlanBytes,
-			"planning worker Pod reached Failed phase",
-		)
-	default:
-		return result, nil
-	}
-}
-
-func failedWorkerDiagnostic(
-	ctx context.Context,
-	readLogs PlannerLogReader,
-	pod *k8scorev1.Pod,
-	maxBytes int,
-	fallback string,
-) error {
-	if readLogs != nil && pod != nil {
-		logs, err := readLogs(
-			ctx,
-			pod.GetNamespace(),
-			pod.GetName(),
-			plannerContainerName,
-		)
-		if err == nil {
-			diagnostic, decodeErr := clabernetesdeviceplan.DecodeWorkerError(logs, maxBytes)
-			if decodeErr == nil {
-				return errors.Join(ErrPlannerFailed, diagnostic)
-			}
+			node,
+			podName,
+			renderInput.WorkerCommand,
+			extracted,
+			inputArtifact.SensitiveValues,
+		); err != nil {
+			return nil, podName, false, err
 		}
-	}
+		if err = deleteWorkerAttemptArtifacts(
+			ctx,
+			r.Client,
+			node.GetNamespace(),
+			podName,
+		); err != nil {
+			return nil, podName, false, err
+		}
 
-	return fmt.Errorf("%w: %s", ErrPlannerFailed, fallback)
+		return extracted, podName, false, nil
+	default:
+		return nil, podName, true, nil
+	}
 }
 
 func (r *PlannerReconciler) ensurePlannerNetworkPolicy(

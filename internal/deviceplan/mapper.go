@@ -649,8 +649,10 @@ func mapContainer(
 		return ContainerPlan{}, err
 	}
 
+	// The recorded configuration already carries every package-owned variable: the imported
+	// Deploy hook sets its own interface count per container, including per-component values
+	// this mapper must not clobber.
 	environment := maps.Clone(config.Env)
-	environment["CLAB_INTFS"] = strconv.Itoa(len(node.Interfaces))
 
 	return ContainerPlan{
 		ID:               containerID,

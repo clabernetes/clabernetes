@@ -711,6 +711,18 @@ func TestDirectPlanningFailureDoesNotMutateLastAppliedWorkload(t *testing.T) {
 			DigestReference: "registry.example/device@sha256:" + strings.Repeat("a", 64),
 		},
 	}
+	failureFrame, err := clabernetesdeviceplan.EncodeWorkerError(clabernetesdeviceplan.Error{
+		Code: clabernetesdeviceplan.ErrorUnsupported, Field: "test",
+		Behavior: "isolated-worker", Message: "imported evaluation failed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failureLogs := func(context.Context, string, string, string) ([]byte, error) {
+		return failureFrame, nil
+	}
+	reconciler.ImageDiscoveryReconciler.ReadLogs = failureLogs
+	reconciler.PlannerReconciler.ReadLogs = failureLogs
 	if err := reconciler.Reconcile(ctx, node); err != nil {
 		t.Fatal(err)
 	}
@@ -728,7 +740,7 @@ func TestDirectPlanningFailureDoesNotMutateLastAppliedWorkload(t *testing.T) {
 	if err := client.Status().Update(ctx, &pods.Items[0]); err != nil {
 		t.Fatal(err)
 	}
-	err := reconciler.Reconcile(ctx, node)
+	err = reconciler.Reconcile(ctx, node)
 	if !errors.Is(err, ErrPlannerFailed) {
 		t.Fatalf("direct reconcile error = %v, want ErrPlannerFailed", err)
 	}

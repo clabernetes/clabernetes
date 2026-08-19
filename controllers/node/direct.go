@@ -198,6 +198,10 @@ func (r *Reconciler) reconcileDirect(
 	planInput := clabernetesdeviceplan.Input{}
 	var convergedDiscovery *clabernetesdeviceplan.ImageDiscovery
 	imageDiscoveryConverged := false
+	// keepWorkerArtifacts names every worker Pod, NetworkPolicy, input ConfigMap, and output
+	// ConfigMap this reconcile referenced; the sweep at the end removes everything else the
+	// Node owns.
+	keepWorkerArtifacts := map[string]bool{}
 	for range maxDirectImageDiscoveryRounds {
 		baseRequest.Images = resolvedImages
 		discoveryInput, compileErr := CompilePlanInput(baseRequest)
@@ -216,6 +220,8 @@ func (r *Reconciler) reconcileDirect(
 		if reconcileErr != nil {
 			return reconcileErr
 		}
+		keepWorkerArtifacts[discoveryResult.PodName] = true
+		keepWorkerArtifacts[discoveryResult.InputConfigMapName] = true
 		if discoveryResult.State != PlannerStateSucceeded {
 			return nil
 		}
@@ -300,6 +306,8 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	keepWorkerArtifacts[planningResult.PodName] = true
+	keepWorkerArtifacts[planningResult.InputConfigMapName] = true
 	if planningResult.State != PlannerStateSucceeded {
 		return nil
 	}
@@ -446,6 +454,8 @@ func (r *Reconciler) reconcileDirect(
 		currentDeployment = existingDeployment
 		keepPlanConfigMapName = coldReferences.PlanConfigMapName
 		keepConnectivityRevisionConfigMapName = coldReferences.ConnectivityRevisionConfigMapName
+		// The retained Pod still mounts the cold planning input.
+		keepWorkerArtifacts[coldReferences.InputConfigMapName] = true
 	} else {
 		connectivityRevision, err = clabernetesdirectruntime.NewConnectivityRevision(
 			planInput,
@@ -456,9 +466,14 @@ func (r *Reconciler) reconcileDirect(
 		if err != nil {
 			return err
 		}
-		connectivityRevisionConfigMap, revisionErr := r.ConnectivityRevisionConfigMapReconciler.Ensure(ctx, node, connectivityRevision)
-		if revisionErr != nil {
-			return revisionErr
+		// Assign, do not redeclare: reconcileDirectLinkRestart receives the outer variable.
+		connectivityRevisionConfigMap, err = r.ConnectivityRevisionConfigMapReconciler.Ensure(
+			ctx,
+			node,
+			connectivityRevision,
+		)
+		if err != nil {
+			return err
 		}
 		planConfigMap, _, planErr := r.PlanConfigMapReconciler.Ensure(ctx, node, PlanArtifact{
 			Plan: canonicalPlan, NormalizedInputs: canonicalInput,
@@ -551,11 +566,15 @@ func (r *Reconciler) reconcileDirect(
 		return err
 	}
 
-	return r.ConnectivityRevisionConfigMapReconciler.GarbageCollect(
+	if err = r.ConnectivityRevisionConfigMapReconciler.GarbageCollect(
 		ctx,
 		node,
 		keepConnectivityRevisionConfigMapName,
-	)
+	); err != nil {
+		return err
+	}
+
+	return r.garbageCollectWorkerArtifacts(ctx, node, keepWorkerArtifacts)
 }
 
 func (r *Reconciler) reconcileDirectSecondary(

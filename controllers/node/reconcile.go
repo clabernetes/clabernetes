@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
@@ -166,8 +167,18 @@ func (c *Controller) Reconcile(
 
 	c.BaseController.LogReconcileCompleteSuccess(req)
 
+	if c.reconciler.runtimeMode == clabernetesinternaldeviceruntime.ModeDirect {
+		// Direct pipelines park between worker Pod phases and revalidate referenced payload
+		// objects on every pass, so a periodic pass is both the stall watchdog for a dropped
+		// Pod event and the backstop for payload edits the watches cannot see.
+		return ctrlruntime.Result{RequeueAfter: directRequeueInterval}, nil
+	}
+
 	return ctrlruntime.Result{}, nil
 }
+
+// directRequeueInterval paces the direct-mode watchdog pass.
+const directRequeueInterval = 60 * time.Second
 
 // Reconcile reconciles a single Node -- for launcher (primary/standalone) nodes this renders
 // the deployment/services/pvc and statuses for the whole node group; for grouped (secondary)

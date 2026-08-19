@@ -134,12 +134,17 @@ func canonicalEntropyBehavior(behavior string) string {
 }
 
 type entropyReader struct {
+	// mutex serializes reads: the reader replaces the process-global crypto/rand source, and an
+	// imported hook may consume randomness from goroutines it spawns itself.
+	mutex   sync.Mutex
 	key     []byte
 	counter uint64
 	pending []byte
 }
 
 func (r *entropyReader) Read(destination []byte) (int, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 	written := 0
 	for written < len(destination) {
 		if len(r.pending) == 0 {

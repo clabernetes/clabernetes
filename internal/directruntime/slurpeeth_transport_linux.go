@@ -583,15 +583,18 @@ func (t *directSlurpeethTransport) close() error {
 		if t.listener != nil {
 			closeErr = errors.Join(closeErr, t.listener.Close())
 		}
-		for _, intf := range t.interfaces {
-			closeErr = errors.Join(closeErr, unix.Close(intf.file))
-		}
 		t.connectionMutex.Lock()
 		for connection := range t.connections {
 			closeErr = errors.Join(closeErr, connection.Close())
 		}
 		t.connectionMutex.Unlock()
+		// The packet-socket file descriptors close only after every reader and writer has
+		// exited (their receive timeout observes the cancelled context); closing first would
+		// let the kernel reuse an fd number while a goroutine is still using it.
 		t.wait.Wait()
+		for _, intf := range t.interfaces {
+			closeErr = errors.Join(closeErr, unix.Close(intf.file))
+		}
 	})
 
 	return closeErr

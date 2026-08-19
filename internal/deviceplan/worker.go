@@ -1,7 +1,6 @@
 package deviceplan
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -151,6 +150,8 @@ func decodeWorkerInput(input io.Reader, configuredMaxBytes int64) (Input, error)
 }
 
 // EncodeWorkerOutput returns the canonical framed record written as the last worker log line.
+// The leading newline guarantees the frame starts a line even after a partial hook write on the
+// same stream.
 func EncodeWorkerOutput(plan Plan) ([]byte, error) {
 	canonical, err := plan.CanonicalJSON()
 	if err != nil {
@@ -158,7 +159,7 @@ func EncodeWorkerOutput(plan Plan) ([]byte, error) {
 	}
 	encoded := base64.RawStdEncoding.EncodeToString(canonical)
 
-	return []byte(workerOutputPrefix + encoded + "\n"), nil
+	return []byte("\n" + workerOutputPrefix + encoded + "\n"), nil
 }
 
 // EncodeImageWorkerOutput returns the canonical framed image-discovery record.
@@ -169,7 +170,80 @@ func EncodeImageWorkerOutput(discovery ImageDiscovery) ([]byte, error) {
 	}
 	encoded := base64.RawStdEncoding.EncodeToString(canonical)
 
-	return []byte(imageWorkerOutputPrefix + encoded + "\n"), nil
+	return []byte("\n" + imageWorkerOutputPrefix + encoded + "\n"), nil
+}
+
+// WorkerFrameKind identifies which framed record type a worker emitted.
+type WorkerFrameKind string
+
+// The three framed record types a worker can emit.
+const (
+	WorkerFramePlan    WorkerFrameKind = "plan"
+	WorkerFrameImages  WorkerFrameKind = "images"
+	WorkerFrameError   WorkerFrameKind = "error"
+	WorkerFrameUnknown WorkerFrameKind = ""
+)
+
+// FrameKind returns the record type of the last framed line in raw worker output.
+func FrameKind(raw []byte) WorkerFrameKind {
+	kind := WorkerFrameUnknown
+	for _, line := range strings.Split(string(raw), "\n") {
+		switch {
+		case strings.HasPrefix(line, workerOutputPrefix):
+			kind = WorkerFramePlan
+		case strings.HasPrefix(line, imageWorkerOutputPrefix):
+			kind = WorkerFrameImages
+		case strings.HasPrefix(line, workerErrorPrefix):
+			kind = WorkerFrameError
+		}
+	}
+
+	return kind
+}
+
+// ExtractWorkerFrame returns the last framed worker record in raw logs, including its prefix
+// and trailing newline, so the record can be persisted and later decoded exactly like the
+// original stream. Surrounding hook output is discarded.
+func ExtractWorkerFrame(raw []byte) ([]byte, bool) {
+	frame := ""
+	for _, line := range strings.Split(string(raw), "\n") {
+		for _, prefix := range []string{
+			workerOutputPrefix, imageWorkerOutputPrefix, workerErrorPrefix,
+		} {
+			if strings.HasPrefix(line, prefix) {
+				frame = line
+			}
+		}
+	}
+	if frame == "" {
+		return nil, false
+	}
+
+	return []byte(frame + "\n"), true
+}
+
+// DecodeWorkerFramePayload returns the decoded payload bytes of the last framed record so a
+// caller can screen its content without caring which record type it is.
+func DecodeWorkerFramePayload(raw []byte) ([]byte, bool) {
+	encoded := ""
+	for _, line := range strings.Split(string(raw), "\n") {
+		for _, prefix := range []string{
+			workerOutputPrefix, imageWorkerOutputPrefix, workerErrorPrefix,
+		} {
+			if value, found := strings.CutPrefix(line, prefix); found {
+				encoded = value
+			}
+		}
+	}
+	if encoded == "" {
+		return nil, false
+	}
+	decoded, err := base64.RawStdEncoding.Strict().DecodeString(encoded)
+	if err != nil || len(decoded) == 0 {
+		return nil, false
+	}
+
+	return decoded, true
 }
 
 // DecodeWorkerError extracts the last bounded, structured preflight diagnostic from failed worker
@@ -195,6 +269,16 @@ func DecodeWorkerError(raw []byte, maxBytes int) (*Error, error) {
 	return &diagnostic, nil
 }
 
+// EncodeWorkerError returns the framed structured diagnostic a worker emits on failure.
+func EncodeWorkerError(diagnostic Error) ([]byte, error) {
+	raw, err := json.Marshal(&diagnostic)
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte("\n" + workerErrorPrefix + base64.RawStdEncoding.EncodeToString(raw) + "\n"), nil
+}
+
 func writeWorkerError(output io.Writer, err error) error {
 	if output == nil {
 		return nil
@@ -210,12 +294,11 @@ func writeWorkerError(output io.Writer, err error) error {
 			Behavior: structured.Behavior, Message: structured.Message,
 		}
 	}
-	raw, marshalErr := json.Marshal(diagnostic)
+	framed, marshalErr := EncodeWorkerError(*diagnostic)
 	if marshalErr != nil {
 		return marshalErr
 	}
-	framed := workerErrorPrefix + base64.RawStdEncoding.EncodeToString(raw) + "\n"
-	_, writeErr := io.WriteString(output, framed)
+	_, writeErr := output.Write(framed)
 
 	return writeErr
 }
@@ -276,20 +359,28 @@ func decodeFramedWorkerOutput(
 		)
 	}
 	var encoded string
-	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
-	maxEncodedBytes := base64.RawStdEncoding.EncodedLen(maxBytes) + len(prefix)
-	scanner.Buffer(make([]byte, 64<<10), maxEncodedBytes+1)
-	for scanner.Scan() {
-		if value, found := strings.CutPrefix(scanner.Text(), prefix); found {
-			encoded = value
+	maxEncodedBytes := base64.RawStdEncoding.EncodedLen(maxBytes)
+	oversizedFrame := false
+	// Split rather than bufio.Scan: an unrelated oversized log line from an imported hook must
+	// not abort framed-record extraction, and only a matching frame is size-limited.
+	for line := range strings.SplitSeq(string(raw), "\n") {
+		value, found := strings.CutPrefix(line, prefix)
+		if !found {
+			continue
 		}
+		if len(value) > maxEncodedBytes {
+			oversizedFrame = true
+			continue
+		}
+		encoded = value
+		oversizedFrame = false
 	}
-	if err := scanner.Err(); err != nil {
+	if oversizedFrame {
 		return nil, planningError(
 			ErrorSerialization,
 			"worker.output",
 			document+" worker output exceeds its framing limit",
-			err,
+			nil,
 		)
 	}
 	if encoded == "" {

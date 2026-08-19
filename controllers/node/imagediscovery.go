@@ -3,6 +3,7 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -70,94 +71,68 @@ func (r *ImageDiscoveryReconciler) Reconcile(
 	if deadlineSeconds == 0 {
 		deadlineSeconds = defaultPlannerDeadlineSeconds
 	}
-	inputConfigMap, inputDigest, err := (&PlannerInputConfigMapReconciler{
-		Client: r.Client, MaxInputBytes: maxInputBytes,
-	}).Ensure(ctx, attempt.Node, PlannerInputArtifact{
+	inputArtifact := PlannerInputArtifact{
 		CanonicalInput: canonicalInput, SensitiveValues: attempt.SensitiveValues,
-	})
+	}
+	inputRendered, inputDigest, err := (&PlannerInputConfigMapReconciler{
+		Client: r.Client, MaxInputBytes: maxInputBytes,
+	}).Render(attempt.Node, inputArtifact)
 	if err != nil {
 		return nil, err
 	}
 	renderInput := PlannerPodInput{
 		Node: attempt.Node, Image: attempt.Image,
-		InputConfigMapName: inputConfigMap.GetName(), InputDigest: inputDigest,
+		InputConfigMapName: inputRendered.GetName(), InputDigest: inputDigest,
 		PlannerRevision: attempt.PlannerRevision, WorkerCommand: plannerWorkerImages,
 		MaxInputBytes: int64(maxInputBytes), DeadlineSeconds: deadlineSeconds,
 		ImagePullSecrets:  attempt.ImagePullSecrets,
 		Payloads:          attempt.Input.Payloads,
 		EntropySecretName: attempt.EntropySecretName,
 	}
-	podName, err := imageDiscoveryPodName(attempt.Node.GetName(), renderInput)
-	if err != nil {
-		return nil, err
-	}
-	renderInput.Name = podName
+	objects := &PlannerReconciler{Client: r.Client, ReadLogs: r.ReadLogs}
+	frame, podName, pending, err := objects.executeWorkerAttempt(
+		ctx,
+		attempt.Node,
+		renderInput,
+		"-images-",
+		inputArtifact,
+		maxInputBytes,
+	)
 	result := &ImageDiscoveryResult{
 		State: PlannerStatePending, PodName: podName,
-		InputConfigMapName: inputConfigMap.GetName(), InputDigest: inputDigest,
+		InputConfigMapName: inputRendered.GetName(), InputDigest: inputDigest,
 	}
-	objects := &PlannerReconciler{Client: r.Client}
-	policy, err := RenderPlannerNetworkPolicy(renderInput)
 	if err != nil {
 		return nil, err
 	}
-	policyCreated, err := objects.ensurePlannerNetworkPolicy(ctx, policy)
-	if err != nil || policyCreated {
-		return result, err
+	if pending {
+		return result, nil
 	}
-	pod, err := RenderPlannerPod(renderInput)
-	if err != nil {
-		return nil, err
-	}
-	existingPod, podCreated, err := objects.ensurePlannerPod(ctx, pod)
-	if err != nil || podCreated {
-		return result, err
-	}
-	switch existingPod.Status.Phase {
-	case k8scorev1.PodSucceeded:
-		if r.ReadLogs == nil {
-			return nil, fmt.Errorf("image discovery log reader is required for a completed worker")
-		}
-		logs, readErr := r.ReadLogs(
-			ctx,
-			existingPod.GetNamespace(),
-			existingPod.GetName(),
-			plannerContainerName,
-		)
-		if readErr != nil {
-			return nil, fmt.Errorf("reading completed image discovery output: %w", readErr)
-		}
-		discovery, decodeErr := clabernetesdeviceplan.DecodeImageWorkerOutput(
-			logs,
-			maxOutputBytes,
-		)
+	if clabernetesdeviceplan.FrameKind(frame) == clabernetesdeviceplan.WorkerFrameError {
+		diagnostic, decodeErr := clabernetesdeviceplan.DecodeWorkerError(frame, maxOutputBytes)
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		if discovery.InputDigest != inputDigest ||
-			!reflect.DeepEqual(discovery.Compatibility, attempt.Input.Compatibility) ||
-			discovery.Planner.Revision != attempt.PlannerRevision ||
-			!discoveryReferencesInputNodes(discovery, attempt.Input) {
-			return nil, fmt.Errorf(
-				"%w: image discovery identity differs from its request",
-				ErrPlannerFailed,
-			)
-		}
-		result.State = PlannerStateSucceeded
-		result.Discovery = &discovery
 
-		return result, nil
-	case k8scorev1.PodFailed:
-		return nil, failedWorkerDiagnostic(
-			ctx,
-			r.ReadLogs,
-			existingPod,
-			maxOutputBytes,
-			"image discovery Pod reached Failed phase",
-		)
-	default:
-		return result, nil
+		return nil, errors.Join(ErrPlannerFailed, diagnostic)
 	}
+	discovery, decodeErr := clabernetesdeviceplan.DecodeImageWorkerOutput(frame, maxOutputBytes)
+	if decodeErr != nil {
+		return nil, decodeErr
+	}
+	if discovery.InputDigest != inputDigest ||
+		!reflect.DeepEqual(discovery.Compatibility, attempt.Input.Compatibility) ||
+		discovery.Planner.Revision != attempt.PlannerRevision ||
+		!discoveryReferencesInputNodes(discovery, attempt.Input) {
+		return nil, fmt.Errorf(
+			"%w: image discovery identity differs from its request",
+			ErrPlannerFailed,
+		)
+	}
+	result.State = PlannerStateSucceeded
+	result.Discovery = &discovery
+
+	return result, nil
 }
 
 func discoveryReferencesInputNodes(
