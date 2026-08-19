@@ -26,6 +26,26 @@ spec:
     - jsonPath: .status.readiness
       name: Readiness
       type: string
+    - jsonPath: .status.conditions[?(@.type=='ContainersReady')].status
+      name: Containers
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Prepared')].status
+      name: Prepared
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='ConnectivityReady')].status
+      name: Connectivity
+      priority: 1
+      type: string
+    - jsonPath: .status.planDigest
+      name: Plan
+      priority: 1
+      type: string
+    - jsonPath: .status.appliedLauncherProfile.name
+      name: Profile
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -33,16 +53,13 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          Node represents a single containerlab node ("device") and is realized as a single launcher
-          pod. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by
+          Node represents one logical containerlab node realized in a direct Kubernetes workload. Nodes
+          are a primary clabernetes API -- they can be created by users directly, emitted by
           the (optional) Topology compiler, or created by any other machinery (i.e. a containerlab
-          runtime); the node controller treats all of these identically. The object name *is* the
-          containerlab node name -- the launcher pod hostname and the node's services (`<name>` for
-          exposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the
-          namespace is the topology boundary. The spec is simply what a human would write for the node
-          in a containerlab topology file (plus per-node payload and launcherProfileRef); wiring lives
-          exclusively on Link objects and everything operational is stamped by the controller into
-          status.
+          runtime); the Node controller treats all of these identically. The object name is the
+          containerlab Node name and the namespace is the topology boundary. The spec is the flattened
+          containerlab Node definition plus per-node payload and launcherProfileRef; wiring lives on Link
+          objects and bounded allocations and observations live in status.
         properties:
           apiVersion:
             description: |-
@@ -68,9 +85,9 @@ spec:
               optional LauncherProfile reference. The definition must be self-contained: expanding topology
               defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
               this for you). Anything that is deployment *policy* rather than node payload -- expose
-              behavior, image pull config, launcher resources, scheduling, privileges -- lives on
+              behavior, image pull defaults, generic resources, scheduling, and probes -- lives on
               LauncherProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
-              curated subset (see NodeDefinition): fields a launcher pod cannot realize are absent, and
+              curated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and
               unknown fields are rejected rather than silently ignored.
             properties:
               binds:
@@ -266,9 +283,8 @@ spec:
                     x-kubernetes-list-type: atomic
                 type: object
               filesFromConfigMap:
-                description: |-
-                  FilesFromConfigMap holds files mounted from ConfigMaps into the launcher responsible for
-                  this Node.
+                description: FilesFromConfigMap holds files staged from ConfigMaps
+                  for this Node's application containers.
                 items:
                   description: |-
                     FileFromConfigMap represents a file that you would like to mount (from a configmap) in the
@@ -301,15 +317,55 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
-              filesFromURL:
+              filesFromSecret:
                 description: |-
-                  FilesFromURL holds any files that the launcher for this node should fetch from a URL prior
-                  to launching the node.
+                  FilesFromSecret holds sensitive files projected from same-namespace Secrets into this Node's
+                  direct application container.
+                items:
+                  description: FileFromSecret represents one file projected from a
+                    same-namespace Kubernetes Secret.
+                  properties:
+                    filePath:
+                      description: |-
+                        FilePath is the absolute destination path, or the destination directory when SecretPath is
+                        omitted and every Secret key is projected.
+                      type: string
+                    mode:
+                      default: read
+                      description: Mode selects read-only or read-and-execute permissions
+                        for the staged file.
+                      enum:
+                      - read
+                      - execute
+                      type: string
+                    secretName:
+                      description: SecretName is the name of the same-namespace Secret.
+                      type: string
+                    secretPath:
+                      description: |-
+                        SecretPath is the Secret data key to project. When omitted, every key is projected beneath
+                        FilePath in deterministic key order.
+                      type: string
+                  required:
+                  - filePath
+                  - secretName
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              filesFromURL:
+                description: FilesFromURL holds files preparation must fetch and verify
+                  before the Node starts.
                 items:
                   description: |-
                     FileFromURL represents a file that you would like to mount from a URL in the launcher pod for
                     a given node.
                   properties:
+                    digest:
+                      description: |-
+                        Digest is the required SHA-256 identity of the downloaded bytes in direct-runtime mode. It
+                        prevents a mutable URL from changing a device payload without changing the accepted plan.
+                      pattern: ^sha256:[a-f0-9]{64}$
+                      type: string
                     filePath:
                       description: FilePath is the path to mount the file.
                       type: string
@@ -333,8 +389,8 @@ spec:
                 type: string
               launcherProfileRef:
                 description: |-
-                  LauncherProfileRef optionally names the same-namespace LauncherProfile supplying launcher
-                  policy. When omitted, global Config defaults are used.
+                  LauncherProfileRef optionally names the same-namespace LauncherProfile supplying direct
+                  workload policy. When omitted, global Config defaults are used.
                 properties:
                   name:
                     default: ""
@@ -435,8 +491,8 @@ spec:
             properties:
               appliedLauncherProfile:
                 description: |-
-                  AppliedLauncherProfile identifies the LauncherProfile successfully applied to the launcher
-                  workload. It is nil when the Node uses only global Config defaults.
+                  AppliedLauncherProfile identifies the LauncherProfile revision successfully applied to the
+                  direct workload. It is nil when the Node uses only global Config defaults.
                 properties:
                   generation:
                     description: Generation is the applied LauncherProfile generation.
@@ -514,11 +570,80 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              directContainers:
+                description: |-
+                  DirectContainers contains bounded Kubernetes observations for application containers that
+                  represent this logical Node. It contains no user intent or full plan data.
+                items:
+                  description: NodeDirectContainerStatus is one plan-addressed application-container
+                    observation.
+                  properties:
+                    componentID:
+                      description: ComponentID is the imported component identity
+                        when this is not the logical primary.
+                      type: string
+                    id:
+                      description: ID is the stable runtime-neutral container identity
+                        from the applied plan.
+                      type: string
+                    imageID:
+                      description: ImageID is the kubelet-observed immutable image
+                        identity when available.
+                      type: string
+                    name:
+                      description: Name is the deterministic Kubernetes container
+                        name used with kubectl's -c option.
+                      type: string
+                    ready:
+                      description: Ready is the Kubernetes application-container readiness
+                        observation.
+                      type: boolean
+                    restartCount:
+                      description: RestartCount is the kubelet-observed restart count.
+                      format: int32
+                      type: integer
+                    state:
+                      description: State is one of unknown, waiting, running, or terminated.
+                      type: string
+                  required:
+                  - id
+                  - name
+                  - ready
+                  - restartCount
+                  - state
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - id
+                x-kubernetes-list-type: map
+              directManagement:
+                description: |-
+                  DirectManagement contains the bounded management allocation from the applied direct plan.
+                  It contains no credentials or kind-specific configuration.
+                properties:
+                  interfaceName:
+                    description: InterfaceName is the package-selected management
+                      interface in the Pod namespace.
+                    type: string
+                  ipv4:
+                    description: IPv4 is the allocated IPv4 address and prefix.
+                    type: string
+                  ipv4Gateway:
+                    description: IPv4Gateway is the source-specific IPv4 gateway.
+                    type: string
+                  ipv6:
+                    description: IPv6 is the allocated IPv6 address and prefix.
+                    type: string
+                  ipv6Gateway:
+                    description: IPv6Gateway is the source-specific IPv6 gateway.
+                    type: string
+                required:
+                - interfaceName
+                type: object
               exposedPorts:
                 description: |-
-                  ExposedPorts holds the expose port *allocations* for this node -- the controller assigns
-                  an expose port for every (spec or auto-expose default) port and programs the node's expose
-                  service from this very field; the launcher reads it to publish the ports on the pod.
+                  ExposedPorts holds expose-port allocations for this Node. The controller assigns and programs
+                  the direct Pod Service from this field.
                 properties:
                   loadBalancerAddress:
                     description: |-
@@ -538,9 +663,8 @@ spec:
                             expose service listens on.
                           type: integer
                         exposePort:
-                          description: |-
-                            ExposePort is the allocated (or user provided) port published on the launcher pod (and
-                            targeted by the expose service).
+                          description: ExposePort is the allocated Service port targeting
+                            the direct device Pod.
                           type: integer
                         protocol:
                           description: Protocol is the protocol of the port -- TCP
@@ -557,9 +681,14 @@ spec:
                     type: array
                     x-kubernetes-list-type: atomic
                 type: object
+              planDigest:
+                description: PlanDigest identifies the immutable direct device plan
+                  observed by this status.
+                type: string
               probeStatuses:
-                description: ProbeStatuses holds the per-probe status information
-                  for this node.
+                description: |-
+                  ProbeStatuses holds legacy nested-runtime probe observations during migration. Direct mode
+                  reports application and helper observations through Conditions and DirectContainers.
                 properties:
                   livenessProbe:
                     description: LivenessProbe is the status of the node's liveness
@@ -595,7 +724,7 @@ spec:
                 type: object
               readiness:
                 description: |-
-                  Readiness is the readiness of this node as reported by its launcher deployment -- one of
+                  Readiness is the controller-observed readiness of this Node's active runtime -- one of
                   "ready", "notready" or "unknown".
                 enum:
                 - ready
@@ -606,4 +735,5 @@ spec:
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}

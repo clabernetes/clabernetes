@@ -42,10 +42,9 @@ type LauncherProfileSpec struct {
 	// StatusProbes holds the configurations used to check and report Node status.
 	// +optional
 	StatusProbes *StatusProbes `json:"statusProbes,omitempty"`
-	// Mgmt temporarily retains shared containerlab management network settings for Topology
-	// compatibility. Its final ownership is intentionally deferred.
+	// Mgmt holds shared direct management-overlay allocation policy.
 	// +optional
-	Mgmt *MgmtNet `json:"mgmt,omitempty"`
+	Mgmt *ManagementPolicy `json:"mgmt,omitempty"`
 }
 
 // LauncherProfileExpose holds the expose policy fields of a LauncherProfile. Pointers distinguish
@@ -69,62 +68,48 @@ type LauncherProfileExpose struct {
 	UseNodeMgmtIpv6Address *bool `json:"useNodeMgmtIpv6Address,omitempty"`
 }
 
-// LauncherProfileImagePull holds image pull policy fields for launcher Pods.
+// LauncherProfileImagePull holds Kubernetes-native image pull policy for direct device Pods.
 type LauncherProfileImagePull struct {
-	// InsecureRegistries is a slice of insecure registries to configure in launcher Pods.
+	// Policy is the default Kubernetes pull policy for application containers whose flattened Node
+	// definition does not explicitly declare one.
+	// +kubebuilder:validation:Enum=IfNotPresent;Always;Never
 	// +optional
-	InsecureRegistries InsecureRegistries `json:"insecureRegistries,omitempty"`
-	// PullThroughOverride overrides the image pull-through mode.
-	// +kubebuilder:validation:Enum=auto;always;never
-	// +optional
-	PullThroughOverride string `json:"pullThroughOverride,omitempty"`
-	// PullSecrets provides Secrets to use when pulling images.
+	Policy string `json:"policy,omitempty"`
+	// PullSecrets provides same-namespace Docker-config Secrets to the kubelet through
+	// Pod.spec.imagePullSecrets. Credentials are not mounted into application containers.
 	// +listType=set
 	// +optional
 	PullSecrets []string `json:"pullSecrets,omitempty"`
-	// DockerDaemonConfig names the Secret containing daemon.json.
-	// +optional
-	DockerDaemonConfig *string `json:"dockerDaemonConfig,omitempty"`
-	// DockerConfig names the Secret containing config.json.
-	// +optional
-	DockerConfig *string `json:"dockerConfig,omitempty"`
 }
 
-// LauncherProfileDeployment holds launcher deployment policy fields.
+// LauncherProfileDeployment holds portable direct workload persistence policy.
 type LauncherProfileDeployment struct {
-	// PrivilegedLauncher configures launcher containers as privileged.
-	// +optional
-	PrivilegedLauncher *bool `json:"privilegedLauncher,omitempty"`
 	// Persistence enables persistence of the containerlab working directory.
 	// +optional
 	Persistence *Persistence `json:"persistence,omitempty"`
-	// ContainerlabDebug sets the containerlab --debug flag.
+}
+
+// ManagementPolicy defines direct management-overlay address allocation. Docker network identity,
+// MTU, and external-access controls are deliberately absent.
+type ManagementPolicy struct {
+	// IPv4Subnet is the IPv4 management subnet.
 	// +optional
-	ContainerlabDebug *bool `json:"containerlabDebug,omitempty"`
-	// ContainerlabTimeout sets the containerlab --timeout flag.
+	IPv4Subnet string `json:"ipv4-subnet,omitempty"`
+	// IPv4Gw is the IPv4 management gateway.
 	// +optional
-	ContainerlabTimeout *string `json:"containerlabTimeout,omitempty"`
-	// ContainerlabVersion selects a custom containerlab version, downloaded by the launcher at
-	// startup in place of the one baked into the image. 0.78.0 is the floor: the Node spec
-	// vocabulary includes fields (i.e. privileged, tmpfs, security-opts) that older containerlab
-	// releases reject outright, so pinning further back makes those nodes fail to deploy.
+	IPv4Gw string `json:"ipv4-gw,omitempty"`
+	// IPv4Range is the IPv4 allocation range within IPv4Subnet.
 	// +optional
-	ContainerlabVersion *string `json:"containerlabVersion,omitempty"`
-	// LauncherImage selects the launcher image.
+	IPv4Range string `json:"ipv4-range,omitempty"`
+	// IPv6Subnet is the IPv6 management subnet.
 	// +optional
-	LauncherImage string `json:"launcherImage,omitempty"`
-	// LauncherImagePullPolicy selects the launcher image pull policy.
-	// +kubebuilder:validation:Enum=IfNotPresent;Always;Never
+	IPv6Subnet string `json:"ipv6-subnet,omitempty"`
+	// IPv6Gw is the IPv6 management gateway.
 	// +optional
-	LauncherImagePullPolicy string `json:"launcherImagePullPolicy,omitempty"`
-	// LauncherLogLevel selects the launcher log level.
-	// +kubebuilder:validation:Enum=disabled;critical;warn;info;debug
+	IPv6Gw string `json:"ipv6-gw,omitempty"`
+	// IPv6Range is the IPv6 allocation range within IPv6Subnet.
 	// +optional
-	LauncherLogLevel string `json:"launcherLogLevel,omitempty"`
-	// ExtraEnv is a list of additional environment variables for the launcher container.
-	// +listType=atomic
-	// +optional
-	ExtraEnv []k8scorev1.EnvVar `json:"extraEnv,omitempty"`
+	IPv6Range string `json:"ipv6-range,omitempty"`
 }
 
 // LauncherProfileStatus is the status for a LauncherProfile resource.

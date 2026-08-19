@@ -14,6 +14,14 @@ const (
 	// clabernetes controllers logger level.
 	ControllerLoggerLevelEnv = "CONTROLLER_LOGGER_LEVEL"
 
+	// DeviceRuntimeModeEnv selects the temporary migration runtime. The only accepted values are
+	// nested and direct; direct never falls back to nested when planning or rendering fails.
+	DeviceRuntimeModeEnv = "DEVICE_RUNTIME_MODE"
+
+	// DeviceRuntimeImageEnv is the manager image used for isolated planning and thin direct-Pod
+	// helpers. It contains the c9s integration binary, not containerlab kind knowledge.
+	DeviceRuntimeImageEnv = "DEVICE_RUNTIME_IMAGE"
+
 	// ClientOperationTimeoutMultiplierEnv is the multiplier applied to the default client
 	// operation timeout.
 	ClientOperationTimeoutMultiplierEnv = "CLIENT_OPERATION_TIMEOUT_MULTIPLIER"
@@ -88,25 +96,9 @@ const (
 	// privileged mode or our "not so privileged mode".
 	LauncherPrivilegedEnv = "LAUNCHER_PRIVILEGED"
 
-	// LauncherInsecureRegistries env var that tells the launcher pods which registries are
-	// insecure. Should be set by the controller via the topology spec.
-	LauncherInsecureRegistries = "LAUNCHER_INSECURE_REGISTRIES"
-
-	// LauncherImagePullThroughModeEnv env var tells the manager how to configure the launcher,
-	// which in turn tells the launcher how it should attempt to pull images for the node it
-	// represents.
-	LauncherImagePullThroughModeEnv = "LAUNCHER_IMAGE_PULL_THROUGH_MODE"
-
-	// LauncherCRIKindEnv env var tells the launcher what CRI sock is mounted in it (if configured).
-	LauncherCRIKindEnv = "LAUNCHER_CRI_KIND"
-
 	// LauncherNodeNameEnv is the env var that holds the name of the node in the original topology
 	// that a given launcher is responsible for.
 	LauncherNodeNameEnv = "LAUNCHER_NODE_NAME"
-
-	// LauncherNodeImageEnv is the env var that holds the image name of the node in the original
-	// topology that a given launcher is responsible for.
-	LauncherNodeImageEnv = "LAUNCHER_NODE_IMAGE"
 
 	// LauncherContainerlabVersion is the env var that holds the possibly user specified version of
 	// containerlab to download and use in the launcher.
@@ -141,10 +133,6 @@ const (
 	// LauncherMgmtNetworkEnv is the env var that holds the (json encoded) containerlab management
 	// network settings the launcher should render into its topology file (if any).
 	LauncherMgmtNetworkEnv = "LAUNCHER_MGMT_NETWORK"
-
-	// LauncherPullSecretsEnv is the env var that holds the (comma separated) secret names the
-	// launcher may use when pulling images via the cluster CRI.
-	LauncherPullSecretsEnv = "LAUNCHER_PULL_SECRETS" //nolint:gosec
 
 	// LauncherInClusterDNSSuffixEnv is the env var that holds the in cluster dns suffix the
 	// launcher uses when deriving tunnel destinations (fabric service names).

@@ -44,219 +44,8 @@ spec:
             description: ConfigSpec is the spec for a Config resource.
             properties:
               deployment:
-                description: Deployment holds clabernetes deployment related configuration
-                  settings.
+                description: Deployment holds generic direct device workload defaults.
                 properties:
-                  containerlabDebug:
-                    description: |-
-                      ContainerlabDebug sets the `--debug` flag when invoking containerlab in the launcher pods.
-                      This is disabled by default.
-                    type: boolean
-                  containerlabTimeout:
-                    description: |-
-                      ContainerlabTimeout sets the `--timeout` flag when invoking containerlab in the launcher
-                      pods.
-                    type: string
-                  containerlabVersion:
-                    description: |-
-                      ContainerlabVersion sets a custom version to use for containerlab -- when set this will cause
-                      the launcher pods to download and use this specific version of containerlab. Setting a bad
-                      version (version that doesn't exist/typo/etc.) will cause pods to fail to launch, so be
-                      careful! You never "need" to this as the publicly available launcher image will always be
-                      built with a (reasonably) up to date containerlab version, this setting exists in case you
-                      want to pin back to an older version for some reason or you want to be bleeding edge with
-                      some new feature (but do note that just because it exists in containerlab doesn't
-                      *necessarily* mean it will be auto-working in clabernetes!
-                      0.78.0 is the floor -- the Node vocabulary includes fields older releases reject outright.
-                    type: string
-                  extraEnv:
-                    description: |-
-                      ExtraEnv is a list of additional environment variables to set on the launcher container. The
-                      values here are applied to *all* launchers since this is the global config after all!
-                    items:
-                      description: EnvVar represents an environment variable present
-                        in a Container.
-                      properties:
-                        name:
-                          description: |-
-                            Name of the environment variable.
-                            May consist of any printable ASCII characters except '='.
-                          type: string
-                        value:
-                          description: |-
-                            Variable references $(VAR_NAME) are expanded
-                            using the previously defined environment variables in the container and
-                            any service environment variables. If a variable cannot be resolved,
-                            the reference in the input string will be unchanged. Double $$ are reduced
-                            to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
-                            "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
-                            Escaped references will never be expanded, regardless of whether the variable
-                            exists or not.
-                            Defaults to "".
-                          type: string
-                        valueFrom:
-                          description: Source for the environment variable's value.
-                            Cannot be used if value is not empty.
-                          properties:
-                            configMapKeyRef:
-                              description: Selects a key of a ConfigMap.
-                              properties:
-                                key:
-                                  description: The key to select.
-                                  type: string
-                                name:
-                                  default: ""
-                                  description: |-
-                                    Name of the referent.
-                                    This field is effectively required, but due to backwards compatibility is
-                                    allowed to be empty. Instances of this type with an empty value here are
-                                    almost certainly wrong.
-                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                  type: string
-                                optional:
-                                  description: Specify whether the ConfigMap or its
-                                    key must be defined
-                                  type: boolean
-                              required:
-                              - key
-                              type: object
-                              x-kubernetes-map-type: atomic
-                            fieldRef:
-                              description: |-
-                                Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
-                                spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
-                              properties:
-                                apiVersion:
-                                  description: Version of the schema the FieldPath
-                                    is written in terms of, defaults to "v1".
-                                  type: string
-                                fieldPath:
-                                  description: Path of the field to select in the
-                                    specified API version.
-                                  type: string
-                              required:
-                              - fieldPath
-                              type: object
-                              x-kubernetes-map-type: atomic
-                            fileKeyRef:
-                              description: |-
-                                FileKeyRef selects a key of the env file.
-                                Requires the EnvFiles feature gate to be enabled.
-                              properties:
-                                key:
-                                  description: |-
-                                    The key within the env file. An invalid key will prevent the pod from starting.
-                                    The keys defined within a source may consist of any printable ASCII characters except '='.
-                                    During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
-                                  type: string
-                                optional:
-                                  default: false
-                                  description: |-
-                                    Specify whether the file or its key must be defined. If the file or key
-                                    does not exist, then the env var is not published.
-                                    If optional is set to true and the specified key does not exist,
-                                    the environment variable will not be set in the Pod's containers.
-
-                                    If optional is set to false and the specified key does not exist,
-                                    an error will be returned during Pod creation.
-                                  type: boolean
-                                path:
-                                  description: |-
-                                    The path within the volume from which to select the file.
-                                    Must be relative and may not contain the '..' path or start with '..'.
-                                  type: string
-                                volumeName:
-                                  description: The name of the volume mount containing
-                                    the env file.
-                                  type: string
-                              required:
-                              - key
-                              - path
-                              - volumeName
-                              type: object
-                              x-kubernetes-map-type: atomic
-                            resourceFieldRef:
-                              description: |-
-                                Selects a resource of the container: only resources limits and requests
-                                (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
-                              properties:
-                                containerName:
-                                  description: 'Container name: required for volumes,
-                                    optional for env vars'
-                                  type: string
-                                divisor:
-                                  anyOf:
-                                  - type: integer
-                                  - type: string
-                                  description: Specifies the output format of the
-                                    exposed resources, defaults to "1"
-                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                  x-kubernetes-int-or-string: true
-                                resource:
-                                  description: 'Required: resource to select'
-                                  type: string
-                              required:
-                              - resource
-                              type: object
-                              x-kubernetes-map-type: atomic
-                            secretKeyRef:
-                              description: Selects a key of a secret in the pod's
-                                namespace
-                              properties:
-                                key:
-                                  description: The key of the secret to select from.  Must
-                                    be a valid secret key.
-                                  type: string
-                                name:
-                                  default: ""
-                                  description: |-
-                                    Name of the referent.
-                                    This field is effectively required, but due to backwards compatibility is
-                                    allowed to be empty. Instances of this type with an empty value here are
-                                    almost certainly wrong.
-                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                  type: string
-                                optional:
-                                  description: Specify whether the Secret or its key
-                                    must be defined
-                                  type: boolean
-                              required:
-                              - key
-                              type: object
-                              x-kubernetes-map-type: atomic
-                          type: object
-                      required:
-                      - name
-                      type: object
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  launcherImage:
-                    default: ghcr.io/clabernetes/clabernetes/clabernetes-launcher:latest
-                    description: LauncherImage sets the default launcher image to
-                      use when spawning launcher deployments.
-                    type: string
-                  launcherImagePullPolicy:
-                    default: IfNotPresent
-                    description: |-
-                      LauncherImagePullPolicy sets the default launcher image pull policy to use when spawning
-                      launcher deployments.
-                    enum:
-                    - IfNotPresent
-                    - Always
-                    - Never
-                    type: string
-                  launcherLogLevel:
-                    description: |-
-                      LauncherLogLevel sets the launcher clabernetes worker log level -- this overrides whatever
-                      is set on the controllers env vars for this topology. Note: omitempty because empty str does
-                      not satisfy enum of course.
-                    enum:
-                    - disabled
-                    - critical
-                    - warn
-                    - info
-                    - debug
-                    type: string
                   nodeSelectorsByImage:
                     additionalProperties:
                       additionalProperties:
@@ -264,104 +53,18 @@ spec:
                       type: object
                     description: |-
                       NodeSelectorsByImage is a mapping of image glob pattern as key and node selectors (value)
-                      to apply to each deployment. Note that in case of multiple matches, the longest (with
-                      most characters) will take precedence. A config example:
+                      to apply to direct device workloads. The longest matching pattern wins; conflicts between
+                      images in one grouped/component workload fail preflight. A config example:
                       {
                         "internal.io/nokia_sros*": {"node-flavour": "baremetal"},
                         "ghcr.io/nokia/srlinux*":  {"node-flavour": "amd64"},
                         "default":                 {"node-flavour": "cheap"},
                       }.
                     type: object
-                  privilegedLauncher:
-                    description: |-
-                      PrivilegedLauncher, when true, sets the launcher containers to privileged. By default, we do
-                      our best to *not* need this/set this, and instead set only the capabilities we need, however
-                      its possible that some containers launched by the launcher may need/want more capabilities,
-                      so this flag exists for users to bypass the default settings and enable fully privileged
-                      launcher pods.
-                    type: boolean
-                  resourcesByContainerlabKind:
-                    additionalProperties:
-                      additionalProperties:
-                        description: ResourceRequirements describes the compute resource
-                          requirements.
-                        properties:
-                          claims:
-                            description: |-
-                              Claims lists the names of resources, defined in spec.resourceClaims,
-                              that are used by this container.
-
-                              This field depends on the
-                              DynamicResourceAllocation feature gate.
-
-                              This field is immutable. It can only be set for containers.
-                            items:
-                              description: ResourceClaim references one entry in PodSpec.ResourceClaims.
-                              properties:
-                                name:
-                                  description: |-
-                                    Name must match the name of one entry in pod.spec.resourceClaims of
-                                    the Pod where this field is used. It makes that resource available
-                                    inside a container.
-                                  type: string
-                                request:
-                                  description: |-
-                                    Request is the name chosen for a request in the referenced claim.
-                                    If empty, everything from the claim is made available, otherwise
-                                    only the result of this request.
-                                  type: string
-                              required:
-                              - name
-                              type: object
-                            type: array
-                            x-kubernetes-list-map-keys:
-                            - name
-                            x-kubernetes-list-type: map
-                          limits:
-                            additionalProperties:
-                              anyOf:
-                              - type: integer
-                              - type: string
-                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                              x-kubernetes-int-or-string: true
-                            description: |-
-                              Limits describes the maximum amount of compute resources allowed.
-                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                            type: object
-                          requests:
-                            additionalProperties:
-                              anyOf:
-                              - type: integer
-                              - type: string
-                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                              x-kubernetes-int-or-string: true
-                            description: |-
-                              Requests describes the minimum amount of compute resources required.
-                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-                            type: object
-                        type: object
-                      type: object
-                    description: |-
-                      ResourcesByContainerlabKind is a mapping of container lab kind -> type -> default resource
-                      settings. Note that a key value of "default" in the inner map will apply the given resources
-                      for any pod of that containerlab *kind*. For example:
-                      {
-                        "srl": {
-                          "default": DEFAULT RESOURCES FOR KIND "srl",
-                          "ixr10": RESOURCES FOR KIND "srl", TYPE "ixr10"
-                      }
-                      Given resources as above, a containerlab node of kind "srl" and "type" ixr10" would get the
-                      specific resources as allocated in the ixr10 key, whereas a containerlab kind of "srl" and
-                      "type" unset or "ixr6" would get the "default" resource settings. To apply global default
-                      resources, regardless of containerlab kind/type, use the `resourcesDefault` field.
-                    type: object
                   resourcesDefault:
                     description: |-
-                      ResourcesDefault is the default set of resources for clabernetes launcher pods. This is used
-                      only as a last option if a Topology does not have resources, and there are no resources for
-                      the given containerlab kind/type
+                      ResourcesDefault is merged onto each logical Node's primary application container. Imported
+                      plans remain the source of kind-owned component requirements.
                     properties:
                       claims:
                         description: |-
@@ -419,75 +122,63 @@ spec:
                           More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
                     type: object
-                required:
-                - launcherImage
-                - launcherImagePullPolicy
                 type: object
               imagePull:
-                description: |-
-                  ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling
-                  images.
+                description: ImagePull holds direct Pod pull defaults and controller-only
+                  OCI metadata trust policy.
                 properties:
-                  criHostsDir:
+                  policy:
+                    default: IfNotPresent
                     description: |-
-                      CRIHostsDir is an optional host directory containing containerd registry hosts
-                      configuration. When set and the effective CRI is containerd, the directory is mounted
-                      read-only into pull-through launchers both at its original path (so certificate paths rooted
-                      in this directory remain valid) and at containerd's conventional certs.d path used by
-                      nerdctl.
-                    pattern: ^/.+
-                    type: string
-                    x-kubernetes-validations:
-                    - message: criHostsDir must be an absolute non-root path without
-                        '.' or '..' segments
-                      rule: self.matches('^/.*[^/].*$') && !self.matches('(^|/)[.][.]?(/|$)')
-                  criKindOverride:
-                    description: |-
-                      CRIKindOverride allows for overriding the auto discovered cri flavor of the cluster -- this
-                      may be useful if we fail to parse the cri kind for some reason, or in mixed cri flavor
-                      clusters -- however in the latter case, make sure that if you are using image pull through
-                      that clabernetes workloads are only run on the nodes of the cri kind specified here!
+                      Policy is the default Kubernetes pull policy for application containers whose flattened Node
+                      definition does not explicitly declare one.
                     enum:
-                    - containerd
+                    - IfNotPresent
+                    - Always
+                    - Never
                     type: string
-                  criSockOverride:
+                  pullSecrets:
                     description: |-
-                      CRISockOverride allows for overriding the path of the CRI sock that is mounted in the
-                      launcher pods (if/when image pull through mode is auto or always). This can be useful if,
-                      for example, the CRI sock is in a "non-standard" location like K3s which puts the containerd
-                      sock at `/run/k3s/containerd/containerd.sock` rather than the "normal" (whatever that means)
-                      location of `/run/containerd/containerd.sock`. The value must end with "containerd.sock" for
-                      now, in the future maybe crio support will be added.
-                    pattern: (.*containerd\.sock)
-                    type: string
-                  dockerConfig:
+                      PullSecrets lists same-namespace Docker-config Secrets placed on direct device Pods. Every
+                      listed Secret name must exist in each workload namespace that inherits this Config default.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  registryMetadataTrust:
                     description: |-
-                      DockerConfig allows for setting the docker user (for root) config for all launchers in this
-                      topology. The secret *must be present in the namespace of this topology*. The secret *must*
-                      contain a key "config.json" -- as this secret will be mounted to /root/.docker/config.json
-                      and as such wil be utilized when doing docker-y things -- this means you can put auth things
-                      in here in the event your cluster doesn't support the preferred image pull through option.
-                    type: string
-                  dockerDaemonConfig:
-                    description: |-
-                      DockerDaemonConfig allows for setting a default docker daemon config for launcher pods
-                      with the specified secret. The secret *must be present in the namespace of any given
-                      topology* -- so if you are configuring this at the "global config" level, ensure that you are
-                      deploying topologies into a specific namespace, or have ensured there is a secret of the
-                      given name in every namespace you wish to deploy a topology to. When set, insecure registries
-                      config option is ignored as it is assumed you are handling that in the given docker config.
-                      Note that the secret *must* contain a key "daemon.json" -- as this secret will be mounted to
-                      /etc/docker and docker will be expecting the config at /etc/docker/daemon.json.
-                    type: string
-                  pullThroughOverride:
-                    description: |-
-                      PullThroughOverride allows for overriding the image pull through mode for this
-                      particular topology.
-                    enum:
-                    - auto
-                    - always
-                    - never
-                    type: string
+                      RegistryMetadataTrust contains exact, controller-only trust exceptions for OCI metadata
+                      resolution. It does not configure kubelets: administrators must configure the corresponding
+                      registry mirror, CA, or HTTP endpoint independently in every eligible node runtime.
+                    items:
+                      description: |-
+                        RegistryMetadataTrustEntry is one exact registry transport policy used only by the c9s
+                        controller while resolving OCI manifests and configuration blobs. Kubelet registry mirrors,
+                        credentials, and transport trust remain cluster-runtime configuration.
+                      properties:
+                        caBundle:
+                          description: |-
+                            CABundle is a PEM-encoded CA bundle that extends the controller's system trust roots for
+                            this registry.
+                          type: string
+                        plainHTTP:
+                          description: |-
+                            PlainHTTP explicitly allows unencrypted HTTP metadata access to this registry. It does not
+                            disable TLS verification and cannot be combined with CABundle.
+                          type: boolean
+                        registry:
+                          description: |-
+                            Registry is the exact registry host, optionally including a port. URL schemes and paths are
+                            not accepted.
+                          minLength: 1
+                          type: string
+                      required:
+                      - registry
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - registry
+                    x-kubernetes-list-type: map
                 type: object
               inClusterDNSSuffix:
                 description: InClusterDNSSuffix overrides the default in cluster dns

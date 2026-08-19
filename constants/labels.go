@@ -24,6 +24,9 @@ const (
 	// LabelTopologyNode is the label indicating the node the deployment represents in a topology.
 	LabelTopologyNode = LabelPrefix + "/topologyNode"
 
+	// LabelDirectWorkload identifies the primary Node name of a direct device Pod.
+	LabelDirectWorkload = LabelPrefix + "/direct-workload"
+
 	// LabelTopologyKind is the label indicating the resource *kind* the object is associated with.
 	// For example, a "containerlab" kind.
 	LabelTopologyKind = LabelPrefix + "/topologyKind"
@@ -83,14 +86,4 @@ const (
 	// LabelDisableDeployments indicates that controller should reconcile normally but not create
 	// update or delete any deployments.
 	LabelDisableDeployments = LabelPrefix + "/disableDeployments"
-)
-
-const (
-	// LabelPullerImageHash is a label that holds the (shortened) hash of the image tag that the
-	// puller is trying to pull onto a node.
-	LabelPullerImageHash = LabelPrefix + "/pullerImageHash"
-
-	// LabelPullerNodeTarget is a label that holds the node name that is being targeted by the
-	// puller pod.
-	LabelPullerNodeTarget = LabelPrefix + "/pullerNodeTarget"
 )

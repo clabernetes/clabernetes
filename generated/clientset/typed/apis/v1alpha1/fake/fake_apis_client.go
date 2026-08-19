@@ -32,10 +32,6 @@ func (c *FakeC9sV1alpha1) Configs(namespace string) v1alpha1.ConfigInterface {
 	return newFakeConfigs(c, namespace)
 }
 
-func (c *FakeC9sV1alpha1) ImageRequests(namespace string) v1alpha1.ImageRequestInterface {
-	return newFakeImageRequests(c, namespace)
-}
-
 func (c *FakeC9sV1alpha1) LauncherProfiles(namespace string) v1alpha1.LauncherProfileInterface {
 	return newFakeLauncherProfiles(c, namespace)
 }

@@ -2,7 +2,10 @@ package config
 
 import (
 	"maps"
+	"os"
+	"slices"
 
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	k8scorev1 "k8s.io/api/core/v1"
 )
@@ -46,17 +49,29 @@ func (m *manager) GetAllMetadata() (outAnnotations, outLabels map[string]string)
 	return outAnnotations, outLabels
 }
 
-func (m *manager) GetResourcesForContainerlabKind(
-	containerlabKind string,
-	containerlabType string,
-) *k8scorev1.ResourceRequirements {
+func (m *manager) GetApplicationImagePullPolicy() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.resourcesForContainerlabKind(
-		containerlabKind,
-		containerlabType,
-	)
+	return m.config.ImagePull.Policy
+}
+
+func (m *manager) GetImagePullSecrets() []string {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	return slices.Clone(m.config.ImagePull.PullSecrets)
+}
+
+func (m *manager) GetDefaultResources() *k8scorev1.ResourceRequirements {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	if m.config.Deployment.ResourcesDefault == nil {
+		return nil
+	}
+
+	return m.config.Deployment.ResourcesDefault.DeepCopy()
 }
 
 func (m *manager) GetNodeSelectorsByImage(
@@ -69,24 +84,21 @@ func (m *manager) GetNodeSelectorsByImage(
 }
 
 func (m *manager) GetPrivilegedLauncher() bool {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return m.config.Deployment.PrivilegedLauncher
+	return true
 }
 
 func (m *manager) GetContainerlabDebug() bool {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.config.Deployment.ContainerlabDebug
+	return false
 }
 
 func (m *manager) GetContainerlabTimeout() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.config.Deployment.ContainerlabTimeout
+	return ""
 }
 
 func (m *manager) GetInClusterDNSSuffix() string {
@@ -96,74 +108,39 @@ func (m *manager) GetInClusterDNSSuffix() string {
 	return m.config.InClusterDNSSuffix
 }
 
-func (m *manager) GetImagePullThroughMode() string {
+func (m *manager) GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryMetadataTrustEntry {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.config.ImagePull.PullThroughOverride
-}
-
-func (m *manager) GetImagePullCriSockOverride() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return m.config.ImagePull.CRISockOverride
-}
-
-func (m *manager) GetImagePullCriKindOverride() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return m.config.ImagePull.CRIKindOverride
-}
-
-func (m *manager) GetImagePullCriHostsDir() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return m.config.ImagePull.CRIHostsDir
-}
-
-func (m *manager) GetDockerDaemonConfig() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return m.config.ImagePull.DockerDaemonConfig
-}
-
-func (m *manager) GetDockerConfig() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return m.config.ImagePull.DockerConfig
+	return slices.Clone(m.config.ImagePull.RegistryMetadataTrust)
 }
 
 func (m *manager) GetLauncherImage() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.config.Deployment.LauncherImage
+	return os.Getenv(clabernetesconstants.LauncherImageEnv)
 }
 
 func (m *manager) GetLauncherImagePullPolicy() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.config.Deployment.LauncherImagePullPolicy
+	return clabernetesconstants.KubernetesImagePullIfNotPresent
 }
 
 func (m *manager) GetLauncherLogLevel() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.config.Deployment.LauncherLogLevel
+	return clabernetesconstants.Info
 }
 
 func (m *manager) GetExtraEnv() []k8scorev1.EnvVar {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.config.Deployment.ExtraEnv
+	return nil
 }
 
 func (m *manager) GetRemoveTopologyPrefix() bool {
@@ -177,5 +154,5 @@ func (m *manager) GetContainerlabVersion() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	return m.config.Deployment.ContainerlabVersion
+	return ""
 }

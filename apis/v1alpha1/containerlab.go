@@ -136,8 +136,8 @@ type NodeDefinition struct {
 	// them: the compiler copies them onto the emitted Node's metadata.labels, from where they
 	// reach the launcher deployment and its pods. There is deliberately no spec.labels on a Node
 	// (hence json:"-") -- in Kubernetes, metadata.labels is where labels belong, and unlike
-	// containerlab's docker labels these are selectable with kubectl. Invalid labels and keys
-	// reserved by c9s are omitted with a warning during Topology compilation.
+	// containerlab's Docker labels these are selectable with kubectl. Invalid labels and keys
+	// reserved by c9s make Topology compilation fail before any primitive is emitted.
 	// +optional
 	Labels map[string]string `json:"-" yaml:"labels,omitempty"`
 	// DNS holds the DNS configuration for the node.
@@ -395,36 +395,4 @@ func (l *XIOMS) UnmarshalYAML(unmarshal func(any) error) error {
 	*l = XIOMS(entries)
 
 	return nil
-}
-
-// MgmtNet defines the (containerlab, so docker) management network options for the network that
-// the nodes in a launcher pod get attached to.
-type MgmtNet struct {
-	// Network is the name of the docker network to use for the management network.
-	// +optional
-	Network string `json:"network,omitempty" yaml:"network,omitempty"`
-	// IPv4Subnet is the IPv4 subnet of the management network.
-	// +optional
-	IPv4Subnet string `json:"ipv4-subnet,omitempty" yaml:"ipv4-subnet,omitempty"`
-	// IPv4Gw is the IPv4 gateway of the management network.
-	// +optional
-	IPv4Gw string `json:"ipv4-gw,omitempty" yaml:"ipv4-gw,omitempty"`
-	// IPv4Range is the IPv4 range of the management network.
-	// +optional
-	IPv4Range string `json:"ipv4-range,omitempty" yaml:"ipv4-range,omitempty"`
-	// IPv6Subnet is the IPv6 subnet of the management network.
-	// +optional
-	IPv6Subnet string `json:"ipv6-subnet,omitempty" yaml:"ipv6-subnet,omitempty"`
-	// IPv6Gw is the IPv6 gateway of the management network.
-	// +optional
-	IPv6Gw string `json:"ipv6-gw,omitempty" yaml:"ipv6-gw,omitempty"`
-	// IPv6Range is the IPv6 range of the management network.
-	// +optional
-	IPv6Range string `json:"ipv6-range,omitempty" yaml:"ipv6-range,omitempty"`
-	// MTU is the MTU of the management network.
-	// +optional
-	MTU int `json:"mtu,omitempty" yaml:"mtu,omitempty"`
-	// ExternalAccess enables (or disables) external access to the management network.
-	// +optional
-	ExternalAccess *bool `json:"external-access,omitempty" yaml:"external-access,omitempty"`
 }

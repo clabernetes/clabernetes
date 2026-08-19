@@ -51,200 +51,6 @@ spec:
               deployment:
                 description: Deployment holds launcher deployment settings.
                 properties:
-                  containerlabDebug:
-                    description: ContainerlabDebug sets the containerlab --debug flag.
-                    type: boolean
-                  containerlabTimeout:
-                    description: ContainerlabTimeout sets the containerlab --timeout
-                      flag.
-                    type: string
-                  containerlabVersion:
-                    description: |-
-                      ContainerlabVersion selects a custom containerlab version, downloaded by the launcher at
-                      startup in place of the one baked into the image. 0.78.0 is the floor: the Node spec
-                      vocabulary includes fields (i.e. privileged, tmpfs, security-opts) that older containerlab
-                      releases reject outright, so pinning further back makes those nodes fail to deploy.
-                    type: string
-                  extraEnv:
-                    description: ExtraEnv is a list of additional environment variables
-                      for the launcher container.
-                    items:
-                      description: EnvVar represents an environment variable present
-                        in a Container.
-                      properties:
-                        name:
-                          description: |-
-                            Name of the environment variable.
-                            May consist of any printable ASCII characters except '='.
-                          type: string
-                        value:
-                          description: |-
-                            Variable references $(VAR_NAME) are expanded
-                            using the previously defined environment variables in the container and
-                            any service environment variables. If a variable cannot be resolved,
-                            the reference in the input string will be unchanged. Double $$ are reduced
-                            to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
-                            "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
-                            Escaped references will never be expanded, regardless of whether the variable
-                            exists or not.
-                            Defaults to "".
-                          type: string
-                        valueFrom:
-                          description: Source for the environment variable's value.
-                            Cannot be used if value is not empty.
-                          properties:
-                            configMapKeyRef:
-                              description: Selects a key of a ConfigMap.
-                              properties:
-                                key:
-                                  description: The key to select.
-                                  type: string
-                                name:
-                                  default: ""
-                                  description: |-
-                                    Name of the referent.
-                                    This field is effectively required, but due to backwards compatibility is
-                                    allowed to be empty. Instances of this type with an empty value here are
-                                    almost certainly wrong.
-                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                  type: string
-                                optional:
-                                  description: Specify whether the ConfigMap or its
-                                    key must be defined
-                                  type: boolean
-                              required:
-                              - key
-                              type: object
-                              x-kubernetes-map-type: atomic
-                            fieldRef:
-                              description: |-
-                                Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
-                                spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
-                              properties:
-                                apiVersion:
-                                  description: Version of the schema the FieldPath
-                                    is written in terms of, defaults to "v1".
-                                  type: string
-                                fieldPath:
-                                  description: Path of the field to select in the
-                                    specified API version.
-                                  type: string
-                              required:
-                              - fieldPath
-                              type: object
-                              x-kubernetes-map-type: atomic
-                            fileKeyRef:
-                              description: |-
-                                FileKeyRef selects a key of the env file.
-                                Requires the EnvFiles feature gate to be enabled.
-                              properties:
-                                key:
-                                  description: |-
-                                    The key within the env file. An invalid key will prevent the pod from starting.
-                                    The keys defined within a source may consist of any printable ASCII characters except '='.
-                                    During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
-                                  type: string
-                                optional:
-                                  default: false
-                                  description: |-
-                                    Specify whether the file or its key must be defined. If the file or key
-                                    does not exist, then the env var is not published.
-                                    If optional is set to true and the specified key does not exist,
-                                    the environment variable will not be set in the Pod's containers.
-
-                                    If optional is set to false and the specified key does not exist,
-                                    an error will be returned during Pod creation.
-                                  type: boolean
-                                path:
-                                  description: |-
-                                    The path within the volume from which to select the file.
-                                    Must be relative and may not contain the '..' path or start with '..'.
-                                  type: string
-                                volumeName:
-                                  description: The name of the volume mount containing
-                                    the env file.
-                                  type: string
-                              required:
-                              - key
-                              - path
-                              - volumeName
-                              type: object
-                              x-kubernetes-map-type: atomic
-                            resourceFieldRef:
-                              description: |-
-                                Selects a resource of the container: only resources limits and requests
-                                (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
-                              properties:
-                                containerName:
-                                  description: 'Container name: required for volumes,
-                                    optional for env vars'
-                                  type: string
-                                divisor:
-                                  anyOf:
-                                  - type: integer
-                                  - type: string
-                                  description: Specifies the output format of the
-                                    exposed resources, defaults to "1"
-                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                                  x-kubernetes-int-or-string: true
-                                resource:
-                                  description: 'Required: resource to select'
-                                  type: string
-                              required:
-                              - resource
-                              type: object
-                              x-kubernetes-map-type: atomic
-                            secretKeyRef:
-                              description: Selects a key of a secret in the pod's
-                                namespace
-                              properties:
-                                key:
-                                  description: The key of the secret to select from.  Must
-                                    be a valid secret key.
-                                  type: string
-                                name:
-                                  default: ""
-                                  description: |-
-                                    Name of the referent.
-                                    This field is effectively required, but due to backwards compatibility is
-                                    allowed to be empty. Instances of this type with an empty value here are
-                                    almost certainly wrong.
-                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                  type: string
-                                optional:
-                                  description: Specify whether the Secret or its key
-                                    must be defined
-                                  type: boolean
-                              required:
-                              - key
-                              type: object
-                              x-kubernetes-map-type: atomic
-                          type: object
-                      required:
-                      - name
-                      type: object
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  launcherImage:
-                    description: LauncherImage selects the launcher image.
-                    type: string
-                  launcherImagePullPolicy:
-                    description: LauncherImagePullPolicy selects the launcher image
-                      pull policy.
-                    enum:
-                    - IfNotPresent
-                    - Always
-                    - Never
-                    type: string
-                  launcherLogLevel:
-                    description: LauncherLogLevel selects the launcher log level.
-                    enum:
-                    - disabled
-                    - critical
-                    - warn
-                    - info
-                    - debug
-                    type: string
                   persistence:
                     description: Persistence enables persistence of the containerlab
                       working directory.
@@ -258,9 +64,8 @@ spec:
                           re-add it.
                         type: string
                       enabled:
-                        description: |-
-                          Enabled indicates if persistence of hte containerlab lab/working directory will be placed in
-                          a mounted PVC.
+                        description: Enabled indicates whether package-planned persistent
+                          artifacts are placed in a mounted PVC.
                         type: boolean
                       storageClassName:
                         description: |-
@@ -271,10 +76,6 @@ spec:
                     required:
                     - enabled
                     type: object
-                  privilegedLauncher:
-                    description: PrivilegedLauncher configures launcher containers
-                      as privileged.
-                    type: boolean
                 type: object
               expose:
                 description: Expose holds configurations relevant to how Nodes using
@@ -310,67 +111,45 @@ spec:
                 description: ImagePull holds configurations relevant to how launcher
                   Pods handle pulling images.
                 properties:
-                  dockerConfig:
-                    description: DockerConfig names the Secret containing config.json.
+                  policy:
+                    description: |-
+                      Policy is the default Kubernetes pull policy for application containers whose flattened Node
+                      definition does not explicitly declare one.
+                    enum:
+                    - IfNotPresent
+                    - Always
+                    - Never
                     type: string
-                  dockerDaemonConfig:
-                    description: DockerDaemonConfig names the Secret containing daemon.json.
-                    type: string
-                  insecureRegistries:
-                    description: InsecureRegistries is a slice of insecure registries
-                      to configure in launcher Pods.
-                    items:
-                      type: string
-                    type: array
                   pullSecrets:
-                    description: PullSecrets provides Secrets to use when pulling
-                      images.
+                    description: |-
+                      PullSecrets provides same-namespace Docker-config Secrets to the kubelet through
+                      Pod.spec.imagePullSecrets. Credentials are not mounted into application containers.
                     items:
                       type: string
                     type: array
                     x-kubernetes-list-type: set
-                  pullThroughOverride:
-                    description: PullThroughOverride overrides the image pull-through
-                      mode.
-                    enum:
-                    - auto
-                    - always
-                    - never
-                    type: string
                 type: object
               mgmt:
-                description: |-
-                  Mgmt temporarily retains shared containerlab management network settings for Topology
-                  compatibility. Its final ownership is intentionally deferred.
+                description: Mgmt holds shared direct management-overlay allocation
+                  policy.
                 properties:
-                  external-access:
-                    description: ExternalAccess enables (or disables) external access
-                      to the management network.
-                    type: boolean
                   ipv4-gw:
-                    description: IPv4Gw is the IPv4 gateway of the management network.
+                    description: IPv4Gw is the IPv4 management gateway.
                     type: string
                   ipv4-range:
-                    description: IPv4Range is the IPv4 range of the management network.
+                    description: IPv4Range is the IPv4 allocation range within IPv4Subnet.
                     type: string
                   ipv4-subnet:
-                    description: IPv4Subnet is the IPv4 subnet of the management network.
+                    description: IPv4Subnet is the IPv4 management subnet.
                     type: string
                   ipv6-gw:
-                    description: IPv6Gw is the IPv6 gateway of the management network.
+                    description: IPv6Gw is the IPv6 management gateway.
                     type: string
                   ipv6-range:
-                    description: IPv6Range is the IPv6 range of the management network.
+                    description: IPv6Range is the IPv6 allocation range within IPv6Subnet.
                     type: string
                   ipv6-subnet:
-                    description: IPv6Subnet is the IPv6 subnet of the management network.
-                    type: string
-                  mtu:
-                    description: MTU is the MTU of the management network.
-                    type: integer
-                  network:
-                    description: Network is the name of the docker network to use
-                      for the management network.
+                    description: IPv6Subnet is the IPv6 management subnet.
                     type: string
                 type: object
               resources:

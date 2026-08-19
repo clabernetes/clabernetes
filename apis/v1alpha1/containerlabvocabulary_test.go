@@ -20,7 +20,7 @@ const pinnedContainerlabVersion = "0.78.0"
 // types in the new release and update both this map and pinnedContainerlabVersion:
 //
 //	types/node_definition.go -> NodeDefinition
-//	types/types.go           -> ConfigDispatcher, Extras, DNSConfig, CertificateConfig, MgmtNet
+//	types/types.go           -> ConfigDispatcher, Extras, DNSConfig, CertificateConfig
 //	types/component.go       -> Component, XIOM, MDA
 //
 // Entries clabernetes deliberately does not expose (i.e. stages, credentials, restart-policy)
@@ -58,20 +58,6 @@ var pinnedContainerlabVocabulary = map[string][]string{
 	"MDA": {
 		"slot",
 		"type",
-	},
-	"MgmtNet": {
-		"bridge",
-		"driver-opts",
-		"external-access",
-		"ipv4-gw",
-		"ipv4-range",
-		"ipv4-subnet",
-		"ipv6-gw",
-		"ipv6-range",
-		"ipv6-subnet",
-		"mtu",
-		"network",
-		"skip-when-unused",
 	},
 	"NodeDefinition": {
 		"aliases",
@@ -175,9 +161,9 @@ func collectYAMLTags(walk reflect.Type, into map[string][]string) {
 func TestNodeVocabularyIsContainerlabSubset(t *testing.T) {
 	ours := map[string][]string{}
 
-	// both roots are rendered into the launcher's topo.clab.yaml
+	// The Node root is rendered into the launcher's topo.clab.yaml. File-level management
+	// vocabulary is imported directly from containerlab and needs no c9s snapshot.
 	collectYAMLTags(reflect.TypeFor[clabernetesapisv1alpha1.NodeDefinition](), ours)
-	collectYAMLTags(reflect.TypeFor[clabernetesapisv1alpha1.MgmtNet](), ours)
 
 	for typeName, tags := range ours {
 		theirs, ok := pinnedContainerlabVocabulary[typeName]

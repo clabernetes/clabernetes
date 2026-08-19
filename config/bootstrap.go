@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -14,40 +13,26 @@ import (
 )
 
 type bootstrapConfig struct {
-	mergeMode                   string
-	globalAnnotations           map[string]string
-	globalLabels                map[string]string
-	resourcesDefault            *k8scorev1.ResourceRequirements
-	resourcesByContainerlabKind map[string]map[string]*k8scorev1.ResourceRequirements
-	nodeSelectorsByImage        map[string]map[string]string
-	privilegedLauncher          bool
-	containerlabDebug           bool
-	containerlabTimeout         string
-	inClusterDNSSuffix          string
-	imagePullThroughMode        string
-	launcherImage               string
-	launcherImagePullPolicy     string
-	launcherLogLevel            string
-	criSockOverride             string
-	criKindOverride             string
-	criHostsDir                 string
-	naming                      string
-	containerlabVersion         string
-	extraEnv                    []k8scorev1.EnvVar
+	mergeMode             string
+	globalAnnotations     map[string]string
+	globalLabels          map[string]string
+	resourcesDefault      *k8scorev1.ResourceRequirements
+	nodeSelectorsByImage  map[string]map[string]string
+	inClusterDNSSuffix    string
+	imagePullPolicy       string
+	imagePullSecrets      []string
+	registryMetadataTrust []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
+	naming                string
 }
 
 func bootstrapFromConfigMap( //nolint:gocyclo,funlen,gocognit
 	inMap map[string]string,
 ) (*bootstrapConfig, error) {
 	bc := &bootstrapConfig{
-		mergeMode:               "merge",
-		inClusterDNSSuffix:      clabernetesconstants.KubernetesDefaultInClusterDNSSuffix,
-		imagePullThroughMode:    clabernetesconstants.ImagePullThroughModeAuto,
-		launcherImage:           os.Getenv(clabernetesconstants.LauncherImageEnv),
-		launcherImagePullPolicy: clabernetesconstants.KubernetesImagePullIfNotPresent,
-		launcherLogLevel:        clabernetesconstants.Info,
-		privilegedLauncher:      true,
-		naming:                  clabernetesconstants.NamingModePrefixed,
+		mergeMode:          "merge",
+		inClusterDNSSuffix: clabernetesconstants.KubernetesDefaultInClusterDNSSuffix,
+		imagePullPolicy:    clabernetesconstants.KubernetesImagePullIfNotPresent,
+		naming:             clabernetesconstants.NamingModePrefixed,
 	}
 
 	var outErrors []string
@@ -81,14 +66,6 @@ func bootstrapFromConfigMap( //nolint:gocyclo,funlen,gocognit
 		}
 	}
 
-	resourcesByKindData, resourcesByKindOk := inMap["resourcesByContainerlabKind"]
-	if resourcesByKindOk {
-		err := sigsyaml.Unmarshal([]byte(resourcesByKindData), &bc.resourcesByContainerlabKind)
-		if err != nil {
-			outErrors = append(outErrors, err.Error())
-		}
-	}
-
 	nodeSelectorsByImageData, nodeSelectorsByImageOk := inMap["nodeSelectorsByImage"]
 	if nodeSelectorsByImageOk {
 		err := sigsyaml.Unmarshal([]byte(nodeSelectorsByImageData), &bc.nodeSelectorsByImage)
@@ -97,87 +74,38 @@ func bootstrapFromConfigMap( //nolint:gocyclo,funlen,gocognit
 		}
 	}
 
-	inPrivilegedLauncher, inPrivilegedLauncherOk := inMap["privilegedLauncher"]
-	if inPrivilegedLauncherOk {
-		if strings.EqualFold(inPrivilegedLauncher, clabernetesconstants.False) {
-			bc.privilegedLauncher = false
-		}
-	}
-
-	inContainerlabDebug, inContainerlabDebugOk := inMap["containerlabDebug"]
-	if inContainerlabDebugOk {
-		if strings.EqualFold(inContainerlabDebug, clabernetesconstants.True) {
-			bc.containerlabDebug = true
-		}
-	}
-
-	inContainerlabTimeout, inContainerlabTimeoutOk := inMap["containerlabTimeout"]
-	if inContainerlabTimeoutOk {
-		bc.containerlabTimeout = inContainerlabTimeout
-	}
-
 	inClusterDNSSuffix, inClusterDNSSuffixOk := inMap["inClusterDNSSuffix"]
 	if inClusterDNSSuffixOk {
 		bc.inClusterDNSSuffix = inClusterDNSSuffix
 	}
 
-	imagePullThroughMode, imagePullThroughModeOk := inMap["imagePullThroughMode"]
-	if imagePullThroughModeOk {
-		bc.imagePullThroughMode = imagePullThroughMode
+	imagePullPolicy, imagePullPolicyOk := inMap["imagePullPolicy"]
+	if imagePullPolicyOk {
+		bc.imagePullPolicy = imagePullPolicy
 	}
 
-	launcherImage, launcherImageOk := inMap["launcherImage"]
-	if launcherImageOk && launcherImage != "" {
-		// check for empty string too -- the config map by default (w/ default values) will always
-		// have just "" for launcher image, config bootstrapping will use the value set in the
-		// LAUNCHER_IMAGE env which will be the same kind of resolution we have for manager image
-		// where user provided value takes precedent, then if unset and "0.0.0" chart version it
-		// results in dev-latest image tag, finally, resulting in just the image w/ the tag the same
-		// as the chart version.
-		bc.launcherImage = launcherImage
+	imagePullSecretsData, imagePullSecretsOk := inMap["imagePullSecrets"]
+	if imagePullSecretsOk {
+		err := sigsyaml.Unmarshal([]byte(imagePullSecretsData), &bc.imagePullSecrets)
+		if err != nil {
+			outErrors = append(outErrors, err.Error())
+		}
 	}
 
-	launcherImagePullPolicy, launcherImagePullPolicyOk := inMap["launcherImagePullPolicy"]
-	if launcherImagePullPolicyOk {
-		bc.launcherImagePullPolicy = launcherImagePullPolicy
-	}
-
-	launcherLogLevel, launcherLogLevelOk := inMap["launcherLogLevel"]
-	if launcherLogLevelOk {
-		bc.launcherLogLevel = launcherLogLevel
-	}
-
-	criSockOverride, criSockOverrideOk := inMap["criSockOverride"]
-	if criSockOverrideOk {
-		bc.criSockOverride = criSockOverride
-	}
-
-	criKindOverride, criKindOverrideOk := inMap["criKindOverride"]
-	if criKindOverrideOk {
-		bc.criKindOverride = criKindOverride
-	}
-
-	criHostsDir, criHostsDirOk := inMap["criHostsDir"]
-	if criHostsDirOk {
-		bc.criHostsDir = criHostsDir
+	registryMetadataTrustData, registryMetadataTrustOk := inMap["registryMetadataTrust"]
+	if registryMetadataTrustOk {
+		err := sigsyaml.Unmarshal(
+			[]byte(registryMetadataTrustData),
+			&bc.registryMetadataTrust,
+		)
+		if err != nil {
+			outErrors = append(outErrors, err.Error())
+		}
 	}
 
 	naming, namingOk := inMap["naming"]
 	if namingOk {
 		bc.naming = naming
-	}
-
-	containerlabVersion, containerlabVersionOk := inMap["containerlabVersion"]
-	if containerlabVersionOk {
-		bc.containerlabVersion = containerlabVersion
-	}
-
-	extraEnvData, extraEnvOk := inMap["extraEnv"]
-	if extraEnvOk {
-		err := sigsyaml.Unmarshal([]byte(extraEnvData), &bc.extraEnv)
-		if err != nil {
-			outErrors = append(outErrors, err.Error())
-		}
 	}
 
 	var err error
@@ -248,8 +176,12 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 		config.Spec.InClusterDNSSuffix = bootstrap.inClusterDNSSuffix
 	}
 
-	if config.Spec.ImagePull.PullThroughOverride == "" {
-		config.Spec.ImagePull.PullThroughOverride = bootstrap.imagePullThroughMode
+	if config.Spec.ImagePull.Policy == "" {
+		config.Spec.ImagePull.Policy = bootstrap.imagePullPolicy
+	}
+
+	if config.Spec.ImagePull.PullSecrets == nil && bootstrap.imagePullSecrets != nil {
+		config.Spec.ImagePull.PullSecrets = append([]string{}, bootstrap.imagePullSecrets...)
 	}
 
 	if config.Spec.Deployment.ResourcesDefault == nil {
@@ -272,56 +204,26 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 		config.Spec.Deployment.NodeSelectorsByImage[k] = v
 	}
 
-	if len(bootstrap.resourcesByContainerlabKind) > 0 &&
-		config.Spec.Deployment.ResourcesByContainerlabKind == nil {
-		config.Spec.Deployment.ResourcesByContainerlabKind = make(
-			map[string]map[string]*k8scorev1.ResourceRequirements,
-		)
+	existingRegistryTrust := make(
+		map[string]bool,
+		len(config.Spec.ImagePull.RegistryMetadataTrust),
+	)
+	for _, entry := range config.Spec.ImagePull.RegistryMetadataTrust {
+		existingRegistryTrust[entry.Registry] = true
 	}
-
-	for k, v := range bootstrap.resourcesByContainerlabKind {
-		_, exists := config.Spec.Deployment.ResourcesByContainerlabKind[k]
-		if exists {
+	for _, entry := range bootstrap.registryMetadataTrust {
+		if existingRegistryTrust[entry.Registry] {
 			continue
 		}
-
-		config.Spec.Deployment.ResourcesByContainerlabKind[k] = v
-	}
-
-	if config.Spec.Deployment.LauncherImage == "" {
-		config.Spec.Deployment.LauncherImage = bootstrap.launcherImage
-	}
-
-	if config.Spec.Deployment.LauncherImagePullPolicy == "" {
-		config.Spec.Deployment.LauncherImagePullPolicy = bootstrap.launcherImagePullPolicy
-	}
-
-	if config.Spec.Deployment.LauncherLogLevel == "" {
-		config.Spec.Deployment.LauncherLogLevel = bootstrap.launcherLogLevel
-	}
-
-	if config.Spec.ImagePull.CRISockOverride == "" {
-		config.Spec.ImagePull.CRISockOverride = bootstrap.criSockOverride
-	}
-
-	if config.Spec.ImagePull.CRIKindOverride == "" {
-		config.Spec.ImagePull.CRIKindOverride = bootstrap.criKindOverride
-	}
-
-	if config.Spec.ImagePull.CRIHostsDir == "" {
-		config.Spec.ImagePull.CRIHostsDir = bootstrap.criHostsDir
+		config.Spec.ImagePull.RegistryMetadataTrust = append(
+			config.Spec.ImagePull.RegistryMetadataTrust,
+			entry,
+		)
+		existingRegistryTrust[entry.Registry] = true
 	}
 
 	if config.Spec.Naming == "" {
 		config.Spec.Naming = bootstrap.naming
-	}
-
-	if config.Spec.Deployment.ContainerlabVersion == "" {
-		config.Spec.Deployment.ContainerlabVersion = bootstrap.containerlabVersion
-	}
-
-	if len(config.Spec.Deployment.ExtraEnv) == 0 {
-		config.Spec.Deployment.ExtraEnv = bootstrap.extraEnv
 	}
 }
 
@@ -336,22 +238,13 @@ func mergeFromBootstrapConfigReplace(
 		},
 		InClusterDNSSuffix: bootstrap.inClusterDNSSuffix,
 		ImagePull: clabernetesapisv1alpha1.ConfigImagePull{
-			PullThroughOverride: bootstrap.imagePullThroughMode,
-			CRISockOverride:     bootstrap.criSockOverride,
-			CRIKindOverride:     bootstrap.criKindOverride,
-			CRIHostsDir:         bootstrap.criHostsDir,
+			Policy:                bootstrap.imagePullPolicy,
+			PullSecrets:           append([]string{}, bootstrap.imagePullSecrets...),
+			RegistryMetadataTrust: bootstrap.registryMetadataTrust,
 		},
 		Deployment: clabernetesapisv1alpha1.ConfigDeployment{
-			ResourcesDefault:            bootstrap.resourcesDefault,
-			ResourcesByContainerlabKind: bootstrap.resourcesByContainerlabKind,
-			NodeSelectorsByImage:        bootstrap.nodeSelectorsByImage,
-			PrivilegedLauncher:          bootstrap.privilegedLauncher,
-			ContainerlabDebug:           bootstrap.containerlabDebug,
-			LauncherImage:               bootstrap.launcherImage,
-			LauncherImagePullPolicy:     bootstrap.launcherImagePullPolicy,
-			LauncherLogLevel:            bootstrap.launcherLogLevel,
-			ContainerlabVersion:         bootstrap.containerlabVersion,
-			ExtraEnv:                    bootstrap.extraEnv,
+			ResourcesDefault:     bootstrap.resourcesDefault,
+			NodeSelectorsByImage: bootstrap.nodeSelectorsByImage,
 		},
 		Naming: bootstrap.naming,
 	}

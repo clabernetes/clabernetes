@@ -29,9 +29,19 @@ spec:
     - jsonPath: .spec.endpointB.interfaceName
       name: Interface-B
       type: string
+    - jsonPath: .spec.connectivity
+      name: Connectivity
+      type: string
     - jsonPath: .status.tunnelID
       name: Tunnel-ID
       type: integer
+    - jsonPath: .status.conditions[?(@.type=='Accepted')].status
+      name: Accepted
+      type: string
+    - jsonPath: .status.error
+      name: Error
+      priority: 1
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -40,14 +50,10 @@ spec:
           primary clabernetes API -- like Nodes they can be created by users directly or emitted by the
           (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints
           (Node object names in the same namespace plus interface names), connectivity flavor, and an
-          optional mtu. The link controller allocates a tunnel id into the status for links that cross
-          launcher pods; links between nodes co-located in one launcher pod and links to the reserved
-          `host` node need no tunnel and are materialized directly by the owning launcher. Launchers
-          select only the links terminating on their nodes with *field selectors* on the endpoint node
-          names (which requires kubernetes 1.31+) -- no labels are required, ever, and no launcher
-          watches more than its own
-          links. Storing one object per wire keeps every persisted object O(1) regardless of topology
-          size.
+          optional MTU. The Link controller allocates a tunnel ID into status for cross-Pod transports;
+          same-Pod, loopback, and host Links need no tunnel allocation. Direct connectivity reconcilers
+          select only Links terminating on their Nodes with endpoint field selectors. Storing one object
+          per wire keeps every persisted object O(1) regardless of topology size.
         properties:
           apiVersion:
             description: |-
@@ -69,13 +75,13 @@ spec:
           spec:
             description: |-
               LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.
-              Anything operational (the allocated tunnel id) lives in the status, and anything derivable
-              (i.e. the remote launcher's fabric service) is derived by the launchers.
+              Anything operational (the allocated tunnel ID and resolved identities) lives in status, and
+              current peer transport identity is derived by direct connectivity reconcilers.
             properties:
               connectivity:
                 default: vxlan
                 description: |-
-                  Connectivity is the flavor used to realize this Link across launcher Pods. Empty values on
+                  Connectivity is the flavor used to realize this Link across direct Pods. Empty values on
                   objects stored before API defaulting was introduced are normalized to VXLAN by consumers.
                 enum:
                 - vxlan
@@ -118,9 +124,8 @@ spec:
                 - nodeName
                 type: object
               mtu:
-                description: |-
-                  MTU is the mtu for the link -- launchers apply this to the (node side of the) link
-                  termination they create; zero means "unset" (use the containerlab default).
+                description: MTU is the MTU for both direct endpoint interfaces; zero
+                  means unset.
                 type: integer
             required:
             - endpointA
@@ -129,12 +134,72 @@ spec:
           status:
             description: LinkStatus is the status for a Link resource.
             properties:
+              conditions:
+                description: |-
+                  Conditions contains bounded controller observations for this Link. It does not claim
+                  dataplane readiness, which remains observable through endpoint Node connectivity status.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               error:
                 description: |-
-                  Error holds the reason this link cannot currently be realized. An empty value means the
-                  link is eligible for materialization (a cross-launcher link can still be waiting for its
-                  tunnel id); invalid links and deterministic endpoint-conflict losers carry an error and are
-                  ignored by node controllers and launchers until their spec or conflicting links change.
+                  Error is a compact compatibility field containing the current Accepted=False message. New
+                  consumers should prefer Conditions.
                 type: string
               resolvedEndpoints:
                 description: |-
@@ -181,7 +246,7 @@ spec:
                   TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller
                   allocated for this link -- both sides of the link use the same id. This is an allocation
                   rather than user intent, hence it living in the status; zero means "not allocated (yet)"
-                  (launchers skip such links until the controller has filled the id in).
+                  (direct connectivity reconcilers wait until the controller has filled the ID in).
                 maximum: 16000000
                 minimum: 0
                 type: integer
@@ -192,4 +257,5 @@ spec:
     - jsonPath: .spec.endpointB.nodeName
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}

@@ -80,16 +80,13 @@ type TopologySpec struct {
 	// Expose holds configurations relevant to how clabernetes exposes a topology.
 	// +optional
 	Expose Expose `json:"expose"`
-	// Deployment holds configurations relevant to how clabernetes configures deployments that make
-	// up a given topology.
+	// Deployment holds portable policy compiled into direct Node workloads.
 	// +optional
 	Deployment Deployment `json:"deployment"`
-	// StatusProbes holds the configurations relevant to how clabernetes and the launcher handle
-	// checking and reporting the containerlab node status
+	// StatusProbes holds additional direct application readiness policy.
 	// +optional
 	StatusProbes StatusProbes `json:"statusProbes"`
-	// ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling
-	// images.
+	// ImagePull holds Kubernetes-native defaults compiled into direct device Pods.
 	// +optional
 	ImagePull ImagePull `json:"imagePull"`
 	// Naming tells the clabernetes controller how it should name resources it creates -- that is
