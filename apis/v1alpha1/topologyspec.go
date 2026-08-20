@@ -3,7 +3,7 @@ package v1alpha1
 import k8scorev1 "k8s.io/api/core/v1"
 
 // FileFromConfigMap represents a file that you would like to mount (from a configmap) in the
-// launcher pod for a given node.
+// device pod for a given node.
 type FileFromConfigMap struct {
 	// FilePath is the path to mount the file.
 	FilePath string `json:"filePath"`
@@ -40,7 +40,7 @@ type FileFromSecret struct {
 	Mode string `json:"mode,omitempty"`
 }
 
-// FileFromURL represents a file that you would like to mount from a URL in the launcher pod for
+// FileFromURL represents a file that you would like to mount from a URL in the device pod for
 // a given node.
 type FileFromURL struct {
 	// FilePath is the path to mount the file.
@@ -159,7 +159,7 @@ type Deployment struct {
 	// +optional
 	Scheduling Scheduling `json:"scheduling"`
 	// FilesFromConfigMap is a slice of FileFromConfigMap that define the configmap/path and node
-	// and path on a launcher node that the file should be mounted to. If the path is not provided
+	// and path in a device pod that the file should be mounted to. If the path is not provided
 	// the configmap is mounted in its entirety (like normal k8s things), so you *probably* want
 	// to specify the sub path unless you are sure what you're doing!
 	// +optional
@@ -168,7 +168,7 @@ type Deployment struct {
 	// +optional
 	FilesFromSecret map[string][]FileFromSecret `json:"filesFromSecret,omitempty"`
 	// FilesFromURL is a mapping of FileFromURL that define a URL at which to fetch a file, and path
-	// on a launcher node that the file should be downloaded to. This is useful for configs that are
+	// in a device pod that the file should be staged at. This is useful for configs that are
 	// larger than the ConfigMap (etcd) 1Mb size limit.
 	// +optional
 	FilesFromURL map[string][]FileFromURL `json:"filesFromURL"`
@@ -179,20 +179,20 @@ type Deployment struct {
 
 // Scheduling holds direct Pod node selection and toleration policy.
 type Scheduling struct {
-	// NodeSelector sets the node selector that will be configured on all launcher pods for this
+	// NodeSelector sets the node selector that will be configured on all device pods for this
 	// Topology.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	// Tolerations is a list of Tolerations that will be set on the launcher pod spec.
+	// Tolerations is a list of Tolerations that will be set on the device pod spec.
 	// +listType=atomic
 	// +optional
 	Tolerations []k8scorev1.Toleration `json:"tolerations"`
 }
 
 // StatusProbes holds details about if the status probes are enabled and if so how they should be
-// handled. Enabled probes always require the nested container to be running and not paused,
-// restarting, or dead. If Docker exposes an image-defined healthcheck, it must also be healthy.
-// Configured TCP and SSH probes are additional requirements.
+// handled. Node readiness always requires every device application container to be running and
+// ready, including any image-defined or declared healthcheck translated into its startup and
+// readiness probes. Configured TCP and SSH probes are additional requirements.
 type StatusProbes struct {
 	// Enabled sets the status probes to enabled (or obviously disabled). A Node that has previously
 	// started but later fails its readiness check remains running and is reported not ready. A Node
@@ -218,13 +218,13 @@ type StatusProbes struct {
 }
 
 // ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a
-// Topology. If both styles are configured, both and the generic nested-container probe must succeed
-// in order to report healthy.
+// Topology. If both styles are configured, both and the generic device-container readiness must
+// succeed in order to report healthy.
 type ProbeConfiguration struct {
 	// StartupSeconds is the total amount of seconds to allow for the node to start. This defaults
 	// to roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for
-	// c9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value
-	// does not delay fast nodes because the readiness probe takes over as soon as startup succeeds.
+	// the kubelet to pull the image and boot the device. A larger value does not delay fast nodes
+	// because the readiness probe takes over as soon as startup succeeds.
 	// +optional
 	StartupSeconds int `json:"startupSeconds"`
 	// SSHProbeConfiguration defines an SSH probe.
@@ -237,8 +237,8 @@ type ProbeConfiguration struct {
 
 // SSHProbeConfiguration defines a "ssh" probe -- the ssh probe just connects using standard go
 // crypto ssh setup and reports true if auth is successful, it does no further checking. The probe
-// is executed by the launcher and the result is placed into /clabernetes/.nodestatus so the k8s
-// probe can pick it up and reflect the status.
+// runs inside the device pod against the node's management address and feeds the container's
+// Kubernetes readiness.
 type SSHProbeConfiguration struct {
 	// Username is the username to use for auth.
 	Username string `json:"username"`
@@ -249,14 +249,11 @@ type SSHProbeConfiguration struct {
 	Port int `json:"port"`
 }
 
-// TCPProbeConfiguration defines a "tcp" probe. The probe is executed by the launcher and the
-// result is placed into /clabernetes/.nodestatus so the k8s probe can pick it up and reflect the
-// status.
+// TCPProbeConfiguration defines a "tcp" probe. The probe runs inside the device pod against the
+// node's management address and feeds the container's Kubernetes readiness.
 type TCPProbeConfiguration struct {
-	// Port defines the port to try to open a TCP connection to. When using TCP probe setup this
-	// connection happens inside the launcher rather than the "normal" k8s style probes. This style
-	// probe behaves like a k8s style probe though in that it is "successful" whenever a TCP
-	// connection to this port can be opened successfully.
+	// Port defines the port to try to open a TCP connection to. The probe is "successful"
+	// whenever a TCP connection to this port can be opened successfully.
 	Port int `json:"port"`
 }
 

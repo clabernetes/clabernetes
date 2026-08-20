@@ -11,18 +11,18 @@ import (
 // This file holds the containerlab *vocabulary* -- the node definition (and its sub objects) as
 // a user would write it in a containerlab topology file. These types carry both json and yaml
 // tags with identical (containerlab native) names: the json side is what the Node CRD schema is
-// built from, the yaml side is what the launcher marshals into the topo.clab.yaml it feeds to
-// containerlab. util/containerlab aliases these types so there is exactly one definition of the
-// vocabulary in the codebase.
+// built from and what planning serializes for the imported containerlab module, the yaml side is
+// what the topology compiler parses. util/containerlab aliases these types so there is exactly
+// one definition of the vocabulary in the codebase.
 
 // NodeDefinition represents a configuration a given node can have in a (containerlab) lab
 // definition file. It is a *curated subset* of the containerlab node vocabulary: a field lives
-// here only if a clabernetes controller reads it, or if containerlab-in-a-launcher-pod can
-// realize it for a single node. Deliberately absent are vocabulary whose meaning spans the nodes
-// of one lab (deployment stages, startup delays, boot ordering), settings the launcher pod
-// already owns (resources, image pull policy, readiness -- LauncherProfile territory), and
-// anything containerlab itself no longer accepts. This is also, verbatim, the containerlab
-// portion of the clabernetes Node custom resource spec.
+// here only if the direct runtime can realize its semantics in a Kubernetes Pod. Deliberately
+// absent are Docker-runtime selection and lifecycle vocabulary (`runtime`, `auto-remove`,
+// `pid-mode`, `cgroupns-mode`, `cpu-set`), multi-node boot orchestration (`stages`), and
+// credential bytes (`credentials`) -- the topology compiler rejects each of those with a
+// structured diagnostic naming the field. This is also, verbatim, the containerlab portion of
+// the clabernetes Node custom resource spec.
 type NodeDefinition struct {
 	// Kind is the containerlab kind of the node -- i.e. nokia_srlinux.
 	// +optional
@@ -33,6 +33,12 @@ type NodeDefinition struct {
 	// Image is the container image for the node.
 	// +optional
 	Image string `json:"image,omitempty" yaml:"image,omitempty"`
+	// ImagePullPolicy is the containerlab pull policy for the node's image; it maps onto the
+	// equivalent Kubernetes image pull policy and takes precedence over profile and global
+	// defaults.
+	// +kubebuilder:validation:Enum=always;Always;never;Never;ifnotpresent;IfNotPresent
+	// +optional
+	ImagePullPolicy string `json:"image-pull-policy,omitempty" yaml:"image-pull-policy,omitempty"`
 	// License is the path to the license file for the node.
 	// +optional
 	License string `json:"license,omitempty" yaml:"license,omitempty"`
@@ -48,6 +54,16 @@ type NodeDefinition struct {
 	// generates and mounts no startup config at all.
 	// +optional
 	SuppressStartupConfig *bool `json:"suppress-startup-config,omitempty" yaml:"suppress-startup-config,omitempty"`
+	// StartupDelay is an optional delay in seconds applied before the node's application
+	// container starts.
+	// +optional
+	StartupDelay uint `json:"startup-delay,omitempty" yaml:"startup-delay,omitempty"`
+	// RestartPolicy is the container restart policy for the node. Only the values with a
+	// shared-Pod mapping are accepted -- a device container in a direct Pod always restarts
+	// with its Pod, so Docker's "no" and "on-failure" policies cannot be represented.
+	// +kubebuilder:validation:Enum=always;Always;unless-stopped;Unless-stopped
+	// +optional
+	RestartPolicy string `json:"restart-policy,omitempty" yaml:"restart-policy,omitempty"`
 	// Config holds containerlab config engine settings for the node.
 	// +optional
 	Config *ConfigDispatcher `json:"config,omitempty" yaml:"config,omitempty"`
@@ -90,6 +106,15 @@ type NodeDefinition struct {
 	// ShmSize is the shared memory size allocated to the node's container -- i.e. 256m.
 	// +optional
 	ShmSize string `json:"shm-size,omitempty" yaml:"shm-size,omitempty"`
+	// CPU is the number of vcpus to allocate for the node's container -- it becomes the
+	// container's Kubernetes CPU limit.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	CPU float64 `json:"cpu,omitempty" yaml:"cpu,omitempty"`
+	// Memory is the memory limit for the node's container in containerlab's human-readable
+	// form -- i.e. 1Gb -- and becomes the container's Kubernetes memory limit.
+	// +optional
+	Memory string `json:"memory,omitempty" yaml:"memory,omitempty"`
 	// the ports pattern spells out 1-65535 as an alternation so the range is enforced by the
 	// pattern alone: a CEL rule over an unbounded list of unbounded strings blows the
 	// apiserver's estimated cost budget and the whole CRD is then rejected at install time
@@ -114,12 +139,12 @@ type NodeDefinition struct {
 	// cost budget: "container:" plus a node name, which is an RFC1123 label, so 10 + 63
 
 	// NetworkMode declares that this node shares the network namespace -- and therefore the
-	// launcher pod -- of the named primary node. `container:<primary node name>` is the only
-	// accepted value: clabernetes derives node "grouping" (nodes co-located in one launcher pod,
+	// device pod -- of the named primary node. `container:<primary node name>` is the only
+	// accepted value: clabernetes derives node "grouping" (nodes co-located in one device pod,
 	// i.e. the cards of a distributed chassis) from exactly this containerlab-native field, and
-	// the other containerlab network modes have no meaning inside a launcher pod.
+	// the other containerlab network modes have no meaning inside a device pod.
 	// +kubebuilder:validation:MaxLength=73
-	// +kubebuilder:validation:XValidation:rule="self.matches('^container:[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="network-mode must be container:<primary node name> -- it declares that this node shares its launcher pod with the named primary node"
+	// +kubebuilder:validation:XValidation:rule="self.matches('^container:[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="network-mode must be container:<primary node name> -- it declares that this node shares its device pod with the named primary node"
 	// +optional
 	NetworkMode string `json:"network-mode,omitempty" yaml:"network-mode,omitempty"`
 	// Env holds the environment variables for the node's container.
@@ -139,7 +164,7 @@ type NodeDefinition struct {
 	Group string `json:"group,omitempty" yaml:"group,omitempty"`
 	// Labels are containerlab node labels, and exist only so a Topology definition can carry
 	// them: the compiler copies them onto the emitted Node's metadata.labels, from where they
-	// reach the launcher deployment and its pods. There is deliberately no spec.labels on a Node
+	// reach the device deployment and its pods. There is deliberately no spec.labels on a Node
 	// (hence json:"-") -- in Kubernetes, metadata.labels is where labels belong, and unlike
 	// containerlab's Docker labels these are selectable with kubectl. Invalid labels and keys
 	// reserved by c9s make Topology compilation fail before any primitive is emitted.
@@ -151,6 +176,23 @@ type NodeDefinition struct {
 	// Certificate holds the TLS certificate configuration for the node.
 	// +optional
 	Certificate *CertificateConfig `json:"certificate,omitempty" yaml:"certificate,omitempty"`
+	// Healthcheck is the containerlab process health contract for the node; it merges over the
+	// image-defined OCI healthcheck and is realized as container startup/readiness behavior.
+	// +optional
+	Healthcheck *HealthcheckConfig `json:"healthcheck,omitempty" yaml:"healthcheck,omitempty"`
+	// Aliases lists additional network names for the node. Each alias is realized as an extra
+	// same-namespace headless Service selecting the node's Pod, so lab members resolve the
+	// alias exactly like the node's own name. Aliases do not inherit from defaults or kinds.
+	// +kubebuilder:validation:items:Pattern=`^[a-z]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:items:MaxLength=63
+	// +listType=atomic
+	// +optional
+	Aliases []string `json:"aliases,omitempty" yaml:"aliases,omitempty"`
+	// LinkApplyMode declares the lifecycle action used when the node's links change: live (no
+	// lifecycle action), restart, or recreate. It overrides the kind's imported default.
+	// +kubebuilder:validation:Enum=live;restart;recreate
+	// +optional
+	LinkApplyMode string `json:"link-apply-mode,omitempty" yaml:"link-apply-mode,omitempty"`
 	// Extras holds extra, possibly kind specific, node parameters.
 	// +optional
 	Extras *Extras `json:"extras,omitempty" yaml:"extras,omitempty"`
@@ -243,6 +285,32 @@ type DNSConfig struct {
 	// +listType=atomic
 	// +optional
 	Search []string `json:"search,omitempty" yaml:"search,omitempty"`
+}
+
+// HealthcheckConfig represents a containerlab process health contract for a node.
+type HealthcheckConfig struct {
+	// Test is the command to run to check the health of the container -- the first element
+	// selects the containerlab test form (i.e. CMD) and the remainder is the command itself.
+	// +listType=atomic
+	// +optional
+	Test []string `json:"test,omitempty" yaml:"test,omitempty"`
+	// Interval is the time in seconds to wait between checks.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	Interval int `json:"interval,omitempty" yaml:"interval,omitempty"`
+	// Timeout is the time in seconds to wait before considering a check to have hung.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	Timeout int `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	// Retries is the number of consecutive failures needed to consider the container unhealthy.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	Retries int `json:"retries,omitempty" yaml:"retries,omitempty"`
+	// StartPeriod is the time in seconds to wait for the container to initialize before the
+	// retries countdown starts.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	StartPeriod int `json:"start-period,omitempty" yaml:"start-period,omitempty"`
 }
 
 // CertificateConfig represents the configuration of a TLS infrastructure used by a node.

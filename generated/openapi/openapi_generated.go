@@ -85,6 +85,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL": schema_clabernetes_clabernetes_apis_v1alpha1_FileFromURL(
 			ref,
 		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig": schema_clabernetes_clabernetes_apis_v1alpha1_HealthcheckConfig(
+			ref,
+		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull": schema_clabernetes_clabernetes_apis_v1alpha1_ImagePull(
 			ref,
 		),
@@ -880,7 +883,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Deployment(
 					},
 					"filesFromConfigMap": {
 						SchemaProps: spec.SchemaProps{
-							Description: "FilesFromConfigMap is a slice of FileFromConfigMap that define the configmap/path and node and path on a launcher node that the file should be mounted to. If the path is not provided the configmap is mounted in its entirety (like normal k8s things), so you *probably* want to specify the sub path unless you are sure what you're doing!",
+							Description: "FilesFromConfigMap is a slice of FileFromConfigMap that define the configmap/path and node and path in a device pod that the file should be mounted to. If the path is not provided the configmap is mounted in its entirety (like normal k8s things), so you *probably* want to specify the sub path unless you are sure what you're doing!",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -926,7 +929,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Deployment(
 					},
 					"filesFromURL": {
 						SchemaProps: spec.SchemaProps{
-							Description: "FilesFromURL is a mapping of FileFromURL that define a URL at which to fetch a file, and path on a launcher node that the file should be downloaded to. This is useful for configs that are larger than the ConfigMap (etcd) 1Mb size limit.",
+							Description: "FilesFromURL is a mapping of FileFromURL that define a URL at which to fetch a file, and path in a device pod that the file should be staged at. This is useful for configs that are larger than the ConfigMap (etcd) 1Mb size limit.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -1075,7 +1078,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_FileFromConfigMap(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "FileFromConfigMap represents a file that you would like to mount (from a configmap) in the launcher pod for a given node.",
+				Description: "FileFromConfigMap represents a file that you would like to mount (from a configmap) in the device pod for a given node.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"filePath": {
@@ -1168,7 +1171,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_FileFromURL(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "FileFromURL represents a file that you would like to mount from a URL in the launcher pod for a given node.",
+				Description: "FileFromURL represents a file that you would like to mount from a URL in the device pod for a given node.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"filePath": {
@@ -1196,6 +1199,68 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_FileFromURL(
 					},
 				},
 				Required: []string{"filePath", "url"},
+			},
+		},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_HealthcheckConfig(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HealthcheckConfig represents a containerlab process health contract for a node.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"test": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Test is the command to run to check the health of the container -- the first element selects the containerlab test form (i.e. CMD) and the remainder is the command itself.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"interval": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Interval is the time in seconds to wait between checks.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"timeout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Timeout is the time in seconds to wait before considering a check to have hung.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"retries": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Retries is the number of consecutive failures needed to consider the container unhealthy.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"start-period": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StartPeriod is the time in seconds to wait for the container to initialize before the retries countdown starts.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
 			},
 		},
 	}
@@ -2006,7 +2071,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "NodeDefinition represents a configuration a given node can have in a (containerlab) lab definition file. It is a *curated subset* of the containerlab node vocabulary: a field lives here only if a clabernetes controller reads it, or if containerlab-in-a-launcher-pod can realize it for a single node. Deliberately absent are vocabulary whose meaning spans the nodes of one lab (deployment stages, startup delays, boot ordering), settings the launcher pod already owns (resources, image pull policy, readiness -- LauncherProfile territory), and anything containerlab itself no longer accepts. This is also, verbatim, the containerlab portion of the clabernetes Node custom resource spec.",
+				Description: "NodeDefinition represents a configuration a given node can have in a (containerlab) lab definition file. It is a *curated subset* of the containerlab node vocabulary: a field lives here only if the direct runtime can realize its semantics in a Kubernetes Pod. Deliberately absent are Docker-runtime selection and lifecycle vocabulary (`runtime`, `auto-remove`, `pid-mode`, `cgroupns-mode`, `cpu-set`), multi-node boot orchestration (`stages`), and credential bytes (`credentials`) -- the topology compiler rejects each of those with a structured diagnostic naming the field. This is also, verbatim, the containerlab portion of the clabernetes Node custom resource spec.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -2026,6 +2091,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 					"image": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Image is the container image for the node.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"image-pull-policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ImagePullPolicy is the containerlab pull policy for the node's image; it maps onto the equivalent Kubernetes image pull policy and takes precedence over profile and global defaults.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -2055,6 +2127,20 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 						SchemaProps: spec.SchemaProps{
 							Description: "SuppressStartupConfig boots the node with its factory configuration -- containerlab generates and mounts no startup config at all.",
 							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"startup-delay": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StartupDelay is an optional delay in seconds applied before the node's application container starts.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"restart-policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RestartPolicy is the container restart policy for the node. Only the values with a shared-Pod mapping are accepted -- a device container in a direct Pod always restarts with its Pod, so Docker's \"no\" and \"on-failure\" policies cannot be represented.",
+							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
@@ -2211,6 +2297,20 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 							Format:      "",
 						},
 					},
+					"cpu": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CPU is the number of vcpus to allocate for the node's container -- it becomes the container's Kubernetes CPU limit.",
+							Type:        []string{"number"},
+							Format:      "double",
+						},
+					},
+					"memory": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Memory is the memory limit for the node's container in containerlab's human-readable form -- i.e. 1Gb -- and becomes the container's Kubernetes memory limit.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"ports": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
@@ -2246,7 +2346,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 					},
 					"network-mode": {
 						SchemaProps: spec.SchemaProps{
-							Description: "NetworkMode declares that this node shares the network namespace -- and therefore the launcher pod -- of the named primary node. `container:<primary node name>` is the only accepted value: clabernetes derives node \"grouping\" (nodes co-located in one launcher pod, i.e. the cards of a distributed chassis) from exactly this containerlab-native field, and the other containerlab network modes have no meaning inside a launcher pod.",
+							Description: "NetworkMode declares that this node shares the network namespace -- and therefore the device pod -- of the named primary node. `container:<primary node name>` is the only accepted value: clabernetes derives node \"grouping\" (nodes co-located in one device pod, i.e. the cards of a distributed chassis) from exactly this containerlab-native field, and the other containerlab network modes have no meaning inside a device pod.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -2323,6 +2423,40 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 							),
 						},
 					},
+					"healthcheck": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Healthcheck is the containerlab process health contract for the node; it merges over the image-defined OCI healthcheck and is realized as container startup/readiness behavior.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig",
+							),
+						},
+					},
+					"aliases": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Aliases lists additional network names for the node. Each alias is realized as an extra same-namespace headless Service selecting the node's Pod, so lab members resolve the alias exactly like the node's own name. Aliases do not inherit from defaults or kinds.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"link-apply-mode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LinkApplyMode declares the lifecycle action used when the node's links change: live (no lifecycle action), restart, or recreate. It overrides the kind's imported default.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"extras": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Extras holds extra, possibly kind specific, node parameters.",
@@ -2355,7 +2489,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Component", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher", "github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Extras"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Component", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher", "github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Extras", "github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig"},
 	}
 }
 
@@ -2687,6 +2821,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 							Format:      "",
 						},
 					},
+					"image-pull-policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ImagePullPolicy is the containerlab pull policy for the node's image; it maps onto the equivalent Kubernetes image pull policy and takes precedence over profile and global defaults.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"license": {
 						SchemaProps: spec.SchemaProps{
 							Description: "License is the path to the license file for the node.",
@@ -2712,6 +2853,20 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 						SchemaProps: spec.SchemaProps{
 							Description: "SuppressStartupConfig boots the node with its factory configuration -- containerlab generates and mounts no startup config at all.",
 							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"startup-delay": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StartupDelay is an optional delay in seconds applied before the node's application container starts.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"restart-policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RestartPolicy is the container restart policy for the node. Only the values with a shared-Pod mapping are accepted -- a device container in a direct Pod always restarts with its Pod, so Docker's \"no\" and \"on-failure\" policies cannot be represented.",
+							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
@@ -2868,6 +3023,20 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 							Format:      "",
 						},
 					},
+					"cpu": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CPU is the number of vcpus to allocate for the node's container -- it becomes the container's Kubernetes CPU limit.",
+							Type:        []string{"number"},
+							Format:      "double",
+						},
+					},
+					"memory": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Memory is the memory limit for the node's container in containerlab's human-readable form -- i.e. 1Gb -- and becomes the container's Kubernetes memory limit.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"ports": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
@@ -2903,7 +3072,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 					},
 					"network-mode": {
 						SchemaProps: spec.SchemaProps{
-							Description: "NetworkMode declares that this node shares the network namespace -- and therefore the launcher pod -- of the named primary node. `container:<primary node name>` is the only accepted value: clabernetes derives node \"grouping\" (nodes co-located in one launcher pod, i.e. the cards of a distributed chassis) from exactly this containerlab-native field, and the other containerlab network modes have no meaning inside a launcher pod.",
+							Description: "NetworkMode declares that this node shares the network namespace -- and therefore the device pod -- of the named primary node. `container:<primary node name>` is the only accepted value: clabernetes derives node \"grouping\" (nodes co-located in one device pod, i.e. the cards of a distributed chassis) from exactly this containerlab-native field, and the other containerlab network modes have no meaning inside a device pod.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -2978,6 +3147,40 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 							Ref: ref(
 								"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig",
 							),
+						},
+					},
+					"healthcheck": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Healthcheck is the containerlab process health contract for the node; it merges over the image-defined OCI healthcheck and is realized as container startup/readiness behavior.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig",
+							),
+						},
+					},
+					"aliases": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Aliases lists additional network names for the node. Each alias is realized as an extra same-namespace headless Service selecting the node's Pod, so lab members resolve the alias exactly like the node's own name. Aliases do not inherit from defaults or kinds.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"link-apply-mode": {
+						SchemaProps: spec.SchemaProps{
+							Description: "LinkApplyMode declares the lifecycle action used when the node's links change: live (no lifecycle action), restart, or recreate. It overrides the kind's imported default.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"extras": {
@@ -3078,7 +3281,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Component", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher", "github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Extras", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromSecret", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL", "k8s.io/api/core/v1.LocalObjectReference"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Component", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher", "github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Extras", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromSecret", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL", "github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig", "k8s.io/api/core/v1.LocalObjectReference"},
 	}
 }
 
@@ -3233,12 +3436,12 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ProbeConfiguration(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a Topology. If both styles are configured, both and the generic nested-container probe must succeed in order to report healthy.",
+				Description: "ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a Topology. If both styles are configured, both and the generic device-container readiness must succeed in order to report healthy.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"startupSeconds": {
 						SchemaProps: spec.SchemaProps{
-							Description: "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults to roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for c9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value does not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
+							Description: "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults to roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for the kubelet to pull the image and boot the device. A larger value does not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
 							Default:     0,
 							Type:        []string{"integer"},
 							Format:      "int32",
@@ -3312,7 +3515,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "SSHProbeConfiguration defines a \"ssh\" probe -- the ssh probe just connects using standard go crypto ssh setup and reports true if auth is successful, it does no further checking. The probe is executed by the launcher and the result is placed into /clabernetes/.nodestatus so the k8s probe can pick it up and reflect the status.",
+				Description: "SSHProbeConfiguration defines a \"ssh\" probe -- the ssh probe just connects using standard go crypto ssh setup and reports true if auth is successful, it does no further checking. The probe runs inside the device pod against the node's management address and feeds the container's Kubernetes readiness.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"username": {
@@ -3357,7 +3560,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Scheduling(
 				Properties: map[string]spec.Schema{
 					"nodeSelector": {
 						SchemaProps: spec.SchemaProps{
-							Description: "NodeSelector sets the node selector that will be configured on all launcher pods for this Topology.",
+							Description: "NodeSelector sets the node selector that will be configured on all device pods for this Topology.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -3377,7 +3580,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Scheduling(
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Tolerations is a list of Tolerations that will be set on the launcher pod spec.",
+							Description: "Tolerations is a list of Tolerations that will be set on the device pod spec.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -3402,7 +3605,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_StatusProbes(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "StatusProbes holds details about if the status probes are enabled and if so how they should be handled. Enabled probes always require the nested container to be running and not paused, restarting, or dead. If Docker exposes an image-defined healthcheck, it must also be healthy. Configured TCP and SSH probes are additional requirements.",
+				Description: "StatusProbes holds details about if the status probes are enabled and if so how they should be handled. Node readiness always requires every device application container to be running and ready, including any image-defined or declared healthcheck translated into its startup and readiness probes. Configured TCP and SSH probes are additional requirements.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"enabled": {
@@ -3471,12 +3674,12 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TCPProbeConfiguration(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "TCPProbeConfiguration defines a \"tcp\" probe. The probe is executed by the launcher and the result is placed into /clabernetes/.nodestatus so the k8s probe can pick it up and reflect the status.",
+				Description: "TCPProbeConfiguration defines a \"tcp\" probe. The probe runs inside the device pod against the node's management address and feeds the container's Kubernetes readiness.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"port": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Port defines the port to try to open a TCP connection to. When using TCP probe setup this connection happens inside the launcher rather than the \"normal\" k8s style probes. This style probe behaves like a k8s style probe though in that it is \"successful\" whenever a TCP connection to this port can be opened successfully.",
+							Description: "Port defines the port to try to open a TCP connection to. The probe is \"successful\" whenever a TCP connection to this port can be opened successfully.",
 							Default:     0,
 							Type:        []string{"integer"},
 							Format:      "int32",

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
@@ -600,6 +601,80 @@ func TestPlanRecordsWhetherImagePullPolicyCameFromNodeIntent(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestPlanMapsExtendedNodeVocabularyWithoutKindDispatch(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Definition = mustJSON(t, map[string]any{
+		"kind":          syntheticKind,
+		"image":         "example/future:1",
+		"startup-delay": 7,
+		"cpu":           1.5,
+		"memory":        "512m",
+		"aliases":       []string{"future-alt"},
+		"healthcheck": map[string]any{
+			"test":         []string{"CMD", "true"},
+			"interval":     10,
+			"timeout":      3,
+			"retries":      2,
+			"start-period": 5,
+		},
+	})
+
+	plan, err := (clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "extended-vocabulary-v1",
+	}).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(plan.Containers) != 1 || len(plan.Nodes) != 1 {
+		t.Fatalf("planned containers/nodes = %#v / %#v", plan.Containers, plan.Nodes)
+	}
+
+	container := plan.Containers[0]
+	if container.StartupDelay != 7 {
+		t.Fatalf("startup delay = %d, want 7", container.StartupDelay)
+	}
+
+	if container.Resources.CPULimit != "1.5" || container.Resources.MemoryLimit != "512000000" {
+		t.Fatalf(
+			"resources = %q cpu / %q memory, want 1.5 / 512000000 bytes",
+			container.Resources.CPULimit,
+			container.Resources.MemoryLimit,
+		)
+	}
+
+	if container.Healthcheck == nil ||
+		!slices.Equal(container.Healthcheck.Test, []string{"CMD", "true"}) ||
+		container.Healthcheck.Interval != int64(10*time.Second) ||
+		container.Healthcheck.Timeout != int64(3*time.Second) ||
+		container.Healthcheck.Retries != 2 ||
+		container.Healthcheck.StartPeriod != int64(5*time.Second) {
+		t.Fatalf("healthcheck = %#v, want declared healthcheck contract", container.Healthcheck)
+	}
+
+	if !slices.Equal(plan.Nodes[0].Aliases, []string{"future-alt"}) {
+		t.Fatalf("aliases = %#v, want [future-alt]", plan.Nodes[0].Aliases)
+	}
+}
+
+func TestPlanFailsClosedOnUnparseableMemoryLimit(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Definition = mustJSON(t, map[string]any{
+		"kind": syntheticKind, "image": "example/future:1", "memory": "watermelon",
+	})
+
+	_, err := (clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "extended-vocabulary-v1",
+	}).Plan(context.Background(), input)
+	if err == nil || !strings.Contains(err.Error(), "memory") {
+		t.Fatalf("expected structured memory planning failure, got %v", err)
 	}
 }
 

@@ -518,6 +518,13 @@ func (r *Reconciler) reconcileDirect(
 		); serviceErr != nil {
 			return serviceErr
 		}
+		if serviceErr := r.reconcileDirectAliasServices(
+			ctx,
+			member,
+			node.GetName(),
+		); serviceErr != nil {
+			return serviceErr
+		}
 		renderedService := r.ServiceReconciler.RenderDirectExposeService(
 			member,
 			node.GetName(),

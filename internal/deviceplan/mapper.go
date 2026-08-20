@@ -695,6 +695,15 @@ func mapContainer(
 	// this mapper must not clobber.
 	environment := maps.Clone(config.Env)
 
+	memoryLimit, err := formatMemory(config.Memory)
+	if err != nil {
+		return ContainerPlan{}, nodeMappingError(
+			node.Input.ID,
+			"definition.memory",
+			"memory limit is not a parseable size",
+		)
+	}
+
 	return ContainerPlan{
 		ID:               containerID,
 		NodeID:           node.Input.ID,
@@ -724,7 +733,7 @@ func mapContainer(
 		Security:        security,
 		Resources: ResourcePlan{
 			CPULimit:    formatCPU(config.CPU),
-			MemoryLimit: config.Memory,
+			MemoryLimit: memoryLimit,
 			CPUSet:      config.CPUSet,
 		},
 		DNS:         mapDNS(config.DNS),
@@ -1296,6 +1305,23 @@ func formatCPU(value float64) string {
 	}
 
 	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+// formatMemory converts containerlab's human-readable memory limit (parsed by the same
+// humanize rules the Docker runtime applies) into an exact byte quantity for the Kubernetes
+// renderer -- passing the raw string through would let Docker's "512m" (megabytes) silently
+// become the Kubernetes quantity 512 millibytes.
+func formatMemory(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+
+	memoryBytes, err := humanize.ParseBytes(value)
+	if err != nil {
+		return "", err
+	}
+
+	return strconv.FormatUint(memoryBytes, 10), nil
 }
 
 func normalizeTmpfsOptions(options string) (string, []string, bool, bool, error) {

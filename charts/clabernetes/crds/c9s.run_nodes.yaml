@@ -90,6 +90,17 @@ spec:
               curated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and
               unknown fields are rejected rather than silently ignored.
             properties:
+              aliases:
+                description: |-
+                  Aliases lists additional network names for the node. Each alias is realized as an extra
+                  same-namespace headless Service selecting the node's Pod, so lab members resolve the
+                  alias exactly like the node's own name. Aliases do not inherit from defaults or kinds.
+                items:
+                  maxLength: 63
+                  pattern: ^[a-z]([-a-z0-9]*[a-z0-9])?$
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
               binds:
                 description: Binds is a list of bind (mount) compatible strings.
                 items:
@@ -208,6 +219,12 @@ spec:
                     description: Vars holds the variables for the config engine.
                     type: object
                 type: object
+              cpu:
+                description: |-
+                  CPU is the number of vcpus to allocate for the node's container -- it becomes the
+                  container's Kubernetes CPU limit.
+                minimum: 0
+                type: number
               devices:
                 description: Devices is a list of host devices to map into the node's
                   container.
@@ -288,7 +305,7 @@ spec:
                 items:
                   description: |-
                     FileFromConfigMap represents a file that you would like to mount (from a configmap) in the
-                    launcher pod for a given node.
+                    device pod for a given node.
                   properties:
                     configMapName:
                       description: ConfigMapName is the name of the configmap to mount.
@@ -357,7 +374,7 @@ spec:
                   before the Node starts.
                 items:
                   description: |-
-                    FileFromURL represents a file that you would like to mount from a URL in the launcher pod for
+                    FileFromURL represents a file that you would like to mount from a URL in the device pod for
                     a given node.
                   properties:
                     digest:
@@ -387,8 +404,55 @@ spec:
                   the topology's groups section participates in the imported inheritance rules, and the
                   name itself is carried onto the compiled Node as a label.
                 type: string
+              healthcheck:
+                description: |-
+                  Healthcheck is the containerlab process health contract for the node; it merges over the
+                  image-defined OCI healthcheck and is realized as container startup/readiness behavior.
+                properties:
+                  interval:
+                    description: Interval is the time in seconds to wait between checks.
+                    minimum: 0
+                    type: integer
+                  retries:
+                    description: Retries is the number of consecutive failures needed
+                      to consider the container unhealthy.
+                    minimum: 0
+                    type: integer
+                  start-period:
+                    description: |-
+                      StartPeriod is the time in seconds to wait for the container to initialize before the
+                      retries countdown starts.
+                    minimum: 0
+                    type: integer
+                  test:
+                    description: |-
+                      Test is the command to run to check the health of the container -- the first element
+                      selects the containerlab test form (i.e. CMD) and the remainder is the command itself.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  timeout:
+                    description: Timeout is the time in seconds to wait before considering
+                      a check to have hung.
+                    minimum: 0
+                    type: integer
+                type: object
               image:
                 description: Image is the container image for the node.
+                type: string
+              image-pull-policy:
+                description: |-
+                  ImagePullPolicy is the containerlab pull policy for the node's image; it maps onto the
+                  equivalent Kubernetes image pull policy and takes precedence over profile and global
+                  defaults.
+                enum:
+                - always
+                - Always
+                - never
+                - Never
+                - ifnotpresent
+                - IfNotPresent
                 type: string
               kind:
                 description: Kind is the containerlab kind of the node -- i.e. nokia_srlinux.
@@ -412,6 +476,20 @@ spec:
               license:
                 description: License is the path to the license file for the node.
                 type: string
+              link-apply-mode:
+                description: |-
+                  LinkApplyMode declares the lifecycle action used when the node's links change: live (no
+                  lifecycle action), restart, or recreate. It overrides the kind's imported default.
+                enum:
+                - live
+                - restart
+                - recreate
+                type: string
+              memory:
+                description: |-
+                  Memory is the memory limit for the node's container in containerlab's human-readable
+                  form -- i.e. 1Gb -- and becomes the container's Kubernetes memory limit.
+                type: string
               mgmt-ipv4:
                 description: MgmtIPv4 is the user-defined IPv4 address of the node
                   in the management network.
@@ -423,16 +501,16 @@ spec:
               network-mode:
                 description: |-
                   NetworkMode declares that this node shares the network namespace -- and therefore the
-                  launcher pod -- of the named primary node. `container:<primary node name>` is the only
-                  accepted value: clabernetes derives node "grouping" (nodes co-located in one launcher pod,
+                  device pod -- of the named primary node. `container:<primary node name>` is the only
+                  accepted value: clabernetes derives node "grouping" (nodes co-located in one device pod,
                   i.e. the cards of a distributed chassis) from exactly this containerlab-native field, and
-                  the other containerlab network modes have no meaning inside a launcher pod.
+                  the other containerlab network modes have no meaning inside a device pod.
                 maxLength: 73
                 type: string
                 x-kubernetes-validations:
                 - message: network-mode must be container:<primary node name> -- it
-                    declares that this node shares its launcher pod with the named
-                    primary node
+                    declares that this node shares its device pod with the named primary
+                    node
                   rule: self.matches('^container:[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
               ports:
                 description: |-
@@ -450,6 +528,17 @@ spec:
               privileged:
                 description: Privileged runs the node's container in privileged mode.
                 type: boolean
+              restart-policy:
+                description: |-
+                  RestartPolicy is the container restart policy for the node. Only the values with a
+                  shared-Pod mapping are accepted -- a device container in a direct Pod always restarts
+                  with its Pod, so Docker's "no" and "on-failure" policies cannot be represented.
+                enum:
+                - always
+                - Always
+                - unless-stopped
+                - Unless-stopped
+                type: string
               security-opts:
                 description: |-
                   SecurityOpts is a list of security options (i.e. seccomp or apparmor settings) to apply to
@@ -467,6 +556,11 @@ spec:
                   StartupConfig is the startup configuration for the node -- either a path or an inline
                   (multiline string) config.
                 type: string
+              startup-delay:
+                description: |-
+                  StartupDelay is an optional delay in seconds applied before the node's application
+                  container starts.
+                type: integer
               suppress-startup-config:
                 description: |-
                   SuppressStartupConfig boots the node with its factory configuration -- containerlab

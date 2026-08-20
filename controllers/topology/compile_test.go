@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -629,7 +630,7 @@ topology:
     n1:
       kind: linux
       image: ghcr.io/srl-labs/network-multitool
-      cpu: 2
+      cpu-set: 0-1
       ports: [22022:22/tcp]
   links:
     - endpoints: ["n1:eth1", "host:veth-review"]
@@ -691,6 +692,150 @@ topology:
 
 	if compiled.Mgmt == nil || compiled.Mgmt.IPv4Subnet != "172.30.30.0/24" {
 		t.Fatalf("management policy was not preserved: %+v", compiled.Mgmt)
+	}
+}
+
+func TestCompileTopologyWiresExtendedNodeVocabulary(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: extended-vocabulary
+topology:
+  defaults:
+    image-pull-policy: IfNotPresent
+  kinds:
+    linux:
+      restart-policy: unless-stopped
+      startup-delay: 7
+      cpu: 1.5
+      memory: 1Gb
+      link-apply-mode: live
+      healthcheck:
+        test: [CMD, "true"]
+        interval: 10
+        timeout: 3
+        retries: 2
+        start-period: 5
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      aliases: [n1-alt]
+`)
+	if err != nil {
+		t.Fatalf("extended vocabulary must compile, got: %s", err)
+	}
+
+	node, ok := compiled.Nodes["n1"]
+	if !ok {
+		t.Fatalf("compiled nodes = %+v, want n1", compiled.Nodes)
+	}
+
+	if node.ImagePullPolicy != "IfNotPresent" || node.RestartPolicy != "unless-stopped" ||
+		node.StartupDelay != 7 || node.CPU != 1.5 || node.Memory != "1Gb" ||
+		node.LinkApplyMode != "live" {
+		t.Fatalf("inherited vocabulary was not flattened onto the node: %+v", node)
+	}
+
+	if node.Healthcheck == nil || node.Healthcheck.Interval != 10 ||
+		node.Healthcheck.StartPeriod != 5 ||
+		!slices.Equal(node.Healthcheck.Test, []string{"CMD", "true"}) {
+		t.Fatalf("inherited healthcheck was not flattened onto the node: %+v", node.Healthcheck)
+	}
+
+	if !slices.Equal(node.Aliases, []string{"n1-alt"}) {
+		t.Fatalf("aliases = %+v, want [n1-alt]", node.Aliases)
+	}
+}
+
+func TestCompileTopologyRejectsUnportableVocabularyValues(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: unportable-vocabulary
+topology:
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      restart-policy: "on-failure"
+      image-pull-policy: sometimes
+      link-apply-mode: bounce
+      aliases: [Bad_Alias, n2, shared]
+    n2:
+      kind: linux
+      image: alpine
+      aliases: [shared]
+`)
+	if err == nil {
+		t.Fatal("unportable vocabulary values must fail compilation")
+	}
+
+	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	codes := make([]string, 0, len(unsupported.Diagnostics))
+	for _, diagnostic := range unsupported.Diagnostics {
+		codes = append(codes, diagnostic.Code)
+	}
+
+	for _, expected := range []string{
+		"unsupported-restart-policy",
+		"unsupported-image-pull-policy",
+		"unsupported-link-apply-mode",
+		"invalid-alias",
+		"duplicate-alias",
+	} {
+		if !slices.Contains(codes, expected) {
+			t.Errorf("expected diagnostic %q, got %v", expected, codes)
+		}
+	}
+}
+
+func TestCompileTopologyDocumentsRejectedVocabulary(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: rejected-vocabulary
+topology:
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      runtime: podman
+      stages:
+        create:
+          wait-for:
+            - node: n2
+              stage: healthy
+`)
+	if err == nil {
+		t.Fatal("rejected vocabulary must fail compilation")
+	}
+
+	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	rejected := map[string]bool{}
+	for _, diagnostic := range unsupported.Diagnostics {
+		if diagnostic.Code == "unsupported-field" &&
+			strings.Contains(diagnostic.Message, "is rejected:") {
+			rejected[diagnostic.Path] = true
+		}
+	}
+
+	for _, field := range []string{"runtime", "stages"} {
+		if !rejected[field] {
+			t.Errorf(
+				"expected documented rejection for field %q, got diagnostics %+v",
+				field,
+				unsupported.Diagnostics,
+			)
+		}
 	}
 }
 

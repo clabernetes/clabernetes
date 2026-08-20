@@ -219,12 +219,12 @@ spec:
                     additionalProperties:
                       type: string
                     description: |-
-                      NodeSelector sets the node selector that will be configured on all launcher pods for this
+                      NodeSelector sets the node selector that will be configured on all device pods for this
                       Topology.
                     type: object
                   tolerations:
                     description: Tolerations is a list of Tolerations that will be
-                      set on the launcher pod spec.
+                      set on the device pod spec.
                     items:
                       description: |-
                         The pod this Toleration is attached to tolerates any taint that matches
@@ -290,8 +290,8 @@ spec:
                     additionalProperties:
                       description: |-
                         ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a
-                        Topology. If both styles are configured, both and the generic nested-container probe must succeed
-                        in order to report healthy.
+                        Topology. If both styles are configured, both and the generic device-container readiness must
+                        succeed in order to report healthy.
                       properties:
                         sshProbeConfiguration:
                           description: SSHProbeConfiguration defines an SSH probe.
@@ -314,18 +314,16 @@ spec:
                           description: |-
                             StartupSeconds is the total amount of seconds to allow for the node to start. This defaults
                             to roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for
-                            c9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value
-                            does not delay fast nodes because the readiness probe takes over as soon as startup succeeds.
+                            the kubelet to pull the image and boot the device. A larger value does not delay fast nodes
+                            because the readiness probe takes over as soon as startup succeeds.
                           type: integer
                         tcpProbeConfiguration:
                           description: TCPProbeConfiguration defines a TCP probe.
                           properties:
                             port:
                               description: |-
-                                Port defines the port to try to open a TCP connection to. When using TCP probe setup this
-                                connection happens inside the launcher rather than the "normal" k8s style probes. This style
-                                probe behaves like a k8s style probe though in that it is "successful" whenever a TCP
-                                connection to this port can be opened successfully.
+                                Port defines the port to try to open a TCP connection to. The probe is "successful"
+                                whenever a TCP connection to this port can be opened successfully.
                               type: integer
                           required:
                           - port
@@ -361,18 +359,16 @@ spec:
                         description: |-
                           StartupSeconds is the total amount of seconds to allow for the node to start. This defaults
                           to roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for
-                          c9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value
-                          does not delay fast nodes because the readiness probe takes over as soon as startup succeeds.
+                          the kubelet to pull the image and boot the device. A larger value does not delay fast nodes
+                          because the readiness probe takes over as soon as startup succeeds.
                         type: integer
                       tcpProbeConfiguration:
                         description: TCPProbeConfiguration defines a TCP probe.
                         properties:
                           port:
                             description: |-
-                              Port defines the port to try to open a TCP connection to. When using TCP probe setup this
-                              connection happens inside the launcher rather than the "normal" k8s style probes. This style
-                              probe behaves like a k8s style probe though in that it is "successful" whenever a TCP
-                              connection to this port can be opened successfully.
+                              Port defines the port to try to open a TCP connection to. The probe is "successful"
+                              whenever a TCP connection to this port can be opened successfully.
                             type: integer
                         required:
                         - port

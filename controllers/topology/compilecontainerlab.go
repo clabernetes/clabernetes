@@ -90,6 +90,8 @@ func compileContainerlabDefinition(
 	}
 
 	validateNodeNetworkModes(compiled.Nodes, diagnostics)
+	validateNodeVocabularyPolicies(compiled.Nodes, diagnostics)
+	validateNodeAliases(compiled.Nodes, diagnostics)
 
 	compiled.Links, err = compileContainerlabLinks(containerlabConfig, diagnostics)
 	if err != nil {
@@ -206,14 +208,7 @@ func validateNodeNetworkModes(
 	nodes map[string]*clabernetesutilcontainerlab.NodeDefinition,
 	diagnostics *compileDiagnostics,
 ) {
-	nodeNames := make([]string, 0, len(nodes))
-	for nodeName := range nodes {
-		nodeNames = append(nodeNames, nodeName)
-	}
-
-	sort.Strings(nodeNames)
-
-	for _, nodeName := range nodeNames {
+	for _, nodeName := range sortedNodeNames(nodes) {
 		networkMode := nodes[nodeName].NetworkMode
 		if networkMode == "" {
 			continue
@@ -282,6 +277,144 @@ func validateNodeNetworkModes(
 	}
 }
 
+// sortedNodeNames returns the compiled node names in deterministic diagnostic order.
+func sortedNodeNames(nodes map[string]*clabernetesutilcontainerlab.NodeDefinition) []string {
+	nodeNames := make([]string, 0, len(nodes))
+	for nodeName := range nodes {
+		nodeNames = append(nodeNames, nodeName)
+	}
+
+	sort.Strings(nodeNames)
+
+	return nodeNames
+}
+
+// validateNodeVocabularyPolicies rejects recognized policy fields whose values the direct
+// runtime cannot realize, so an unrepresentable declaration fails at compile rather than at
+// Node admission or planning.
+func validateNodeVocabularyPolicies(
+	nodes map[string]*clabernetesutilcontainerlab.NodeDefinition,
+	diagnostics *compileDiagnostics,
+) {
+	restartPolicies := map[string]bool{
+		"": true, "always": true, "Always": true, "unless-stopped": true, "Unless-stopped": true,
+	}
+	pullPolicies := map[string]bool{
+		"": true, "always": true, "Always": true, "never": true, "Never": true,
+		"ifnotpresent": true, "IfNotPresent": true,
+	}
+	linkApplyModes := map[string]bool{"": true, "live": true, "restart": true, "recreate": true}
+
+	for _, nodeName := range sortedNodeNames(nodes) {
+		node := nodes[nodeName]
+
+		if !restartPolicies[node.RestartPolicy] {
+			diagnostics.add(CompilerDiagnostic{
+				Code: "unsupported-restart-policy",
+				Path: fmt.Sprintf("topology.nodes.%s.restart-policy", nodeName),
+				Message: fmt.Sprintf(
+					"node %q restart policy %q has no shared-Pod mapping; "+
+						"direct device containers support always or unless-stopped",
+					nodeName,
+					node.RestartPolicy,
+				),
+			})
+		}
+
+		if !pullPolicies[node.ImagePullPolicy] {
+			diagnostics.add(CompilerDiagnostic{
+				Code: "unsupported-image-pull-policy",
+				Path: fmt.Sprintf("topology.nodes.%s.image-pull-policy", nodeName),
+				Message: fmt.Sprintf(
+					"node %q image pull policy %q is not a containerlab pull policy "+
+						"(always, never, ifnotpresent)",
+					nodeName,
+					node.ImagePullPolicy,
+				),
+			})
+		}
+
+		if !linkApplyModes[node.LinkApplyMode] {
+			diagnostics.add(CompilerDiagnostic{
+				Code: "unsupported-link-apply-mode",
+				Path: fmt.Sprintf("topology.nodes.%s.link-apply-mode", nodeName),
+				Message: fmt.Sprintf(
+					"node %q link apply mode %q is not live, restart, or recreate",
+					nodeName,
+					node.LinkApplyMode,
+				),
+			})
+		}
+	}
+}
+
+// validateNodeAliases enforces that every alias can become a same-namespace Service name and
+// that no alias collides with a node name or another alias anywhere in the topology.
+func validateNodeAliases(
+	nodes map[string]*clabernetesutilcontainerlab.NodeDefinition,
+	diagnostics *compileDiagnostics,
+) {
+	owners := map[string]string{}
+	for nodeName := range nodes {
+		owners[nodeName] = fmt.Sprintf("node %q", nodeName)
+	}
+
+	for _, nodeName := range sortedNodeNames(nodes) {
+		for index, alias := range nodes[nodeName].Aliases {
+			path := fmt.Sprintf("topology.nodes.%s.aliases[%d]", nodeName, index)
+
+			if problems := k8svalidation.IsDNS1035Label(alias); len(problems) != 0 {
+				diagnostics.add(CompilerDiagnostic{
+					Code: "invalid-alias",
+					Path: path,
+					Message: fmt.Sprintf(
+						"node %q alias %q cannot become a Kubernetes Service name: %s",
+						nodeName,
+						alias,
+						strings.Join(problems, "; "),
+					),
+				})
+
+				continue
+			}
+
+			if owner, exists := owners[alias]; exists {
+				diagnostics.add(CompilerDiagnostic{
+					Code: "duplicate-alias",
+					Path: path,
+					Message: fmt.Sprintf(
+						"node %q alias %q collides with %s",
+						nodeName,
+						alias,
+						owner,
+					),
+				})
+
+				continue
+			}
+
+			owners[alias] = fmt.Sprintf("node %q alias %q", nodeName, alias)
+		}
+	}
+}
+
+// rejectedContainerlabFields documents baseline vocabulary the direct runtime deliberately does
+// not accept: the strict parser already fails on them, and these messages replace the raw parse
+// error so the diagnostic states why the field is rejected rather than implying it is unknown.
+var rejectedContainerlabFields = map[string]string{
+	"runtime": "container runtime selection is Docker-only; " +
+		"direct device Pods always use the cluster's container runtime",
+	"auto-remove": "Docker auto-remove has no direct-Pod equivalent; " +
+		"Kubernetes owns container lifecycle",
+	"pid-mode":      "Docker PID-namespace sharing has no direct-Pod mapping",
+	"cgroupns-mode": "Docker cgroup-namespace selection has no direct-Pod mapping",
+	"cpu-set":       "CPU pinning has no portable Pod mapping",
+	"stages": "containerlab deployment stages coordinate multi-node boot ordering " +
+		"the direct runtime does not implement",
+	"credentials": "node credentials are not represented; " +
+		"imported kind default credentials still apply",
+}
+
 var unknownFieldPattern = regexp.MustCompile(`^line (\d+): field ([^ ]+)`)
 
 func diagnosticFromUnknownField(message string) CompilerDiagnostic {
@@ -297,6 +430,14 @@ func diagnosticFromUnknownField(message string) CompilerDiagnostic {
 
 	diagnostic.Line, _ = strconv.Atoi(matches[1])
 	diagnostic.Path = matches[2]
+
+	if reason, rejected := rejectedContainerlabFields[diagnostic.Path]; rejected {
+		diagnostic.Message = fmt.Sprintf(
+			"field %q is rejected: %s",
+			diagnostic.Path,
+			reason,
+		)
+	}
 
 	return diagnostic
 }
@@ -518,6 +659,8 @@ func flattenNodeDefinition(
 		Image:         topology.GetNodeImage(nodeName),
 		License:       topology.GetNodeLicense(nodeName),
 		StartupConfig: topology.GetNodeStartupConfig(nodeName),
+		StartupDelay:  topology.GetNodeStartupDelay(nodeName),
+		RestartPolicy: topology.GetRestartPolicy(nodeName),
 		Entrypoint:    topology.GetNodeEntrypoint(nodeName),
 		Cmd:           topology.GetNodeCmd(nodeName),
 		Exec:          slices.Clone(topology.GetNodeExec(nodeName)),
@@ -527,6 +670,9 @@ func flattenNodeDefinition(
 		SecurityOpts:  slices.Clone(topology.GetNodeSecurityOpts(nodeName)),
 		Tmpfs:         maps.Clone(topology.GetNodeTmpfs(nodeName)),
 		ShmSize:       topology.GetNodeShmSize(nodeName),
+		CPU:           topology.GetNodeCPU(nodeName),
+		Memory:        topology.GetNodeMemory(nodeName),
+		LinkApplyMode: string(topology.GetNodeLinkApplyMode(nodeName)),
 		Ports:         importedNodePorts(topology, nodeName),
 		NetworkMode:   topology.GetNodeNetworkMode(nodeName),
 		Env:           maps.Clone(topology.GetNodeEnv(nodeName)),
@@ -536,6 +682,13 @@ func flattenNodeDefinition(
 	}
 
 	layers := importedNodeLayers(topology, nodeName)
+	// The imported image-pull-policy getter normalizes its result, which would make every
+	// flattened Node look explicitly configured; the raw most-specific declaration preserves
+	// the Node-versus-default distinction the planner needs.
+	flattened.ImagePullPolicy = firstImportedString(
+		layers,
+		func(definition *clabtypes.NodeDefinition) string { return definition.ImagePullPolicy },
+	)
 	flattened.EnforceStartupConfig = clonePointer(firstImportedPointer(
 		layers,
 		func(definition *clabtypes.NodeDefinition) *bool { return definition.EnforceStartupConfig },
@@ -559,9 +712,11 @@ func flattenNodeDefinition(
 	flattened.Binds = slices.Clone(binds)
 
 	if sourceNode := topology.Nodes[nodeName]; sourceNode != nil {
-		// Containerlab intentionally does not inherit per-node management addresses.
+		// Containerlab intentionally does not inherit per-node management addresses or
+		// network aliases.
 		flattened.MgmtIPv4 = sourceNode.MgmtIPv4
 		flattened.MgmtIPv6 = sourceNode.MgmtIPv6
+		flattened.Aliases = slices.Clone(sourceNode.Aliases)
 	}
 
 	if firstImportedPointer(
@@ -606,6 +761,23 @@ func flattenNodeDefinition(
 		transcodeErr := transcodeImportedField(
 			topology.GetNodeExtras(nodeName),
 			flattened.Extras,
+		)
+		if transcodeErr != nil {
+			return nil, transcodeErr
+		}
+	}
+
+	if firstImportedPointer(
+		layers,
+		func(definition *clabtypes.NodeDefinition) *clabtypes.HealthcheckConfig {
+			return definition.HealthCheck
+		},
+	) != nil {
+		flattened.Healthcheck = &clabernetesutilcontainerlab.HealthcheckConfig{}
+
+		transcodeErr := transcodeImportedField(
+			topology.GetHealthCheckConfig(nodeName),
+			flattened.Healthcheck,
 		)
 		if transcodeErr != nil {
 			return nil, transcodeErr
@@ -674,6 +846,19 @@ func firstImportedPointer[T any](
 	}
 
 	return nil
+}
+
+func firstImportedString(
+	layers []*clabtypes.NodeDefinition,
+	get func(*clabtypes.NodeDefinition) string,
+) string {
+	for _, layer := range layers {
+		if value := get(layer); value != "" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func clonePointer[T any](value *T) *T {

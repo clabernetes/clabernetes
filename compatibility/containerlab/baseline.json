@@ -228,7 +228,9 @@
         "Node.spec.cmd",
         "Node.spec.user",
         "Node.spec.env",
-        "Node.spec.env-files"
+        "Node.spec.env-files",
+        "Node.spec.restart-policy",
+        "Node.spec.startup-delay"
       ],
       "requiredCapabilities": [
         "kind-plan",
@@ -360,7 +362,8 @@
       "inputs": [
         "Node.spec.ports",
         "LauncherProfile.spec.expose",
-        "Node.status.exposedPorts"
+        "Node.status.exposedPorts",
+        "Node.spec.aliases"
       ],
       "requiredCapabilities": [
         "management",
@@ -468,7 +471,9 @@
         "LauncherProfile.spec.resources",
         "LauncherProfile.spec.scheduling",
         "LauncherProfile.spec.expose",
-        "LauncherProfile.spec.statusProbes"
+        "LauncherProfile.spec.statusProbes",
+        "Node.spec.cpu",
+        "Node.spec.memory"
       ],
       "requiredCapabilities": [
         "resource-policy",
@@ -537,7 +542,8 @@
       "inputs": [
         "Node.spec.image",
         "LauncherProfile.spec.imagePull",
-        "Config.spec.imagePull"
+        "Config.spec.imagePull",
+        "Node.spec.image-pull-policy"
       ],
       "requiredCapabilities": [
         "image-pull"
@@ -588,7 +594,8 @@
         "OCI healthcheck",
         "component status",
         "imported readiness",
-        "LauncherProfile.spec.statusProbes"
+        "LauncherProfile.spec.statusProbes",
+        "Node.spec.healthcheck"
       ],
       "requiredCapabilities": [
         "readiness"
@@ -727,7 +734,8 @@
         "Link delete",
         "Pod recreation",
         "Pod rescheduling",
-        "controller restart"
+        "controller restart",
+        "Node.spec.link-apply-mode"
       ],
       "requiredCapabilities": [
         "connectivity",
@@ -902,7 +910,7 @@
     }
   ],
   "invalidation": {
-    "planner": "sha256:1310c556594f6cbf",
+    "planner": "sha256:f3d61dd8486ff670",
     "renderer": "sha256:ffdcac3643df8440",
     "preparation": "sha256:b4293ea05c6f6c41",
     "connectivity": "sha256:9b79dd107678c2a6"

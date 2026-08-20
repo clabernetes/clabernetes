@@ -4,6 +4,7 @@ package node //nolint:testpackage // tests exercise unexported reconciliation he
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -159,6 +160,128 @@ func TestRenderDirectFabricServicePublishesCurrentPodBeforeReadiness(t *testing.
 	}
 	if service.Spec.Selector[clabernetesconstants.LabelTopologyNode] != node.GetName() {
 		t.Fatalf("direct fabric selector = %v", service.Spec.Selector)
+	}
+}
+
+func TestRenderDirectAliasService(t *testing.T) {
+	t.Parallel()
+
+	node := nodeReconcileTestNode()
+	service := NewServiceReconciler(
+		&claberneteslogging.FakeInstance{},
+		clabernetesconfig.GetFakeManager,
+	).RenderDirectAliasService(node, node.GetName(), "srl1-alt")
+
+	if service.GetName() != "srl1-alt" {
+		t.Fatalf("alias service name = %q, want srl1-alt", service.GetName())
+	}
+
+	if service.Spec.ClusterIP != k8scorev1.ClusterIPNone ||
+		!service.Spec.PublishNotReadyAddresses || len(service.Spec.Ports) != 0 {
+		t.Fatalf("alias service is not a portless headless name binding: %+v", service.Spec)
+	}
+
+	if service.Spec.Selector[clabernetesconstants.LabelTopologyNode] != node.GetName() {
+		t.Fatalf("alias selector = %v", service.Spec.Selector)
+	}
+
+	labels := service.GetLabels()
+	if labels[clabernetesconstants.LabelTopologyServiceType] !=
+		clabernetesconstants.TopologyServiceTypeAlias ||
+		labels[clabernetesconstants.LabelTopologyNode] != node.GetName() {
+		t.Fatalf("alias service labels = %v", labels)
+	}
+}
+
+func TestReconcileDirectAliasServicesCreatesAndPrunes(t *testing.T) {
+	t.Parallel()
+
+	scheme := nodeReconcileTestScheme(t)
+	node := nodeReconcileTestNode()
+	node.Spec.Aliases = []string{"srl1-alt", "srl1-extra"}
+
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
+	reconciler := &Reconciler{
+		Log:    &claberneteslogging.FakeInstance{},
+		Client: client,
+		ServiceReconciler: NewServiceReconciler(
+			&claberneteslogging.FakeInstance{},
+			clabernetesconfig.GetFakeManager,
+		),
+	}
+
+	err := reconciler.reconcileDirectAliasServices(context.Background(), node, node.GetName())
+	if err != nil {
+		t.Fatalf("reconciling alias services failed: %s", err)
+	}
+
+	for _, alias := range node.Spec.Aliases {
+		service := &k8scorev1.Service{}
+
+		err = client.Get(
+			context.Background(),
+			apimachinerytypes.NamespacedName{Namespace: node.GetNamespace(), Name: alias},
+			service,
+		)
+		if err != nil {
+			t.Fatalf("alias service %q was not created: %s", alias, err)
+		}
+
+		if !ownedByUID(service, node.GetUID()) {
+			t.Fatalf("alias service %q is not owned by its node", alias)
+		}
+	}
+
+	node.Spec.Aliases = []string{"srl1-alt"}
+
+	err = reconciler.reconcileDirectAliasServices(context.Background(), node, node.GetName())
+	if err != nil {
+		t.Fatalf("re-reconciling alias services failed: %s", err)
+	}
+
+	err = client.Get(
+		context.Background(),
+		apimachinerytypes.NamespacedName{Namespace: node.GetNamespace(), Name: "srl1-extra"},
+		&k8scorev1.Service{},
+	)
+	if !apimachineryerrors.IsNotFound(err) {
+		t.Fatalf("undeclared alias service was not pruned: %v", err)
+	}
+
+	err = client.Get(
+		context.Background(),
+		apimachinerytypes.NamespacedName{Namespace: node.GetNamespace(), Name: "srl1-alt"},
+		&k8scorev1.Service{},
+	)
+	if err != nil {
+		t.Fatalf("declared alias service must survive pruning: %s", err)
+	}
+}
+
+func TestReconcileDirectAliasServicesRefusesForeignServiceCollision(t *testing.T) {
+	t.Parallel()
+
+	scheme := nodeReconcileTestScheme(t)
+	node := nodeReconcileTestNode()
+	node.Spec.Aliases = []string{"taken"}
+
+	foreign := &k8scorev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "taken", Namespace: node.GetNamespace()},
+	}
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(node, foreign).Build()
+	reconciler := &Reconciler{
+		Log:    &claberneteslogging.FakeInstance{},
+		Client: client,
+		ServiceReconciler: NewServiceReconciler(
+			&claberneteslogging.FakeInstance{},
+			clabernetesconfig.GetFakeManager,
+		),
+	}
+
+	err := reconciler.reconcileDirectAliasServices(context.Background(), node, node.GetName())
+	if err == nil || !strings.Contains(err.Error(), "collides") {
+		t.Fatalf("expected alias collision failure, got %v", err)
 	}
 }
 

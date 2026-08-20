@@ -119,6 +119,29 @@ func (r *ServiceReconciler) RenderDirectFabricService(
 	return service
 }
 
+// RenderDirectAliasService realizes one containerlab network alias: a headless Service named by
+// the alias selecting the node's pod, so lab members resolve the alias exactly like the node's
+// own name. Docker realizes aliases as management-network DNS aliases; a portless headless
+// Service is the Kubernetes equivalent of that pure name-to-address binding.
+func (r *ServiceReconciler) RenderDirectAliasService(
+	node *clabernetesapisv1alpha1.Node,
+	launcherNode,
+	alias string,
+) *k8scorev1.Service {
+	service := r.renderServiceBase(
+		node,
+		alias,
+		launcherNode,
+		clabernetesconstants.TopologyServiceTypeAlias,
+	)
+
+	service.Spec.Type = k8scorev1.ServiceTypeClusterIP
+	service.Spec.ClusterIP = k8scorev1.ClusterIPNone
+	service.Spec.PublishNotReadyAddresses = true
+
+	return service
+}
+
 // RenderExposeService renders the expose service for the given node from the *allocations* in
 // exposedPorts (see ResolveExposedPorts) -- allocations are made into the node status first and
 // the service is programmed from them. Returns nil if the node exposes nothing (no ports, or

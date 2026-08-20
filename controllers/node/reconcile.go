@@ -408,6 +408,114 @@ func (r *Reconciler) reconcileRenderedFabricService(
 	return r.updateService(ctx, existing, rendered, node.GetUID())
 }
 
+// reconcileDirectAliasServices realizes the node's declared network aliases as additional
+// headless Services selecting the node's pod, and prunes alias Services the node no longer
+// declares. An alias whose name is already taken by a Service this node does not own fails
+// closed instead of adopting or overwriting the foreign object.
+func (r *Reconciler) reconcileDirectAliasServices(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+	launcherNode string,
+) error {
+	desired := make(map[string]bool, len(node.Spec.Aliases))
+
+	for _, alias := range node.Spec.Aliases {
+		desired[alias] = true
+
+		rendered := r.ServiceReconciler.RenderDirectAliasService(node, launcherNode, alias)
+
+		err := ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
+		if err != nil {
+			return err
+		}
+
+		existing := &k8scorev1.Service{}
+
+		err = r.Client.Get(
+			ctx,
+			apimachinerytypes.NamespacedName{
+				Namespace: rendered.GetNamespace(),
+				Name:      rendered.GetName(),
+			},
+			existing,
+		)
+		if err != nil {
+			if apimachineryerrors.IsNotFound(err) {
+				r.Log.Infof("creating alias service %q for node %q", alias, node.GetName())
+
+				if createErr := r.Client.Create(ctx, rendered); createErr != nil {
+					return createErr
+				}
+
+				continue
+			}
+
+			return err
+		}
+
+		if !ownedByUID(existing, node.GetUID()) {
+			return fmt.Errorf(
+				"%w: alias %q of node %q collides with existing service '%s/%s'",
+				claberneteserrors.ErrInvalidData,
+				alias,
+				node.GetName(),
+				existing.GetNamespace(),
+				existing.GetName(),
+			)
+		}
+
+		if r.ServiceReconciler.Conforms(existing, rendered, node.GetUID()) {
+			continue
+		}
+
+		r.Log.Infof("updating alias service %q for node %q", alias, node.GetName())
+
+		if updateErr := r.updateService(ctx, existing, rendered, node.GetUID()); updateErr != nil {
+			return updateErr
+		}
+	}
+
+	return r.pruneDirectAliasServices(ctx, node, desired)
+}
+
+func (r *Reconciler) pruneDirectAliasServices(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+	desired map[string]bool,
+) error {
+	owned := &k8scorev1.ServiceList{}
+
+	err := r.Client.List(
+		ctx,
+		owned,
+		ctrlruntimeclient.InNamespace(node.GetNamespace()),
+		ctrlruntimeclient.MatchingLabels{
+			clabernetesconstants.LabelTopologyNode:        node.GetName(),
+			clabernetesconstants.LabelTopologyServiceType: clabernetesconstants.TopologyServiceTypeAlias,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	for index := range owned.Items {
+		service := &owned.Items[index]
+		if desired[service.GetName()] || !ownedByUID(service, node.GetUID()) ||
+			service.GetDeletionTimestamp() != nil {
+			continue
+		}
+
+		r.Log.Infof("pruning alias service %q for node %q", service.GetName(), node.GetName())
+
+		if deleteErr := r.Client.Delete(ctx, service); deleteErr != nil &&
+			!apimachineryerrors.IsNotFound(deleteErr) {
+			return deleteErr
+		}
+	}
+
+	return nil
+}
+
 func (r *Reconciler) reconcileRenderedExposeService(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,

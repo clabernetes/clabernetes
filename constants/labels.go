@@ -70,6 +70,10 @@ const (
 	// type -- this indicates that this service is of the type that is used for exposing ports on
 	// a containerlab node via a LoadBalancer service.
 	TopologyServiceTypeExpose = "expose"
+	// TopologyServiceTypeAlias is one of the allowed values for the LabelTopologyServiceType
+	// label type -- this indicates that this service realizes one containerlab network alias as
+	// an additional same-namespace name for a node's pod.
+	TopologyServiceTypeAlias = "alias"
 )
 
 const (

@@ -42,12 +42,29 @@ iperf at the expected 1.78 Mbps on both access leafs measured through gNMI -> gn
 Prometheus, Grafana healthy, and Loki holding syslog streams from all five SR Linux nodes
 (`source` label values leaf1-3/spine1-2) delivered over the by-name UDP syslog path.
 
-## Remaining vocabulary gap (next slice)
+## Remaining vocabulary wired (2026-08-20)
 
-Schema diff of `node-config` leaves these fields still rejected, each needing a deliberate
-disposition: `aliases`, `auto-remove`, `cgroup-parent`, `cgroupns-mode`, `cpu`, `cpu-set`,
-`credentials`, `healthcheck`, `hostname`, `image-pull-policy`, `link-apply-mode`, `memory`,
-`pid-mode`, `restart-policy`, `runtime`, `stages`, `startup-delay`. Several have complete
-device-plan support already (healthcheck, stages, aliases, credentials, startup-delay,
-restart-policy, cpu/memory as plan resources) and only lack the vocabulary gate wiring;
-`runtime`/`auto-remove`/`pid-mode` stay documented rejections.
+The remaining `node-config` schema vocabulary received its deliberate disposition:
+
+- **Wired end to end** (vocabulary type, CRD schema, imported-inheritance flattening, plan,
+  renderer): `startup-delay`, `restart-policy` (`always`/`unless-stopped`; `no`/`on-failure`
+  fail compile with `unsupported-restart-policy` because a device container in a shared Pod
+  always restarts with it), `image-pull-policy`, `cpu` and `memory` (device-container limits;
+  memory converts through the same humanize rules Docker applies, so `512m` means megabytes,
+  not Kubernetes millibytes), `healthcheck` (merged over the image OCI healthcheck into
+  startup/readiness probes), `aliases` (node-scoped like upstream, each realized as an extra
+  same-namespace headless Service selecting the node's Pod, validated as DNS-1035 and unique
+  against node names and other aliases), and `link-apply-mode` (`live`/`restart`/`recreate`).
+- **Documented rejections** with dedicated compile diagnostics stating why: `runtime`,
+  `auto-remove`, `pid-mode`, `cgroupns-mode`, `cpu-set`, `stages` (multi-node boot
+  orchestration the direct runtime does not implement), and `credentials` (credential bytes
+  belong in referenced Secrets; imported kind defaults still apply).
+- **Not in the baseline**: the earlier audit listed `hostname` and `cgroup-parent`, but neither
+  exists in containerlab 0.78.0's `node-config` schema or Go `NodeDefinition` -- there is
+  nothing to wire or reject.
+
+Proven by unit coverage at every layer (vocabulary subset test with the new `HealthcheckConfig`
+snapshot, compile flatten/reject tests, plan mapping tests including the memory-unit
+conversion, alias Service render/reconcile/prune tests) plus the direct e2e suites rerun
+against a live cluster after the change. The planner-change evidence invalidation fired as
+designed and the conformance reruns recorded fresh evidence.

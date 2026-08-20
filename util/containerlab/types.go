@@ -29,6 +29,8 @@ type (
 	DNSConfig = clabernetesapisv1alpha1.DNSConfig
 	// CertificateConfig represents the configuration of a TLS infrastructure used by a node.
 	CertificateConfig = clabernetesapisv1alpha1.CertificateConfig
+	// HealthcheckConfig represents a containerlab process health contract for a node.
+	HealthcheckConfig = clabernetesapisv1alpha1.HealthcheckConfig
 	// Component holds a hardware component configuration (i.e. an SR-OS card or mda).
 	Component = clabernetesapisv1alpha1.Component
 	// XIOM holds a single xiom configuration of a hardware component.

@@ -830,11 +830,11 @@
                                         "additionalProperties": {
                                             "type": "string"
                                         },
-                                        "description": "NodeSelector sets the node selector that will be configured on all launcher pods for this\nTopology.",
+                                        "description": "NodeSelector sets the node selector that will be configured on all device pods for this\nTopology.",
                                         "type": "object"
                                     },
                                     "tolerations": {
-                                        "description": "Tolerations is a list of Tolerations that will be set on the launcher pod spec.",
+                                        "description": "Tolerations is a list of Tolerations that will be set on the device pod spec.",
                                         "items": {
                                             "description": "The pod this Toleration is attached to tolerates any taint that matches\nthe triple <key,value,effect> using the matching operator <operator>.",
                                             "properties": {
@@ -886,7 +886,7 @@
                                     },
                                     "nodeProbeConfigurations": {
                                         "additionalProperties": {
-                                            "description": "ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a\nTopology. If both styles are configured, both and the generic nested-container probe must succeed\nin order to report healthy.",
+                                            "description": "ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a\nTopology. If both styles are configured, both and the generic device-container readiness must\nsucceed in order to report healthy.",
                                             "properties": {
                                                 "sshProbeConfiguration": {
                                                     "description": "SSHProbeConfiguration defines an SSH probe.",
@@ -911,14 +911,14 @@
                                                     "type": "object"
                                                 },
                                                 "startupSeconds": {
-                                                    "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nc9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value\ndoes not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
+                                                    "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nthe kubelet to pull the image and boot the device. A larger value does not delay fast nodes\nbecause the readiness probe takes over as soon as startup succeeds.",
                                                     "type": "integer"
                                                 },
                                                 "tcpProbeConfiguration": {
                                                     "description": "TCPProbeConfiguration defines a TCP probe.",
                                                     "properties": {
                                                         "port": {
-                                                            "description": "Port defines the port to try to open a TCP connection to. When using TCP probe setup this\nconnection happens inside the launcher rather than the \"normal\" k8s style probes. This style\nprobe behaves like a k8s style probe though in that it is \"successful\" whenever a TCP\nconnection to this port can be opened successfully.",
+                                                            "description": "Port defines the port to try to open a TCP connection to. The probe is \"successful\"\nwhenever a TCP connection to this port can be opened successfully.",
                                                             "type": "integer"
                                                         }
                                                     },
@@ -959,14 +959,14 @@
                                                 "type": "object"
                                             },
                                             "startupSeconds": {
-                                                "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nc9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value\ndoes not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
+                                                "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nthe kubelet to pull the image and boot the device. A larger value does not delay fast nodes\nbecause the readiness probe takes over as soon as startup succeeds.",
                                                 "type": "integer"
                                             },
                                             "tcpProbeConfiguration": {
                                                 "description": "TCPProbeConfiguration defines a TCP probe.",
                                                 "properties": {
                                                     "port": {
-                                                        "description": "Port defines the port to try to open a TCP connection to. When using TCP probe setup this\nconnection happens inside the launcher rather than the \"normal\" k8s style probes. This style\nprobe behaves like a k8s style probe though in that it is \"successful\" whenever a TCP\nconnection to this port can be opened successfully.",
+                                                        "description": "Port defines the port to try to open a TCP connection to. The probe is \"successful\"\nwhenever a TCP connection to this port can be opened successfully.",
                                                         "type": "integer"
                                                     }
                                                 },
@@ -1291,6 +1291,16 @@
                     "spec": {
                         "description": "NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --\ncontainerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an\noptional LauncherProfile reference. The definition must be self-contained: expanding topology\ndefaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do\nthis for you). Anything that is deployment *policy* rather than node payload -- expose\nbehavior, image pull defaults, generic resources, scheduling, and probes -- lives on\nLauncherProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a\ncurated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and\nunknown fields are rejected rather than silently ignored.",
                         "properties": {
+                            "aliases": {
+                                "description": "Aliases lists additional network names for the node. Each alias is realized as an extra\nsame-namespace headless Service selecting the node's Pod, so lab members resolve the\nalias exactly like the node's own name. Aliases do not inherit from defaults or kinds.",
+                                "items": {
+                                    "maxLength": 63,
+                                    "pattern": "^[a-z]([-a-z0-9]*[a-z0-9])?$",
+                                    "type": "string"
+                                },
+                                "type": "array",
+                                "x-kubernetes-list-type": "atomic"
+                            },
                             "binds": {
                                 "description": "Binds is a list of bind (mount) compatible strings.",
                                 "items": {
@@ -1435,6 +1445,11 @@
                                 },
                                 "type": "object"
                             },
+                            "cpu": {
+                                "description": "CPU is the number of vcpus to allocate for the node's container -- it becomes the\ncontainer's Kubernetes CPU limit.",
+                                "minimum": 0,
+                                "type": "number"
+                            },
                             "devices": {
                                 "description": "Devices is a list of host devices to map into the node's container.",
                                 "items": {
@@ -1529,7 +1544,7 @@
                             "filesFromConfigMap": {
                                 "description": "FilesFromConfigMap holds files staged from ConfigMaps for this Node's application containers.",
                                 "items": {
-                                    "description": "FileFromConfigMap represents a file that you would like to mount (from a configmap) in the\nlauncher pod for a given node.",
+                                    "description": "FileFromConfigMap represents a file that you would like to mount (from a configmap) in the\ndevice pod for a given node.",
                                     "properties": {
                                         "configMapName": {
                                             "description": "ConfigMapName is the name of the configmap to mount.",
@@ -1601,7 +1616,7 @@
                             "filesFromURL": {
                                 "description": "FilesFromURL holds files preparation must fetch and verify before the Node starts.",
                                 "items": {
-                                    "description": "FileFromURL represents a file that you would like to mount from a URL in the launcher pod for\na given node.",
+                                    "description": "FileFromURL represents a file that you would like to mount from a URL in the device pod for\na given node.",
                                     "properties": {
                                         "digest": {
                                             "description": "Digest is the required SHA-256 identity of the downloaded bytes in direct-runtime mode. It\nprevents a mutable URL from changing a device payload without changing the accepted plan.",
@@ -1630,8 +1645,54 @@
                                 "description": "Group names the containerlab group a node belongs to. Group-scoped configuration from\nthe topology's groups section participates in the imported inheritance rules, and the\nname itself is carried onto the compiled Node as a label.",
                                 "type": "string"
                             },
+                            "healthcheck": {
+                                "description": "Healthcheck is the containerlab process health contract for the node; it merges over the\nimage-defined OCI healthcheck and is realized as container startup/readiness behavior.",
+                                "properties": {
+                                    "interval": {
+                                        "description": "Interval is the time in seconds to wait between checks.",
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    },
+                                    "retries": {
+                                        "description": "Retries is the number of consecutive failures needed to consider the container unhealthy.",
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    },
+                                    "start-period": {
+                                        "description": "StartPeriod is the time in seconds to wait for the container to initialize before the\nretries countdown starts.",
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    },
+                                    "test": {
+                                        "description": "Test is the command to run to check the health of the container -- the first element\nselects the containerlab test form (i.e. CMD) and the remainder is the command itself.",
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "type": "array",
+                                        "x-kubernetes-list-type": "atomic"
+                                    },
+                                    "timeout": {
+                                        "description": "Timeout is the time in seconds to wait before considering a check to have hung.",
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    }
+                                },
+                                "type": "object"
+                            },
                             "image": {
                                 "description": "Image is the container image for the node.",
+                                "type": "string"
+                            },
+                            "image-pull-policy": {
+                                "description": "ImagePullPolicy is the containerlab pull policy for the node's image; it maps onto the\nequivalent Kubernetes image pull policy and takes precedence over profile and global\ndefaults.",
+                                "enum": [
+                                    "always",
+                                    "Always",
+                                    "never",
+                                    "Never",
+                                    "ifnotpresent",
+                                    "IfNotPresent"
+                                ],
                                 "type": "string"
                             },
                             "kind": {
@@ -1654,6 +1715,19 @@
                                 "description": "License is the path to the license file for the node.",
                                 "type": "string"
                             },
+                            "link-apply-mode": {
+                                "description": "LinkApplyMode declares the lifecycle action used when the node's links change: live (no\nlifecycle action), restart, or recreate. It overrides the kind's imported default.",
+                                "enum": [
+                                    "live",
+                                    "restart",
+                                    "recreate"
+                                ],
+                                "type": "string"
+                            },
+                            "memory": {
+                                "description": "Memory is the memory limit for the node's container in containerlab's human-readable\nform -- i.e. 1Gb -- and becomes the container's Kubernetes memory limit.",
+                                "type": "string"
+                            },
                             "mgmt-ipv4": {
                                 "description": "MgmtIPv4 is the user-defined IPv4 address of the node in the management network.",
                                 "type": "string"
@@ -1663,12 +1737,12 @@
                                 "type": "string"
                             },
                             "network-mode": {
-                                "description": "NetworkMode declares that this node shares the network namespace -- and therefore the\nlauncher pod -- of the named primary node. `container:<primary node name>` is the only\naccepted value: clabernetes derives node \"grouping\" (nodes co-located in one launcher pod,\ni.e. the cards of a distributed chassis) from exactly this containerlab-native field, and\nthe other containerlab network modes have no meaning inside a launcher pod.",
+                                "description": "NetworkMode declares that this node shares the network namespace -- and therefore the\ndevice pod -- of the named primary node. `container:<primary node name>` is the only\naccepted value: clabernetes derives node \"grouping\" (nodes co-located in one device pod,\ni.e. the cards of a distributed chassis) from exactly this containerlab-native field, and\nthe other containerlab network modes have no meaning inside a device pod.",
                                 "maxLength": 73,
                                 "type": "string",
                                 "x-kubernetes-validations": [
                                     {
-                                        "message": "network-mode must be container:<primary node name> -- it declares that this node shares its launcher pod with the named primary node",
+                                        "message": "network-mode must be container:<primary node name> -- it declares that this node shares its device pod with the named primary node",
                                         "rule": "self.matches('^container:[a-z0-9]([-a-z0-9]*[a-z0-9])?$')"
                                     }
                                 ]
@@ -1686,6 +1760,16 @@
                                 "description": "Privileged runs the node's container in privileged mode.",
                                 "type": "boolean"
                             },
+                            "restart-policy": {
+                                "description": "RestartPolicy is the container restart policy for the node. Only the values with a\nshared-Pod mapping are accepted -- a device container in a direct Pod always restarts\nwith its Pod, so Docker's \"no\" and \"on-failure\" policies cannot be represented.",
+                                "enum": [
+                                    "always",
+                                    "Always",
+                                    "unless-stopped",
+                                    "Unless-stopped"
+                                ],
+                                "type": "string"
+                            },
                             "security-opts": {
                                 "description": "SecurityOpts is a list of security options (i.e. seccomp or apparmor settings) to apply to\nthe node's container.",
                                 "items": {
@@ -1701,6 +1785,10 @@
                             "startup-config": {
                                 "description": "StartupConfig is the startup configuration for the node -- either a path or an inline\n(multiline string) config.",
                                 "type": "string"
+                            },
+                            "startup-delay": {
+                                "description": "StartupDelay is an optional delay in seconds applied before the node's application\ncontainer starts.",
+                                "type": "integer"
                             },
                             "suppress-startup-config": {
                                 "description": "SuppressStartupConfig boots the node with its factory configuration -- containerlab\ngenerates and mounts no startup config at all.",
@@ -2085,7 +2173,7 @@
                                     "filesFromConfigMap": {
                                         "additionalProperties": {
                                             "items": {
-                                                "description": "FileFromConfigMap represents a file that you would like to mount (from a configmap) in the\nlauncher pod for a given node.",
+                                                "description": "FileFromConfigMap represents a file that you would like to mount (from a configmap) in the\ndevice pod for a given node.",
                                                 "properties": {
                                                     "configMapName": {
                                                         "description": "ConfigMapName is the name of the configmap to mount.",
@@ -2117,7 +2205,7 @@
                                             },
                                             "type": "array"
                                         },
-                                        "description": "FilesFromConfigMap is a slice of FileFromConfigMap that define the configmap/path and node\nand path on a launcher node that the file should be mounted to. If the path is not provided\nthe configmap is mounted in its entirety (like normal k8s things), so you *probably* want\nto specify the sub path unless you are sure what you're doing!",
+                                        "description": "FilesFromConfigMap is a slice of FileFromConfigMap that define the configmap/path and node\nand path in a device pod that the file should be mounted to. If the path is not provided\nthe configmap is mounted in its entirety (like normal k8s things), so you *probably* want\nto specify the sub path unless you are sure what you're doing!",
                                         "type": "object"
                                     },
                                     "filesFromSecret": {
@@ -2161,7 +2249,7 @@
                                     "filesFromURL": {
                                         "additionalProperties": {
                                             "items": {
-                                                "description": "FileFromURL represents a file that you would like to mount from a URL in the launcher pod for\na given node.",
+                                                "description": "FileFromURL represents a file that you would like to mount from a URL in the device pod for\na given node.",
                                                 "properties": {
                                                     "digest": {
                                                         "description": "Digest is the required SHA-256 identity of the downloaded bytes in direct-runtime mode. It\nprevents a mutable URL from changing a device payload without changing the accepted plan.",
@@ -2185,7 +2273,7 @@
                                             },
                                             "type": "array"
                                         },
-                                        "description": "FilesFromURL is a mapping of FileFromURL that define a URL at which to fetch a file, and path\non a launcher node that the file should be downloaded to. This is useful for configs that are\nlarger than the ConfigMap (etcd) 1Mb size limit.",
+                                        "description": "FilesFromURL is a mapping of FileFromURL that define a URL at which to fetch a file, and path\nin a device pod that the file should be staged at. This is useful for configs that are\nlarger than the ConfigMap (etcd) 1Mb size limit.",
                                         "type": "object"
                                     },
                                     "persistence": {
@@ -2283,11 +2371,11 @@
                                                 "additionalProperties": {
                                                     "type": "string"
                                                 },
-                                                "description": "NodeSelector sets the node selector that will be configured on all launcher pods for this\nTopology.",
+                                                "description": "NodeSelector sets the node selector that will be configured on all device pods for this\nTopology.",
                                                 "type": "object"
                                             },
                                             "tolerations": {
-                                                "description": "Tolerations is a list of Tolerations that will be set on the launcher pod spec.",
+                                                "description": "Tolerations is a list of Tolerations that will be set on the device pod spec.",
                                                 "items": {
                                                     "description": "The pod this Toleration is attached to tolerates any taint that matches\nthe triple <key,value,effect> using the matching operator <operator>.",
                                                     "properties": {
@@ -2414,7 +2502,7 @@
                                     },
                                     "nodeProbeConfigurations": {
                                         "additionalProperties": {
-                                            "description": "ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a\nTopology. If both styles are configured, both and the generic nested-container probe must succeed\nin order to report healthy.",
+                                            "description": "ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a\nTopology. If both styles are configured, both and the generic device-container readiness must\nsucceed in order to report healthy.",
                                             "properties": {
                                                 "sshProbeConfiguration": {
                                                     "description": "SSHProbeConfiguration defines an SSH probe.",
@@ -2439,14 +2527,14 @@
                                                     "type": "object"
                                                 },
                                                 "startupSeconds": {
-                                                    "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nc9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value\ndoes not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
+                                                    "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nthe kubelet to pull the image and boot the device. A larger value does not delay fast nodes\nbecause the readiness probe takes over as soon as startup succeeds.",
                                                     "type": "integer"
                                                 },
                                                 "tcpProbeConfiguration": {
                                                     "description": "TCPProbeConfiguration defines a TCP probe.",
                                                     "properties": {
                                                         "port": {
-                                                            "description": "Port defines the port to try to open a TCP connection to. When using TCP probe setup this\nconnection happens inside the launcher rather than the \"normal\" k8s style probes. This style\nprobe behaves like a k8s style probe though in that it is \"successful\" whenever a TCP\nconnection to this port can be opened successfully.",
+                                                            "description": "Port defines the port to try to open a TCP connection to. The probe is \"successful\"\nwhenever a TCP connection to this port can be opened successfully.",
                                                             "type": "integer"
                                                         }
                                                     },
@@ -2487,14 +2575,14 @@
                                                 "type": "object"
                                             },
                                             "startupSeconds": {
-                                                "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nc9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value\ndoes not delay fast nodes because the readiness probe takes over as soon as startup succeeds.",
+                                                "description": "StartupSeconds is the total amount of seconds to allow for the node to start. This defaults\nto roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for\nthe kubelet to pull the image and boot the device. A larger value does not delay fast nodes\nbecause the readiness probe takes over as soon as startup succeeds.",
                                                 "type": "integer"
                                             },
                                             "tcpProbeConfiguration": {
                                                 "description": "TCPProbeConfiguration defines a TCP probe.",
                                                 "properties": {
                                                     "port": {
-                                                        "description": "Port defines the port to try to open a TCP connection to. When using TCP probe setup this\nconnection happens inside the launcher rather than the \"normal\" k8s style probes. This style\nprobe behaves like a k8s style probe though in that it is \"successful\" whenever a TCP\nconnection to this port can be opened successfully.",
+                                                        "description": "Port defines the port to try to open a TCP connection to. The probe is \"successful\"\nwhenever a TCP connection to this port can be opened successfully.",
                                                         "type": "integer"
                                                     }
                                                 },

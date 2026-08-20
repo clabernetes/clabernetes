@@ -10,7 +10,7 @@ import (
 )
 
 // pinnedContainerlabVersion is the containerlab release the vocabulary below was taken from. It
-// must track ARG CONTAINERLAB_VERSION in build/launcher.Dockerfile.
+// must track the github.com/srl-labs/containerlab module version pinned in go.mod.
 const pinnedContainerlabVersion = "0.78.0"
 
 // pinnedContainerlabVocabulary is the yaml vocabulary of the pinned containerlab's node
@@ -20,10 +20,11 @@ const pinnedContainerlabVersion = "0.78.0"
 // types in the new release and update both this map and pinnedContainerlabVersion:
 //
 //	types/node_definition.go -> NodeDefinition
-//	types/types.go           -> ConfigDispatcher, Extras, DNSConfig, CertificateConfig
+//	types/types.go           -> ConfigDispatcher, Extras, DNSConfig, CertificateConfig,
+//	                            HealthcheckConfig
 //	types/component.go       -> Component, XIOM, MDA
 //
-// Entries clabernetes deliberately does not expose (i.e. stages, credentials, restart-policy)
+// Entries clabernetes deliberately does not expose (i.e. stages, credentials, runtime)
 // are kept, since this map describes containerlab's vocabulary rather than ours -- the test only
 // asserts that ours is a subset of it.
 var pinnedContainerlabVocabulary = map[string][]string{
@@ -54,6 +55,13 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"k8s_kind",
 		"mysocket-proxy",
 		"srl-agents",
+	},
+	"HealthcheckConfig": {
+		"test",
+		"interval",
+		"timeout",
+		"retries",
+		"start-period",
 	},
 	"MDA": {
 		"slot",
@@ -155,13 +163,13 @@ func collectYAMLTags(walk reflect.Type, into map[string][]string) {
 }
 
 // TestNodeVocabularyIsContainerlabSubset is the guard that would have caught the publish,
-// sandbox, kernel, wait-for and top-level SANs fields: every yaml tag clabernetes renders into a
-// topo.clab.yaml must exist on the matching containerlab object, otherwise the launcher's
-// containerlab -- which parses strictly -- rejects the whole topology.
+// sandbox, kernel, wait-for and top-level SANs fields: every yaml tag clabernetes serializes
+// toward the imported containerlab module must exist on the matching containerlab object,
+// otherwise the module's strict definition decoding rejects the whole node.
 func TestNodeVocabularyIsContainerlabSubset(t *testing.T) {
 	ours := map[string][]string{}
 
-	// The Node root is rendered into the launcher's topo.clab.yaml. File-level management
+	// The Node root is serialized into the planning input definition. File-level management
 	// vocabulary is imported directly from containerlab and needs no c9s snapshot.
 	collectYAMLTags(reflect.TypeFor[clabernetesapisv1alpha1.NodeDefinition](), ours)
 
