@@ -1,4 +1,4 @@
-//nolint:nlreturn,noinlineerr,wsl_v5 // Planner reconciliation uses compact fail-closed guards.
+//nolint:err113,gocyclo,noinlineerr,wsl_v5 // Planner reconciliation uses compact fail-closed guards.
 package node
 
 import (
@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	k8scorev1 "k8s.io/api/core/v1"
 	k8snetworkingv1 "k8s.io/api/networking/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -37,18 +37,20 @@ var (
 // PlannerState is the bounded state of one content-addressed planner attempt.
 type PlannerState string
 
+// Planner Pod lifecycle states observed by the Node controller.
 const (
 	PlannerStatePending   PlannerState = "Pending"
 	PlannerStateSucceeded PlannerState = "Succeeded"
 )
 
 // PlannerLogReader reads the completed worker's combined log stream.
-type PlannerLogReader func(ctx context.Context, namespace, podName, containerName string) ([]byte, error)
+type PlannerLogReader func(ctx context.Context, namespace,
+	podName, containerName string) ([]byte, error)
 
 // PlannerAttempt contains explicit worker inputs and Kubernetes execution policy.
 type PlannerAttempt struct {
 	Node                  *clabernetesapisv1alpha1.Node
-	Input                 clabernetesdeviceplan.Input
+	Input                 clabernetesinternaldeviceplan.Input
 	SensitiveValues       [][]byte
 	Image                 string
 	PlannerRevision       string
@@ -66,7 +68,7 @@ type PlannerResult struct {
 	PodName            string
 	InputConfigMapName string
 	InputDigest        string
-	Plan               *clabernetesdeviceplan.Plan
+	Plan               *clabernetesinternaldeviceplan.Plan
 }
 
 // PlannerReconciler owns the isolated worker's input, default-deny policy, and Pod.
@@ -82,7 +84,7 @@ func (r *PlannerReconciler) Reconcile(
 	attempt PlannerAttempt,
 ) (*PlannerResult, error) {
 	if r.Client == nil {
-		return nil, fmt.Errorf("planner reconciler client is required")
+		return nil, errors.New("planner reconciler client is required")
 	}
 	canonicalInput, err := attempt.Input.CanonicalJSON()
 	if err != nil {
@@ -90,15 +92,13 @@ func (r *PlannerReconciler) Reconcile(
 	}
 	if (len(attempt.Input.Certificates) != 0) !=
 		(strings.TrimSpace(attempt.CertificateSecretName) != "") {
-		return nil, fmt.Errorf(
-			"planner certificate inputs and Secret identity must be supplied together",
-		)
+		return nil,
+			errors.New("planner certificate inputs and Secret identity must be supplied together")
 	}
 	if (attempt.Input.EntropyDigest != "") !=
 		(strings.TrimSpace(attempt.EntropySecretName) != "") {
-		return nil, fmt.Errorf(
-			"planner entropy digest and Secret identity must be supplied together",
-		)
+		return nil,
+			errors.New("planner entropy digest and Secret identity must be supplied together")
 	}
 	maxInputBytes := attempt.MaxInputBytes
 	if maxInputBytes == 0 {
@@ -149,15 +149,18 @@ func (r *PlannerReconciler) Reconcile(
 	if pending {
 		return result, nil
 	}
-	if clabernetesdeviceplan.FrameKind(frame) == clabernetesdeviceplan.WorkerFrameError {
-		diagnostic, decodeErr := clabernetesdeviceplan.DecodeWorkerError(frame, maxPlanBytes)
+	if clabernetesinternaldeviceplan.FrameKind(
+		frame,
+	) == clabernetesinternaldeviceplan.WorkerFrameError {
+		diagnostic, decodeErr := clabernetesinternaldeviceplan.DecodeWorkerError(frame,
+			maxPlanBytes)
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
 
 		return nil, errors.Join(ErrPlannerFailed, diagnostic)
 	}
-	plan, decodeErr := clabernetesdeviceplan.DecodeWorkerOutput(frame, maxPlanBytes)
+	plan, decodeErr := clabernetesinternaldeviceplan.DecodeWorkerOutput(frame, maxPlanBytes)
 	if decodeErr != nil {
 		return nil, decodeErr
 	}
@@ -224,9 +227,10 @@ func (r *PlannerReconciler) executeWorkerAttempt(
 	switch existingPod.Status.Phase {
 	case k8scorev1.PodSucceeded, k8scorev1.PodFailed:
 		if r.ReadLogs == nil {
-			return nil, podName, false, fmt.Errorf(
-				"planner log reader is required for a completed worker",
-			)
+			return nil,
+				podName,
+				false,
+				errors.New("planner log reader is required for a completed worker")
 		}
 		logs, readErr := r.ReadLogs(
 			ctx,
@@ -234,7 +238,7 @@ func (r *PlannerReconciler) executeWorkerAttempt(
 			existingPod.GetName(),
 			plannerContainerName,
 		)
-		extracted, ok := clabernetesdeviceplan.ExtractWorkerFrame(logs)
+		extracted, ok := clabernetesinternaldeviceplan.ExtractWorkerFrame(logs)
 		if readErr != nil || !ok {
 			// Unreadable logs or a terminal Pod without any framed record (deadline, eviction,
 			// OOM, log rotation) is indistinguishable from a transient failure: remove the Pod

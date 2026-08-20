@@ -137,7 +137,9 @@ func (f fakeManager) GetInClusterDNSSuffix() string {
 	return "svc.cluster.local"
 }
 
-func (f fakeManager) GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryMetadataTrustEntry {
+func (f fakeManager) GetRegistryMetadataTrust() (
+	result []clabernetesapisv1alpha1.RegistryMetadataTrustEntry,
+) {
 	return slices.Clone(f.registryMetadataTrust)
 }
 

@@ -110,14 +110,16 @@ func TestMergeFromBootstrapConfigImagePullSecrets(t *testing.T) {
 			mergeMode: "overwrite", existing: []string{"existing"}, want: bootstrapSecrets,
 		},
 	} {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			bootstrapConfigMap := &k8scorev1.ConfigMap{Data: map[string]string{
-				"imagePullSecrets": "- registry-a\n- registry-b\n",
-				"mergeMode":        test.mergeMode,
-			}}
+			bootstrapConfigMap := &k8scorev1.ConfigMap{
+				Data: map[string]string{ //nolint:gosec // test fixture identifier, not a credential.
+					"imagePullSecrets": "- registry-a\n- registry-b\n",
+					"mergeMode":        test.mergeMode,
+				},
+			}
+
 			config := &clabernetesapisv1alpha1.Config{Spec: clabernetesapisv1alpha1.ConfigSpec{
 				ImagePull: clabernetesapisv1alpha1.ConfigImagePull{
 					PullSecrets: test.existing,
@@ -130,6 +132,7 @@ func TestMergeFromBootstrapConfigImagePullSecrets(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
+
 			if !reflect.DeepEqual(config.Spec.ImagePull.PullSecrets, test.want) {
 				t.Fatalf(
 					"image pull Secrets = %#v, want %#v",
@@ -167,6 +170,7 @@ func TestMergeFromBootstrapConfigRegistryMetadataTrust(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+
 	if got := config.Spec.ImagePull.RegistryMetadataTrust; len(got) != 2 ||
 		got[0].CABundle != "existing-ca" || got[1].Registry != "added.example.test:5000" {
 		t.Fatalf("merged registry metadata trust = %#v", got)

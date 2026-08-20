@@ -1,8 +1,10 @@
+//nolint:err113 // diagnostics are structured one-off errors carrying typed classification.
 package node
 
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -58,7 +60,6 @@ func NewController(
 		baseController.Client,
 		clabernetes.GetCtrlRuntimeMgr().GetAPIReader(),
 		clabernetes.GetAppName(),
-		clabernetes.GetNamespace(),
 		clabernetesconfig.GetManager,
 	)
 	reconciler.DirectRuntimeImage = clabernetes.GetDeviceRuntimeImage()
@@ -99,8 +100,9 @@ func newDirectContainerExecutor(
 	) error {
 		if config == nil || client == nil || namespace == "" || podName == "" ||
 			containerName == "" || len(command) == 0 {
-			return fmt.Errorf("direct container exec identity is incomplete")
+			return errors.New("direct container exec identity is incomplete")
 		}
+
 		request := client.CoreV1().RESTClient().Post().
 			Namespace(namespace).
 			Resource("pods").
@@ -112,6 +114,7 @@ func newDirectContainerExecutor(
 				Stdout:    true,
 				Stderr:    true,
 			}, clientgoscheme.ParameterCodec)
+
 		executor, err := clientgoremotecommand.NewSPDYExecutor(
 			config,
 			http.MethodPost,
@@ -120,6 +123,7 @@ func newDirectContainerExecutor(
 		if err != nil {
 			return fmt.Errorf("creating direct container executor: %w", err)
 		}
+
 		var stderr bytes.Buffer
 		if err = executor.StreamWithContext(ctx, clientgoremotecommand.StreamOptions{
 			Stdout: &bytes.Buffer{}, Stderr: &stderr,
@@ -489,7 +493,7 @@ func (c *Controller) enqueueLaunchersForPayloadObject(
 	ctx context.Context,
 	obj ctrlruntimeclient.Object,
 ) []ctrlruntimereconcile.Request {
-	references := func(node *clabernetesapisv1alpha1.Node) bool { return false }
+	var references func(*clabernetesapisv1alpha1.Node) bool
 
 	switch payloadObject := obj.(type) {
 	case *k8scorev1.ConfigMap:
@@ -544,6 +548,7 @@ func (c *Controller) enqueueLaunchersForPayloadObject(
 	for name := range launcherNames {
 		names = append(names, name)
 	}
+
 	sort.Strings(names)
 
 	requests := make([]ctrlruntimereconcile.Request, 0, len(names))

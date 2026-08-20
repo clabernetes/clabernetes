@@ -26,11 +26,13 @@ var invalidationComponents = map[string][]string{ //nolint:gochecknoglobals // S
 // recorded conformance evidence until the baseline is consciously refreshed.
 func ComputeInvalidation(root string) (Invalidation, error) {
 	digests := map[string]string{}
+
 	for component, trees := range invalidationComponents {
 		digest, err := digestSourceTrees(root, trees)
 		if err != nil {
 			return Invalidation{}, fmt.Errorf("digesting %s sources: %w", component, err)
 		}
+
 		digests[component] = digest
 	}
 
@@ -44,24 +46,30 @@ func ComputeInvalidation(root string) (Invalidation, error) {
 
 func digestSourceTrees(root string, trees []string) (string, error) {
 	entries := []string{}
+
 	for _, tree := range trees {
 		base := filepath.Join(root, tree)
+
 		err := filepath.WalkDir(base, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
+
 			if entry.IsDir() || !strings.HasSuffix(path, ".go") ||
 				strings.HasSuffix(path, "_test.go") {
 				return nil
 			}
+
 			content, readErr := os.ReadFile(path) //nolint:gosec // root scopes this read.
 			if readErr != nil {
 				return readErr
 			}
+
 			relative, relErr := filepath.Rel(root, path)
 			if relErr != nil {
 				return relErr
 			}
+
 			fileDigest := sha256.Sum256(content)
 			entries = append(
 				entries,

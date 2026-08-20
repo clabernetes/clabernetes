@@ -1,12 +1,14 @@
+//nolint:err113,gocyclo // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
 
 // conventionalNoFileLimit is the open-file bound containerlab's supported container runtime
@@ -27,24 +29,27 @@ type LaunchOperations interface {
 
 // RunLaunch applies synchronous pre-start operations and replaces the helper with the image's
 // real process. This prevents a kubelet PostStart race for mount security options.
-func RunLaunch(plan clabernetesdeviceplan.Plan, containerID string) error {
+func RunLaunch(plan clabernetesinternaldeviceplan.Plan, containerID string) error {
 	return RunLaunchWithOperations(plan, containerID, newLaunchOperations())
 }
 
 // RunLaunchWithOperations exposes the generic syscall seam for deterministic tests.
 func RunLaunchWithOperations(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	containerID string,
 	operations LaunchOperations,
 ) error {
 	if operations == nil {
-		return fmt.Errorf("application launch operations are nil")
+		return errors.New("application launch operations are nil")
 	}
-	normalized, err := clabernetesdeviceplan.NormalizePlan(plan)
+
+	normalized, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
 		return err
 	}
-	var target *clabernetesdeviceplan.ContainerPlan
+
+	var target *clabernetesinternaldeviceplan.ContainerPlan
+
 	for index := range normalized.Containers {
 		if normalized.Containers[index].ID == containerID {
 			target = &normalized.Containers[index]
@@ -52,34 +57,42 @@ func RunLaunchWithOperations(
 			break
 		}
 	}
+
 	if target == nil {
-		return fmt.Errorf("application launch target is absent from the plan")
+		return errors.New("application launch target is absent from the plan")
 	}
+
 	if target.StartupDelay > 0 {
 		if uint64(target.StartupDelay) > uint64((1<<63-1)/time.Second) {
-			return fmt.Errorf("application startup delay exceeds runtime duration limits")
+			return errors.New("application startup delay exceeds runtime duration limits")
 		}
+
 		if err = operations.Delay(time.Duration(target.StartupDelay) * time.Second); err != nil {
 			return fmt.Errorf("waiting for application startup delay: %w", err)
 		}
 	}
-	mounts := make(map[string]clabernetesdeviceplan.MountPlan, len(normalized.Mounts))
+
+	mounts := make(map[string]clabernetesinternaldeviceplan.MountPlan, len(normalized.Mounts))
 	for _, mount := range normalized.Mounts {
 		mounts[mount.ID] = mount
 	}
+
 	for _, action := range normalized.Actions {
-		if action.Phase != clabernetesdeviceplan.PhasePreStart ||
+		if action.Phase != clabernetesinternaldeviceplan.PhasePreStart ||
 			action.Target.ContainerID != containerID ||
-			action.Kind != clabernetesdeviceplan.ActionMount {
+			action.Kind != clabernetesinternaldeviceplan.ActionMount {
 			continue
 		}
+
 		if action.Target.NodeID != target.NodeID || action.Mount == nil {
 			return fmt.Errorf("pre-start action %q crosses application ownership", action.ID)
 		}
+
 		mount, exists := mounts[action.Mount.MountID]
 		if !exists || mount.ContainerID != containerID {
 			return fmt.Errorf("pre-start action %q references a foreign mount", action.ID)
 		}
+
 		if err = operations.MountFilesystem(
 			action.Mount.Source,
 			mount.Destination,
@@ -94,17 +107,24 @@ func RunLaunchWithOperations(
 	if len(entrypoint) == 0 {
 		entrypoint = slices.Clone(target.ImageEntrypoint)
 	}
+
 	command := slices.Clone(target.Command)
 	if len(command) == 0 {
 		command = slices.Clone(target.ImageCommand)
 	}
-	argv := append(entrypoint, command...)
+
+	//nolint:gocritic // the result deliberately extends a different base slice.
+	argv := append(
+		entrypoint,
+		command...) //nolint:gocritic // OCI argv is entrypoint plus command by contract.
 	if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
-		return fmt.Errorf("application image and plan provide no executable command")
+		return errors.New("application image and plan provide no executable command")
 	}
+
 	if err = operations.LimitOpenFiles(conventionalNoFileLimit); err != nil {
 		return fmt.Errorf("bounding application open files: %w", err)
 	}
+
 	if err = operations.Exec(argv); err != nil {
 		return fmt.Errorf("starting application process: %w", err)
 	}

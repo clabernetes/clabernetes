@@ -88,8 +88,6 @@ func NewCache(resolver Resolver, options CacheOptions) (*Cache, error) {
 }
 
 // Resolve returns validated metadata from the cache or resolves and stores it.
-//
-//nolint:gocritic // Request is intentionally copied at the public cache boundary.
 func (c *Cache) Resolve(ctx context.Context, request Request) (*Metadata, error) {
 	if ctx == nil {
 		return c.resolver.Resolve(ctx, request)

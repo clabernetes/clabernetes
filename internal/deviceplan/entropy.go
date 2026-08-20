@@ -14,13 +14,14 @@ import (
 
 const (
 	// EntropySeedKey is the projected Secret key holding the private replay seed.
-	EntropySeedKey   = "seed"
+	EntropySeedKey = "seed"
+	// EntropySeedBytes is the fixed private seed length.
 	EntropySeedBytes = 32
 )
 
 var (
-	importedEntropyMutex  sync.Mutex
-	activeImportedEntropy *importedEntropySession
+	importedEntropyMutex  sync.Mutex              //nolint:gochecknoglobals // process-wide replay session registry.
+	activeImportedEntropy *importedEntropySession //nolint:gochecknoglobals // process-wide replay session registry.
 )
 
 type importedEntropySession struct {
@@ -45,6 +46,7 @@ func beginImportedEntropy(inputDigest, expectedDigest, root string) (func(), err
 	if expectedDigest == "" && strings.TrimSpace(root) == "" {
 		return func() {}, nil
 	}
+
 	if !validDigest(expectedDigest) || strings.TrimSpace(root) == "" {
 		return nil, planningError(
 			ErrorMissingInput,
@@ -53,6 +55,7 @@ func beginImportedEntropy(inputDigest, expectedDigest, root string) (func(), err
 			nil,
 		)
 	}
+
 	root = filepath.Clean(root)
 	if !filepath.IsAbs(root) || root == string(filepath.Separator) {
 		return nil, planningError(
@@ -62,17 +65,21 @@ func beginImportedEntropy(inputDigest, expectedDigest, root string) (func(), err
 			nil,
 		)
 	}
+
 	seedFile, err := os.Open(
 		filepath.Join(root, EntropySeedKey),
-	) //nolint:gosec // Mounted explicit Secret path.
+	)
 	if err != nil {
 		return nil, planningError(ErrorMissingInput, "entropy", "cannot read entropy seed", err)
 	}
+
 	seed, readErr := io.ReadAll(io.LimitReader(seedFile, EntropySeedBytes+1))
 	closeErr := seedFile.Close()
+
 	if readErr != nil {
 		return nil, planningError(ErrorMissingInput, "entropy", "cannot read entropy seed", readErr)
 	}
+
 	if closeErr != nil {
 		return nil, planningError(
 			ErrorMissingInput,
@@ -81,6 +88,7 @@ func beginImportedEntropy(inputDigest, expectedDigest, root string) (func(), err
 			closeErr,
 		)
 	}
+
 	if len(seed) != EntropySeedBytes || Digest(seed) != expectedDigest {
 		return nil, planningError(
 			ErrorInvariant,
@@ -106,6 +114,7 @@ func importedEntropyReader(nodeID, behavior string) io.Reader {
 	if session == nil {
 		return nil
 	}
+
 	behavior = canonicalEntropyBehavior(behavior)
 	identity := nodeID + "\x00" + behavior
 	call := session.calls[identity]
@@ -115,6 +124,7 @@ func importedEntropyReader(nodeID, behavior string) io.Reader {
 	_, _ = keyMAC.Write([]byte("clabernetes/imported-entropy/v1\x00"))
 	_, _ = keyMAC.Write([]byte(session.inputDigest))
 	_, _ = keyMAC.Write([]byte("\x00" + identity))
+
 	var callBytes [8]byte
 	binary.BigEndian.PutUint64(callBytes[:], call)
 	_, _ = keyMAC.Write(callBytes[:])
@@ -145,16 +155,19 @@ type entropyReader struct {
 func (r *entropyReader) Read(destination []byte) (int, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+
 	written := 0
 	for written < len(destination) {
 		if len(r.pending) == 0 {
 			mac := hmac.New(sha256.New, r.key)
+
 			var counter [8]byte
 			binary.BigEndian.PutUint64(counter[:], r.counter)
 			r.counter++
 			_, _ = mac.Write(counter[:])
 			r.pending = mac.Sum(nil)
 		}
+
 		copied := copy(destination[written:], r.pending)
 		written += copied
 		r.pending = r.pending[copied:]
@@ -168,8 +181,10 @@ func withImportedEntropy(nodeID, behavior string, operation func() error) error 
 	if reader == nil {
 		return operation()
 	}
+
 	original := cryptorand.Reader
 	cryptorand.Reader = reader
+
 	defer func() { cryptorand.Reader = original }()
 
 	return operation()

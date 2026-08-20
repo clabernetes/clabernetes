@@ -42,7 +42,7 @@ func TestDigestSourceTreesRetiresEvidenceOnChange(t *testing.T) {
 	root := t.TempDir()
 	tree := filepath.Join(root, "component")
 
-	err := os.MkdirAll(tree, 0o755)
+	err := os.MkdirAll(tree, 0o755) //nolint:gosec // test fixture permissions.
 	if err != nil {
 		t.Fatalf("creating component tree: %v", err)
 	}

@@ -1,5 +1,6 @@
 //go:build linux
 
+//nolint:err113,funlen,gocyclo // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -11,6 +12,9 @@ import (
 
 	"golang.org/x/sys/unix"
 )
+
+// launchTmpfsFilesystem is the only mount filesystem the launch boundary realizes.
+const launchTmpfsFilesystem = "tmpfs"
 
 type linuxLaunchOperations struct{}
 
@@ -30,10 +34,12 @@ func (linuxLaunchOperations) MountFilesystem(
 	filesystem string,
 	options []string,
 ) error {
-	if source != "tmpfs" || filesystem != "tmpfs" {
+	if source != launchTmpfsFilesystem || filesystem != launchTmpfsFilesystem {
 		return fmt.Errorf("filesystem operation %q from %q is unsupported", filesystem, source)
 	}
+
 	flags := uintptr(0)
+
 	data := make([]string, 0, len(options))
 	for _, option := range options {
 		key, _, _ := strings.Cut(option, "=")
@@ -85,7 +91,9 @@ func (linuxLaunchOperations) MountFilesystem(
 			data = append(data, option)
 		}
 	}
-	if err := unix.Mount(source, destination, filesystem, flags, strings.Join(data, ",")); err != nil {
+
+	if err := unix.Mount(source, destination, filesystem,
+		flags, strings.Join(data, ",")); err != nil {
 		return fmt.Errorf("mounting scoped filesystem at %q: %w", destination, err)
 	}
 
@@ -97,6 +105,7 @@ func (linuxLaunchOperations) LimitOpenFiles(limit uint64) error {
 	if err := unix.Getrlimit(unix.RLIMIT_NOFILE, &current); err != nil {
 		return fmt.Errorf("reading open-file limit: %w", err)
 	}
+
 	if current.Max <= limit {
 		return nil
 	}

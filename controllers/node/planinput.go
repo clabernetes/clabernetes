@@ -1,4 +1,4 @@
-//nolint:nlreturn,wsl_v5 // The compiler is a fail-closed identity boundary.
+//nolint:gocyclo,wsl_v5 // The compiler is a fail-closed identity boundary.
 package node
 
 import (
@@ -9,7 +9,7 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
 
 const (
@@ -26,21 +26,23 @@ type PlanInputCompileRequest struct {
 	GroupMembers  []string
 	NodesByName   map[string]*clabernetesapisv1alpha1.Node
 	Links         []clabernetesapisv1alpha1.Link
-	Compatibility clabernetesdeviceplan.Compatibility
+	Compatibility clabernetesinternaldeviceplan.Compatibility
 	EntropyDigest string
-	Images        []clabernetesdeviceplan.ImageInput
-	Payloads      []clabernetesdeviceplan.PayloadInput
-	Certificates  []clabernetesdeviceplan.CertificateInput
-	Management    []clabernetesdeviceplan.ManagementInput
+	Images        []clabernetesinternaldeviceplan.ImageInput
+	Payloads      []clabernetesinternaldeviceplan.PayloadInput
+	Certificates  []clabernetesinternaldeviceplan.CertificateInput
+	Management    []clabernetesinternaldeviceplan.ManagementInput
 }
 
 // CompilePlanInput creates the canonical imported-package input for one direct workload group.
 // It deliberately treats kind and type as opaque values and contains no registry or vendor map.
-func CompilePlanInput(request PlanInputCompileRequest) (clabernetesdeviceplan.Input, error) {
+func CompilePlanInput(request PlanInputCompileRequest) (clabernetesinternaldeviceplan.Input,
+	error,
+) {
 	if request.Primary == nil || request.Primary.GetName() == "" ||
 		request.Primary.GetNamespace() == "" || request.Primary.GetUID() == "" {
-		return clabernetesdeviceplan.Input{}, planInputError(
-			clabernetesdeviceplan.ErrorInvalidInput,
+		return clabernetesinternaldeviceplan.Input{}, planInputError(
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
 			"nodes",
 			"primary Node identity is incomplete",
 		)
@@ -49,15 +51,15 @@ func CompilePlanInput(request PlanInputCompileRequest) (clabernetesdeviceplan.In
 	slices.Sort(memberNames)
 	memberNames = slices.Compact(memberNames)
 	if len(memberNames) == 0 || !slices.Contains(memberNames, request.Primary.GetName()) {
-		return clabernetesdeviceplan.Input{}, planInputError(
-			clabernetesdeviceplan.ErrorInvalidInput,
+		return clabernetesinternaldeviceplan.Input{}, planInputError(
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
 			"nodes",
 			"workload group does not contain its primary Node",
 		)
 	}
 
-	input := clabernetesdeviceplan.Input{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion,
+	input := clabernetesinternaldeviceplan.Input{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		TopologyName:  planningTopologyName(request.Primary),
 		Compatibility: request.Compatibility,
 		EntropyDigest: request.EntropyDigest,
@@ -75,16 +77,16 @@ func CompilePlanInput(request PlanInputCompileRequest) (clabernetesdeviceplan.In
 		}
 		if member == nil || member.GetNamespace() != request.Primary.GetNamespace() ||
 			member.GetUID() == "" {
-			return clabernetesdeviceplan.Input{}, planInputError(
-				clabernetesdeviceplan.ErrorMissingInput,
+			return clabernetesinternaldeviceplan.Input{}, planInputError(
+				clabernetesinternaldeviceplan.ErrorMissingInput,
 				"nodes."+name,
 				"group member identity is unresolved",
 			)
 		}
 		definition, err := json.Marshal(member.Spec.NodeDefinition)
 		if err != nil {
-			return clabernetesdeviceplan.Input{}, planInputError(
-				clabernetesdeviceplan.ErrorSerialization,
+			return clabernetesinternaldeviceplan.Input{}, planInputError(
+				clabernetesinternaldeviceplan.ErrorSerialization,
 				"nodes."+name+".definition",
 				"cannot serialize Node definition",
 			)
@@ -94,7 +96,7 @@ func CompilePlanInput(request PlanInputCompileRequest) (clabernetesdeviceplan.In
 		if name != request.Primary.GetName() {
 			groupOwner = string(request.Primary.GetUID())
 		}
-		input.Nodes = append(input.Nodes, clabernetesdeviceplan.NodeInput{
+		input.Nodes = append(input.Nodes, clabernetesinternaldeviceplan.NodeInput{
 			ID: nodeID, Name: name, Kind: member.Spec.Kind, Type: member.Spec.Type,
 			GroupOwner: groupOwner, Definition: definition,
 		})
@@ -109,11 +111,11 @@ func CompilePlanInput(request PlanInputCompileRequest) (clabernetesdeviceplan.In
 		memberIDs,
 	)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, err
+		return clabernetesinternaldeviceplan.Input{}, err
 	}
 	input.Interfaces = interfaces
 
-	return clabernetesdeviceplan.NormalizeInput(input)
+	return clabernetesinternaldeviceplan.NormalizeInput(input)
 }
 
 func planningTopologyName(primary *clabernetesapisv1alpha1.Node) string {
@@ -129,8 +131,8 @@ func compileAcceptedInterfaces(
 	nodesByName map[string]*clabernetesapisv1alpha1.Node,
 	members map[string]*clabernetesapisv1alpha1.Node,
 	memberIDs map[string]string,
-) ([]clabernetesdeviceplan.InterfaceInput, error) {
-	result := []clabernetesdeviceplan.InterfaceInput{}
+) ([]clabernetesinternaldeviceplan.InterfaceInput, error) {
+	result := []clabernetesinternaldeviceplan.InterfaceInput{}
 	for index := range links {
 		link := &links[index]
 		endpoints := [2]clabernetesapisv1alpha1.LinkEndpointSpec{
@@ -143,7 +145,7 @@ func compileAcceptedInterfaces(
 		}
 		if link.GetUID() == "" || link.Status.Error != "" || link.Status.ResolvedEndpoints == nil {
 			return nil, planInputError(
-				clabernetesdeviceplan.ErrorMissingInput,
+				clabernetesinternaldeviceplan.ErrorMissingInput,
 				"links."+link.GetName(),
 				"terminating Link has no accepted UID-bound endpoint inventory",
 			)
@@ -153,7 +155,8 @@ func compileAcceptedInterfaces(
 			link.Status.ResolvedEndpoints.EndpointB,
 		}
 		for side := range endpoints {
-			if err := validateResolvedEndpoint(link, endpoints[side], resolved[side], nodesByName); err != nil {
+			if err := validateResolvedEndpoint(link, endpoints[side],
+				resolved[side], nodesByName); err != nil {
 				return nil, err
 			}
 			member := members[endpoints[side].NodeName]
@@ -171,7 +174,7 @@ func compileAcceptedInterfaces(
 				connectivity == string(clabernetesapisv1alpha1.LinkConnectivitySlurpeeth)) &&
 				link.Status.TunnelID == 0 {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorMissingInput,
+					clabernetesinternaldeviceplan.ErrorMissingInput,
 					"links."+link.GetName()+".status.tunnelID",
 					"cross-Pod Link allocation is not ready",
 				)
@@ -185,7 +188,7 @@ func compileAcceptedInterfaces(
 				connectivity == string(clabernetesapisv1alpha1.LinkConnectivitySlurpeeth) {
 				peerTransport = FabricServiceName(endpoints[peerSide].NodeName)
 			}
-			result = append(result, clabernetesdeviceplan.InterfaceInput{
+			result = append(result, clabernetesinternaldeviceplan.InterfaceInput{
 				ID:     fmt.Sprintf("%s/%c", link.GetUID(), 'a'+rune(side)),
 				NodeID: memberIDs[member.GetName()], Name: endpoints[side].InterfaceName,
 				LinkID: string(link.GetUID()), LinkName: link.GetName(), PeerNodeID: peerNodeID,
@@ -195,7 +198,7 @@ func compileAcceptedInterfaces(
 			})
 		}
 	}
-	slices.SortFunc(result, func(left, right clabernetesdeviceplan.InterfaceInput) int {
+	slices.SortFunc(result, func(left, right clabernetesinternaldeviceplan.InterfaceInput) int {
 		return strings.Compare(left.ID, right.ID)
 	})
 
@@ -210,7 +213,7 @@ func validateResolvedEndpoint(
 ) error {
 	if resolved.NodeName != endpoint.NodeName {
 		return planInputError(
-			clabernetesdeviceplan.ErrorInvariant,
+			clabernetesinternaldeviceplan.ErrorInvariant,
 			"links."+link.GetName()+".status.resolvedEndpoints",
 			"Link status names a stale endpoint",
 		)
@@ -218,7 +221,7 @@ func validateResolvedEndpoint(
 	if endpoint.NodeName == clabernetesapisv1alpha1.LinkHostNodeName {
 		if resolved.UID != "" {
 			return planInputError(
-				clabernetesdeviceplan.ErrorInvariant,
+				clabernetesinternaldeviceplan.ErrorInvariant,
 				"links."+link.GetName()+".status.resolvedEndpoints",
 				"host endpoint unexpectedly has a Node UID",
 			)
@@ -228,7 +231,7 @@ func validateResolvedEndpoint(
 	}
 	if resolved.UID == "" {
 		return planInputError(
-			clabernetesdeviceplan.ErrorMissingInput,
+			clabernetesinternaldeviceplan.ErrorMissingInput,
 			"links."+link.GetName()+".status.resolvedEndpoints",
 			"Link endpoint UID is unresolved",
 		)
@@ -236,7 +239,7 @@ func validateResolvedEndpoint(
 	if current := nodesByName[endpoint.NodeName]; current != nil &&
 		current.GetUID() != resolved.UID {
 		return planInputError(
-			clabernetesdeviceplan.ErrorInvariant,
+			clabernetesinternaldeviceplan.ErrorInvariant,
 			"links."+link.GetName()+".status.resolvedEndpoints",
 			"Link endpoint UID is stale",
 		)
@@ -264,11 +267,11 @@ func interfaceConnectivity(
 }
 
 func planInputError(
-	code clabernetesdeviceplan.ErrorCode,
+	code clabernetesinternaldeviceplan.ErrorCode,
 	field,
 	message string,
 ) error {
-	return &clabernetesdeviceplan.Error{
+	return &clabernetesinternaldeviceplan.Error{
 		Code: code, Field: field, Behavior: "controller-input", Message: message,
 	}
 }

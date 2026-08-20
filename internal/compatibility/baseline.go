@@ -1,4 +1,4 @@
-//nolint:nlreturn,noinlineerr,wsl_v5 // Manifest validation is clearest as compact fail-fast checks.
+//nolint:err113,gocyclo,mnd,nlreturn,noinlineerr,wsl_v5 // Manifest validation is clearest as compact fail-fast checks.
 package compatibility
 
 import (
@@ -345,9 +345,9 @@ func (b *Baseline) VerifyRepository(root string) error {
 	problems := []string{}
 
 	moduleFilePath := filepath.Join(root, "go.mod")
-	moduleFile, err := os.ReadFile(
+	moduleFile, err := os.ReadFile( //nolint:gosec // reads are confined to plan-scoped roots.
 		moduleFilePath,
-	) //nolint:gosec // root scopes this repository read.
+	)
 	if err != nil {
 		problems = append(problems, fmt.Sprintf("go.mod cannot be read: %v", err))
 	} else if moduleErr := verifyContainerlabModuleFile(

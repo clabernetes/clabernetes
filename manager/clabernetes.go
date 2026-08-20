@@ -1,4 +1,3 @@
-//nolint:wsl_v5 // Manager bootstrap keeps closely related configuration assignments together.
 package manager
 
 import (

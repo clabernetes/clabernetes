@@ -22,6 +22,7 @@ func TestTerminalQueryFilterRemovesCapabilityQueries(t *testing.T) {
 	// Sequences split across reads reassemble; unrelated CSI output passes through.
 	filter = &terminalQueryFilter{output: &bytes.Buffer{}}
 	first := filter.filter([]byte("before\x1b[5"))
+
 	second := filter.filter([]byte("nafter\x1b[1mBOLD"))
 	if string(first)+string(second) != "beforeafter\x1b[1mBOLD" {
 		t.Fatalf("split filtering = %q + %q", first, second)

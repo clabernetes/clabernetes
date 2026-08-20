@@ -1,7 +1,9 @@
+//nolint:err113,gocognit,gocyclo,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package node
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -9,7 +11,7 @@ import (
 	"strings"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
 
 type directManagementPool struct {
@@ -22,27 +24,31 @@ type directManagementPool struct {
 func newDirectManagementPool(subnet, addressRange string, ipv4 bool) (directManagementPool, error) {
 	if subnet == "" {
 		if addressRange != "" {
-			return directManagementPool{}, fmt.Errorf("management range requires a subnet")
+			return directManagementPool{}, errors.New("management range requires a subnet")
 		}
 
 		return directManagementPool{ipv4: ipv4}, nil
 	}
+
 	network, err := netip.ParsePrefix(subnet)
 	if err != nil || network.Addr().Is4() != ipv4 {
-		return directManagementPool{}, fmt.Errorf("management subnet is invalid")
+		return directManagementPool{}, errors.New("management subnet is invalid")
 	}
+
 	network = network.Masked()
+
 	allocation := network
 	if addressRange != "" {
 		allocation, err = netip.ParsePrefix(addressRange)
 		if err != nil || allocation.Addr().Is4() != ipv4 {
-			return directManagementPool{}, fmt.Errorf("management range is invalid")
+			return directManagementPool{}, errors.New("management range is invalid")
 		}
+
 		allocation = allocation.Masked()
 		if allocation.Bits() < network.Bits() ||
 			!network.Contains(allocation.Addr()) ||
 			!network.Contains(lastPrefixAddress(allocation)) {
-			return directManagementPool{}, fmt.Errorf("management range is outside its subnet")
+			return directManagementPool{}, errors.New("management range is outside its subnet")
 		}
 	}
 
@@ -61,15 +67,19 @@ func allocateDirectManagementAddresses(
 	if !pool.enabled {
 		return result, nil
 	}
+
 	reserved := map[netip.Addr]string{}
+
 	for name, node := range nodesByName {
 		if node == nil || address(node) == "" {
 			continue
 		}
+
 		candidate, err := parseLooseManagementAddress(address(node), pool.ipv4)
 		if err != nil || !pool.allocation.Contains(candidate) {
 			continue
 		}
+
 		if existing := reserved[candidate]; existing != "" && existing != name {
 			return nil, fmt.Errorf(
 				"management address %q is declared by both %q and %q",
@@ -78,22 +88,28 @@ func allocateDirectManagementAddresses(
 				name,
 			)
 		}
+
 		reserved[candidate] = name
 	}
+
 	gatewayAddress := netip.Addr{}
+
 	if gateway != "" {
 		var err error
+
 		gatewayAddress, err = netip.ParseAddr(gateway)
 		if err != nil || gatewayAddress.Is4() != pool.ipv4 ||
 			!pool.network.Contains(gatewayAddress) {
-			return nil, fmt.Errorf("management gateway is invalid or outside its subnet")
+			return nil, errors.New("management gateway is invalid or outside its subnet")
 		}
+
 		if existing := reserved[gatewayAddress]; existing != "" {
 			return nil, fmt.Errorf(
 				"management gateway address is already declared by Node %q",
 				existing,
 			)
 		}
+
 		reserved[gatewayAddress] = "gateway"
 	}
 
@@ -103,6 +119,7 @@ func allocateDirectManagementAddresses(
 			names = append(names, name)
 		}
 	}
+
 	slices.SortFunc(names, func(left, right string) int {
 		leftNode, rightNode := nodesByName[left], nodesByName[right]
 		leftIdentity := string(leftNode.GetUID()) + "\x00" + left
@@ -110,27 +127,34 @@ func allocateDirectManagementAddresses(
 
 		return strings.Compare(leftIdentity, rightIdentity)
 	})
+
 	maxAttempts := max(4096, len(nodesByName)*1024)
 	for _, name := range names {
 		node := nodesByName[name]
+
 		seed := string(node.GetUID())
 		if seed == "" {
 			seed = name
 		}
+
 		allocated := netip.Addr{}
+
 		for attempt := range maxAttempts {
 			candidate := hashedPrefixAddress(pool.allocation, seed, attempt)
 			if !usableManagementAddress(pool, candidate, gatewayAddress) ||
 				reserved[candidate] != "" {
 				continue
 			}
+
 			allocated = candidate
 
 			break
 		}
+
 		if !allocated.IsValid() {
-			return nil, fmt.Errorf("management address range has no free usable address")
+			return nil, errors.New("management address range has no free usable address")
 		}
+
 		reserved[allocated] = name
 		result[name] = netip.PrefixFrom(allocated, pool.network.Bits()).String()
 	}
@@ -145,7 +169,9 @@ func validateUniqueExplicitManagementAddresses(
 	for name := range nodesByName {
 		names = append(names, name)
 	}
+
 	slices.Sort(names)
+
 	for _, family := range []struct {
 		ipv4    bool
 		address func(*clabernetesapisv1alpha1.Node) string
@@ -158,17 +184,20 @@ func validateUniqueExplicitManagementAddresses(
 		}},
 	} {
 		owners := map[netip.Addr]string{}
+
 		for _, name := range names {
 			node := nodesByName[name]
 			if node == nil || family.address(node) == "" {
 				continue
 			}
+
 			address, err := parseLooseManagementAddress(family.address(node), family.ipv4)
 			if err != nil {
 				// The owning group's ordinary normalization reports malformed addresses with
 				// its applicable subnet context. This pass is only the namespace uniqueness gate.
 				continue
 			}
+
 			if existing := owners[address]; existing != "" {
 				return fmt.Errorf(
 					"management address %q is declared by both %q and %q",
@@ -177,6 +206,7 @@ func validateUniqueExplicitManagementAddresses(
 					name,
 				)
 			}
+
 			owners[address] = name
 		}
 	}
@@ -191,23 +221,27 @@ func normalizeDirectManagementAddress(
 	if raw == "" {
 		return "", nil
 	}
+
 	if prefix, err := netip.ParsePrefix(raw); err == nil {
 		if prefix.Addr().Is4() != pool.ipv4 {
-			return "", fmt.Errorf("management address has the wrong family")
+			return "", errors.New("management address has the wrong family")
 		}
+
 		if pool.enabled && (prefix.Bits() != pool.network.Bits() ||
 			!pool.network.Contains(prefix.Addr())) {
-			return "", fmt.Errorf("management address is outside its declared subnet")
+			return "", errors.New("management address is outside its declared subnet")
 		}
 
 		return prefix.String(), nil
 	}
+
 	address, err := netip.ParseAddr(raw)
 	if err != nil || address.Is4() != pool.ipv4 {
-		return "", fmt.Errorf("management address is invalid")
+		return "", errors.New("management address is invalid")
 	}
+
 	if !pool.enabled || !pool.network.Contains(address) {
-		return "", fmt.Errorf("management address without a prefix requires a matching subnet")
+		return "", errors.New("management address without a prefix requires a matching subnet")
 	}
 
 	return netip.PrefixFrom(address, pool.network.Bits()).String(), nil
@@ -217,13 +251,15 @@ func validateDirectManagementGateway(raw, source string, ipv4 bool) error {
 	if raw == "" {
 		return nil
 	}
+
 	prefix, err := netip.ParsePrefix(source)
 	if err != nil || prefix.Addr().Is4() != ipv4 {
-		return fmt.Errorf("management gateway requires a same-family source address")
+		return errors.New("management gateway requires a same-family source address")
 	}
+
 	gateway, err := netip.ParseAddr(raw)
 	if err != nil || gateway.Is4() != ipv4 || !prefix.Contains(gateway) {
-		return fmt.Errorf("management gateway is invalid or off-link")
+		return errors.New("management gateway is invalid or off-link")
 	}
 
 	return nil
@@ -237,16 +273,19 @@ func validateDirectManagementHostAddress(
 	if raw == "" || !pool.enabled {
 		return nil
 	}
+
 	prefix, err := netip.ParsePrefix(raw)
 	if err != nil {
-		return fmt.Errorf("management address is invalid")
+		return errors.New("management address is invalid")
 	}
+
 	gatewayAddress := netip.Addr{}
 	if gateway != "" {
 		gatewayAddress, _ = netip.ParseAddr(gateway)
 	}
+
 	if !usableManagementAddress(pool, prefix.Addr(), gatewayAddress) {
-		return fmt.Errorf("management address is a reserved subnet address")
+		return errors.New("management address is a reserved subnet address")
 	}
 
 	return nil
@@ -264,14 +303,15 @@ func directManagementAddressIdentity(raw string) string {
 func parseLooseManagementAddress(raw string, ipv4 bool) (netip.Addr, error) {
 	if prefix, err := netip.ParsePrefix(raw); err == nil {
 		if prefix.Addr().Is4() != ipv4 {
-			return netip.Addr{}, fmt.Errorf("management address has the wrong family")
+			return netip.Addr{}, errors.New("management address has the wrong family")
 		}
 
 		return prefix.Addr(), nil
 	}
+
 	address, err := netip.ParseAddr(raw)
 	if err != nil || address.Is4() != ipv4 {
-		return netip.Addr{}, fmt.Errorf("management address is invalid")
+		return netip.Addr{}, errors.New("management address is invalid")
 	}
 
 	return address, nil
@@ -285,6 +325,7 @@ func usableManagementAddress(
 	if !address.IsValid() || address == pool.allocation.Masked().Addr() || address == gateway {
 		return false
 	}
+
 	if pool.ipv4 && address == lastPrefixAddress(pool.allocation) {
 		return false
 	}
@@ -294,6 +335,7 @@ func usableManagementAddress(
 
 func hashedPrefixAddress(prefix netip.Prefix, seed string, attempt int) netip.Addr {
 	digest := sha256.Sum256([]byte(seed + "\x00" + strconv.Itoa(attempt)))
+
 	if prefix.Addr().Is4() {
 		value := prefix.Masked().Addr().As4()
 		for bit := prefix.Bits(); bit < 32; bit++ {
@@ -302,6 +344,7 @@ func hashedPrefixAddress(prefix netip.Prefix, seed string, attempt int) netip.Ad
 
 		return netip.AddrFrom4(value)
 	}
+
 	value := prefix.Masked().Addr().As16()
 	for bit := prefix.Bits(); bit < 128; bit++ {
 		copyHashBit(value[:], digest[:], bit, bit-prefix.Bits())
@@ -312,6 +355,7 @@ func hashedPrefixAddress(prefix netip.Prefix, seed string, attempt int) netip.Ad
 
 func copyHashBit(destination, digest []byte, destinationBit, digestBit int) {
 	destinationMask := byte(1 << (7 - destinationBit%8))
+
 	digestMask := byte(1 << (7 - digestBit%8))
 	if digest[digestBit/8]&digestMask != 0 {
 		destination[destinationBit/8] |= destinationMask
@@ -329,6 +373,7 @@ func lastPrefixAddress(prefix netip.Prefix) netip.Addr {
 
 		return netip.AddrFrom4(value)
 	}
+
 	value := prefix.Masked().Addr().As16()
 	for bit := prefix.Bits(); bit < 128; bit++ {
 		value[bit/8] |= byte(1 << (7 - bit%8))
@@ -339,7 +384,7 @@ func lastPrefixAddress(prefix netip.Prefix) netip.Addr {
 
 func directManagementError(field, message string) error {
 	return planInputError(
-		clabernetesdeviceplan.ErrorInvalidInput,
+		clabernetesinternaldeviceplan.ErrorInvalidInput,
 		"launcherProfile.mgmt."+field,
 		message,
 	)
@@ -350,8 +395,8 @@ func directNodeManagementError(
 	field,
 	message string,
 ) error {
-	return &clabernetesdeviceplan.Error{
-		Code: clabernetesdeviceplan.ErrorInvalidInput, NodeID: string(node.GetUID()),
+	return &clabernetesinternaldeviceplan.Error{
+		Code: clabernetesinternaldeviceplan.ErrorInvalidInput, NodeID: string(node.GetUID()),
 		Field:    "nodes." + node.GetName() + ".spec." + field,
 		Behavior: "controller-input", Message: message,
 	}

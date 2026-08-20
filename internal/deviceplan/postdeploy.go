@@ -1,8 +1,9 @@
-//nolint:nlreturn,wsl_v5 // The imported lifecycle boundary uses explicit fail-closed guards.
+//nolint:err113,funcorder,funlen,gocognit,gocyclo,maintidx,mnd,wsl_v5 // The imported lifecycle boundary uses explicit fail-closed guards.
 package deviceplan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,10 +30,10 @@ func (a Adapter) RunPostDeploy(
 	runtime clabruntime.ContainerRuntime,
 ) error {
 	if ctx == nil {
-		return fmt.Errorf("post-deploy context is nil")
+		return errors.New("post-deploy context is nil")
 	}
 	if runtime == nil {
-		return fmt.Errorf("post-deploy runtime is nil")
+		return errors.New("post-deploy runtime is nil")
 	}
 	normalizedInput, err := NormalizeInput(input)
 	if err != nil {
@@ -59,7 +60,7 @@ func (a Adapter) RunPostDeploy(
 	}
 	defer finishEntropy()
 	if strings.TrimSpace(a.Revision) == "" || a.Revision != normalizedPlan.Planner.Revision {
-		return fmt.Errorf("post-deploy worker revision differs from the accepted plan")
+		return errors.New("post-deploy worker revision differs from the accepted plan")
 	}
 	targetContainer, targetNode, targetInput, _, err := importedPostDeployTarget(
 		normalizedInput,
@@ -127,13 +128,13 @@ func (a Adapter) RunDeployEndpoints(
 	execute ImportedHookExecutor,
 ) error {
 	if ctx == nil {
-		return fmt.Errorf("endpoint lifecycle context is nil")
+		return errors.New("endpoint lifecycle context is nil")
 	}
 	if runtime == nil {
-		return fmt.Errorf("endpoint lifecycle runtime is nil")
+		return errors.New("endpoint lifecycle runtime is nil")
 	}
 	if execute == nil {
-		return fmt.Errorf("endpoint lifecycle executor is nil")
+		return errors.New("endpoint lifecycle executor is nil")
 	}
 	normalizedInput, err := NormalizeInput(input)
 	if err != nil {
@@ -160,7 +161,7 @@ func (a Adapter) RunDeployEndpoints(
 	}
 	defer finishEntropy()
 	if strings.TrimSpace(a.Revision) == "" || a.Revision != normalizedPlan.Planner.Revision {
-		return fmt.Errorf("endpoint lifecycle worker revision differs from the accepted plan")
+		return errors.New("endpoint lifecycle worker revision differs from the accepted plan")
 	}
 	targetContainer, targetNode, targetInput, _, err := importedDeployEndpointsTarget(
 		normalizedInput,
@@ -175,7 +176,8 @@ func (a Adapter) RunDeployEndpoints(
 		return &Error{
 			Code: ErrorUnsupported, NodeID: targetNode.ID, Field: "runtime.networkNamespace",
 			Behavior: "runtime.GetNSPath",
-			Message:  "a distinct host worker and target application network namespace are required",
+			Message: "a distinct host worker and target application network " +
+				"namespace are required",
 		}
 	}
 	state, err := a.rehydrateImportedDeployment(
@@ -301,7 +303,7 @@ func (a Adapter) rehydrateImportedDeployment(
 	for index, nodeInput := range normalizedInput.Nodes {
 		entry := registry.Kind(nodeInput.Kind)
 		if entry == nil {
-			return nil, fmt.Errorf("post-deploy kind is absent from the imported registry")
+			return nil, errors.New("post-deploy kind is absent from the imported registry")
 		}
 		definition, decodeErr := decodeNodeDefinition(nodeInput)
 		if decodeErr != nil {
@@ -381,7 +383,7 @@ func (a Adapter) rehydrateImportedDeployment(
 	}
 	if state.target == nil || targetInput.ID != targetNode.ID ||
 		targetContainer.NodeID != targetNode.ID {
-		return nil, fmt.Errorf("post-deploy target could not be reconstructed")
+		return nil, errors.New("post-deploy target could not be reconstructed")
 	}
 
 	preDeploy := &clabnodes.PreDeployParams{
@@ -505,6 +507,7 @@ func verifyReplayedReadinessInventory(
 // containerlab kinds and of future methods added to concrete runtime implementations.
 type importedDeploymentReplayRuntime struct {
 	clabruntime.ContainerRuntime
+
 	live       clabruntime.ContainerRuntime
 	recorder   *recordingRuntime
 	replayRoot string
@@ -755,7 +758,7 @@ func verifyReplayedDeploymentOperations(
 	if len(actual) != len(expected) {
 		return deploymentReplayError(node.ID, "operation count differs from the accepted plan")
 	}
-	for order := 0; order < postDeployOrder; order++ {
+	for order := range postDeployOrder {
 		want, wantExists := expected[order]
 		got, gotExists := actual[order]
 		if !wantExists || !gotExists || !sameReplayedDeploymentOperation(got, want) {
@@ -849,7 +852,7 @@ func importedPostDeployTarget(
 	}
 	if !foundContainer {
 		return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-			fmt.Errorf("post-deploy target container is absent from the plan")
+			errors.New("post-deploy target container is absent from the plan")
 	}
 	var node NodePlan
 	foundNode := false
@@ -863,7 +866,7 @@ func importedPostDeployTarget(
 	}
 	if !foundNode || !nodeOwnsContainer(node, containerID) {
 		return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-			fmt.Errorf("post-deploy target is not a container of a planned logical Node")
+			errors.New("post-deploy target is not a container of a planned logical Node")
 	}
 	actionCount := 0
 	for _, action := range plan.Actions {
@@ -871,14 +874,14 @@ func importedPostDeployTarget(
 			action.Target.ContainerID == containerID {
 			if action.Target.NodeID != node.ID || action.ImportedPostDeploy == nil {
 				return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-					fmt.Errorf("imported post-deploy action crosses logical Node ownership")
+					errors.New("imported post-deploy action crosses logical Node ownership")
 			}
 			actionCount++
 		}
 	}
 	if actionCount != 1 {
 		return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-			fmt.Errorf("post-deploy target requires exactly one imported post-deploy action")
+			errors.New("post-deploy target requires exactly one imported post-deploy action")
 	}
 	for index, candidate := range input.Nodes {
 		if candidate.ID == node.ID {
@@ -887,20 +890,14 @@ func importedPostDeployTarget(
 	}
 
 	return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-		fmt.Errorf("post-deploy target Node is absent from the normalized input")
+		errors.New("post-deploy target Node is absent from the normalized input")
 }
 
 // nodeOwnsContainer reports whether the planned logical Node owns the given container. Imported
 // lifecycle targets are whichever member container the package declared as its exec identity, so
 // ownership — not position — is the plan invariant.
 func nodeOwnsContainer(node NodePlan, containerID string) bool {
-	for _, candidate := range node.ContainerIDs {
-		if candidate == containerID {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(node.ContainerIDs, containerID)
 }
 
 func importedDeployEndpointsTarget(
@@ -922,13 +919,13 @@ func importedDeployEndpointsTarget(
 		if action.Target.NodeID != node.ID || action.Target.NamespaceOwnerID == "" ||
 			action.ImportedDeployEndpoints == nil {
 			return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-				fmt.Errorf("imported endpoint action crosses logical Node ownership")
+				errors.New("imported endpoint action crosses logical Node ownership")
 		}
 		actionCount++
 	}
 	if actionCount != 1 {
 		return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-			fmt.Errorf("endpoint target requires exactly one imported endpoint action")
+			errors.New("endpoint target requires exactly one imported endpoint action")
 	}
 
 	return container, node, nodeInput, nodeIndex, nil
@@ -981,11 +978,11 @@ func mountedTargetCertificateInfrastructure(
 		}
 	}
 	if len(nodeInputs) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil // no matching node inputs means nothing to replay.
 	}
 	root = filepath.Clean(root)
 	if !filepath.IsAbs(root) || root == string(filepath.Separator) {
-		return nil, fmt.Errorf("post-deploy certificates require a scoped Secret projection")
+		return nil, errors.New("post-deploy certificates require a scoped Secret projection")
 	}
 	caCertificate, err := readCertificateFile(filepath.Join(root, CertificateCACertKey))
 	if err != nil {
@@ -997,9 +994,8 @@ func mountedTargetCertificateInfrastructure(
 	}
 	for _, input := range nodeInputs {
 		if Digest(caCertificate) != input.CACertificateDigest {
-			return nil, fmt.Errorf(
-				"post-deploy certificate authority differs from accepted metadata",
-			)
+			return nil,
+				errors.New("post-deploy certificate authority differs from accepted metadata")
 		}
 		certificateKey, privateKeyKey := CertificateMaterialKeys(input.NodeID, input.StorageName)
 		certificate, readErr := readCertificateFile(filepath.Join(root, certificateKey))
@@ -1012,10 +1008,10 @@ func mountedTargetCertificateInfrastructure(
 		}
 		if Digest(certificate) != input.CertificateDigest ||
 			Digest(privateKey) != input.PrivateKeyDigest {
-			return nil, fmt.Errorf("post-deploy node certificate differs from accepted metadata")
+			return nil, errors.New("post-deploy node certificate differs from accepted metadata")
 		}
 		if storage.nodes[input.StorageName] != nil {
-			return nil, fmt.Errorf("post-deploy certificate storage identity is duplicated")
+			return nil, errors.New("post-deploy certificate storage identity is duplicated")
 		}
 		storage.nodes[input.StorageName] = &clabcert.Certificate{
 			Cert: slices.Clone(certificate), Key: slices.Clone(privateKey),

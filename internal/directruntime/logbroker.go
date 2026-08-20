@@ -1,3 +1,4 @@
+//nolint:err113,gocyclo,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -25,7 +26,7 @@ const (
 
 // ApplicationLogStreamer supplies Kubernetes-owned logs to a Pod-local runtime broker.
 type ApplicationLogStreamer interface {
-	StreamLogs(context.Context, string) (io.ReadCloser, error)
+	StreamLogs(ctx context.Context, containerName string) (io.ReadCloser, error)
 }
 
 // ApplicationLogBroker exposes only accepted application log targets over a Pod-local socket.
@@ -47,34 +48,43 @@ func StartApplicationLogBroker(
 	streamer ApplicationLogStreamer,
 ) (*ApplicationLogBroker, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("application log broker context is nil")
+		return nil, errors.New("application log broker context is nil")
 	}
+
 	if streamer == nil {
-		return nil, fmt.Errorf("application log streamer is nil")
+		return nil, errors.New("application log streamer is nil")
 	}
+
 	socketPath = filepath.Clean(socketPath)
+
 	root := filepath.Dir(socketPath)
 	if !filepath.IsAbs(socketPath) || socketPath == string(filepath.Separator) ||
 		root == string(filepath.Separator) {
-		return nil, fmt.Errorf("application log broker socket must have a scoped absolute path")
+		return nil, errors.New("application log broker socket must have a scoped absolute path")
 	}
+
 	accepted := make(map[string]string, len(targets))
 	for runtimeID, containerName := range targets {
 		if strings.TrimSpace(runtimeID) == "" || strings.TrimSpace(containerName) == "" {
-			return nil, fmt.Errorf("application log broker target identity is incomplete")
+			return nil, errors.New("application log broker target identity is incomplete")
 		}
+
 		accepted[runtimeID] = containerName
 	}
+
 	if len(accepted) == 0 {
-		return nil, fmt.Errorf("application log broker has no accepted targets")
+		return nil, errors.New("application log broker has no accepted targets")
 	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
+
+	if err := os.MkdirAll(root, 0o755); err != nil { //nolint:gosec // the directory mode matches the runtime contract.
 		return nil, fmt.Errorf("creating application log broker directory: %w", err)
 	}
+
 	if info, err := os.Lstat(socketPath); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {
-			return nil, fmt.Errorf("application log broker path is occupied by a non-socket")
+			return nil, errors.New("application log broker path is occupied by a non-socket")
 		}
+
 		if err = os.Remove(socketPath); err != nil {
 			return nil, fmt.Errorf("removing stale application log broker socket: %w", err)
 		}
@@ -82,6 +92,7 @@ func StartApplicationLogBroker(
 		return nil, fmt.Errorf("inspecting application log broker socket: %w", err)
 	}
 
+	//nolint:noctx // The broker socket lives for the whole application container, not one context.
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("listening on application log broker socket: %w", err)
@@ -103,7 +114,9 @@ func StartApplicationLogBroker(
 
 			return
 		}
+
 		runtimeID := request.URL.Query().Get("runtimeID")
+
 		containerName, exists := accepted[runtimeID]
 		if !exists {
 			http.Error(
@@ -114,18 +127,23 @@ func StartApplicationLogBroker(
 
 			return
 		}
+
 		logs, streamErr := streamer.StreamLogs(request.Context(), containerName)
 		if streamErr != nil {
 			http.Error(writer, "application log stream is unavailable", http.StatusBadGateway)
 
 			return
 		}
-		defer logs.Close()
+
+		defer func() { _ = logs.Close() }()
+
 		writer.Header().Set("Content-Type", "application/octet-stream")
 		writer.WriteHeader(http.StatusOK)
+
 		if flusher, ok := writer.(http.Flusher); ok {
 			flusher.Flush()
 		}
+
 		_, _ = io.Copy(writer, logs)
 	})
 
@@ -139,16 +157,19 @@ func StartApplicationLogBroker(
 		},
 		errors: make(chan error, 1),
 	}
+
 	go func() {
 		serveErr := broker.server.Serve(listener)
 		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) &&
 			!errors.Is(serveErr, net.ErrClosed) {
 			broker.errors <- serveErr
 		}
+
 		close(broker.errors)
 	}()
 	go func() {
 		<-ctx.Done()
+
 		_ = broker.Close()
 	}()
 
@@ -181,11 +202,13 @@ func (b *ApplicationLogBroker) Close() error {
 	if b == nil {
 		return nil
 	}
+
 	b.closeOnce.Do(func() {
 		b.closeErr = b.server.Close()
 		if err := b.listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			b.closeErr = errors.Join(b.closeErr, err)
 		}
+
 		if err := os.Remove(b.socketPath); err != nil && !os.IsNotExist(err) {
 			b.closeErr = errors.Join(b.closeErr, err)
 		}
@@ -196,6 +219,7 @@ func (b *ApplicationLogBroker) Close() error {
 
 type applicationLogStream struct {
 	io.ReadCloser
+
 	transport *http.Transport
 }
 
@@ -212,13 +236,15 @@ func openApplicationLogStream(
 	runtimeID string,
 ) (io.ReadCloser, error) {
 	if ctx == nil {
-		return nil, fmt.Errorf("application log stream context is nil")
+		return nil, errors.New("application log stream context is nil")
 	}
+
 	socketPath = filepath.Clean(socketPath)
 	if !filepath.IsAbs(socketPath) || socketPath == string(filepath.Separator) ||
 		strings.TrimSpace(runtimeID) == "" {
-		return nil, fmt.Errorf("application log stream identity is incomplete")
+		return nil, errors.New("application log stream identity is incomplete")
 	}
+
 	dialer := &net.Dialer{}
 	transport := &http.Transport{
 		DisableCompression: true,
@@ -226,24 +252,24 @@ func openApplicationLogStream(
 			return dialer.DialContext(dialContext, "unix", socketPath)
 		},
 	}
-	request, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodGet,
-		"http://unix"+applicationLogPath+"?runtimeID="+url.QueryEscape(runtimeID),
-		nil,
-	)
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"http://unix"+applicationLogPath+"?runtimeID="+url.QueryEscape(runtimeID), http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("creating application log stream request: %w", err)
 	}
+
 	response, err := (&http.Client{Transport: transport}).Do(request)
 	if err != nil {
 		transport.CloseIdleConnections()
 
 		return nil, fmt.Errorf("opening application log stream: %w", err)
 	}
+
 	if response.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(response.Body, maxBrokerErrorBytes))
 		_ = response.Body.Close()
+
 		transport.CloseIdleConnections()
 
 		return nil, fmt.Errorf(

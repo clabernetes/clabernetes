@@ -1,8 +1,9 @@
-//nolint:nlreturn,wsl_v5 // Runtime-neutral mapping uses compact fail-closed guards.
+//nolint:err113,funlen,gocognit,gocyclo,mnd,nlreturn,wsl_v5 // Runtime-neutral mapping uses compact fail-closed guards.
 package deviceplan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"path"
@@ -151,7 +152,8 @@ func appendEvaluatedNode(
 			return err
 		}
 		plan.Containers = append(plan.Containers, container)
-		if err = appendStoragePlans(plan, node, recorded.Config, containerID, index == 0); err != nil {
+		if err = appendStoragePlans(plan, node, recorded.Config,
+			containerID, index == 0); err != nil {
 			return err
 		}
 	}
@@ -212,16 +214,20 @@ func appendEvaluatedNode(
 		primaryContainerID,
 		containerNamespaceOwner(plan, primaryContainerID),
 	)
-	plan.Actions = append(plan.Actions, Action{
-		ID:    "imported-deploy-endpoints/" + node.Input.ID,
-		Phase: PhaseInterfaceFixup,
-		Target: ActionTarget{
-			NodeID: node.Input.ID, ContainerID: primaryContainerID,
-			NamespaceOwnerID: containerNamespaceOwner(plan, primaryContainerID),
+	//nolint:gocritic // one append per planned element reads clearest.
+	plan.Actions = append(
+		plan.Actions,
+		Action{ //nolint:gocritic // one append per planned action stage reads clearest.
+			ID:    "imported-deploy-endpoints/" + node.Input.ID,
+			Phase: PhaseInterfaceFixup,
+			Target: ActionTarget{
+				NodeID: node.Input.ID, ContainerID: primaryContainerID,
+				NamespaceOwnerID: containerNamespaceOwner(plan, primaryContainerID),
+			},
+			Kind:                    ActionImportedDeployEndpoints,
+			ImportedDeployEndpoints: &ImportedDeployEndpointsAction{},
 		},
-		Kind:                    ActionImportedDeployEndpoints,
-		ImportedDeployEndpoints: &ImportedDeployEndpointsAction{},
-	})
+	)
 	plan.Actions = append(plan.Actions, Action{
 		ID:    "imported-readiness/" + node.Input.ID,
 		Phase: PhaseReadiness,
@@ -369,7 +375,8 @@ func appendRecordedDeploymentActions(
 		if !exists {
 			return ActionTarget{}, &Error{
 				Code: ErrorInvariant, NodeID: node.Input.ID, Field: "deployment.operations.target",
-				Behavior: behavior, Message: "imported deployment operation targets an unknown container",
+				Behavior: behavior,
+				Message:  "imported deployment operation targets an unknown container",
 			}
 		}
 		for _, container := range plan.Containers {
@@ -472,7 +479,8 @@ func appendRecordedDeploymentActions(
 	if len(orders) != operationCount {
 		return 0, &Error{
 			Code: ErrorInvariant, NodeID: node.Input.ID, Field: "deployment.operations.order",
-			Behavior: "imported-deploy", Message: "imported deployment operation order is incomplete",
+			Behavior: "imported-deploy",
+			Message:  "imported deployment operation order is incomplete",
 		}
 	}
 
@@ -908,7 +916,7 @@ func appendImportedBindPlan(
 	readOnly := false
 	propagation := ""
 	if len(parts) == 3 {
-		for _, option := range strings.Split(parts[2], ",") {
+		for option := range strings.SplitSeq(parts[2], ",") {
 			switch option {
 			case "", "rw":
 			case "ro":
@@ -925,7 +933,8 @@ func appendImportedBindPlan(
 		}
 	}
 
-	volumeID := ""
+	var volumeID string
+
 	sourcePath := ""
 	labDir := path.Clean(config.LabDir)
 	if source == labDir || strings.HasPrefix(source, labDir+"/") {
@@ -1080,8 +1089,8 @@ func imageInputForContainer(inputs []ImageInput, nodeID, reference string) (Imag
 				Message:  "multiple image metadata entries ambiguously match an imported container",
 			}
 		}
-		copy := image
-		match = &copy
+		duplicate := image
+		match = &duplicate
 	}
 	if match != nil {
 		return *match, nil
@@ -1156,9 +1165,9 @@ func mapHealthcheck(config *clabtypes.HealthcheckConfig, image *Healthcheck) *He
 		if image == nil {
 			return nil
 		}
-		copy := *image
-		copy.Test = slices.Clone(image.Test)
-		return &copy
+		duplicate := *image
+		duplicate.Test = slices.Clone(image.Test)
+		return &duplicate
 	}
 
 	return &Healthcheck{
@@ -1199,10 +1208,10 @@ func normalizeTmpfsOptions(options string) (string, []string, bool, bool, error)
 	size := ""
 	readOnly := false
 	requiresRuntimeMount := false
-	for _, option := range strings.Split(options, ",") {
+	for option := range strings.SplitSeq(options, ",") {
 		option = strings.TrimSpace(option)
 		if option == "" || strings.ContainsAny(option, "\x00\n\r") {
-			return "", nil, false, false, fmt.Errorf("option is empty or malformed")
+			return "", nil, false, false, errors.New("option is empty or malformed")
 		}
 		key, _, _ := strings.Cut(option, "=")
 		switch key {
@@ -1213,7 +1222,7 @@ func normalizeTmpfsOptions(options string) (string, []string, bool, bool, error)
 		case "defaults":
 		case "size":
 			if !strings.Contains(option, "=") {
-				return "", nil, false, false, fmt.Errorf("size has no value")
+				return "", nil, false, false, errors.New("size has no value")
 			}
 		default:
 			requiresRuntimeMount = true
@@ -1221,12 +1230,12 @@ func normalizeTmpfsOptions(options string) (string, []string, bool, bool, error)
 		if value, found := strings.CutPrefix(option, "size="); found {
 			bytes, err := humanize.ParseBytes(value)
 			if value == "" {
-				return "", nil, false, false, fmt.Errorf("size is empty")
+				return "", nil, false, false, errors.New("size is empty")
 			}
-			if err != nil {
+			if err != nil { //nolint:gocritic // the parse outcomes are deliberate explicit guards.
 				requiresRuntimeMount = true
 			} else if bytes == 0 {
-				return "", nil, false, false, fmt.Errorf("size is not positive")
+				return "", nil, false, false, errors.New("size is not positive")
 			} else {
 				size = strconv.FormatUint(bytes, 10)
 				option = "size=" + size

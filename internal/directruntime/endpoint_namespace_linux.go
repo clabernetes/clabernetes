@@ -1,5 +1,6 @@
 //go:build linux
 
+//nolint:err113 // diagnostics are structured one-off errors carrying typed classification.
 package directruntime
 
 import (
@@ -8,7 +9,7 @@ import (
 	"os"
 	"runtime"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	"golang.org/x/sys/unix"
 )
 
@@ -21,17 +22,21 @@ func openEndpointNamespace(hostPath string) (EndpointNamespace, error) {
 	if hostPath == "" {
 		return nil, endpointNamespaceCapabilityError("host network namespace path is empty")
 	}
+
 	target, err := os.Open("/proc/self/ns/net")
 	if err != nil {
 		return nil, endpointNamespaceCapabilityError("target Pod network namespace is unavailable")
 	}
+
 	host, err := os.Open(hostPath) //nolint:gosec // Path is a fixed read-only host namespace mount.
 	if err != nil {
 		_ = target.Close()
 
 		return nil, endpointNamespaceCapabilityError("host network namespace mount is unavailable")
 	}
+
 	targetInfo, targetErr := target.Stat()
+
 	hostInfo, hostErr := host.Stat()
 	if targetErr != nil || hostErr != nil {
 		_ = target.Close()
@@ -39,6 +44,7 @@ func openEndpointNamespace(hostPath string) (EndpointNamespace, error) {
 
 		return nil, endpointNamespaceCapabilityError("network namespace identity is unavailable")
 	}
+
 	if os.SameFile(targetInfo, hostInfo) {
 		_ = target.Close()
 		_ = host.Close()
@@ -57,12 +63,18 @@ func (n *linuxEndpointNamespace) TargetPath() string {
 
 func (n *linuxEndpointNamespace) Execute(operation func() error) error {
 	if operation == nil {
-		return fmt.Errorf("endpoint namespace operation is nil")
+		return errors.New("endpoint namespace operation is nil")
 	}
 
 	return executeEndpointNamespace(
-		int(n.target.Fd()),
-		int(n.host.Fd()),
+		//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		int(
+			n.target.Fd(),
+		), //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		int(
+			n.host.Fd(),
+		), //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
 		operation,
 		unix.Setns,
 		runtime.LockOSThread,
@@ -79,16 +91,22 @@ func executeEndpointNamespace(
 	unlockOSThread func(),
 ) error {
 	result := make(chan error, 1)
+
 	go func() {
 		lockOSThread()
+
 		enteredHost := false
 		reuseThread := true
+
 		var operationErr error
+
 		defer func() {
 			if recovered := recover(); recovered != nil {
-				operationErr = fmt.Errorf("endpoint namespace operation panicked")
+				operationErr = errors.New("endpoint namespace operation panicked")
 			}
+
 			var restoreErr error
+
 			if enteredHost {
 				if err := setns(targetFD, unix.CLONE_NEWNET); err != nil {
 					reuseThread = false
@@ -97,9 +115,11 @@ func executeEndpointNamespace(
 					)
 				}
 			}
+
 			if reuseThread {
 				unlockOSThread()
 			}
+
 			result <- errors.Join(operationErr, restoreErr)
 		}()
 
@@ -110,6 +130,7 @@ func executeEndpointNamespace(
 
 			return
 		}
+
 		enteredHost = true
 		operationErr = operation()
 	}()
@@ -122,8 +143,8 @@ func (n *linuxEndpointNamespace) Close() error {
 }
 
 func endpointNamespaceCapabilityError(message string) error {
-	return &clabernetesdeviceplan.Error{
-		Code:  clabernetesdeviceplan.ErrorUnsupported,
+	return &clabernetesinternaldeviceplan.Error{
+		Code:  clabernetesinternaldeviceplan.ErrorUnsupported,
 		Field: "runtime.networkNamespace", Behavior: "host-network-namespace",
 		Message: message,
 	}

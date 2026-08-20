@@ -13,6 +13,7 @@ linters:
     - gomodguard # deprecated, gomodguard_v2 included in all ofc
     - ireturn
     - musttag # also probably should remove but... for now
+    - noinlineerr # contradicts gocritic sloppyReassign on guard-style code; inline error guards are idiomatic here
     - nonamedreturns
     - paralleltest
     - protogetter
@@ -27,12 +28,22 @@ linters:
     gocritic:
       disabled-checks:
         - whyNoLint
+        # normalized plan/input values are deliberately passed and ranged by value: immutability
+        # of the accepted inputs is a design invariant of the record/replay architecture.
+        - hugeParam
+        - rangeValCopy
+        # inline error guards are the codebase idiom (see the noinlineerr disable); sloppyReassign
+        # demands the opposite rewrite, and unnamedResult fights compact typed tuples.
+        - sloppyReassign
+        - unnamedResult
       enabled-tags:
         - diagnostic
         - experimental
         - opinionated
         - performance
         - style
+    exhaustive:
+      default-signifies-exhaustive: true
     gocyclo:
       min-complexity: 15
     importas:
@@ -72,6 +83,15 @@ linters:
         - -ST1000
   exclusions:
     rules:
+      # a machine-readable suppression directive with its mandatory reason must never force a
+      # line wrap that would detach it from the statement it covers.
+      - linters:
+          - lll
+        source: "//nolint:"
+      # a struct field with its serialization tag is one indivisible declaration.
+      - linters:
+          - lll
+        source: "json:\""
       - linters:
           - dupl
           - funlen

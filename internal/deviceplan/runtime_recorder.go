@@ -1,3 +1,4 @@
+//nolint:funcorder,gocyclo,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package deviceplan
 
 import (
@@ -93,11 +94,13 @@ func newRecordingRuntime(
 	} else {
 		runtime.mgmt = &clabtypes.MgmtNet{}
 	}
+
 	for _, image := range images {
 		labels := map[string]string{}
 		for _, label := range image.Config.Labels {
 			labels[label.Name] = label.Value
 		}
+
 		inspect := &clabruntime.ImageInspect{Config: clabruntime.ImageConfig{Labels: labels}}
 		runtime.images[image.SourceReference] = inspect
 		runtime.images[image.DigestReference] = inspect
@@ -109,16 +112,19 @@ func newRecordingRuntime(
 func (r *recordingRuntime) AllowMissingImageMetadata() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.allowMissingImages = true
 }
 
 func (r *recordingRuntime) MissingImages() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	result := make([]string, 0, len(r.missingImages))
 	for reference := range r.missingImages {
 		result = append(result, reference)
 	}
+
 	slices.Sort(result)
 
 	return result
@@ -141,12 +147,14 @@ func (r *recordingRuntime) Failure() error {
 func (r *recordingRuntime) BeginMutationRecording() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.recordingMutations = true
 }
 
 func (r *recordingRuntime) BeginReadinessObservation() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.readinessObservation = true
 }
 
@@ -186,13 +194,16 @@ func (r *recordingRuntime) Stdins() []RecordedStdin {
 func (r *recordingRuntime) allowed(operation string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.calls = append(r.calls, operation)
 }
 
 func (r *recordingRuntime) blocked(operation string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.calls = append(r.calls, operation)
+
 	err := &Error{
 		Code:     ErrorSideEffect,
 		Behavior: operation,
@@ -217,6 +228,7 @@ func (r *recordingRuntime) Mgmt() *clabtypes.MgmtNet {
 
 func (r *recordingRuntime) WithConfig(config *clabruntime.RuntimeConfig) {
 	r.allowed("runtime.WithConfig")
+
 	if config != nil {
 		r.config = *config
 	}
@@ -224,10 +236,11 @@ func (r *recordingRuntime) WithConfig(config *clabruntime.RuntimeConfig) {
 
 func (r *recordingRuntime) WithMgmtNet(mgmt *clabtypes.MgmtNet) {
 	r.allowed("runtime.WithMgmtNet")
+
 	if mgmt != nil {
-		copy := *mgmt
-		copy.DriverOpts = maps.Clone(mgmt.DriverOpts)
-		r.mgmt = &copy
+		duplicate := *mgmt
+		duplicate.DriverOpts = maps.Clone(mgmt.DriverOpts)
+		r.mgmt = &duplicate
 	}
 }
 
@@ -251,11 +264,13 @@ func (r *recordingRuntime) PullImage(
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.recordingMutations {
 		return r.blockedLocked("runtime.PullImage")
 	}
 
 	const operation = "runtime.PullImage"
+
 	r.calls = append(r.calls, operation)
 	if _, exists := r.images[imageName]; !exists {
 		return r.failLocked(&Error{
@@ -273,35 +288,43 @@ func (r *recordingRuntime) CreateContainer(
 ) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.recordingMutations {
 		return "", r.blockedLocked("runtime.CreateContainer")
 	}
+
 	if config == nil {
 		return "", r.failLocked(&Error{
 			Code: ErrorInvariant, Field: "container.config",
-			Behavior: "runtime.CreateContainer", Message: "imported code supplied no container config",
+			Behavior: "runtime.CreateContainer",
+			Message:  "imported code supplied no container config",
 		})
 	}
 
 	r.calls = append(r.calls, "runtime.CreateContainer")
+
 	runtimeID := config.LongName
 	if runtimeID == "" {
 		runtimeID = config.ShortName
 	}
+
 	if runtimeID == "" {
 		return "", r.failLocked(&Error{
 			Code: ErrorInvariant, Field: "container.name",
 			Behavior: "runtime.CreateContainer", Message: "imported container has no identity",
 		})
 	}
+
 	for _, container := range r.containers {
 		if container.RuntimeID == runtimeID {
 			return "", r.failLocked(&Error{
 				Code: ErrorInvariant, Field: "container.name",
-				Behavior: "runtime.CreateContainer", Message: "imported container identity is duplicated",
+				Behavior: "runtime.CreateContainer",
+				Message:  "imported container identity is duplicated",
 			})
 		}
 	}
+
 	r.containers = append(r.containers, RecordedContainer{RuntimeID: runtimeID, Config: config})
 
 	return runtimeID, nil
@@ -314,6 +337,7 @@ func (r *recordingRuntime) StartContainer(
 ) (any, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.recordingMutations {
 		return nil, r.blockedLocked("runtime.StartContainer")
 	}
@@ -351,21 +375,26 @@ func (r *recordingRuntime) ListContainers(
 ) ([]clabruntime.GenericContainer, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.recordingMutations {
 		return nil, r.blockedLocked("runtime.ListContainers")
 	}
 
 	const operation = "runtime.ListContainers"
+
 	r.calls = append(r.calls, operation)
+
 	result := make([]clabruntime.GenericContainer, 0, len(r.containers))
 	for _, recorded := range r.containers {
 		if !recordedContainerMatches(recorded, filters) {
 			continue
 		}
+
 		state := "created"
 		if recorded.Started {
 			state = "running"
 		}
+
 		management := genericManagement(recorded.Config)
 		result = append(result, clabruntime.GenericContainer{
 			Names: []string{recorded.RuntimeID}, ID: recorded.RuntimeID,
@@ -394,9 +423,11 @@ func (r *recordingRuntime) Exec(
 ) (*clabexec.ExecResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.recordingMutations {
 		return nil, r.blockedLocked("runtime.Exec")
 	}
+
 	if err := r.recordExecLocked(runtimeID, command, true); err != nil {
 		return nil, err
 	}
@@ -411,6 +442,7 @@ func (r *recordingRuntime) ExecNotWait(
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.recordingMutations {
 		return r.blockedLocked("runtime.ExecNotWait")
 	}
@@ -440,11 +472,13 @@ func (r *recordingRuntime) GetName() string {
 func (r *recordingRuntime) GetHostsPath(_ context.Context, runtimeID string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.recordingMutations {
 		return "", r.blockedLocked("runtime.GetHostsPath")
 	}
 
 	const operation = "runtime.GetHostsPath"
+
 	r.calls = append(r.calls, operation)
 	if !r.knownContainerLocked(runtimeID) {
 		return "", r.failLocked(&Error{
@@ -452,13 +486,16 @@ func (r *recordingRuntime) GetHostsPath(_ context.Context, runtimeID string) (st
 			Message: "imported hosts-file access targets an unknown container",
 		})
 	}
+
 	if existing := r.hostsPaths[runtimeID]; existing != "" {
 		return filepath.Join(r.artifactRoot, filepath.FromSlash(existing)), nil
 	}
+
 	artifactPath := filepath.ToSlash(filepath.Join(
 		".clabernetes-runtime-hosts",
 		shortDigest(runtimeID),
 	))
+
 	controlledPath := filepath.Join(r.artifactRoot, filepath.FromSlash(artifactPath))
 	if err := os.MkdirAll(filepath.Dir(controlledPath), 0o700); err != nil {
 		return "", r.failLocked(&Error{
@@ -466,23 +503,26 @@ func (r *recordingRuntime) GetHostsPath(_ context.Context, runtimeID string) (st
 			Message: "cannot create a controlled hosts-file artifact directory", cause: err,
 		})
 	}
-	file, err := os.OpenFile(
+
+	file, err := os.OpenFile( //nolint:gosec // reads are confined to plan-scoped roots.
 		controlledPath,
 		os.O_WRONLY|os.O_CREATE|os.O_EXCL,
 		0o666,
-	) //nolint:gosec // Imported hook expects an appendable hosts file in private scratch.
+	)
 	if err != nil {
 		return "", r.failLocked(&Error{
 			Code: ErrorSideEffect, Field: "hosts.snapshot", Behavior: operation,
 			Message: "cannot create a controlled hosts-file artifact", cause: err,
 		})
 	}
+
 	if err = file.Close(); err != nil {
 		return "", r.failLocked(&Error{
 			Code: ErrorSideEffect, Field: "hosts.snapshot", Behavior: operation,
 			Message: "cannot close a controlled hosts-file artifact", cause: err,
 		})
 	}
+
 	r.hostsPaths[runtimeID] = artifactPath
 	r.copies = append(r.copies, RecordedCopy{
 		RuntimeID: runtimeID, Destination: "/etc/hosts", ArtifactPath: artifactPath,
@@ -498,21 +538,25 @@ func (r *recordingRuntime) GetContainerStatus(
 ) clabruntime.ContainerStatus {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if r.readinessObservation && runtimeID != "" {
 		r.calls = append(r.calls, "runtime.GetContainerStatus")
 
 		return clabruntime.Running
 	}
+
 	if !r.recordingMutations {
 		_ = r.blockedLocked("runtime.GetContainerStatus")
 
 		return clabruntime.NotFound
 	}
+
 	r.calls = append(r.calls, "runtime.GetContainerStatus")
 	for _, container := range r.containers {
 		if container.RuntimeID != runtimeID {
 			continue
 		}
+
 		if container.Started {
 			return clabruntime.Running
 		}
@@ -526,14 +570,17 @@ func (r *recordingRuntime) GetContainerStatus(
 func (r *recordingRuntime) IsHealthy(_ context.Context, runtimeID string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if r.readinessObservation && runtimeID != "" {
 		r.calls = append(r.calls, "runtime.IsHealthy")
 
 		return true, nil
 	}
+
 	if !r.recordingMutations {
 		return false, r.blockedLocked("runtime.IsHealthy")
 	}
+
 	r.calls = append(r.calls, "runtime.IsHealthy")
 	for _, container := range r.containers {
 		if container.RuntimeID == runtimeID {
@@ -554,11 +601,13 @@ func (r *recordingRuntime) WriteToStdinNoWait(
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.recordingMutations {
 		return r.blockedLocked("runtime.WriteToStdinNoWait")
 	}
 
 	const operation = "runtime.WriteToStdinNoWait"
+
 	r.calls = append(r.calls, operation)
 	if !r.knownContainerLocked(runtimeID) {
 		return r.failLocked(&Error{
@@ -566,12 +615,14 @@ func (r *recordingRuntime) WriteToStdinNoWait(
 			Message: "imported stdin write targets an unknown container",
 		})
 	}
+
 	if len(content) == 0 {
 		return r.failLocked(&Error{
 			Code: ErrorInvariant, Field: "stdin.content", Behavior: operation,
 			Message: "imported stdin write has no content",
 		})
 	}
+
 	artifactPath := filepath.ToSlash(filepath.Join(
 		".clabernetes-runtime-stdin",
 		fmt.Sprintf("%06d", len(r.stdins)),
@@ -585,6 +636,7 @@ func (r *recordingRuntime) WriteToStdinNoWait(
 	); err != nil {
 		return err
 	}
+
 	r.stdins = append(r.stdins, RecordedStdin{
 		RuntimeID: runtimeID, ArtifactPath: artifactPath, Order: r.takeActionOrderLocked(),
 	})
@@ -623,7 +675,9 @@ func (r *recordingRuntime) InspectImage(
 ) (*clabruntime.ImageInspect, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.calls = append(r.calls, "runtime.InspectImage")
+
 	image, ok := r.images[imageName]
 	if !ok {
 		if r.allowMissingImages {
@@ -631,6 +685,7 @@ func (r *recordingRuntime) InspectImage(
 
 			return &clabruntime.ImageInspect{}, nil
 		}
+
 		err := &Error{
 			Code:     ErrorMissingInput,
 			Field:    "images",
@@ -643,10 +698,11 @@ func (r *recordingRuntime) InspectImage(
 
 		return nil, err
 	}
-	copy := *image
-	copy.Config.Labels = maps.Clone(image.Config.Labels)
 
-	return &copy, nil
+	duplicate := *image
+	duplicate.Config.Labels = maps.Clone(image.Config.Labels)
+
+	return &duplicate, nil
 }
 
 func (r *recordingRuntime) CopyToContainer(
@@ -657,11 +713,13 @@ func (r *recordingRuntime) CopyToContainer(
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if !r.recordingMutations {
 		return r.blockedLocked("runtime.CopyToContainer")
 	}
 
 	const operation = "runtime.CopyToContainer"
+
 	r.calls = append(r.calls, operation)
 	if !r.knownContainerLocked(runtimeID) {
 		return r.failLocked(&Error{
@@ -669,12 +727,14 @@ func (r *recordingRuntime) CopyToContainer(
 			Message: "imported runtime copy targets an unknown container",
 		})
 	}
+
 	if destination == "" || source == "" {
 		return r.failLocked(&Error{
 			Code: ErrorInvariant, Field: "copy.path", Behavior: operation,
 			Message: "imported runtime copy has an empty source or destination",
 		})
 	}
+
 	info, err := os.Lstat(source)
 	if err != nil {
 		return r.failLocked(&Error{
@@ -682,22 +742,26 @@ func (r *recordingRuntime) CopyToContainer(
 			Message: "imported runtime copy source is unavailable", cause: err,
 		})
 	}
+
 	if !info.Mode().IsRegular() {
 		return r.failLocked(&Error{
 			Code: ErrorUnsupported, Field: "copy.source", Behavior: operation,
 			Message: "imported runtime copy source is not a regular file",
 		})
 	}
-	content, err := os.ReadFile(
+
+	content, err := os.ReadFile( //nolint:gosec // reads are confined to plan-scoped roots.
 		source,
-	) //nolint:gosec // Source is selected by imported hook in a disposable planning process.
+	)
 	if err != nil {
 		return r.failLocked(&Error{
 			Code: ErrorMissingInput, Field: "copy.source", Behavior: operation,
 			Message: "imported runtime copy source cannot be read", cause: err,
 		})
 	}
-	artifactPath := ""
+
+	var artifactPath string
+
 	relative, relativeErr := filepath.Rel(r.artifactRoot, source)
 	if relativeErr == nil && relative != "." && relative != ".." &&
 		!filepath.IsAbs(relative) && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
@@ -709,10 +773,12 @@ func (r *recordingRuntime) CopyToContainer(
 
 		return nil
 	}
+
 	artifactPath = filepath.ToSlash(filepath.Join(
 		".clabernetes-runtime-copies",
 		fmt.Sprintf("%06d", len(r.copies)),
 	))
+
 	snapshotPath := filepath.Join(r.artifactRoot, filepath.FromSlash(artifactPath))
 	if err = os.MkdirAll(filepath.Dir(snapshotPath), 0o700); err != nil {
 		return r.failLocked(&Error{
@@ -726,29 +792,34 @@ func (r *recordingRuntime) CopyToContainer(
 	// readable by unprivileged device users. Record the mode the runtime contract realizes,
 	// applied explicitly so the process umask cannot skew the captured artifact metadata.
 	const runtimeCopyMode = 0o666
-	file, err := os.OpenFile(
+
+	file, err := os.OpenFile( //nolint:gosec // reads are confined to plan-scoped roots.
 		snapshotPath,
 		os.O_WRONLY|os.O_CREATE|os.O_EXCL,
 		runtimeCopyMode,
-	) //nolint:gosec // The runtime-contract mode is realized inside private scratch.
+	)
 	if err != nil {
 		return r.failLocked(&Error{
 			Code: ErrorSideEffect, Field: "copy.snapshot", Behavior: operation,
 			Message: "cannot create a controlled runtime-copy artifact", cause: err,
 		})
 	}
+
 	if _, err = file.Write(content); err == nil {
 		err = file.Chmod(runtimeCopyMode)
 	}
+
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
+
 	if err != nil {
 		return r.failLocked(&Error{
 			Code: ErrorSideEffect, Field: "copy.snapshot", Behavior: operation,
 			Message: "cannot write a controlled runtime-copy artifact", cause: err,
 		})
 	}
+
 	r.copies = append(r.copies, RecordedCopy{
 		RuntimeID: runtimeID, Destination: destination, ArtifactPath: artifactPath,
 		WriteMode: FileWriteReplace, Order: r.takeActionOrderLocked(),
@@ -783,6 +854,7 @@ func (r *recordingRuntime) recordExecLocked(
 	if wait {
 		operation = "runtime.Exec"
 	}
+
 	r.calls = append(r.calls, operation)
 	if command == nil || len(command.GetCmd()) == 0 {
 		return r.failLocked(&Error{
@@ -790,12 +862,14 @@ func (r *recordingRuntime) recordExecLocked(
 			Message: "imported runtime exec has no command",
 		})
 	}
+
 	if !r.knownContainerLocked(runtimeID) {
 		return r.failLocked(&Error{
 			Code: ErrorInvariant, Field: "exec.container", Behavior: operation,
 			Message: "imported runtime exec targets an unknown container",
 		})
 	}
+
 	r.execs = append(r.execs, RecordedExec{
 		RuntimeID: runtimeID,
 		Command:   slices.Clone(command.GetCmd()),
@@ -837,18 +911,26 @@ func (r *recordingRuntime) writeArtifactLocked(
 			Message: "cannot create a controlled runtime artifact directory", cause: err,
 		})
 	}
-	file, err := os.OpenFile(controlledPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+
+	//nolint:gosec // reads are confined to plan-scoped roots.
+	file, err := os.OpenFile(
+		controlledPath,
+		os.O_WRONLY|os.O_CREATE|os.O_EXCL,
+		mode,
+	) //nolint:gosec // reads are confined to plan-scoped roots.
 	if err != nil {
 		return r.failLocked(&Error{
 			Code: ErrorSideEffect, Field: field, Behavior: operation,
 			Message: "cannot create a controlled runtime artifact", cause: err,
 		})
 	}
+
 	if _, err = file.Write(content); err == nil {
 		err = file.Close()
 	} else {
 		_ = file.Close()
 	}
+
 	if err != nil {
 		return r.failLocked(&Error{
 			Code: ErrorSideEffect, Field: field, Behavior: operation,
@@ -867,6 +949,7 @@ func recordedContainerMatches(
 		if filter == nil {
 			continue
 		}
+
 		switch filter.FilterType {
 		case "name":
 			if filter.Match != container.RuntimeID && filter.Match != container.Config.LongName &&
@@ -911,6 +994,7 @@ func genericManagement(config *clabtypes.NodeConfig) clabruntime.GenericMgmtIPs 
 	if result.IPv4pLen == 0 {
 		result.IPv4pLen = config.MgmtIPv4PrefixLength
 	}
+
 	if result.IPv6pLen == 0 {
 		result.IPv6pLen = config.MgmtIPv6PrefixLength
 	}
@@ -922,10 +1006,12 @@ func splitManagementPrefix(value string) (string, int) {
 	if value == "" {
 		return "", 0
 	}
+
 	address, network, err := net.ParseCIDR(value)
 	if err != nil {
 		return value, 0
 	}
+
 	prefix, _ := network.Mask.Size()
 
 	return address.String(), prefix

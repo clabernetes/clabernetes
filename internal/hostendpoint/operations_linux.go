@@ -1,6 +1,6 @@
 //go:build linux
 
-//nolint:err113,gocritic,noinlineerr,perfsprint,wsl_v5 // Exact ownership diagnostics are explicit.
+//nolint:err113,gocognit,mnd,nestif,noinlineerr,perfsprint,wsl_v5 // Exact ownership diagnostics are explicit.
 package hostendpoint
 
 import (
@@ -122,7 +122,7 @@ func (linuxOperations) Ensure(
 	return err
 }
 
-//nolint:funlen,gocognit,gocyclo,nestif // One transaction guards each cross-namespace mutation.
+//nolint:gocognit,gocyclo,nestif // One transaction guards each cross-namespace mutation.
 func ensureOwnedVethPair(
 	hostHandle *netlink.Handle,
 	podHandle *netlink.Handle,
@@ -930,8 +930,6 @@ func (linuxOperations) ListManagement(ctx context.Context) ([]OwnedManagementObj
 // kernel hairpin to the Pod's own cluster address through the worker host namespace, keeping
 // application-local management dials working after a device implementation takes ownership of
 // the Pod's primary interface.
-//
-//nolint:funlen // One transaction realizes the pair, its addressing, and the hairpin route.
 func (linuxOperations) EnsureManagement(
 	ctx context.Context,
 	endpoint ManagementEndpoint,
@@ -1094,7 +1092,15 @@ func managementLegPairIndex(handle *netlink.Handle, link netlink.Link) (int, boo
 func managementLoopAddress(offset uint32) net.IP {
 	value := managementLoopBase + offset
 
-	return net.IPv4(byte(value>>24), byte(value>>16), byte(value>>8), byte(value))
+	return net.IPv4(
+		byte(value>>24),
+		//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		byte(value>>16),
+		//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		byte(value>>8),
+		//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		byte(value),
+	)
 }
 
 // ensureInterfaceAddress idempotently installs one /31 loop address on an owned interface.

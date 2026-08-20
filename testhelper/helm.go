@@ -171,7 +171,12 @@ func ReadAllRenderedTemplates(t *testing.T, rootRenderDir string) map[string][]b
 			)
 		}
 
-		renderedTemplates[fmt.Sprintf("_subchart-%s-%s", subChartName, filepath.Base(subChartFileName))] = contents //nolint:lll
+		subChartKey := fmt.Sprintf(
+			"_subchart-%s-%s",
+			subChartName,
+			filepath.Base(subChartFileName),
+		)
+		renderedTemplates[subChartKey] = contents
 	}
 
 	return renderedTemplates

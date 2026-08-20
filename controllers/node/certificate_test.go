@@ -1,20 +1,24 @@
+//nolint:gocyclo,testpackage // dense fixture-driven tests exercise one boundary end to end.
 package node
 
 import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"slices"
 	"testing"
 	"time"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	k8scorev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+var errInterceptedCreate = errors.New("intercepted create is not a client object")
 
 type alreadyExistsAfterSecretCreateClient struct {
 	ctrlruntimeclient.Client
@@ -27,7 +31,7 @@ func (c *alreadyExistsAfterSecretCreateClient) Get(
 	options ...ctrlruntimeclient.GetOption,
 ) error {
 	if _, ok := object.(*k8scorev1.Secret); ok {
-		return apierrors.NewNotFound(
+		return apimachineryerrors.NewNotFound(
 			schema.GroupResource{Group: "", Resource: "secrets"},
 			key.Name,
 		)
@@ -44,11 +48,17 @@ func (c *alreadyExistsAfterSecretCreateClient) Create(
 	if _, ok := object.(*k8scorev1.Secret); !ok {
 		return c.Client.Create(ctx, object, options...)
 	}
-	if err := c.Client.Create(ctx, object.DeepCopyObject().(ctrlruntimeclient.Object), options...); err != nil {
+
+	clientObject, ok := object.DeepCopyObject().(ctrlruntimeclient.Object)
+	if !ok {
+		return errInterceptedCreate
+	}
+
+	if err := c.Client.Create(ctx, clientObject, options...); err != nil {
 		return err
 	}
 
-	return apierrors.NewAlreadyExists(
+	return apimachineryerrors.NewAlreadyExists(
 		schema.GroupResource{Group: "", Resource: "secrets"},
 		object.GetName(),
 	)
@@ -64,7 +74,7 @@ func TestCertificateReconcilerIssuesImportedPublicRequestWithoutKindKnowledge(t 
 		WithObjects(owner).
 		Build()
 	reconciler := &CertificateReconciler{Client: client}
-	requirement := clabernetesdeviceplan.CertificateRequirement{
+	requirement := clabernetesinternaldeviceplan.CertificateRequirement{
 		NodeID: string(owner.GetUID()), StorageName: "package-storage-name",
 		CommonName:  "future-device.lab.example",
 		DNSNames:    []string{"future-device", "future-device.lab.example"},
@@ -72,39 +82,46 @@ func TestCertificateReconcilerIssuesImportedPublicRequestWithoutKindKnowledge(t 
 		Country:     "US", Organization: "package-owned-subject",
 		KeySize: 2048, ValidityNanoseconds: int64(48 * time.Hour),
 	}
+
 	resolution, err := reconciler.Resolve(
 		ctx,
 		owner,
 		"lab",
-		[]clabernetesdeviceplan.CertificateRequirement{
+		[]clabernetesinternaldeviceplan.CertificateRequirement{
 			requirement,
 		},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if resolution.SecretName == "" || len(resolution.Inputs) != 1 ||
 		len(resolution.SensitiveValues) != 4 {
 		t.Fatalf("certificate resolution = %#v", resolution)
 	}
+
 	secret := &k8scorev1.Secret{}
 	if err = client.Get(ctx, ctrlruntimeclient.ObjectKey{
 		Namespace: owner.GetNamespace(), Name: resolution.SecretName,
 	}, secret); err != nil {
 		t.Fatal(err)
 	}
-	certificateKey, _ := clabernetesdeviceplan.CertificateMaterialKeys(
+
+	certificateKey, _ := clabernetesinternaldeviceplan.CertificateMaterialKeys(
 		requirement.NodeID,
 		requirement.StorageName,
 	)
+
 	block, _ := pem.Decode(secret.Data[certificateKey])
 	if block == nil {
 		t.Fatal("issued certificate is not PEM encoded")
 	}
+
 	certificate, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if certificate.Subject.CommonName != requirement.CommonName ||
 		!slices.Equal(certificate.DNSNames, requirement.DNSNames) ||
 		len(certificate.IPAddresses) != len(requirement.IPAddresses) ||
@@ -117,13 +134,14 @@ func TestCertificateReconcilerIssuesImportedPublicRequestWithoutKindKnowledge(t 
 		ctx,
 		owner,
 		"lab",
-		[]clabernetesdeviceplan.CertificateRequirement{
+		[]clabernetesinternaldeviceplan.CertificateRequirement{
 			requirement,
 		},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if again.SecretName != resolution.SecretName ||
 		again.Inputs[0].CertificateDigest != resolution.Inputs[0].CertificateDigest {
 		t.Fatalf(
@@ -147,7 +165,7 @@ func TestCertificateReconcilerConvergesAcrossSecretCreateRaces(t *testing.T) {
 		Client: &alreadyExistsAfterSecretCreateClient{Client: baseClient},
 		Reader: baseClient,
 	}
-	requirement := clabernetesdeviceplan.CertificateRequirement{
+	requirement := clabernetesinternaldeviceplan.CertificateRequirement{
 		NodeID: string(owner.GetUID()), StorageName: "package-storage-name",
 		CommonName: "future-device.lab.example", DNSNames: []string{"future-device"},
 		Country: "US", Organization: "package-owned-subject", KeySize: 2048,
@@ -157,11 +175,12 @@ func TestCertificateReconcilerConvergesAcrossSecretCreateRaces(t *testing.T) {
 		ctx,
 		owner,
 		"lab",
-		[]clabernetesdeviceplan.CertificateRequirement{requirement},
+		[]clabernetesinternaldeviceplan.CertificateRequirement{requirement},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if resolution.SecretName == "" || len(resolution.Inputs) != 1 {
 		t.Fatalf("certificate resolution after create races = %#v", resolution)
 	}

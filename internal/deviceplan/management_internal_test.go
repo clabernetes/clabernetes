@@ -20,6 +20,7 @@ func TestCompleteRuntimeManagementFillsUnaddressedNodesWithPodAddress(t *testing
 	completed := completeRuntimeManagement(
 		explicit, nodes, plans, "10.244.1.181", "10.244.1.1", []string{"10.96.0.10"},
 	)
+
 	want := []ManagementInput{
 		{
 			NodeID:        "node-a",
@@ -78,21 +79,25 @@ func TestApplyManagementDNSKeepsTopologyPrecedence(t *testing.T) {
 	if !reflect.DeepEqual(config.DNS.Servers, []string{"192.0.2.53"}) {
 		t.Fatalf("topology DNS servers were overwritten: %#v", config.DNS)
 	}
+
 	if !reflect.DeepEqual(config.DNS.Search, []string{"svc"}) {
 		t.Fatalf("unset search domains were not completed: %#v", config.DNS)
 	}
+
 	if topology.Search != nil {
 		t.Fatalf("shared definition DNS struct was mutated: %#v", topology)
 	}
 
 	completed := &clabtypes.NodeConfig{}
 	applyManagementDNS(completed, DNSConfig{Servers: []string{"10.96.0.10"}})
+
 	if completed.DNS == nil || !reflect.DeepEqual(completed.DNS.Servers, []string{"10.96.0.10"}) {
 		t.Fatalf("empty node DNS was not completed: %#v", completed.DNS)
 	}
 
 	member := &clabtypes.NodeConfig{NetworkMode: "container:owner"}
 	applyManagementDNS(member, DNSConfig{Servers: []string{"10.96.0.10"}})
+
 	if member.DNS != nil {
 		t.Fatalf("container-network-mode member received DNS config: %#v", member.DNS)
 	}

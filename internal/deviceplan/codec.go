@@ -1,4 +1,4 @@
-//nolint:cyclop,funlen,gocognit,gocyclo,maintidx // Schema validation is one fail-closed boundary.
+//nolint:cyclop,err113,funlen,gocognit,gocyclo,maintidx // Schema validation is one fail-closed boundary.
 package deviceplan
 
 import (
@@ -89,6 +89,7 @@ func NormalizeInput(input Input) (Input, error) {
 	if err != nil {
 		return Input{}, planningError(ErrorSerialization, "input", "cannot clone input", err)
 	}
+
 	if err = validateInput(normalized); err != nil {
 		return Input{}, err
 	}
@@ -97,10 +98,12 @@ func NormalizeInput(input Input) (Input, error) {
 		return strings.Compare(left.ID, right.ID)
 	})
 	slices.SortFunc(normalized.Images, compareImageInput)
+
 	for index := range normalized.Images {
 		normalizeImageConfig(&normalized.Images[index].Config)
 		slices.Sort(normalized.Images[index].Platform.OSFeatures)
 	}
+
 	slices.SortFunc(normalized.Payloads, func(left, right PayloadInput) int {
 		return strings.Compare(left.ID, right.ID)
 	})
@@ -127,16 +130,19 @@ func NormalizePlan(plan Plan) (Plan, error) {
 	if err != nil {
 		return Plan{}, planningError(ErrorSerialization, "plan", "cannot clone plan", err)
 	}
+
 	for index := range normalized.Containers {
 		if normalized.Containers[index].RuntimeID == "" {
 			normalized.Containers[index].RuntimeID = normalized.Containers[index].ID
 		}
 	}
+
 	for index := range normalized.Files {
 		if normalized.Files[index].ArtifactKind == "" {
 			normalized.Files[index].ArtifactKind = ArtifactRegular
 		}
 	}
+
 	if err = validatePlan(normalized); err != nil {
 		return Plan{}, err
 	}
@@ -144,13 +150,16 @@ func NormalizePlan(plan Plan) (Plan, error) {
 	slices.SortFunc(normalized.Nodes, func(left, right NodePlan) int {
 		return strings.Compare(left.ID, right.ID)
 	})
+
 	for index := range normalized.Nodes {
 		slices.Sort(normalized.Nodes[index].ReadinessContainerIDs)
 		slices.Sort(normalized.Nodes[index].Aliases)
 	}
+
 	slices.SortFunc(normalized.Containers, func(left, right ContainerPlan) int {
 		return strings.Compare(left.ID, right.ID)
 	})
+
 	for index := range normalized.Containers {
 		container := &normalized.Containers[index]
 		slices.Sort(container.MountIDs)
@@ -162,9 +171,11 @@ func NormalizePlan(plan Plan) (Plan, error) {
 		slices.SortFunc(container.Labels, compareKeyValue)
 		slices.SortFunc(container.Ports, comparePort)
 	}
+
 	slices.SortFunc(normalized.Files, func(left, right FilePlan) int {
 		return strings.Compare(left.ID, right.ID)
 	})
+
 	for index := range normalized.Files {
 		slices.SortFunc(normalized.Files[index].Variables, compareKeyValue)
 		slices.SortFunc(
@@ -174,6 +185,7 @@ func NormalizePlan(plan Plan) (Plan, error) {
 			},
 		)
 	}
+
 	slices.SortFunc(normalized.Volumes, func(left, right VolumePlan) int {
 		return strings.Compare(left.ID, right.ID)
 	})
@@ -184,9 +196,11 @@ func NormalizePlan(plan Plan) (Plan, error) {
 	slices.SortFunc(normalized.Management, func(left, right ManagementPlan) int {
 		return strings.Compare(left.ID, right.ID)
 	})
+
 	for index := range normalized.Management {
 		slices.SortFunc(normalized.Management[index].Routes, compareRoute)
 	}
+
 	slices.SortFunc(normalized.Interfaces, func(left, right InterfacePlan) int {
 		return strings.Compare(left.ID, right.ID)
 	})
@@ -198,18 +212,22 @@ func validateInput(input Input) error {
 	if err := validateHeader(input.SchemaVersion, input.Compatibility); err != nil {
 		return err
 	}
+
 	if strings.TrimSpace(input.TopologyName) == "" {
 		return planningError(ErrorMissingInput, "topologyName", "topology name is required", nil)
 	}
+
 	if input.EntropyDigest != "" && !validDigest(input.EntropyDigest) {
 		return planningError(ErrorInvalidInput, "entropyDigest", "must be a sha256 digest", nil)
 	}
+
 	if len(input.Nodes) == 0 {
 		return planningError(ErrorMissingInput, "nodes", "at least one Node is required", nil)
 	}
 
 	nodes := map[string]bool{}
 	names := map[string]bool{}
+
 	for index, node := range input.Nodes {
 		field := fmt.Sprintf("nodes[%d]", index)
 		if node.ID == "" || node.Name == "" || node.Kind == "" {
@@ -220,15 +238,19 @@ func validateInput(input Input) error {
 				nil,
 			)
 		}
+
 		if nodes[node.ID] || names[node.Name] {
 			return planningError(ErrorInvalidInput, field, "Node identity is duplicated", nil)
 		}
+
 		if !json.Valid(node.Definition) {
 			return planningError(ErrorInvalidInput, field+".definition", "must be valid JSON", nil)
 		}
+
 		nodes[node.ID] = true
 		names[node.Name] = true
 	}
+
 	for index, node := range input.Nodes {
 		if node.GroupOwner != "" && !nodes[node.GroupOwner] {
 			return planningError(
@@ -241,6 +263,7 @@ func validateInput(input Input) error {
 	}
 
 	images := map[string]bool{}
+
 	for index, image := range input.Images {
 		field := fmt.Sprintf("images[%d]", index)
 		if !nodes[image.NodeID] {
@@ -251,14 +274,17 @@ func validateInput(input Input) error {
 				nil,
 			)
 		}
+
 		identity := image.Role
 		if identity == "" {
 			identity = image.SourceReference
 		}
+
 		key := image.NodeID + "\x00" + identity
 		if images[key] {
 			return planningError(ErrorInvalidInput, field, "image identity is duplicated", nil)
 		}
+
 		if image.SourceReference == "" || image.DigestReference == "" ||
 			image.Platform.OS == "" || image.Platform.Architecture == "" {
 			return planningError(
@@ -268,16 +294,21 @@ func validateInput(input Input) error {
 				nil,
 			)
 		}
-		if err := validateUniqueKeyValues(image.Config.Environment, field+".config.environment"); err != nil {
+
+		if err := validateUniqueKeyValues(image.Config.Environment,
+			field+".config.environment"); err != nil {
 			return err
 		}
+
 		if err := validateUniqueKeyValues(image.Config.Labels, field+".config.labels"); err != nil {
 			return err
 		}
+
 		images[key] = true
 	}
 
 	payloads := map[string]bool{}
+
 	for index, payload := range input.Payloads {
 		field := fmt.Sprintf("payloads[%d]", index)
 		if payload.ID == "" || payload.Destination == "" || !nodes[payload.NodeID] {
@@ -288,9 +319,11 @@ func validateInput(input Input) error {
 				nil,
 			)
 		}
+
 		if payloads[payload.ID] {
 			return planningError(ErrorInvalidInput, field+".id", "payload ID is duplicated", nil)
 		}
+
 		if !validPayloadKind(payload.Kind) {
 			return planningError(
 				ErrorUnsupported,
@@ -299,13 +332,16 @@ func validateInput(input Input) error {
 				nil,
 			)
 		}
+
 		if payload.Reference == "" || payload.Kind == PayloadInline && payload.Digest == "" {
 			return planningError(ErrorMissingInput, field, "payload identity is incomplete", nil)
 		}
+
 		payloads[payload.ID] = true
 	}
 
 	certificates := map[string]bool{}
+
 	for index, certificate := range input.Certificates {
 		field := fmt.Sprintf("certificates[%d]", index)
 		if !nodes[certificate.NodeID] {
@@ -316,6 +352,7 @@ func validateInput(input Input) error {
 				nil,
 			)
 		}
+
 		if strings.TrimSpace(certificate.StorageName) == "" ||
 			!validDigest(certificate.CertificateDigest) ||
 			!validDigest(certificate.PrivateKeyDigest) ||
@@ -328,6 +365,7 @@ func validateInput(input Input) error {
 				nil,
 			)
 		}
+
 		identity := certificate.NodeID + "\x00" + certificate.StorageName
 		if certificates[identity] {
 			return planningError(
@@ -337,21 +375,25 @@ func validateInput(input Input) error {
 				nil,
 			)
 		}
+
 		certificates[identity] = true
 	}
 
 	managementNodes := map[string]bool{}
+
 	for index, management := range input.Management {
 		field := fmt.Sprintf("management[%d]", index)
 		if !nodes[management.NodeID] {
 			return planningError(ErrorInvalidInput, field, "known Node is required", nil)
 		}
+
 		if management.InterfaceName == "" && management.IPv4 == "" &&
 			management.IPv4Gateway == "" && management.IPv6 == "" &&
 			management.IPv6Gateway == "" && len(management.DNS.Servers) == 0 &&
 			len(management.DNS.Search) == 0 && len(management.DNS.Options) == 0 {
 			return planningError(ErrorInvalidInput, field, "management intent is empty", nil)
 		}
+
 		if managementNodes[management.NodeID] {
 			return planningError(
 				ErrorInvalidInput,
@@ -360,19 +402,23 @@ func validateInput(input Input) error {
 				nil,
 			)
 		}
+
 		managementNodes[management.NodeID] = true
 	}
 
 	interfaces := map[string]bool{}
+
 	for index, intf := range input.Interfaces {
 		field := fmt.Sprintf("interfaces[%d]", index)
 		if intf.ID == "" || !nodes[intf.NodeID] || intf.Name == "" || intf.LinkID == "" ||
 			intf.Connectivity == "" || intf.TunnelID < 0 || intf.MTU < 0 {
 			return planningError(ErrorInvalidInput, field, "interface input is incomplete", nil)
 		}
+
 		if interfaces[intf.ID] {
 			return planningError(ErrorInvalidInput, field+".id", "interface ID is duplicated", nil)
 		}
+
 		interfaces[intf.ID] = true
 	}
 
@@ -383,34 +429,42 @@ func validatePlan(plan Plan) error {
 	if err := validateHeader(plan.SchemaVersion, plan.Compatibility); err != nil {
 		return err
 	}
+
 	if !validDigest(plan.InputDigest) {
 		return planningError(ErrorInvalidInput, "inputDigest", "must be a sha256 digest", nil)
 	}
+
 	if plan.Planner.Name == "" || plan.Planner.Revision == "" {
 		return planningError(ErrorMissingInput, "planner", "name and revision are required", nil)
 	}
+
 	if len(plan.Nodes) == 0 || len(plan.Containers) == 0 {
 		return planningError(ErrorMissingInput, "plan", "Nodes and containers are required", nil)
 	}
 
 	nodes := map[string]NodePlan{}
+
 	for index, node := range plan.Nodes {
 		field := fmt.Sprintf("nodes[%d]", index)
 		if node.ID == "" || node.Name == "" || node.Kind == "" || len(node.ContainerIDs) == 0 ||
 			len(node.ReadinessContainerIDs) == 0 {
 			return planningError(ErrorInvalidInput, field, "logical Node plan is incomplete", nil)
 		}
+
 		if _, exists := nodes[node.ID]; exists {
 			return planningError(ErrorInvariant, field+".id", "Node ID is duplicated", nil)
 		}
+
 		if hasDuplicates(node.ContainerIDs) || hasDuplicates(node.ReadinessContainerIDs) {
 			return planningError(ErrorInvariant, field, "container references are duplicated", nil)
 		}
+
 		nodes[node.ID] = node
 	}
 
 	containers := map[string]ContainerPlan{}
 	runtimeIDs := map[string]bool{}
+
 	for index, container := range plan.Containers {
 		field := fmt.Sprintf("containers[%d]", index)
 		if container.ID == "" || container.RuntimeID == "" || container.Image == "" ||
@@ -422,6 +476,7 @@ func validatePlan(plan Plan) error {
 				nil,
 			)
 		}
+
 		if container.ImageDigest != "" && !validDigest(container.ImageDigest) {
 			return planningError(
 				ErrorInvalidInput,
@@ -430,12 +485,15 @@ func validatePlan(plan Plan) error {
 				nil,
 			)
 		}
+
 		if _, exists := nodes[container.NodeID]; !exists {
 			return planningError(ErrorInvariant, field+".nodeID", "references an unknown Node", nil)
 		}
+
 		if _, exists := containers[container.ID]; exists {
 			return planningError(ErrorInvariant, field+".id", "container ID is duplicated", nil)
 		}
+
 		if runtimeIDs[container.RuntimeID] {
 			return planningError(
 				ErrorInvariant,
@@ -444,17 +502,23 @@ func validatePlan(plan Plan) error {
 				nil,
 			)
 		}
+
 		runtimeIDs[container.RuntimeID] = true
 		if err := validateUniqueKeyValues(container.Environment, field+".environment"); err != nil {
 			return err
 		}
+
 		if err := validateUniqueKeyValues(container.Labels, field+".labels"); err != nil {
 			return err
 		}
-		if err := validateUniqueKeyValues(container.Security.Sysctls, field+".security.sysctls"); err != nil {
+
+		if err := validateUniqueKeyValues(container.Security.Sysctls,
+			field+".security.sysctls"); err != nil {
 			return err
 		}
+
 		ports := map[string]bool{}
+
 		for portIndex, port := range container.Ports {
 			portField := fmt.Sprintf("%s.ports[%d]", field, portIndex)
 			if port.Number < 1 || port.Number > 65535 ||
@@ -466,14 +530,18 @@ func validatePlan(plan Plan) error {
 					nil,
 				)
 			}
+
 			key := fmt.Sprintf("%d/%s", port.Number, port.Protocol)
 			if ports[key] {
 				return planningError(ErrorInvariant, portField, "container port is duplicated", nil)
 			}
+
 			ports[key] = true
 		}
+
 		containers[container.ID] = container
 	}
+
 	for index, container := range plan.Containers {
 		if _, exists := containers[container.NamespaceOwnerID]; !exists {
 			return planningError(
@@ -484,12 +552,15 @@ func validatePlan(plan Plan) error {
 			)
 		}
 	}
+
 	for index, node := range plan.Nodes {
 		containerIDs := make(map[string]bool, len(node.ContainerIDs))
 		for _, containerID := range node.ContainerIDs {
 			containerIDs[containerID] = true
 		}
-		for _, containerID := range append(slices.Clone(node.ContainerIDs), node.ReadinessContainerIDs...) {
+
+		for _, containerID := range append(slices.Clone(node.ContainerIDs),
+			node.ReadinessContainerIDs...) {
 			container, exists := containers[containerID]
 			if !exists || container.NodeID != node.ID {
 				return planningError(
@@ -500,6 +571,7 @@ func validatePlan(plan Plan) error {
 				)
 			}
 		}
+
 		for _, containerID := range node.ReadinessContainerIDs {
 			if !containerIDs[containerID] {
 				return planningError(
@@ -513,12 +585,15 @@ func validatePlan(plan Plan) error {
 	}
 
 	files := map[string]FilePlan{}
+
 	for index, file := range plan.Files {
 		field := fmt.Sprintf("files[%d]", index)
+
 		artifactKind := file.ArtifactKind
 		if artifactKind == "" {
 			artifactKind = ArtifactRegular
 		}
+
 		artifactPath := path.Clean(file.ArtifactPath)
 		if file.ID == "" || !validFileSourceKind(file.SourceKind) ||
 			(artifactKind != ArtifactRegular && artifactKind != ArtifactSymlink &&
@@ -531,7 +606,8 @@ func validatePlan(plan Plan) error {
 			!validPortableOwnership(file.GID) {
 			return planningError(ErrorInvalidInput, field, "file plan is incomplete", nil)
 		}
-		if artifactKind == ArtifactSymlink {
+
+		if artifactKind == ArtifactSymlink { //nolint:gocritic // each guard names one divergence class.
 			if (file.SourceKind != FileSourceGenerator &&
 				file.SourceKind != FileSourceCertificate) || file.LinkTarget == "" ||
 				len(file.LinkTarget) > maxGeneratedSymlinkTargetBytes ||
@@ -550,14 +626,18 @@ func validatePlan(plan Plan) error {
 				return planningError(ErrorInvalidInput, field, "directory plan is incomplete", nil)
 			}
 		} else if file.LinkTarget != "" {
-			return planningError(ErrorInvalidInput, field, "regular artifact has a link target", nil)
+			return planningError(ErrorInvalidInput, field,
+				"regular artifact has a link target", nil)
 		}
+
 		if len(file.ExtendedAttributes) > 128 ||
 			(len(file.ExtendedAttributes) != 0 && file.SourceKind != FileSourceGenerator &&
 				file.SourceKind != FileSourceCertificate) {
 			return planningError(ErrorInvalidInput, field, "artifact metadata is invalid", nil)
 		}
+
 		attributeNames := map[string]bool{}
+
 		for attributeIndex, attribute := range file.ExtendedAttributes {
 			attributeField := fmt.Sprintf("%s.extendedAttributes[%d]", field, attributeIndex)
 			if attribute.Name == "" || len(attribute.Name) > 255 ||
@@ -570,45 +650,58 @@ func validatePlan(plan Plan) error {
 					nil,
 				)
 			}
+
 			attributeNames[attribute.Name] = true
 		}
+
 		if file.SourceKind == FileSourcePayload && file.Destination == "" {
 			return planningError(ErrorInvalidInput, field, "payload destination is required", nil)
 		}
+
 		if file.Digest != "" && !validDigest(file.Digest) {
 			return planningError(ErrorInvalidInput, field+".digest", "file digest is invalid", nil)
 		}
+
 		if (file.SourceKind == FileSourceEmpty) != (file.SourceReference == "") {
 			return planningError(ErrorInvalidInput, field, "file source identity is invalid", nil)
 		}
+
 		if err := validateUniqueKeyValues(file.Variables, field+".variables"); err != nil {
 			return err
 		}
+
 		if _, exists := nodes[file.NodeID]; !exists {
 			return planningError(ErrorInvariant, field+".nodeID", "references an unknown Node", nil)
 		}
+
 		if _, exists := files[file.ID]; exists {
 			return planningError(ErrorInvariant, field+".id", "file ID is duplicated", nil)
 		}
+
 		files[file.ID] = file
 	}
 
 	volumes := map[string]VolumePlan{}
+
 	for index, volume := range plan.Volumes {
 		field := fmt.Sprintf("volumes[%d]", index)
 		if volume.ID == "" || !validVolumeKind(volume.Kind) {
 			return planningError(ErrorInvalidInput, field, "volume ID or kind is invalid", nil)
 		}
+
 		if _, exists := nodes[volume.NodeID]; !exists {
 			return planningError(ErrorInvariant, field+".nodeID", "references an unknown Node", nil)
 		}
+
 		if _, exists := volumes[volume.ID]; exists {
 			return planningError(ErrorInvariant, field+".id", "volume ID is duplicated", nil)
 		}
+
 		volumes[volume.ID] = volume
 	}
 
 	mounts := map[string]MountPlan{}
+
 	for index, mount := range plan.Mounts {
 		field := fmt.Sprintf("mounts[%d]", index)
 		if mount.ID == "" || mount.Destination == "" || !path.IsAbs(mount.Destination) ||
@@ -620,6 +713,7 @@ func validatePlan(plan Plan) error {
 				nil,
 			)
 		}
+
 		if _, exists := containers[mount.ContainerID]; !exists {
 			return planningError(
 				ErrorInvariant,
@@ -628,6 +722,7 @@ func validatePlan(plan Plan) error {
 				nil,
 			)
 		}
+
 		if _, exists := volumes[mount.VolumeID]; !exists {
 			return planningError(
 				ErrorInvariant,
@@ -636,11 +731,14 @@ func validatePlan(plan Plan) error {
 				nil,
 			)
 		}
+
 		if _, exists := mounts[mount.ID]; exists {
 			return planningError(ErrorInvariant, field+".id", "mount ID is duplicated", nil)
 		}
+
 		mounts[mount.ID] = mount
 	}
+
 	for index, container := range plan.Containers {
 		for _, mountID := range container.MountIDs {
 			mount, exists := mounts[mountID]
@@ -657,6 +755,7 @@ func validatePlan(plan Plan) error {
 
 	management := map[string]ManagementPlan{}
 	managementNodes := map[string]bool{}
+
 	for index, item := range plan.Management {
 		field := fmt.Sprintf("management[%d]", index)
 		if item.ID == "" ||
@@ -666,6 +765,7 @@ func validatePlan(plan Plan) error {
 				item.InterfaceSelector != ManagementInterfacePodTransport) {
 			return planningError(ErrorInvalidInput, field, "management plan is incomplete", nil)
 		}
+
 		if _, exists := nodes[item.NodeID]; !exists || managementNodes[item.NodeID] {
 			return planningError(
 				ErrorInvariant,
@@ -674,14 +774,17 @@ func validatePlan(plan Plan) error {
 				nil,
 			)
 		}
+
 		if _, exists := management[item.ID]; exists {
 			return planningError(ErrorInvariant, field+".id", "management ID is duplicated", nil)
 		}
+
 		management[item.ID] = item
 		managementNodes[item.NodeID] = true
 	}
 
 	interfaces := map[string]InterfacePlan{}
+
 	for index, intf := range plan.Interfaces {
 		field := fmt.Sprintf("interfaces[%d]", index)
 		if intf.ID == "" || intf.Name == "" || intf.NamespaceOwnerID == "" ||
@@ -689,9 +792,11 @@ func validatePlan(plan Plan) error {
 			!validLinkApplyMode(intf.LinkApplyMode) {
 			return planningError(ErrorInvalidInput, field, "interface plan is incomplete", nil)
 		}
+
 		if _, exists := nodes[intf.NodeID]; !exists {
 			return planningError(ErrorInvariant, field+".nodeID", "references an unknown Node", nil)
 		}
+
 		if _, exists := containers[intf.NamespaceOwnerID]; !exists {
 			return planningError(
 				ErrorInvariant,
@@ -700,21 +805,26 @@ func validatePlan(plan Plan) error {
 				nil,
 			)
 		}
+
 		if _, exists := interfaces[intf.ID]; exists {
 			return planningError(ErrorInvariant, field+".id", "interface ID is duplicated", nil)
 		}
+
 		interfaces[intf.ID] = intf
 	}
 
 	actions := map[string]bool{}
+
 	for index, action := range plan.Actions {
 		field := fmt.Sprintf("actions[%d]", index)
 		if action.ID == "" || !validActionPhase(action.Phase) {
 			return planningError(ErrorInvalidInput, field, "action ID or phase is invalid", nil)
 		}
+
 		if actions[action.ID] {
 			return planningError(ErrorInvariant, field+".id", "action ID is duplicated", nil)
 		}
+
 		if _, exists := nodes[action.Target.NodeID]; !exists {
 			return planningError(
 				ErrorInvariant,
@@ -723,6 +833,7 @@ func validatePlan(plan Plan) error {
 				nil,
 			)
 		}
+
 		if action.Target.ContainerID != "" {
 			if _, exists := containers[action.Target.ContainerID]; !exists {
 				return planningError(
@@ -733,6 +844,7 @@ func validatePlan(plan Plan) error {
 				)
 			}
 		}
+
 		if action.Target.NamespaceOwnerID != "" {
 			if _, exists := containers[action.Target.NamespaceOwnerID]; !exists {
 				return planningError(
@@ -743,6 +855,7 @@ func validatePlan(plan Plan) error {
 				)
 			}
 		}
+
 		if err := validateActionPayload(
 			action,
 			files,
@@ -754,6 +867,7 @@ func validatePlan(plan Plan) error {
 		); err != nil {
 			return err
 		}
+
 		actions[action.ID] = true
 	}
 
@@ -761,13 +875,14 @@ func validatePlan(plan Plan) error {
 }
 
 func validPortableOwnership(value *int64) bool {
-	return value == nil || *value >= 0 && *value <= 1<<31-1
+	return value == nil || *value >= 0 && *value < 1<<31
 }
 
 func validateHeader(schema string, compatibility Compatibility) error {
 	if schema != SchemaVersion {
 		return planningError(ErrorInvalidInput, "schemaVersion", "unsupported schema version", nil)
 	}
+
 	if compatibility.ContainerlabModule == "" || compatibility.ContainerlabVersion == "" ||
 		!validDigest(compatibility.RegistryDigest) ||
 		compatibility.PlanSchemaVersion != SchemaVersion {
@@ -792,6 +907,7 @@ func validateActionPayload(
 	field string,
 ) error {
 	payloads := 0
+
 	for _, present := range []bool{
 		action.Exec != nil,
 		action.File != nil,
@@ -810,6 +926,7 @@ func validateActionPayload(
 			payloads++
 		}
 	}
+
 	if payloads != 1 {
 		return planningError(
 			ErrorInvariant,
@@ -819,7 +936,8 @@ func validateActionPayload(
 		)
 	}
 
-	valid := false
+	var valid bool
+
 	switch action.Kind {
 	case ActionExec:
 		valid = action.Exec != nil && len(action.Exec.Command) > 0
@@ -828,11 +946,13 @@ func validateActionPayload(
 			action.File,
 			func(value *FileAction) string { return value.FileID },
 		)]
+
 		valid = exists
 		if valid && action.File.WriteMode != "" &&
 			action.File.WriteMode != FileWriteReplace && action.File.WriteMode != FileWriteAppend {
 			valid = false
 		}
+
 		if valid && action.Phase == PhasePostStart {
 			valid = action.File.Destination != "" && file.ArtifactKind == ArtifactRegular
 		}
@@ -848,6 +968,7 @@ func validateActionPayload(
 			func(value *MountAction) string { return value.MountID },
 		)]
 		volume, volumeExists := volumes[mount.VolumeID]
+
 		valid = exists && volumeExists && volume.Kind == VolumeEmptyDir &&
 			strings.EqualFold(volume.Medium, "Memory") &&
 			action.Mount.Filesystem == "tmpfs" && action.Mount.Source == "tmpfs" &&
@@ -864,14 +985,18 @@ func validateActionPayload(
 	case ActionSysctl:
 		valid = action.Sysctl != nil && action.Sysctl.Name != ""
 	case ActionWaitInterface:
-		_, valid = interfaces[valueOrEmpty(action.WaitInterface, func(value *WaitInterfaceAction) string {
-			return value.InterfaceID
-		})]
+		waitInterfaceID := valueOrEmpty(
+			action.WaitInterface,
+			func(value *WaitInterfaceAction) string { return value.InterfaceID },
+		)
+		_, valid = interfaces[waitInterfaceID]
 		valid = valid && action.WaitInterface.TimeoutSeconds > 0
 	case ActionRenameInterface:
-		_, valid = interfaces[valueOrEmpty(action.RenameInterface, func(value *RenameInterfaceAction) string {
-			return value.InterfaceID
-		})]
+		renameInterfaceID := valueOrEmpty(
+			action.RenameInterface,
+			func(value *RenameInterfaceAction) string { return value.InterfaceID },
+		)
+		_, valid = interfaces[renameInterfaceID]
 		valid = valid && action.RenameInterface.From != "" && action.RenameInterface.To != ""
 	case ActionManagementForwarding:
 		_, valid = management[valueOrEmpty(
@@ -897,6 +1022,7 @@ func validateActionPayload(
 	default:
 		return planningError(ErrorUnsupported, field+".kind", "action kind is unsupported", nil)
 	}
+
 	if !valid {
 		return planningError(
 			ErrorInvariant,
@@ -968,6 +1094,7 @@ func validDigest(value string) bool {
 	if len(value) != sha256DigestLength || !strings.HasPrefix(value, "sha256:") {
 		return false
 	}
+
 	_, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
 
 	return err == nil
@@ -984,6 +1111,7 @@ func validateUniqueKeyValues(values []KeyValue, field string) error {
 				nil,
 			)
 		}
+
 		seen[value.Name] = true
 	}
 
@@ -996,6 +1124,7 @@ func hasDuplicates(values []string) bool {
 		if value == "" || seen[value] {
 			return true
 		}
+
 		seen[value] = true
 	}
 
@@ -1013,9 +1142,11 @@ func compareImageInput(left, right ImageInput) int {
 	if compared := strings.Compare(left.NodeID, right.NodeID); compared != 0 {
 		return compared
 	}
+
 	if compared := strings.Compare(left.Role, right.Role); compared != 0 {
 		return compared
 	}
+
 	if compared := strings.Compare(left.SourceReference, right.SourceReference); compared != 0 {
 		return compared
 	}
@@ -1031,6 +1162,7 @@ func comparePort(left, right Port) int {
 	if left.Number < right.Number {
 		return -1
 	}
+
 	if left.Number > right.Number {
 		return 1
 	}
@@ -1050,12 +1182,15 @@ func compareRoute(left, right Route) int {
 	if compared := strings.Compare(left.Destination, right.Destination); compared != 0 {
 		return compared
 	}
+
 	if compared := strings.Compare(left.Gateway, right.Gateway); compared != 0 {
 		return compared
 	}
+
 	if left.Metric < right.Metric {
 		return -1
 	}
+
 	if left.Metric > right.Metric {
 		return 1
 	}
@@ -1065,16 +1200,20 @@ func compareRoute(left, right Route) int {
 
 func compareAction(left, right Action) int {
 	leftRank := actionPhaseRank(left.Phase)
+
 	rightRank := actionPhaseRank(right.Phase)
 	if leftRank < rightRank {
 		return -1
 	}
+
 	if leftRank > rightRank {
 		return 1
 	}
+
 	if left.Order < right.Order {
 		return -1
 	}
+
 	if left.Order > right.Order {
 		return 1
 	}
@@ -1119,10 +1258,12 @@ func marshalCanonical(value any, field string) ([]byte, error) {
 
 func cloneJSON[T any](value T) (T, error) {
 	var cloned T
+
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return cloned, err
 	}
+
 	if err = json.Unmarshal(raw, &cloned); err != nil {
 		return cloned, err
 	}
@@ -1132,16 +1273,20 @@ func cloneJSON[T any](value T) (T, error) {
 
 func decodeStrict[T any](raw []byte, field string) (T, error) {
 	var decoded T
+
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
+
 	if err := decoder.Decode(&decoded); err != nil {
 		return decoded, planningError(ErrorSerialization, field, "cannot decode JSON", err)
 	}
+
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
 			err = errors.New("trailing JSON value")
 		}
+
 		return decoded, planningError(ErrorSerialization, field, "cannot decode JSON", err)
 	}
 

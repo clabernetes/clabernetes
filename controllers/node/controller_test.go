@@ -119,9 +119,11 @@ func TestNodeGroupMoveResolvesFormerAndNewPrimaryWorkloads(t *testing.T) {
 
 	formerRequests := controller.enqueueLauncherFor(context.Background(), former)
 	currentRequests := controller.enqueueLauncherFor(context.Background(), current)
+
 	if got := requestNames(formerRequests); !reflect.DeepEqual(got, []string{"primary-a"}) {
 		t.Fatalf("former group requests = %v", got)
 	}
+
 	if got := requestNames(currentRequests); !reflect.DeepEqual(got, []string{"primary-b"}) {
 		t.Fatalf("new group requests = %v", got)
 	}
@@ -213,6 +215,7 @@ func TestPayloadObjectEventEnqueuesReferencingLauncherGroups(t *testing.T) {
 	if err := clabernetesapisv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := k8scorev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}

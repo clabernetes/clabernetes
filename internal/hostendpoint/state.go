@@ -1,4 +1,4 @@
-//nolint:err113,gocritic,noinlineerr,perfsprint,wsl_v5 // Identity checks stay beside each read.
+//nolint:err113,noinlineerr,perfsprint,wsl_v5 // Identity checks stay beside each read.
 package hostendpoint
 
 import (

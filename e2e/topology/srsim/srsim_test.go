@@ -182,11 +182,13 @@ func assertExpandedSRSimComponents(t *testing.T, namespace string) {
 		`jsonpath={range .items[0].spec.containers[*]}{.name}{"\n"}{end}`,
 	)
 	deviceContainers := 0
-	for _, name := range strings.Split(string(output), "\n") {
+
+	for name := range strings.SplitSeq(string(output), "\n") {
 		if strings.HasPrefix(name, "device-") {
 			deviceContainers++
 		}
 	}
+
 	if deviceContainers < 2 {
 		t.Fatalf("sros Pod has %d device containers, want at least 2: %s", deviceContainers, output)
 	}
@@ -326,11 +328,12 @@ func deviceContainerName(t *testing.T, namespace, workload string) string {
 		"-o",
 		`jsonpath={range .items[0].spec.containers[*]}{.name}{"\n"}{end}`,
 	)
-	for _, name := range strings.Split(string(output), "\n") {
+	for name := range strings.SplitSeq(string(output), "\n") {
 		if strings.HasPrefix(name, "device-") {
 			return name
 		}
 	}
+
 	t.Fatalf("workload %q has no device application container: %s", workload, output)
 
 	return ""

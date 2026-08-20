@@ -1,4 +1,4 @@
-//nolint:err113,gocritic,noinlineerr,perfsprint,wsl_v5 // RPC validation uses compact guards.
+//nolint:err113,gocognit,noinlineerr,perfsprint,wsl_v5 // RPC validation uses compact guards.
 package hostendpoint
 
 import (
@@ -21,8 +21,10 @@ const (
 	DefaultSocketPath = SocketDirectory + "/daemon.sock"
 	ownerPrefix       = "c9s:host:v1:"
 	ownerRoleHost     = "host"
-	ownerRolePod      = "pod"
-	maximumMessage    = 64 << 10
+	// aliasPrefix is the vendor prefix of every c9s-owned interface alias encoding.
+	aliasPrefix    = "c9s"
+	ownerRolePod   = "pod"
+	maximumMessage = 64 << 10
 
 	fabricOwnerPrefix = "c9s:fabric:v1:"
 	fabricRoleLeg     = "leg"
@@ -297,7 +299,7 @@ func fabricOwnerAlias(role string, ownership Ownership) (string, error) {
 
 func parseFabricOwnerAlias(value, role string) (Ownership, bool) {
 	parts := strings.Split(value, ":")
-	if len(parts) != 7 || parts[0] != "c9s" || parts[1] != "fabric" || parts[2] != "v1" ||
+	if len(parts) != 7 || parts[0] != aliasPrefix || parts[1] != "fabric" || parts[2] != "v1" ||
 		parts[3] != role {
 		return Ownership{}, false
 	}
@@ -343,7 +345,7 @@ func mgmtOwnerAlias(role, nodeUID, podUID string) (string, error) {
 
 func parseMgmtOwnerAlias(value, role string) (nodeUID, podUID string, owned bool) {
 	parts := strings.Split(value, ":")
-	if len(parts) != 6 || parts[0] != "c9s" || parts[1] != "mgmt" || parts[2] != "v1" ||
+	if len(parts) != 6 || parts[0] != aliasPrefix || parts[1] != "mgmt" || parts[2] != "v1" ||
 		parts[3] != role {
 		return "", "", false
 	}
@@ -374,7 +376,7 @@ func ownerAlias(role string, ownership Ownership) (string, error) {
 
 func parseOwnerAlias(value, role string) (Ownership, bool) {
 	parts := strings.Split(value, ":")
-	if len(parts) != 7 || parts[0] != "c9s" || parts[1] != "host" || parts[2] != "v1" ||
+	if len(parts) != 7 || parts[0] != aliasPrefix || parts[1] != "host" || parts[2] != "v1" ||
 		parts[3] != role {
 		return Ownership{}, false
 	}

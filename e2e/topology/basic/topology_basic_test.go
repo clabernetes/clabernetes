@@ -1,3 +1,4 @@
+//nolint:gocyclo,nestif // dense fixture-driven tests exercise one boundary end to end.
 package basic_test
 
 import (

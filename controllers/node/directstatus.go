@@ -1,3 +1,4 @@
+//nolint:funlen,gocyclo // single-pass boundary logic reads clearest unsplit.
 package node
 
 import (
@@ -10,9 +11,9 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesdirectpod "github.com/clabernetes/clabernetes/internal/directpod"
-	clabernetesocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
+	clabernetesinternalocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
@@ -29,6 +30,7 @@ func (r *Reconciler) reportDirectPreflightFailure(
 	if !report {
 		return nil
 	}
+
 	previousConditions := slices.Clone(node.Status.Conditions)
 	desiredStatus := *node.Status.DeepCopy()
 	setDirectStatusCondition(
@@ -39,9 +41,11 @@ func (r *Reconciler) reportDirectPreflightFailure(
 		reason,
 		message+"; the last successfully applied device workload was left unchanged",
 	)
+
 	if updateErr := r.updateNodeStatus(ctx, node, desiredStatus); updateErr != nil {
 		return fmt.Errorf("reporting direct preflight failure: %w", updateErr)
 	}
+
 	r.recordDirectConditionTransitions(
 		node,
 		previousConditions,
@@ -53,11 +57,12 @@ func (r *Reconciler) reportDirectPreflightFailure(
 }
 
 func directPreflightDiagnostic(err error) (reason, message string, report bool) {
-	var planningErr *clabernetesdeviceplan.Error
+	var planningErr *clabernetesinternaldeviceplan.Error
 	if errors.As(err, &planningErr) {
 		return "Plan" + string(planningErr.Code), planningErr.Error(), true
 	}
-	var metadataErr *clabernetesocimetadata.Error
+
+	var metadataErr *clabernetesinternalocimetadata.Error
 	if errors.As(err, &metadataErr) {
 		return "OCIMetadata" + string(metadataErr.Code), metadataErr.Error(), true
 	}
@@ -68,67 +73,78 @@ func directPreflightDiagnostic(err error) (reason, message string, report bool) 
 func (r *Reconciler) updateDirectStatuses(
 	ctx context.Context,
 	primary *clabernetesapisv1alpha1.Node,
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	deployment *k8sappsv1.Deployment,
 	groupMembers []string,
 	nodesByName map[string]*clabernetesapisv1alpha1.Node,
 	exposedPorts map[string]*clabernetesapisv1alpha1.NodeExposedPorts,
 	profile *ResolvedProfile,
-	linkLifecycleMode clabernetesdeviceplan.LinkApplyMode,
+	linkLifecycleMode clabernetesinternaldeviceplan.LinkApplyMode,
 ) error {
 	planDigest, err := plan.Digest()
 	if err != nil {
 		return err
 	}
+
 	pod, err := r.currentDirectPod(ctx, primary, deployment)
 	if err != nil {
 		return err
 	}
+
 	preparedStatus, preparedReason, preparedMessage := directHelperCondition(
 		pod,
-		clabernetesdirectpod.PreparationContainerName,
+		clabernetesinternaldirectpod.PreparationContainerName,
 		true,
 	)
 	connectivityStatus, connectivityReason, connectivityMessage := directHelperCondition(
 		pod,
-		clabernetesdirectpod.ConnectivityContainerName,
+		clabernetesinternaldirectpod.ConnectivityContainerName,
 		false,
 	)
-	containerPlans := make(map[string]clabernetesdeviceplan.ContainerPlan, len(plan.Containers))
+
+	containerPlans := make(map[string]clabernetesinternaldeviceplan.ContainerPlan,
+		len(plan.Containers))
 	for _, container := range plan.Containers {
 		containerPlans[container.ID] = container
 	}
+
 	containerStatuses := map[string]k8scorev1.ContainerStatus{}
+
 	if pod != nil {
 		for _, status := range pod.Status.ContainerStatuses {
 			containerStatuses[status.Name] = status
 		}
 	}
-	plansByNodeID := make(map[string]clabernetesdeviceplan.NodePlan, len(plan.Nodes))
+
+	plansByNodeID := make(map[string]clabernetesinternaldeviceplan.NodePlan, len(plan.Nodes))
 	for _, logicalNode := range plan.Nodes {
 		plansByNodeID[logicalNode.ID] = logicalNode
 	}
+
 	managementByNodeID := make(
-		map[string]clabernetesdeviceplan.ManagementPlan,
+		map[string]clabernetesinternaldeviceplan.ManagementPlan,
 		len(plan.Management),
 	)
 	for _, management := range plan.Management {
 		managementByNodeID[management.NodeID] = management
 	}
+
 	for _, memberName := range groupMembers {
 		member := nodesByName[memberName]
 		if member == nil {
 			continue
 		}
+
 		logicalNode, exists := plansByNodeID[string(member.GetUID())]
 		if !exists || logicalNode.Name != member.GetName() {
 			return planInputError(
-				clabernetesdeviceplan.ErrorInvariant,
+				clabernetesinternaldeviceplan.ErrorInvariant,
 				"devicePlan.nodes",
 				"applied plan does not identify every workload Node by UID and name",
 			)
 		}
-		observations, applicationsReady, readinessMessage, observeErr := directContainerObservations(
+
+		observations, applicationsReady, readinessMessage, observeErr := observeDirectContainers(
 			logicalNode,
 			containerPlans,
 			containerStatuses,
@@ -137,19 +153,24 @@ func (r *Reconciler) updateDirectStatuses(
 		if observeErr != nil {
 			return observeErr
 		}
+
 		containersStatus := metav1.ConditionUnknown
 		containersReason := "DirectPodPending"
+
 		if pod != nil {
 			containersStatus = metav1.ConditionFalse
 			containersReason = "DirectContainersNotReady"
+
 			if applicationsReady {
 				containersStatus = metav1.ConditionTrue
 				containersReason = "ContainersReady"
 				readinessMessage = "all required direct application containers are ready"
 			}
 		}
+
 		previousConditions := slices.Clone(member.Status.Conditions)
 		desiredStatus := member.DeepCopy().Status
+
 		desiredStatus.Readiness = clabernetesconstants.NodeStatusUnknown
 		if preparedStatus == metav1.ConditionTrue &&
 			connectivityStatus == metav1.ConditionTrue &&
@@ -160,6 +181,7 @@ func (r *Reconciler) updateDirectStatuses(
 			containersStatus == metav1.ConditionFalse {
 			desiredStatus.Readiness = clabernetesconstants.NodeStatusNotReady
 		}
+
 		desiredStatus.ProbeStatuses = nil
 		desiredStatus.ExposedPorts = exposedPorts[memberName]
 		desiredStatus.AppliedLauncherProfile = copyAppliedLauncherProfile(
@@ -178,10 +200,12 @@ func (r *Reconciler) updateDirectStatuses(
 			"PlanApplied",
 			"status is bound to the current planner-verified direct device plan",
 		)
+
 		statusLifecycleMode := linkLifecycleMode
 		if statusLifecycleMode == "" {
 			statusLifecycleMode = directDeploymentLinkLifecycleMode(deployment, planDigest)
 		}
+
 		setDirectLinkLifecycleActionCondition(
 			&desiredStatus,
 			member,
@@ -220,9 +244,11 @@ func (r *Reconciler) updateDirectStatuses(
 			"LauncherProfileResolved",
 			launcherProfileResolutionMessage(desiredStatus.AppliedLauncherProfile),
 		)
+
 		if err = r.updateNodeStatus(ctx, member, desiredStatus); err != nil {
 			return fmt.Errorf("updating direct status for Node %s: %w", memberName, err)
 		}
+
 		r.recordDirectConditionTransitions(
 			member,
 			previousConditions,
@@ -237,17 +263,20 @@ func (r *Reconciler) updateDirectStatuses(
 func directDeploymentLinkLifecycleMode(
 	deployment *k8sappsv1.Deployment,
 	planDigest string,
-) clabernetesdeviceplan.LinkApplyMode {
+) clabernetesinternaldeviceplan.LinkApplyMode {
 	if deployment == nil ||
-		deployment.Spec.Template.Annotations[clabernetesdirectpod.LinkLifecyclePlanDigestAnnotation] !=
+		deployment.Spec.Template.
+			Annotations[clabernetesinternaldirectpod.LinkLifecyclePlanDigestAnnotation] !=
 			planDigest {
 		return ""
 	}
-	mode := clabernetesdeviceplan.LinkApplyMode(
-		deployment.Spec.Template.Annotations[clabernetesdirectpod.LinkLifecycleModeAnnotation],
+
+	mode := clabernetesinternaldeviceplan.LinkApplyMode(
+		deployment.Spec.Template.
+			Annotations[clabernetesinternaldirectpod.LinkLifecycleModeAnnotation],
 	)
-	if mode != clabernetesdeviceplan.LinkApplyRestart &&
-		mode != clabernetesdeviceplan.LinkApplyRecreate {
+	if mode != clabernetesinternaldeviceplan.LinkApplyRestart &&
+		mode != clabernetesinternaldeviceplan.LinkApplyRecreate {
 		return ""
 	}
 
@@ -257,12 +286,12 @@ func directDeploymentLinkLifecycleMode(
 func setDirectLinkLifecycleActionCondition(
 	status *clabernetesapisv1alpha1.NodeStatus,
 	node *clabernetesapisv1alpha1.Node,
-	mode clabernetesdeviceplan.LinkApplyMode,
+	mode clabernetesinternaldeviceplan.LinkApplyMode,
 	planDigest string,
 ) {
-	if mode != clabernetesdeviceplan.LinkApplyLive &&
-		mode != clabernetesdeviceplan.LinkApplyRestart &&
-		mode != clabernetesdeviceplan.LinkApplyRecreate {
+	if mode != clabernetesinternaldeviceplan.LinkApplyLive &&
+		mode != clabernetesinternaldeviceplan.LinkApplyRestart &&
+		mode != clabernetesinternaldeviceplan.LinkApplyRecreate {
 		apimachinerymeta.RemoveStatusCondition(
 			&status.Conditions,
 			clabernetesapisv1alpha1.NodeConditionLinkLifecycleAction,
@@ -270,6 +299,7 @@ func setDirectLinkLifecycleActionCondition(
 
 		return
 	}
+
 	setDirectStatusCondition(
 		status,
 		node,
@@ -286,7 +316,7 @@ func setDirectLinkLifecycleActionCondition(
 }
 
 func directManagementStatus(
-	management clabernetesdeviceplan.ManagementPlan,
+	management clabernetesinternaldeviceplan.ManagementPlan,
 ) *clabernetesapisv1alpha1.NodeDirectManagementStatus {
 	if management.ID == "" {
 		return nil
@@ -307,8 +337,9 @@ func (r *Reconciler) currentDirectPod(
 	deployment *k8sappsv1.Deployment,
 ) (*k8scorev1.Pod, error) {
 	if deployment == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil // no workload means no pod to observe.
 	}
+
 	pods := &k8scorev1.PodList{}
 	if err := r.Client.List(
 		ctx,
@@ -318,23 +349,32 @@ func (r *Reconciler) currentDirectPod(
 	); err != nil {
 		return nil, fmt.Errorf("listing direct device Pods: %w", err)
 	}
+
 	candidates := make([]*k8scorev1.Pod, 0, len(pods.Items))
-	coldPlanDigest := deployment.Spec.Template.Annotations[clabernetesdirectpod.PlanDigestAnnotation]
+
+	coldPlanDigest := deployment.Spec.Template.
+		Annotations[clabernetesinternaldirectpod.PlanDigestAnnotation]
 	if coldPlanDigest == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // an absent observation is valid.
 	}
+
 	for index := range pods.Items {
 		pod := &pods.Items[index]
 		if pod.GetDeletionTimestamp() != nil ||
-			pod.GetAnnotations()[clabernetesdirectpod.PlanDigestAnnotation] != coldPlanDigest ||
-			pod.GetAnnotations()[clabernetesdirectpod.NodeUIDAnnotation] != string(node.GetUID()) {
+			pod.GetAnnotations()[clabernetesinternaldirectpod.PlanDigestAnnotation] !=
+				coldPlanDigest ||
+			pod.GetAnnotations()[clabernetesinternaldirectpod.NodeUIDAnnotation] !=
+				string(node.GetUID()) {
 			continue
 		}
+
 		candidates = append(candidates, pod)
 	}
+
 	if len(candidates) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil // an absent observation is valid.
 	}
+
 	slices.SortFunc(candidates, func(left, right *k8scorev1.Pod) int {
 		return right.GetCreationTimestamp().Time.Compare(left.GetCreationTimestamp().Time)
 	})
@@ -342,9 +382,9 @@ func (r *Reconciler) currentDirectPod(
 	return candidates[0], nil
 }
 
-func directContainerObservations(
-	node clabernetesdeviceplan.NodePlan,
-	containerPlans map[string]clabernetesdeviceplan.ContainerPlan,
+func observeDirectContainers(
+	node clabernetesinternaldeviceplan.NodePlan,
+	containerPlans map[string]clabernetesinternaldeviceplan.ContainerPlan,
 	statuses map[string]k8scorev1.ContainerStatus,
 	podExists bool,
 ) ([]clabernetesapisv1alpha1.NodeDirectContainerStatus, bool, string, error) {
@@ -355,21 +395,25 @@ func directContainerObservations(
 	)
 	ready := podExists
 	message := "direct device Pod has not been created for the current plan"
+
 	readinessIDs := make(map[string]bool, len(node.ReadinessContainerIDs))
 	for _, id := range node.ReadinessContainerIDs {
 		readinessIDs[id] = true
 	}
+
 	for _, id := range node.ContainerIDs {
 		planned, exists := containerPlans[id]
 		if !exists || planned.NodeID != node.ID {
 			return nil, false, "", planInputError(
-				clabernetesdeviceplan.ErrorInvariant,
+				clabernetesinternaldeviceplan.ErrorInvariant,
 				"devicePlan.containers",
 				"logical Node references an unknown application container",
 			)
 		}
-		name := clabernetesdirectpod.ApplicationContainerName(id)
+
+		name := clabernetesinternaldirectpod.ApplicationContainerName(id)
 		status, observed := statuses[name]
+
 		observation := clabernetesapisv1alpha1.NodeDirectContainerStatus{
 			ID: id, Name: name, ComponentID: planned.ComponentID, State: "unknown",
 		}
@@ -379,12 +423,15 @@ func directContainerObservations(
 			observation.RestartCount = status.RestartCount
 			observation.ImageID = status.ImageID
 		}
+
 		if readinessIDs[id] {
 			if !observed || status.State.Running == nil || !status.Ready {
 				ready = false
 				message = directContainerFailureMessage(planned, name, "is not ready")
 			}
-			if known, matches := directImageDigestMatches(planned.ImageDigest, status.ImageID); known &&
+
+			if known, matches := directImageDigestMatches(planned.ImageDigest,
+				status.ImageID); known &&
 				!matches {
 				ready = false
 				message = directContainerFailureMessage(
@@ -394,8 +441,10 @@ func directContainerObservations(
 				)
 			}
 		}
+
 		observations = append(observations, observation)
 	}
+
 	slices.SortFunc(
 		observations,
 		func(left, right clabernetesapisv1alpha1.NodeDirectContainerStatus) int {
@@ -407,7 +456,7 @@ func directContainerObservations(
 }
 
 func directContainerFailureMessage(
-	planned clabernetesdeviceplan.ContainerPlan,
+	planned clabernetesinternaldeviceplan.ContainerPlan,
 	name,
 	detail string,
 ) string {
@@ -429,15 +478,20 @@ func directHelperCondition(
 	oneShot bool,
 ) (metav1.ConditionStatus, string, string) {
 	if pod == nil {
-		return metav1.ConditionUnknown, "DirectPodPending", "direct device Pod has not been created for the current plan"
+		return metav1.ConditionUnknown,
+			"DirectPodPending",
+			"direct device Pod has not been created for the current plan"
 	}
+
 	for _, status := range pod.Status.InitContainerStatuses {
 		if status.Name != name {
 			continue
 		}
+
 		if oneShot && status.State.Terminated != nil && status.State.Terminated.ExitCode == 0 {
 			return metav1.ConditionTrue, "PreparationCompleted", "direct preparation completed"
 		}
+
 		if !oneShot && status.State.Running != nil && status.Ready {
 			return metav1.ConditionTrue, "ConnectivityReady", "direct connectivity is ready"
 		}
@@ -445,7 +499,9 @@ func directHelperCondition(
 		return metav1.ConditionFalse, "HelperNotReady", "required direct helper is not ready"
 	}
 
-	return metav1.ConditionUnknown, "HelperPending", "required direct helper has no container status"
+	return metav1.ConditionUnknown,
+		"HelperPending",
+		"required direct helper has no container status"
 }
 
 func directContainerState(state k8scorev1.ContainerState) string {
@@ -463,6 +519,7 @@ func directContainerState(state k8scorev1.ContainerState) string {
 
 func directImageDigestMatches(expected, imageID string) (bool, bool) {
 	expectedDigest, expectedKnown := directSHA256Digest(expected)
+
 	observedDigest, observedKnown := directSHA256Digest(imageID)
 	if !expectedKnown || !observedKnown {
 		return false, false
@@ -476,10 +533,12 @@ func directSHA256Digest(value string) (string, bool) {
 	if index < 0 {
 		return "", false
 	}
+
 	digest := value[index:]
 	if len(digest) != len("sha256:")+64 {
 		return "", false
 	}
+
 	if _, err := hex.DecodeString(strings.TrimPrefix(digest, "sha256:")); err != nil {
 		return "", false
 	}
@@ -510,19 +569,23 @@ func (r *Reconciler) recordDirectConditionTransitions(
 	if r.EventRecorder == nil {
 		return
 	}
+
 	for _, condition := range current {
 		if !isDirectStatusCondition(condition.Type) {
 			continue
 		}
+
 		prior := apimachinerymeta.FindStatusCondition(previous, condition.Type)
 		if prior != nil && prior.Status == condition.Status && prior.Reason == condition.Reason &&
 			prior.Message == condition.Message {
 			continue
 		}
+
 		eventType := k8scorev1.EventTypeNormal
 		if condition.Status == metav1.ConditionFalse {
 			eventType = k8scorev1.EventTypeWarning
 		}
+
 		r.EventRecorder.Eventf(
 			node,
 			nil,

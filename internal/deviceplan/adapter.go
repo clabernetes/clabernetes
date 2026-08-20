@@ -1,4 +1,4 @@
-//nolint:nlreturn,wsl_v5 // Adapter guards are clearer as compact fail-closed checks.
+//nolint:err113,funlen,gocognit,gocyclo,mnd,nlreturn,wsl_v5 // Adapter guards are clearer as compact fail-closed checks.
 package deviceplan
 
 import (
@@ -180,7 +180,7 @@ func (a Adapter) Evaluate(ctx context.Context, input Input) (*Evaluation, error)
 			err,
 		)
 	}
-	defer os.RemoveAll(scratchRoot)
+	defer func() { _ = os.RemoveAll(scratchRoot) }()
 
 	return evaluateInWorkspace(
 		ctx,
@@ -278,8 +278,9 @@ func recordDeploymentConditions(ctx context.Context, nodes []EvaluatedNode) erro
 			return &Error{
 				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: "deployment.conditions",
 				Behavior: "imported-deployment-conditions",
-				Message:  "containerlab deployment conditions are not satisfied on the target worker",
-				cause:    hookErr,
+				Message: "containerlab deployment conditions are not satisfied on the " +
+					"target worker",
+				cause: hookErr,
 			}
 		}
 	}
@@ -432,7 +433,9 @@ func evaluateNode(
 		}
 		return nil, &Error{
 			Code: ErrorInvalidInput, NodeID: nodeInput.ID, Field: "definition",
-			Behavior: "imported-init", Message: "containerlab kind initialization failed", cause: err,
+			Behavior: "imported-init",
+			Message:  "containerlab kind initialization failed",
+			cause:    err,
 		}
 	}
 	if err = recorder.Failure(); err != nil {
@@ -648,8 +651,9 @@ func recordDeployments(
 			}
 			return &Error{
 				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: "deployment",
-				Behavior: "imported-deploy", Message: "containerlab deployment hook could not be recorded",
-				cause: err,
+				Behavior: "imported-deploy",
+				Message:  "containerlab deployment hook could not be recorded",
+				cause:    err,
 			}
 		}
 		if err := node.recorder.Failure(); err != nil {
@@ -1161,7 +1165,7 @@ func rewriteExplicitPayloadPaths(
 			relative, err = filepath.Rel(projectionDir, source)
 			if err == nil &&
 				(relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator))) {
-				err = fmt.Errorf("payload projection escapes its mount directory")
+				err = errors.New("payload projection escapes its mount directory")
 			}
 		}
 		var info os.FileInfo
@@ -1176,7 +1180,7 @@ func rewriteExplicitPayloadPaths(
 				cause:    err,
 			}
 		}
-		content, err := os.ReadFile(source) //nolint:gosec // Path is a scoped typed Pod projection.
+		content, err := os.ReadFile(source)
 		if err != nil {
 			return "", planningError(
 				ErrorSideEffect,
@@ -1276,12 +1280,12 @@ func rewriteImportedStringLeaves(
 		if value.IsNil() {
 			return nil
 		}
-		copy := reflect.New(value.Elem().Type()).Elem()
-		copy.Set(value.Elem())
-		if err := rewriteImportedStringLeaves(copy, rewrite); err != nil {
+		duplicate := reflect.New(value.Elem().Type()).Elem()
+		duplicate.Set(value.Elem())
+		if err := rewriteImportedStringLeaves(duplicate, rewrite); err != nil {
 			return err
 		}
-		value.Set(copy)
+		value.Set(duplicate)
 	case reflect.Struct:
 		for index := range value.NumField() {
 			field := value.Field(index)
@@ -1301,12 +1305,12 @@ func rewriteImportedStringLeaves(
 		iterator := value.MapRange()
 		for iterator.Next() {
 			entry := iterator.Value()
-			copy := reflect.New(entry.Type()).Elem()
-			copy.Set(entry)
-			if err := rewriteImportedStringLeaves(copy, rewrite); err != nil {
+			duplicate := reflect.New(entry.Type()).Elem()
+			duplicate.Set(entry)
+			if err := rewriteImportedStringLeaves(duplicate, rewrite); err != nil {
 				return err
 			}
-			value.SetMapIndex(iterator.Key(), copy)
+			value.SetMapIndex(iterator.Key(), duplicate)
 		}
 	case reflect.String:
 		if value.CanSet() {
@@ -1316,6 +1320,8 @@ func rewriteImportedStringLeaves(
 			}
 			value.SetString(rewritten)
 		}
+	default:
+		// Scalar kinds carry no string leaves to rewrite.
 	}
 
 	return nil
@@ -1618,8 +1624,8 @@ func withNodeID(err error, nodeID string) error {
 	if !errors.As(err, &planningErr) {
 		return err
 	}
-	copy := *planningErr
-	copy.NodeID = nodeID
+	duplicate := *planningErr
+	duplicate.NodeID = nodeID
 
-	return &copy
+	return &duplicate
 }

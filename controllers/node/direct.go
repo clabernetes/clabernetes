@@ -1,4 +1,4 @@
-//nolint:nlreturn,noinlineerr,wsl_v5 // The staged reconciler fails closed at every identity boundary.
+//nolint:err113,funlen,gocognit,gocyclo,maintidx,mnd,nestif,nlreturn,noinlineerr,wsl_v5 // The staged reconciler fails closed at every identity boundary.
 package node
 
 import (
@@ -17,16 +17,16 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldeviceruntime "github.com/clabernetes/clabernetes/internal/deviceruntime"
-	clabernetesdirectpod "github.com/clabernetes/clabernetes/internal/directpod"
-	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
-	clabernetesocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
+	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesinternalocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
 	apiquality "k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -34,25 +34,28 @@ import (
 const maxDirectImageDiscoveryRounds = 8
 
 func (r *Reconciler) initializeDirectDependencies() {
-	cache, err := clabernetesocimetadata.NewCache(
-		clabernetesocimetadata.Resolver{},
-		clabernetesocimetadata.CacheOptions{},
+	cache, err := clabernetesinternalocimetadata.NewCache(
+		clabernetesinternalocimetadata.Resolver{},
+		clabernetesinternalocimetadata.CacheOptions{},
 	)
 	r.directInitializationError = err
 	r.ImageDiscoveryReconciler = &ImageDiscoveryReconciler{Client: r.Client}
 	r.ImageMetadataResolver = &ImageMetadataResolver{
 		Client:   r.apiReader,
 		Resolver: cache,
-		Platform: clabernetesocimetadata.Platform{OS: runtime.GOOS, Architecture: runtime.GOARCH},
+		Platform: clabernetesinternalocimetadata.Platform{
+			OS:           runtime.GOOS,
+			Architecture: runtime.GOARCH,
+		},
 	}
 	if r.ImageMetadataResolver.Client == nil {
 		r.ImageMetadataResolver.Client = r.Client
 	}
 	r.PlannerReconciler = &PlannerReconciler{Client: r.Client}
-	r.DirectCompatibility = func() (clabernetesdeviceplan.Compatibility, error) {
-		return clabernetesdeviceplan.LiveCompatibility(nil)
+	r.DirectCompatibility = func() (clabernetesinternaldeviceplan.Compatibility, error) {
+		return clabernetesinternaldeviceplan.LiveCompatibility(nil)
 	}
-	r.DirectPlatform = clabernetesocimetadata.Platform{
+	r.DirectPlatform = clabernetesinternalocimetadata.Platform{
 		OS:           runtime.GOOS,
 		Architecture: runtime.GOARCH,
 	}
@@ -115,7 +118,7 @@ func (r *Reconciler) reconcileDirect(
 				"LauncherProfileConflict",
 				err.Error(),
 			)
-		case apierrors.IsNotFound(err):
+		case apimachineryerrors.IsNotFound(err):
 			return r.updateProfileResolutionFailure(
 				ctx,
 				groupMembers,
@@ -173,7 +176,7 @@ func (r *Reconciler) reconcileDirect(
 		return err
 	}
 	metadataResolver.TrustFor = registryMetadataTrust.ForReference
-	declaredDiscovery, err := clabernetesdeviceplan.DiscoverDeclaredImages(
+	declaredDiscovery, err := clabernetesinternaldeviceplan.DiscoverDeclaredImages(
 		declaredInput,
 		clabernetesconstants.Version,
 	)
@@ -195,8 +198,8 @@ func (r *Reconciler) reconcileDirect(
 		entropyResolution.SensitiveValues...,
 	)
 	imagePullSecrets := declaredMetadata.PullSecrets
-	planInput := clabernetesdeviceplan.Input{}
-	var convergedDiscovery *clabernetesdeviceplan.ImageDiscovery
+	planInput := clabernetesinternaldeviceplan.Input{}
+	var convergedDiscovery *clabernetesinternaldeviceplan.ImageDiscovery
 	imageDiscoveryConverged := false
 	// keepWorkerArtifacts names every worker Pod, NetworkPolicy, input ConfigMap, and output
 	// ConfigMap this reconcile referenced; the sweep at the end removes everything else the
@@ -227,7 +230,7 @@ func (r *Reconciler) reconcileDirect(
 		}
 		if discoveryResult.Discovery == nil {
 			return planInputError(
-				clabernetesdeviceplan.ErrorInvariant,
+				clabernetesinternaldeviceplan.ErrorInvariant,
 				"imageDiscovery",
 				"successful image-discovery worker returned no result",
 			)
@@ -269,14 +272,14 @@ func (r *Reconciler) reconcileDirect(
 	}
 	if !imageDiscoveryConverged {
 		return planInputError(
-			clabernetesdeviceplan.ErrorUnsupported,
+			clabernetesinternaldeviceplan.ErrorUnsupported,
 			"images",
 			"imported image requirements did not converge within the bounded discovery rounds",
 		)
 	}
 	if convergedDiscovery == nil {
 		return planInputError(
-			clabernetesdeviceplan.ErrorInvariant,
+			clabernetesinternaldeviceplan.ErrorInvariant,
 			"imageDiscovery",
 			"converged image discovery result is unavailable",
 		)
@@ -313,12 +316,12 @@ func (r *Reconciler) reconcileDirect(
 	}
 	if planningResult.Plan == nil {
 		return planInputError(
-			clabernetesdeviceplan.ErrorInvariant,
+			clabernetesinternaldeviceplan.ErrorInvariant,
 			"devicePlan",
 			"successful planning worker returned no plan",
 		)
 	}
-	if err = clabernetesdirectpod.ValidatePlan(*planningResult.Plan); err != nil {
+	if err = clabernetesinternaldirectpod.ValidatePlan(*planningResult.Plan); err != nil {
 		return err
 	}
 	probeResolution, err := r.resolveDirectProbePolicies(
@@ -363,10 +366,11 @@ func (r *Reconciler) reconcileDirect(
 		return err
 	}
 	labels, annotations := r.directMetadata(node)
-	annotations[clabernetesdirectpod.NodeUIDAnnotation] = string(node.GetUID())
-	owner := *metav1.NewControllerRef(node, clabernetesapisv1alpha1.SchemeGroupVersion.WithKind("Node"))
+	annotations[clabernetesinternaldirectpod.NodeUIDAnnotation] = string(node.GetUID())
+	owner := *metav1.NewControllerRef(node,
+		clabernetesapisv1alpha1.SchemeGroupVersion.WithKind("Node"))
 	primaryContainerResources := r.directPrimaryContainerResources(profile)
-	renderOptions := clabernetesdirectpod.Options{
+	renderOptions := clabernetesinternaldirectpod.Options{
 		Name: node.GetName(), Namespace: node.GetNamespace(),
 		PreparationImage:           r.DirectRuntimeImage,
 		ConnectivityImage:          r.DirectRuntimeImage,
@@ -429,18 +433,19 @@ func (r *Reconciler) reconcileDirect(
 		if err != nil {
 			return err
 		}
-		if linkLifecycleMode == clabernetesdeviceplan.LinkApplyLive ||
-			linkLifecycleMode == clabernetesdeviceplan.LinkApplyRestart {
+		if linkLifecycleMode == clabernetesinternaldeviceplan.LinkApplyLive ||
+			linkLifecycleMode == clabernetesinternaldeviceplan.LinkApplyRestart {
 			connectivityLifecycleAction = directConnectivityLifecycleAction{
 				Mode: linkLifecycleMode, PlanDigest: connectivityRevision.DesiredPlanDigest,
 				AffectedNodeIDs: slices.Clone(connectivityDecision.AffectedNodeIDs),
 			}
-			connectivityRevisionConfigMap, err = r.ConnectivityRevisionConfigMapReconciler.RecordLifecycleAction(
-				ctx,
-				node,
-				connectivityRevisionConfigMap,
-				connectivityLifecycleAction,
-			)
+			connectivityRevisionConfigMap, err = r.ConnectivityRevisionConfigMapReconciler.
+				RecordLifecycleAction(
+					ctx,
+					node,
+					connectivityRevisionConfigMap,
+					connectivityLifecycleAction,
+				)
 			if err != nil {
 				return err
 			}
@@ -457,7 +462,7 @@ func (r *Reconciler) reconcileDirect(
 		// The retained Pod still mounts the cold planning input.
 		keepWorkerArtifacts[coldReferences.InputConfigMapName] = true
 	} else {
-		connectivityRevision, err = clabernetesdirectruntime.NewConnectivityRevision(
+		connectivityRevision, err = clabernetesinternaldirectruntime.NewConnectivityRevision(
 			planInput,
 			*planningResult.Plan,
 			planInput,
@@ -485,11 +490,12 @@ func (r *Reconciler) reconcileDirect(
 		renderOptions.PlanConfigMapName = planConfigMap.GetName()
 		renderOptions.InputConfigMapName = planningResult.InputConfigMapName
 		renderOptions.ConnectivityRevisionConfigMapName = connectivityRevisionConfigMap.GetName()
-		if linkLifecycleMode == clabernetesdeviceplan.LinkApplyRecreate {
+		if linkLifecycleMode == clabernetesinternaldeviceplan.LinkApplyRecreate {
 			renderOptions.LinkLifecycleMode = linkLifecycleMode
 			renderOptions.LinkLifecyclePlanDigest = desiredPlanDigest
 		}
-		deployment, renderErr := clabernetesdirectpod.Render(*planningResult.Plan, renderOptions)
+		deployment, renderErr := clabernetesinternaldirectpod.Render(*planningResult.Plan,
+			renderOptions)
 		if renderErr != nil {
 			return renderErr
 		}
@@ -591,7 +597,9 @@ func (r *Reconciler) reconcileDirectSecondary(
 	return r.ConnectivityRevisionConfigMapReconciler.GarbageCollect(ctx, node, "")
 }
 
-func seedImageInputs(values []clabernetesdeviceplan.ImageInput) []clabernetesdeviceplan.ImageInput {
+func seedImageInputs(
+	values []clabernetesinternaldeviceplan.ImageInput,
+) []clabernetesinternaldeviceplan.ImageInput {
 	result := slices.Clone(values)
 	for index := range result {
 		// The seed role is c9s-owned sequencing metadata, not package behavior. Clearing it keeps
@@ -604,8 +612,8 @@ func seedImageInputs(values []clabernetesdeviceplan.ImageInput) []clabernetesdev
 
 func mergeResolvedImageInputs(
 	declared,
-	imported []clabernetesdeviceplan.ImageInput,
-) ([]clabernetesdeviceplan.ImageInput, error) {
+	imported []clabernetesinternaldeviceplan.ImageInput,
+) ([]clabernetesinternaldeviceplan.ImageInput, error) {
 	result := slices.Clone(imported)
 	for _, seed := range seedImageInputs(declared) {
 		represented := false
@@ -616,7 +624,7 @@ func mergeResolvedImageInputs(
 			}
 			if seed.DigestReference != discovered.DigestReference {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorInvariant,
+					clabernetesinternaldeviceplan.ErrorInvariant,
 					"images",
 					"declared image digest changed during imported image discovery",
 				)
@@ -632,7 +640,7 @@ func mergeResolvedImageInputs(
 }
 
 func compileDirectExposedPorts(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	profile *ResolvedProfile,
 	groupMembers []string,
 	nodesByName map[string]*clabernetesapisv1alpha1.Node,
@@ -640,7 +648,7 @@ func compileDirectExposedPorts(
 	result := make(map[string]*clabernetesapisv1alpha1.NodeExposedPorts, len(groupMembers))
 	if profile == nil {
 		return nil, planInputError(
-			clabernetesdeviceplan.ErrorInvalidInput,
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
 			"launcherProfile",
 			"resolved profile is nil",
 		)
@@ -662,7 +670,7 @@ func compileDirectExposedPorts(
 			port, err := clabernetesutilcontainerlab.ProcessPortDefinition(raw)
 			if err != nil {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorInvalidInput,
+					clabernetesinternaldeviceplan.ErrorInvalidInput,
 					"nodes."+name+".ports",
 					"destination port is invalid",
 				)
@@ -678,7 +686,7 @@ func compileDirectExposedPorts(
 	for _, container := range plan.Containers {
 		if nodesByID[container.NodeID] == nil {
 			return nil, planInputError(
-				clabernetesdeviceplan.ErrorInvariant,
+				clabernetesinternaldeviceplan.ErrorInvariant,
 				"devicePlan.containers",
 				"planned container belongs to an unknown workload Node",
 			)
@@ -750,7 +758,7 @@ func compileDirectExposedPorts(
 		for key, port := range portsByNode[string(node.GetUID())] {
 			if owner := owners[key]; owner != "" && owner != name {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorUnsupported,
+					clabernetesinternaldeviceplan.ErrorUnsupported,
 					"services.ports",
 					"grouped direct Nodes expose the same Pod destination port",
 				)
@@ -822,7 +830,7 @@ func (r *Reconciler) resolveDirectProfile(
 func validateDirectProfile(profile *ResolvedProfile) error {
 	if profile == nil {
 		return planInputError(
-			clabernetesdeviceplan.ErrorInvalidInput,
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
 			"launcherProfile",
 			"resolved profile is nil",
 		)
@@ -841,7 +849,7 @@ func (r *Reconciler) reconcileDirectPersistentVolumeClaims(
 		member := nodesByName[memberName]
 		if member == nil || member.GetUID() == "" {
 			return nil, planInputError(
-				clabernetesdeviceplan.ErrorMissingInput,
+				clabernetesinternaldeviceplan.ErrorMissingInput,
 				"nodes."+memberName,
 				"persistent direct workload member identity is unresolved",
 			)
@@ -868,8 +876,8 @@ func (r *Reconciler) resolveDirectPayloads(
 	namespace string,
 	groupMembers []string,
 	nodesByName map[string]*clabernetesapisv1alpha1.Node,
-) ([]clabernetesdeviceplan.PayloadInput, error) {
-	result := []clabernetesdeviceplan.PayloadInput{}
+) ([]clabernetesinternaldeviceplan.PayloadInput, error) {
+	result := []clabernetesinternaldeviceplan.PayloadInput{}
 	destinations := map[string]string{}
 	seen := map[string]bool{}
 	reader := r.apiReader
@@ -885,7 +893,7 @@ func (r *Reconciler) resolveDirectPayloads(
 			field := fmt.Sprintf("nodes.%s.filesFromConfigMap[%d]", name, index)
 			if declaration.ConfigMapName == "" {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorMissingInput,
+					clabernetesinternaldeviceplan.ErrorMissingInput,
 					field+".configMapName",
 					"ConfigMap name is required",
 				)
@@ -902,7 +910,7 @@ func (r *Reconciler) resolveDirectPayloads(
 				keys = configMapPayloadKeys(configMap)
 				if len(keys) == 0 {
 					return nil, planInputError(
-						clabernetesdeviceplan.ErrorMissingInput,
+						clabernetesinternaldeviceplan.ErrorMissingInput,
 						field+".configMapPath",
 						"ConfigMap has no file keys",
 					)
@@ -911,7 +919,7 @@ func (r *Reconciler) resolveDirectPayloads(
 			mode, modeErr := directPayloadMode(declaration.Mode)
 			if modeErr != nil {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorInvalidInput,
+					clabernetesinternaldeviceplan.ErrorInvalidInput,
 					field+".mode",
 					modeErr.Error(),
 				)
@@ -919,7 +927,7 @@ func (r *Reconciler) resolveDirectPayloads(
 			baseDestination, destinationErr := directPayloadDestination(declaration.FilePath)
 			if destinationErr != nil {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorInvalidInput,
+					clabernetesinternaldeviceplan.ErrorInvalidInput,
 					field+".filePath",
 					destinationErr.Error(),
 				)
@@ -928,7 +936,7 @@ func (r *Reconciler) resolveDirectPayloads(
 				content, contentErr := configMapPayloadContent(configMap, key)
 				if contentErr != nil {
 					return nil, planInputError(
-						clabernetesdeviceplan.ErrorMissingInput,
+						clabernetesinternaldeviceplan.ErrorMissingInput,
 						field+".configMapPath",
 						contentErr.Error(),
 					)
@@ -937,7 +945,7 @@ func (r *Reconciler) resolveDirectPayloads(
 				if declaration.ConfigMapPath == "" {
 					if path.Base(key) != key || key == "." || key == ".." {
 						return nil, planInputError(
-							clabernetesdeviceplan.ErrorInvalidInput,
+							clabernetesinternaldeviceplan.ErrorInvalidInput,
 							field+".configMapPath",
 							"ConfigMap key is not a portable relative file name",
 						)
@@ -946,9 +954,9 @@ func (r *Reconciler) resolveDirectPayloads(
 				}
 				payload := directPayloadInput(
 					node,
-					clabernetesdeviceplan.PayloadConfigMap,
+					clabernetesinternaldeviceplan.PayloadConfigMap,
 					namespace+"/"+configMap.GetName()+":"+key,
-					clabernetesdeviceplan.Digest(content),
+					clabernetesinternaldeviceplan.Digest(content),
 					destination,
 					mode,
 				)
@@ -961,7 +969,7 @@ func (r *Reconciler) resolveDirectPayloads(
 			field := fmt.Sprintf("nodes.%s.filesFromSecret[%d]", name, index)
 			if declaration.SecretName == "" {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorMissingInput,
+					clabernetesinternaldeviceplan.ErrorMissingInput,
 					field+".secretName",
 					"Secret name is required",
 				)
@@ -978,7 +986,7 @@ func (r *Reconciler) resolveDirectPayloads(
 				keys = secretPayloadKeys(secret)
 				if len(keys) == 0 {
 					return nil, planInputError(
-						clabernetesdeviceplan.ErrorMissingInput,
+						clabernetesinternaldeviceplan.ErrorMissingInput,
 						field+".secretPath",
 						"Secret has no data keys",
 					)
@@ -987,7 +995,7 @@ func (r *Reconciler) resolveDirectPayloads(
 			mode, modeErr := directPayloadMode(declaration.Mode)
 			if modeErr != nil {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorInvalidInput,
+					clabernetesinternaldeviceplan.ErrorInvalidInput,
 					field+".mode",
 					modeErr.Error(),
 				)
@@ -995,7 +1003,7 @@ func (r *Reconciler) resolveDirectPayloads(
 			baseDestination, destinationErr := directPayloadDestination(declaration.FilePath)
 			if destinationErr != nil {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorInvalidInput,
+					clabernetesinternaldeviceplan.ErrorInvalidInput,
 					field+".filePath",
 					destinationErr.Error(),
 				)
@@ -1004,7 +1012,7 @@ func (r *Reconciler) resolveDirectPayloads(
 				content, exists := secret.Data[key]
 				if !exists {
 					return nil, planInputError(
-						clabernetesdeviceplan.ErrorMissingInput,
+						clabernetesinternaldeviceplan.ErrorMissingInput,
 						field+".secretPath",
 						"Secret data key does not exist",
 					)
@@ -1013,7 +1021,7 @@ func (r *Reconciler) resolveDirectPayloads(
 				if declaration.SecretPath == "" {
 					if path.Base(key) != key || key == "." || key == ".." {
 						return nil, planInputError(
-							clabernetesdeviceplan.ErrorInvalidInput,
+							clabernetesinternaldeviceplan.ErrorInvalidInput,
 							field+".secretPath",
 							"Secret key is not a portable relative file name",
 						)
@@ -1022,9 +1030,9 @@ func (r *Reconciler) resolveDirectPayloads(
 				}
 				payload := directPayloadInput(
 					node,
-					clabernetesdeviceplan.PayloadSecret,
+					clabernetesinternaldeviceplan.PayloadSecret,
 					namespace+"/"+secret.GetName()+":"+key,
-					clabernetesdeviceplan.Digest(content),
+					clabernetesinternaldeviceplan.Digest(content),
 					destination,
 					mode,
 				)
@@ -1041,14 +1049,14 @@ func (r *Reconciler) resolveDirectPayloads(
 				(reference.Scheme != "http" && reference.Scheme != "https") ||
 				reference.User != nil {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorInvalidInput,
+					clabernetesinternaldeviceplan.ErrorInvalidInput,
 					field+".url",
 					"URL must be an absolute HTTP(S) URL without embedded credentials",
 				)
 			}
 			if !validDirectPayloadDigest(declaration.Digest) {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorMissingInput,
+					clabernetesinternaldeviceplan.ErrorMissingInput,
 					field+".digest",
 					"direct URL payload requires a sha256 digest",
 				)
@@ -1056,14 +1064,14 @@ func (r *Reconciler) resolveDirectPayloads(
 			destination, destinationErr := directPayloadDestination(declaration.FilePath)
 			if destinationErr != nil {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorInvalidInput,
+					clabernetesinternaldeviceplan.ErrorInvalidInput,
 					field+".filePath",
 					destinationErr.Error(),
 				)
 			}
 			payload := directPayloadInput(
 				node,
-				clabernetesdeviceplan.PayloadURL,
+				clabernetesinternaldeviceplan.PayloadURL,
 				declaration.URL,
 				declaration.Digest,
 				destination,
@@ -1126,20 +1134,20 @@ func directPayloadMode(value string) (uint32, error) {
 	case "execute":
 		return 0o555, nil
 	default:
-		return 0, fmt.Errorf("payload mode must be read or execute")
+		return 0, errors.New("payload mode must be read or execute")
 	}
 }
 
 func directPayloadDestination(value string) (string, error) {
 	if strings.TrimSpace(value) == "" {
-		return "", fmt.Errorf("payload destination is empty")
+		return "", errors.New("payload destination is empty")
 	}
 	if !path.IsAbs(value) {
 		value = "/" + value
 	}
 	value = path.Clean(value)
 	if value == "/" {
-		return "", fmt.Errorf("payload destination must not be the filesystem root")
+		return "", errors.New("payload destination must not be the filesystem root")
 	}
 
 	return value, nil
@@ -1157,37 +1165,37 @@ func validDirectPayloadDigest(value string) bool {
 
 func directPayloadInput(
 	node *clabernetesapisv1alpha1.Node,
-	kind clabernetesdeviceplan.PayloadKind,
+	kind clabernetesinternaldeviceplan.PayloadKind,
 	reference,
 	digest,
 	destination string,
 	mode uint32,
-) clabernetesdeviceplan.PayloadInput {
+) clabernetesinternaldeviceplan.PayloadInput {
 	identity := strings.Join([]string{
 		string(
 			node.GetUID(),
 		), string(kind), reference, digest, destination, fmt.Sprintf("%o", mode),
 	}, "\x00")
-	id := strings.TrimPrefix(clabernetesdeviceplan.Digest([]byte(identity)), "sha256:")[:24]
+	id := strings.TrimPrefix(clabernetesinternaldeviceplan.Digest([]byte(identity)), "sha256:")[:24]
 
-	return clabernetesdeviceplan.PayloadInput{
+	return clabernetesinternaldeviceplan.PayloadInput{
 		ID: "payload-" + id, NodeID: string(node.GetUID()), Kind: kind,
 		Reference: reference, Digest: digest, Destination: destination, Mode: mode,
 	}
 }
 
 func appendDirectPayload(
-	result *[]clabernetesdeviceplan.PayloadInput,
+	result *[]clabernetesinternaldeviceplan.PayloadInput,
 	destinations map[string]string,
 	seen map[string]bool,
-	payload clabernetesdeviceplan.PayloadInput,
+	payload clabernetesinternaldeviceplan.PayloadInput,
 ) error {
 	signature := strings.Join([]string{
 		string(payload.Kind), payload.Reference, payload.Digest, fmt.Sprintf("%o", payload.Mode),
 	}, "\x00")
 	if existing, exists := destinations[payload.Destination]; exists && existing != signature {
 		return planInputError(
-			clabernetesdeviceplan.ErrorInvalidInput,
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
 			"payloads.destination",
 			"grouped payload declarations conflict at "+payload.Destination,
 		)
@@ -1206,7 +1214,7 @@ func compileDirectManagement(
 	groupMembers []string,
 	nodesByName map[string]*clabernetesapisv1alpha1.Node,
 	mgmt *clabernetesapisv1alpha1.ManagementPolicy,
-) ([]clabernetesdeviceplan.ManagementInput, error) {
+) ([]clabernetesinternaldeviceplan.ManagementInput, error) {
 	if err := validateUniqueExplicitManagementAddresses(nodesByName); err != nil {
 		return nil, directManagementError("addresses", err.Error())
 	}
@@ -1248,7 +1256,7 @@ func compileDirectManagement(
 	if err != nil {
 		return nil, directManagementError("ipv6-range", err.Error())
 	}
-	result := []clabernetesdeviceplan.ManagementInput{}
+	result := []clabernetesinternaldeviceplan.ManagementInput{}
 	addresses := map[string]string{}
 	for _, name := range groupMembers {
 		node := nodesByName[name]
@@ -1294,13 +1302,13 @@ func compileDirectManagement(
 			}
 			addresses[key] = name
 		}
-		value := clabernetesdeviceplan.ManagementInput{
+		value := clabernetesinternaldeviceplan.ManagementInput{
 			NodeID: string(node.GetUID()), IPv4: ipv4, IPv6: ipv6,
 		}
 		value.IPv4Gateway = settings.IPv4Gw
 		value.IPv6Gateway = settings.IPv6Gw
 		if node.Spec.DNS != nil {
-			value.DNS = clabernetesdeviceplan.DNSConfig{
+			value.DNS = clabernetesinternaldeviceplan.DNSConfig{
 				Servers: slices.Clone(node.Spec.DNS.Servers),
 				Search:  slices.Clone(node.Spec.DNS.Search),
 				Options: slices.Clone(node.Spec.DNS.Options),
@@ -1318,7 +1326,7 @@ func compileDirectManagement(
 
 func (r *Reconciler) directNodeSelector(
 	profile *ResolvedProfile,
-	images []clabernetesdeviceplan.ImageInput,
+	images []clabernetesinternaldeviceplan.ImageInput,
 ) (map[string]string, error) {
 	if profile.NodeSelector != nil {
 		return maps.Clone(profile.NodeSelector), nil
@@ -1329,7 +1337,7 @@ func (r *Reconciler) directNodeSelector(
 		for key, value := range selectors {
 			if existing, exists := result[key]; exists && existing != value {
 				return nil, planInputError(
-					clabernetesdeviceplan.ErrorUnsupported,
+					clabernetesinternaldeviceplan.ErrorUnsupported,
 					"scheduling.nodeSelector",
 					"direct application images require conflicting node selectors",
 				)
@@ -1386,7 +1394,7 @@ func (r *Reconciler) reconcileDirectDeployment(
 ) (*k8sappsv1.Deployment, error) {
 	existing := &k8sappsv1.Deployment{}
 	err := r.Client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(rendered), existing)
-	if apierrors.IsNotFound(err) {
+	if apimachineryerrors.IsNotFound(err) {
 		if err = r.Client.Create(ctx, rendered); err != nil {
 			return nil, fmt.Errorf("creating direct device Deployment: %w", err)
 		}

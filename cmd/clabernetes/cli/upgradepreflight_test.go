@@ -1,3 +1,4 @@
+//nolint:err113,testpackage // dense fixture-driven tests exercise one boundary end to end.
 package cli
 
 import (
@@ -23,9 +24,11 @@ func TestUpgradePreflightCommandPassesKubeconfigAndOutput(t *testing.T) {
 		if ctx == nil {
 			t.Fatal("runner received nil context")
 		}
+
 		if kubeconfig != "/tmp/c9s-upgrade-kubeconfig" {
 			t.Fatalf("kubeconfig = %q", kubeconfig)
 		}
+
 		if writer != output {
 			t.Fatalf("writer = %T, want app writer", writer)
 		}
@@ -36,6 +39,7 @@ func TestUpgradePreflightCommandPassesKubeconfigAndOutput(t *testing.T) {
 		Writer:   output,
 		Commands: []*urfavecli.Command{command},
 	}
+
 	err := app.RunContext(
 		context.Background(),
 		[]string{"clabernetes", "upgrade-preflight", "--kubeconfig", "/tmp/c9s-upgrade-kubeconfig"},

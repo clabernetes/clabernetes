@@ -1,7 +1,9 @@
+//nolint:err113,funlen,gocyclo // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package deviceplan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,22 +25,27 @@ func (a Adapter) RunSave(
 	runtime clabruntime.ContainerRuntime,
 ) error {
 	if ctx == nil {
-		return fmt.Errorf("save context is nil")
+		return errors.New("save context is nil")
 	}
+
 	if runtime == nil {
-		return fmt.Errorf("save runtime is nil")
+		return errors.New("save runtime is nil")
 	}
+
 	normalizedInput, err := NormalizeInput(input)
 	if err != nil {
 		return err
 	}
+
 	normalizedPlan, err := NormalizePlan(plan)
 	if err != nil {
 		return err
 	}
+
 	if err = ValidatePlanInputIdentity(normalizedInput, normalizedPlan); err != nil {
 		return err
 	}
+
 	normalizedInput.Management = completeRuntimeManagement(
 		normalizedInput.Management,
 		normalizedInput.Nodes,
@@ -47,14 +54,17 @@ func (a Adapter) RunSave(
 		a.PodGateway,
 		a.PodDNSServers,
 	)
+
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
 		return err
 	}
 	defer finishEntropy()
+
 	if strings.TrimSpace(a.Revision) == "" || a.Revision != normalizedPlan.Planner.Revision {
-		return fmt.Errorf("save worker revision differs from the accepted plan")
+		return errors.New("save worker revision differs from the accepted plan")
 	}
+
 	_, targetNode, targetInput, nodeIndex, err := importedSaveTarget(
 		normalizedInput,
 		normalizedPlan,
@@ -63,10 +73,12 @@ func (a Adapter) RunSave(
 	if err != nil {
 		return err
 	}
+
 	root, err := scopedDirectory(artifactRoot, "save artifact root")
 	if err != nil {
 		return err
 	}
+
 	targetLabDir := filepath.Join(root, ArtifactNodeDirectory(targetNode.ID))
 	if err = requireRealDirectory(targetLabDir, "save Node artifact root"); err != nil {
 		return err
@@ -79,29 +91,37 @@ func (a Adapter) RunSave(
 			return err
 		}
 	}
+
 	entry := registry.Kind(targetInput.Kind)
 	if entry == nil {
-		return fmt.Errorf("save kind is absent from the imported registry")
+		return errors.New("save kind is absent from the imported registry")
 	}
+
 	definition, err := decodeNodeDefinition(targetInput)
 	if err != nil {
 		return err
 	}
+
 	config, err := nodeConfigFromDefinition(targetInput, definition, entry)
 	if err != nil {
 		return err
 	}
+
 	config.Index = nodeIndex
+
 	config.LabDir = targetLabDir
 	if err = materializeEmbeddedStartupConfig(targetInput.ID, config); err != nil {
 		return err
 	}
+
 	management := managementForNode(normalizedInput.Management, targetInput.ID)
 	applyManagementInput(config, management)
+
 	implementation, err := registry.NewNodeOfKind(targetInput.Kind)
 	if err != nil {
 		return fmt.Errorf("constructing imported save Node: %w", err)
 	}
+
 	if err = runImportedRuntimeHook(
 		targetInput.ID,
 		"save.initialization",
@@ -119,6 +139,7 @@ func (a Adapter) RunSave(
 	); err != nil {
 		return err
 	}
+
 	if _, err = evaluateInterfaces(
 		implementation,
 		interfacesForNode(normalizedInput.Interfaces, targetInput.ID),
@@ -126,10 +147,13 @@ func (a Adapter) RunSave(
 	); err != nil {
 		return err
 	}
+
 	if err = importedRuntimeBoundaryFailure(runtime, targetInput.ID); err != nil {
 		return err
 	}
+
 	var result *clabnodes.SaveConfigResult
+
 	if err = runImportedRuntimeHook(
 		targetInput.ID,
 		"save",
@@ -139,6 +163,7 @@ func (a Adapter) RunSave(
 		runtime,
 		func() error {
 			var hookErr error
+
 			result, hookErr = implementation.SaveConfig(ctx)
 
 			return hookErr
@@ -146,6 +171,7 @@ func (a Adapter) RunSave(
 	); err != nil {
 		return err
 	}
+
 	if result == nil || result.ConfigPath == "" {
 		return nil
 	}
@@ -159,6 +185,7 @@ func importedSaveTarget(
 	containerID string,
 ) (ContainerPlan, NodePlan, NodeInput, int, error) {
 	var container ContainerPlan
+
 	for _, candidate := range plan.Containers {
 		if candidate.ID == containerID {
 			container = candidate
@@ -166,11 +193,14 @@ func importedSaveTarget(
 			break
 		}
 	}
+
 	if container.ID == "" {
 		return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-			fmt.Errorf("save target container is absent from the plan")
+			errors.New("save target container is absent from the plan")
 	}
+
 	var node NodePlan
+
 	for _, candidate := range plan.Nodes {
 		if candidate.ID == container.NodeID {
 			node = candidate
@@ -178,27 +208,34 @@ func importedSaveTarget(
 			break
 		}
 	}
+
 	if node.ID == "" || !nodeOwnsContainer(node, containerID) {
 		return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-			fmt.Errorf("save target is not a container of a planned logical Node")
+			errors.New("save target is not a container of a planned logical Node")
 	}
+
 	actionCount := 0
+
 	for _, action := range plan.Actions {
 		if action.Phase != PhaseSave || action.Kind != ActionSave ||
 			action.Target.ContainerID != containerID {
 			continue
 		}
+
 		if action.Target.NodeID != node.ID || action.Save == nil ||
 			action.Save.Method != SaveMethodImported {
 			return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-				fmt.Errorf("imported save action crosses logical Node ownership")
+				errors.New("imported save action crosses logical Node ownership")
 		}
+
 		actionCount++
 	}
+
 	if actionCount != 1 {
 		return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-			fmt.Errorf("save target requires exactly one imported save action")
+			errors.New("save target requires exactly one imported save action")
 	}
+
 	for index, candidate := range input.Nodes {
 		if candidate.ID == node.ID {
 			return container, node, candidate, index, nil
@@ -206,25 +243,28 @@ func importedSaveTarget(
 	}
 
 	return ContainerPlan{}, NodePlan{}, NodeInput{}, 0,
-		fmt.Errorf("save target Node is absent from the normalized input")
+		errors.New("save target Node is absent from the normalized input")
 }
 
 func validateImportedSavePath(root, savedPath string) error {
 	cleaned := filepath.Clean(savedPath)
 	if !filepath.IsAbs(cleaned) {
-		return fmt.Errorf("imported save result path is not absolute")
+		return errors.New("imported save result path is not absolute")
 	}
+
 	relative, err := filepath.Rel(root, cleaned)
 	if err != nil || relative == "." || relative == ".." ||
 		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("imported save result escapes the plan-owned artifact root")
+		return errors.New("imported save result escapes the plan-owned artifact root")
 	}
+
 	info, err := os.Lstat(cleaned)
 	if err != nil {
 		return fmt.Errorf("inspecting imported save result: %w", err)
 	}
+
 	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("imported save result is not a regular file")
+		return errors.New("imported save result is not a regular file")
 	}
 
 	return nil

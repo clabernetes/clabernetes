@@ -34,9 +34,11 @@ func (w Worker) Run(ctx context.Context) (runErr error) {
 			_ = writeWorkerError(w.Output, runErr)
 		}
 	}()
+
 	if ctx == nil {
 		return planningError(ErrorInvalidInput, "context", "context is nil", nil)
 	}
+
 	if w.Input == nil || w.Output == nil {
 		return planningError(
 			ErrorMissingInput,
@@ -45,18 +47,22 @@ func (w Worker) Run(ctx context.Context) (runErr error) {
 			nil,
 		)
 	}
+
 	input, err := decodeWorkerInput(w.Input, w.MaxInputBytes)
 	if err != nil {
 		return err
 	}
+
 	plan, err := w.Adapter.Plan(ctx, input)
 	if err != nil {
 		return err
 	}
+
 	framed, err := EncodeWorkerOutput(*plan)
 	if err != nil {
 		return err
 	}
+
 	if _, err = w.Output.Write(framed); err != nil {
 		return planningError(ErrorSerialization, "worker.output", "cannot write device plan", err)
 	}
@@ -79,9 +85,11 @@ func (w ImageWorker) Run(ctx context.Context) (runErr error) {
 			_ = writeWorkerError(w.Output, runErr)
 		}
 	}()
+
 	if ctx == nil {
 		return planningError(ErrorInvalidInput, "context", "context is nil", nil)
 	}
+
 	if w.Input == nil || w.Output == nil {
 		return planningError(
 			ErrorMissingInput,
@@ -90,18 +98,22 @@ func (w ImageWorker) Run(ctx context.Context) (runErr error) {
 			nil,
 		)
 	}
+
 	input, err := decodeWorkerInput(w.Input, w.MaxInputBytes)
 	if err != nil {
 		return err
 	}
+
 	discovery, err := w.Adapter.DiscoverImages(ctx, input)
 	if err != nil {
 		return err
 	}
+
 	framed, err := EncodeImageWorkerOutput(*discovery)
 	if err != nil {
 		return err
 	}
+
 	if _, err = w.Output.Write(framed); err != nil {
 		return planningError(
 			ErrorSerialization,
@@ -119,6 +131,7 @@ func decodeWorkerInput(input io.Reader, configuredMaxBytes int64) (Input, error)
 	if maxInputBytes == 0 {
 		maxInputBytes = defaultMaxWorkerInputBytes
 	}
+
 	if maxInputBytes < 0 {
 		return Input{}, planningError(
 			ErrorInvalidInput,
@@ -127,7 +140,9 @@ func decodeWorkerInput(input io.Reader, configuredMaxBytes int64) (Input, error)
 			nil,
 		)
 	}
+
 	limited := io.LimitReader(input, maxInputBytes+1)
+
 	raw, err := io.ReadAll(limited)
 	if err != nil {
 		return Input{}, planningError(
@@ -137,6 +152,7 @@ func decodeWorkerInput(input io.Reader, configuredMaxBytes int64) (Input, error)
 			err,
 		)
 	}
+
 	if int64(len(raw)) > maxInputBytes {
 		return Input{}, planningError(
 			ErrorInvalidInput,
@@ -157,6 +173,7 @@ func EncodeWorkerOutput(plan Plan) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	encoded := base64.RawStdEncoding.EncodeToString(canonical)
 
 	return []byte("\n" + workerOutputPrefix + encoded + "\n"), nil
@@ -168,6 +185,7 @@ func EncodeImageWorkerOutput(discovery ImageDiscovery) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	encoded := base64.RawStdEncoding.EncodeToString(canonical)
 
 	return []byte("\n" + imageWorkerOutputPrefix + encoded + "\n"), nil
@@ -187,7 +205,8 @@ const (
 // FrameKind returns the record type of the last framed line in raw worker output.
 func FrameKind(raw []byte) WorkerFrameKind {
 	kind := WorkerFrameUnknown
-	for _, line := range strings.Split(string(raw), "\n") {
+
+	for line := range strings.SplitSeq(string(raw), "\n") {
 		switch {
 		case strings.HasPrefix(line, workerOutputPrefix):
 			kind = WorkerFramePlan
@@ -206,7 +225,8 @@ func FrameKind(raw []byte) WorkerFrameKind {
 // original stream. Surrounding hook output is discarded.
 func ExtractWorkerFrame(raw []byte) ([]byte, bool) {
 	frame := ""
-	for _, line := range strings.Split(string(raw), "\n") {
+
+	for line := range strings.SplitSeq(string(raw), "\n") {
 		for _, prefix := range []string{
 			workerOutputPrefix, imageWorkerOutputPrefix, workerErrorPrefix,
 		} {
@@ -215,6 +235,7 @@ func ExtractWorkerFrame(raw []byte) ([]byte, bool) {
 			}
 		}
 	}
+
 	if frame == "" {
 		return nil, false
 	}
@@ -226,7 +247,8 @@ func ExtractWorkerFrame(raw []byte) ([]byte, bool) {
 // caller can screen its content without caring which record type it is.
 func DecodeWorkerFramePayload(raw []byte) ([]byte, bool) {
 	encoded := ""
-	for _, line := range strings.Split(string(raw), "\n") {
+
+	for line := range strings.SplitSeq(string(raw), "\n") {
 		for _, prefix := range []string{
 			workerOutputPrefix, imageWorkerOutputPrefix, workerErrorPrefix,
 		} {
@@ -235,9 +257,11 @@ func DecodeWorkerFramePayload(raw []byte) ([]byte, bool) {
 			}
 		}
 	}
+
 	if encoded == "" {
 		return nil, false
 	}
+
 	decoded, err := base64.RawStdEncoding.Strict().DecodeString(encoded)
 	if err != nil || len(decoded) == 0 {
 		return nil, false
@@ -253,10 +277,12 @@ func DecodeWorkerError(raw []byte, maxBytes int) (*Error, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	diagnostic, err := decodeStrict[Error](decoded, "worker diagnostic")
 	if err != nil {
 		return nil, err
 	}
+
 	if !validWorkerErrorCode(diagnostic.Code) || diagnostic.Message == "" {
 		return nil, planningError(
 			ErrorSerialization,
@@ -283,10 +309,12 @@ func writeWorkerError(output io.Writer, err error) error {
 	if output == nil {
 		return nil
 	}
+
 	diagnostic := &Error{
 		Code: ErrorSideEffect, Field: "worker", Behavior: "isolated-worker",
 		Message: "isolated worker failed without a structured diagnostic",
 	}
+
 	var structured *Error
 	if errors.As(err, &structured) {
 		diagnostic = &Error{
@@ -294,10 +322,12 @@ func writeWorkerError(output io.Writer, err error) error {
 			Behavior: structured.Behavior, Message: structured.Message,
 		}
 	}
+
 	framed, marshalErr := EncodeWorkerError(*diagnostic)
 	if marshalErr != nil {
 		return marshalErr
 	}
+
 	_, writeErr := output.Write(framed)
 
 	return writeErr
@@ -358,7 +388,9 @@ func decodeFramedWorkerOutput(
 			nil,
 		)
 	}
+
 	var encoded string
+
 	maxEncodedBytes := base64.RawStdEncoding.EncodedLen(maxBytes)
 	oversizedFrame := false
 	// Split rather than bufio.Scan: an unrelated oversized log line from an imported hook must
@@ -368,13 +400,17 @@ func decodeFramedWorkerOutput(
 		if !found {
 			continue
 		}
+
 		if len(value) > maxEncodedBytes {
 			oversizedFrame = true
+
 			continue
 		}
+
 		encoded = value
 		oversizedFrame = false
 	}
+
 	if oversizedFrame {
 		return nil, planningError(
 			ErrorSerialization,
@@ -383,6 +419,7 @@ func decodeFramedWorkerOutput(
 			nil,
 		)
 	}
+
 	if encoded == "" {
 		return nil, planningError(
 			ErrorSerialization,
@@ -391,6 +428,7 @@ func decodeFramedWorkerOutput(
 			nil,
 		)
 	}
+
 	decoded, err := base64.RawStdEncoding.Strict().DecodeString(encoded)
 	if err != nil || len(decoded) == 0 || len(decoded) > maxBytes {
 		return nil, planningError(

@@ -1,3 +1,4 @@
+//nolint:testpackage // dense fixture-driven tests exercise one boundary end to end.
 package deviceplan
 
 import (
@@ -30,6 +31,7 @@ func TestRecordingRuntimeBlocksMutationAndImplicitInspection(t *testing.T) {
 			name: "container creation", operation: "runtime.CreateContainer",
 			invoke: func(runtime *recordingRuntime) error {
 				_, err := runtime.CreateContainer(context.Background(), &clabtypes.NodeConfig{})
+
 				return err
 			},
 		},
@@ -41,6 +43,7 @@ func TestRecordingRuntimeBlocksMutationAndImplicitInspection(t *testing.T) {
 					"container",
 					clabruntime.NewEndpointlessNode(&clabtypes.NodeConfig{}),
 				)
+
 				return err
 			},
 		},
@@ -48,6 +51,7 @@ func TestRecordingRuntimeBlocksMutationAndImplicitInspection(t *testing.T) {
 			name: "container inspection", operation: "runtime.ListContainers",
 			invoke: func(runtime *recordingRuntime) error {
 				_, err := runtime.ListContainers(context.Background(), nil)
+
 				return err
 			},
 		},
@@ -55,6 +59,7 @@ func TestRecordingRuntimeBlocksMutationAndImplicitInspection(t *testing.T) {
 			name: "namespace inspection", operation: "runtime.GetNSPath",
 			invoke: func(runtime *recordingRuntime) error {
 				_, err := runtime.GetNSPath(context.Background(), "container")
+
 				return err
 			},
 		},
@@ -68,6 +73,7 @@ func TestRecordingRuntimeBlocksMutationAndImplicitInspection(t *testing.T) {
 			name: "host path inspection", operation: "runtime.GetHostsPath",
 			invoke: func(runtime *recordingRuntime) error {
 				_, err := runtime.GetHostsPath(context.Background(), "container")
+
 				return err
 			},
 		},
@@ -81,6 +87,7 @@ func TestRecordingRuntimeBlocksMutationAndImplicitInspection(t *testing.T) {
 			name: "runtime socket", operation: "runtime.GetRuntimeSocket",
 			invoke: func(runtime *recordingRuntime) error {
 				_, err := runtime.GetRuntimeSocket()
+
 				return err
 			},
 		},
@@ -92,11 +99,13 @@ func TestRecordingRuntimeBlocksMutationAndImplicitInspection(t *testing.T) {
 
 			runtime := newRecordingRuntime(nil, nil, t.TempDir())
 			err := tt.invoke(runtime)
+
 			var planningErr *Error
 			if !errors.As(err, &planningErr) || planningErr.Code != ErrorSideEffect ||
 				planningErr.Behavior != tt.operation {
 				t.Fatalf("operation error = %#v, want SideEffect for %q", err, tt.operation)
 			}
+
 			if !errors.As(runtime.Failure(), &planningErr) {
 				t.Fatal("recorder did not retain forbidden-boundary failure")
 			}
@@ -118,17 +127,20 @@ func TestRecordingRuntimeUsesOnlySuppliedImageMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got, want := inspect.Config.Labels, map[string]string{"vendor": "example"}; !reflect.DeepEqual(
 		got,
 		want,
 	) {
 		t.Fatalf("recorded image labels = %#v, want %#v", got, want)
 	}
+
 	if failure := runtime.Failure(); failure != nil {
 		t.Fatalf("supplied image inspection recorded failure: %v", failure)
 	}
 
 	_, err = runtime.InspectImage(context.Background(), "example/missing:1")
+
 	var planningErr *Error
 	if !errors.As(err, &planningErr) || planningErr.Code != ErrorMissingInput {
 		t.Fatalf("missing image error = %#v, want MissingInput", err)
@@ -140,16 +152,19 @@ func TestRecordingRuntimeCanInventoryMissingMetadataDuringDiscovery(t *testing.T
 
 	runtime := newRecordingRuntime(nil, nil, t.TempDir())
 	runtime.AllowMissingImageMetadata()
+
 	inspect, err := runtime.InspectImage(context.Background(), "example/future-component:1")
 	if err != nil || inspect == nil {
 		t.Fatalf("tolerant InspectImage() = (%#v, %v)", inspect, err)
 	}
+
 	if got, want := runtime.MissingImages(), []string{"example/future-component:1"}; !reflect.DeepEqual(
 		got,
 		want,
 	) {
 		t.Fatalf("missing image inventory = %#v, want %#v", got, want)
 	}
+
 	if failure := runtime.Failure(); failure != nil {
 		t.Fatalf("tolerant discovery retained failure: %v", failure)
 	}
@@ -160,11 +175,14 @@ func TestRecordingRuntimeRecordsGenericContainerLifecycle(t *testing.T) {
 
 	runtime := newRecordingRuntime(nil, nil, t.TempDir())
 	runtime.BeginMutationRecording()
+
 	config := &clabtypes.NodeConfig{LongName: "recorded-container"}
+
 	runtimeID, err := runtime.CreateContainer(context.Background(), config)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = runtime.StartContainer(
 		context.Background(),
 		runtimeID,
@@ -172,15 +190,18 @@ func TestRecordingRuntimeRecordsGenericContainerLifecycle(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+
 	containers := runtime.Containers()
 	if got, want := len(containers), 1; got != want ||
 		containers[0].RuntimeID != runtimeID || !containers[0].Started ||
 		containers[0].Config != config {
 		t.Fatalf("recorded containers = %#v, want one complete lifecycle", containers)
 	}
+
 	if failure := runtime.Failure(); failure != nil {
 		t.Fatalf("generic recording retained failure: %v", failure)
 	}
+
 	listed, err := runtime.ListContainers(context.Background(), []*clabtypes.GenericFilter{{
 		FilterType: "name", Match: runtimeID,
 	}})
@@ -188,9 +209,11 @@ func TestRecordingRuntimeRecordsGenericContainerLifecycle(t *testing.T) {
 		listed[0].State != "running" {
 		t.Fatalf("recorded runtime observation = %#v, err=%v", listed, err)
 	}
+
 	if status := runtime.GetContainerStatus(context.Background(), runtimeID); status != clabruntime.Running {
 		t.Fatalf("recorded container status = %q", status)
 	}
+
 	if healthy, healthErr := runtime.IsHealthy(context.Background(), runtimeID); healthErr != nil ||
 		!healthy {
 		t.Fatalf("recorded container health = %v, err=%v", healthy, healthErr)
@@ -201,32 +224,41 @@ func TestRecordingRuntimeRecordsGenericContainerCopy(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
+
 	source := filepath.Join(root, "source.cfg")
-	if err := os.WriteFile(source, []byte("package-derived\n"), 0o640); err != nil {
+	if err := os.WriteFile(source, []byte("package-derived\n"), 0o640); err != nil { //nolint:gosec // test fixture permissions.
 		t.Fatal(err)
 	}
+
 	runtime := newRecordingRuntime(nil, nil, filepath.Join(root, "artifacts"))
 	runtime.BeginMutationRecording()
+
 	config := &clabtypes.NodeConfig{LongName: "recorded-container"}
+
 	runtimeID, err := runtime.CreateContainer(context.Background(), config)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = runtime.CopyToContainer(context.Background(), runtimeID, "/etc/device.cfg", source); err != nil {
 		t.Fatal(err)
 	}
+
 	copies := runtime.Copies()
 	if got, want := len(copies), 1; got != want || copies[0].RuntimeID != runtimeID ||
 		copies[0].Destination != "/etc/device.cfg" {
 		t.Fatalf("recorded copies = %#v, want one generic copy", copies)
 	}
+
 	snapshot := filepath.Join(root, "artifacts", filepath.FromSlash(copies[0].ArtifactPath))
-	content, err := os.ReadFile(
+
+	content, err := os.ReadFile( //nolint:gosec // test-controlled path.
 		snapshot,
-	) //nolint:gosec // Test reads its private temporary artifact.
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got, want := string(content), "package-derived\n"; got != want {
 		t.Fatalf("snapshot content = %q, want %q", got, want)
 	}
@@ -238,33 +270,41 @@ func TestRecordingRuntimeRecordsControlledHostsAndStdinArtifacts(t *testing.T) {
 	root := t.TempDir()
 	runtime := newRecordingRuntime(nil, nil, root)
 	runtime.BeginMutationRecording()
+
 	config := &clabtypes.NodeConfig{LongName: "recorded-container"}
+
 	runtimeID, err := runtime.CreateContainer(context.Background(), config)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	hostsPath, err := runtime.GetHostsPath(context.Background(), runtimeID)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = os.WriteFile(hostsPath, []byte("192.0.2.10 device-a\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	if err = runtime.WriteToStdinNoWait(
 		context.Background(), runtimeID, []byte("configure terminal\n"),
 	); err != nil {
 		t.Fatal(err)
 	}
+
 	if got, want := len(runtime.Copies()), 1; got != want ||
 		runtime.Copies()[0].Destination != "/etc/hosts" ||
 		runtime.Copies()[0].WriteMode != FileWriteAppend {
 		t.Fatalf("hosts copies = %#v, want one /etc/hosts action", runtime.Copies())
 	}
+
 	if got, want := len(runtime.Stdins()), 1; got != want ||
 		runtime.Stdins()[0].Order <= runtime.Copies()[0].Order {
 		t.Fatalf("stdin records = %#v, want one action ordered after hosts", runtime.Stdins())
 	}
-	content, readErr := os.ReadFile(filepath.Join(
+
+	content, readErr := os.ReadFile(filepath.Join( //nolint:gosec // test-controlled path.
 		root,
 		filepath.FromSlash(runtime.Stdins()[0].ArtifactPath),
 	))
@@ -305,6 +345,7 @@ func TestRecordingRuntimeFlagsNoErrorRuntimeMethods(t *testing.T) {
 
 			runtime := newRecordingRuntime(nil, nil, t.TempDir())
 			tt.invoke(runtime)
+
 			var planningErr *Error
 			if !errors.As(runtime.Failure(), &planningErr) ||
 				planningErr.Code != ErrorSideEffect || planningErr.Behavior != tt.operation {

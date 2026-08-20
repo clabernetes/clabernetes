@@ -1,7 +1,9 @@
 // Package directpod renders runtime-neutral device plans into Kubernetes-native workloads.
 // It deliberately has no dependency on containerlab registries or concrete node implementations.
 //
-//nolint:nlreturn,noinlineerr,wsl_v5 // Rendering guards are clearer as compact fail-closed checks.
+//nolint:err113,funlen,gocognit,gocyclo,maintidx,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
+//nolint:err113,funlen,gocognit,gocyclo,maintidx,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
+//nolint:noinlineerr // Rendering guards are clearer as compact fail-closed checks.
 package directpod
 
 import (
@@ -18,9 +20,9 @@ import (
 	"unicode"
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
-	claberneteshostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesinternalhostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
@@ -64,9 +66,9 @@ const (
 	applicationRuntimeAPIName        = "device-runtime-api"
 	applicationRuntimeAPIRoot        = "/var/lib/clabernetes/runtime-api"
 	applicationRuntimeCredentialName = "device-runtime-credentials"
-	applicationRuntimeCredentialRoot = "/var/run/secrets/kubernetes.io/serviceaccount"
+	applicationRuntimeCredentialRoot = "/var/run/secrets/kubernetes.io/serviceaccount" //nolint:gosec // identifier or path, not a credential.
 	probeSecretVolumeName            = "device-probe-secrets"
-	probePasswordPath                = "/var/lib/clabernetes/probe-secret/password"
+	probePasswordPath                = "/var/lib/clabernetes/probe-secret/password" //nolint:gosec // identifier or path, not a credential.
 	preparationName                  = "prepare-device-plan"
 	connectivityName                 = "device-connectivity"
 	directWorkloadLabel              = clabernetesconstants.LabelDirectWorkload
@@ -105,16 +107,16 @@ type Options struct {
 	Affinity                          *k8scorev1.Affinity
 	PrimaryContainerResources         *k8scorev1.ResourceRequirements
 	ApplicationImagePullPolicy        string
-	Payloads                          []clabernetesdeviceplan.PayloadInput
+	Payloads                          []clabernetesinternaldeviceplan.PayloadInput
 	CertificateSecretName             string
-	CertificateInputs                 []clabernetesdeviceplan.CertificateInput
+	CertificateInputs                 []clabernetesinternaldeviceplan.CertificateInput
 	EntropySecretName                 string
 	ProbeSecretName                   string
 	ProbePolicies                     map[string]ProbePolicy
 	PersistentVolumeClaims            map[string]string
 	EnableContainerStopSignals        bool
 	EnableApplicationLogBroker        bool
-	LinkLifecycleMode                 clabernetesdeviceplan.LinkApplyMode
+	LinkLifecycleMode                 clabernetesinternaldeviceplan.LinkApplyMode
 	LinkLifecyclePlanDigest           string
 }
 
@@ -145,6 +147,7 @@ func DeploymentPlanReferences(deployment *k8sappsv1.Deployment) (PlanReferences,
 	if deployment == nil {
 		return PlanReferences{}, fmt.Errorf("%w: Deployment is nil", ErrInvalidPlanReferences)
 	}
+
 	references := PlanReferences{
 		PlanDigest: deployment.Spec.Template.Annotations[planDigestAnnotation],
 	}
@@ -152,6 +155,7 @@ func DeploymentPlanReferences(deployment *k8sappsv1.Deployment) (PlanReferences,
 		if volume.ConfigMap == nil {
 			continue
 		}
+
 		switch volume.Name {
 		case planVolumeName:
 			references.PlanConfigMapName = volume.ConfigMap.Name
@@ -161,6 +165,7 @@ func DeploymentPlanReferences(deployment *k8sappsv1.Deployment) (PlanReferences,
 			references.ConnectivityRevisionConfigMapName = volume.ConfigMap.Name
 		}
 	}
+
 	if references.PlanConfigMapName == "" || references.InputConfigMapName == "" ||
 		references.ConnectivityRevisionConfigMapName == "" || references.PlanDigest == "" {
 		return PlanReferences{}, fmt.Errorf(
@@ -174,8 +179,8 @@ func DeploymentPlanReferences(deployment *k8sappsv1.Deployment) (PlanReferences,
 
 // ValidatePlan performs every plan-only Kubernetes portability check before the controller creates
 // or mutates a device workload. It contains no kind or vendor knowledge.
-func ValidatePlan(plan clabernetesdeviceplan.Plan) error {
-	normalized, err := clabernetesdeviceplan.NormalizePlan(plan)
+func ValidatePlan(plan clabernetesinternaldeviceplan.Plan) error {
+	normalized, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
 		return err
 	}
@@ -183,19 +188,21 @@ func ValidatePlan(plan clabernetesdeviceplan.Plan) error {
 	return validateNormalizedPlan(normalized)
 }
 
-func validateNormalizedPlan(plan clabernetesdeviceplan.Plan) error {
-	if err := clabernetesdirectruntime.ValidatePlanCapabilities(plan); err != nil {
-		var planningErr *clabernetesdeviceplan.Error
+func validateNormalizedPlan(plan clabernetesinternaldeviceplan.Plan) error {
+	if err := clabernetesinternaldirectruntime.ValidatePlanCapabilities(plan); err != nil {
+		var planningErr *clabernetesinternaldeviceplan.Error
 		if errors.As(err, &planningErr) {
 			return err
 		}
 
-		return &clabernetesdeviceplan.Error{
-			Code: clabernetesdeviceplan.ErrorUnsupported, Field: "devicePlan",
+		return &clabernetesinternaldeviceplan.Error{
+			Code: clabernetesinternaldeviceplan.ErrorUnsupported, Field: "devicePlan",
 			Behavior: "direct-runtime-capability", Message: err.Error(),
 		}
 	}
+
 	deviceTargets := map[string]string{}
+
 	for containerIndex, container := range plan.Containers {
 		securityField := fmt.Sprintf("containers[%d].security", containerIndex)
 		if !portableSeccompProfile(container.Security.SeccompProfile) {
@@ -205,6 +212,7 @@ func validateNormalizedPlan(plan clabernetesdeviceplan.Plan) error {
 				"seccomp profile has no portable Kubernetes representation",
 			)
 		}
+
 		if !portableAppArmorProfile(container.Security.AppArmorProfile) {
 			return directPlanPreflightError(
 				container.NodeID,
@@ -212,6 +220,7 @@ func validateNormalizedPlan(plan clabernetesdeviceplan.Plan) error {
 				"AppArmor profile has no portable Kubernetes representation",
 			)
 		}
+
 		for deviceIndex, device := range container.Security.Devices {
 			field := fmt.Sprintf("%s.devices[%d]", securityField, deviceIndex)
 			if !container.Security.Privileged {
@@ -221,6 +230,7 @@ func validateNormalizedPlan(plan clabernetesdeviceplan.Plan) error {
 					"host device requires privileged container cgroup access",
 				)
 			}
+
 			if !portableHostDevicePath(device.HostPath) ||
 				!portableContainerDevicePath(device.ContainerPath) ||
 				!portableDevicePermissions(device.Permissions) {
@@ -230,6 +240,7 @@ func validateNormalizedPlan(plan clabernetesdeviceplan.Plan) error {
 					"host device path, target, or permissions are not portable",
 				)
 			}
+
 			if existing := deviceTargets[device.ContainerPath]; existing != "" &&
 				existing != device.HostPath {
 				return directPlanPreflightError(
@@ -238,11 +249,13 @@ func validateNormalizedPlan(plan clabernetesdeviceplan.Plan) error {
 					"multiple host devices request the same target-worker path",
 				)
 			}
+
 			deviceTargets[device.ContainerPath] = device.HostPath
 		}
 	}
+
 	for volumeIndex, volume := range plan.Volumes {
-		if volume.Kind == clabernetesdeviceplan.VolumeDevice &&
+		if volume.Kind == clabernetesinternaldeviceplan.VolumeDevice &&
 			!portableHostDevicePath(volume.Reference) {
 			return directPlanPreflightError(
 				volume.NodeID,
@@ -256,8 +269,8 @@ func validateNormalizedPlan(plan clabernetesdeviceplan.Plan) error {
 }
 
 func directPlanPreflightError(nodeID, field, message string) error {
-	return &clabernetesdeviceplan.Error{
-		Code: clabernetesdeviceplan.ErrorUnsupported, NodeID: nodeID, Field: field,
+	return &clabernetesinternaldeviceplan.Error{
+		Code: clabernetesinternaldeviceplan.ErrorUnsupported, NodeID: nodeID, Field: field,
 		Behavior: "kubernetes-workload-preflight", Message: message,
 	}
 }
@@ -276,11 +289,13 @@ func portableDevicePermissions(value string) bool {
 	if value == "" || len(value) > len("rwm") {
 		return false
 	}
+
 	seen := map[rune]bool{}
 	for _, permission := range value {
 		if (permission != 'r' && permission != 'w' && permission != 'm') || seen[permission] {
 			return false
 		}
+
 		seen[permission] = true
 	}
 
@@ -291,6 +306,7 @@ func portableSeccompProfile(value string) bool {
 	if value == "" {
 		return true
 	}
+
 	profile := mapSeccomp(value)
 	if profile == nil {
 		return false
@@ -303,6 +319,7 @@ func portableAppArmorProfile(value string) bool {
 	if value == "" {
 		return true
 	}
+
 	profile := mapAppArmor(value)
 	if profile == nil {
 		return false
@@ -315,6 +332,7 @@ func portableLocalhostProfile(localhost *string) bool {
 	if localhost == nil {
 		return true
 	}
+
 	local := *localhost
 
 	return local != "" && !strings.ContainsRune(local, 0) && !path.IsAbs(local) &&
@@ -323,41 +341,54 @@ func portableLocalhostProfile(localhost *string) bool {
 
 // Render produces a Recreate Deployment whose regular containers are the planned device and
 // component images. The two c9s helpers do not launch or own device processes.
-func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deployment, error) {
-	normalized, err := clabernetesdeviceplan.NormalizePlan(plan)
+func Render(plan clabernetesinternaldeviceplan.Plan,
+	options Options,
+) (*k8sappsv1.Deployment, error) {
+	normalized, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
 		return nil, err
 	}
+
 	if err = validateOptions(options); err != nil {
 		return nil, err
 	}
+
 	if err = validateNormalizedPlan(normalized); err != nil {
 		return nil, err
 	}
+
 	planDigest, err := normalized.Digest()
 	if err != nil {
 		return nil, err
 	}
+
 	labels := maps.Clone(options.Labels)
 	if labels == nil {
 		labels = map[string]string{}
 	}
+
 	labels[directWorkloadLabel] = options.Name
+
 	annotations := maps.Clone(options.Annotations)
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
+
 	delete(annotations, LinkLifecycleModeAnnotation)
 	delete(annotations, LinkLifecyclePlanDigestAnnotation)
+
 	if options.LinkLifecycleMode != "" {
 		annotations[LinkLifecycleModeAnnotation] = string(options.LinkLifecycleMode)
 		annotations[LinkLifecyclePlanDigestAnnotation] = options.LinkLifecyclePlanDigest
 	}
+
 	annotations[planDigestAnnotation] = planDigest
+
 	defaultContainer, err := defaultApplicationContainer(normalized, options.Name)
 	if err != nil {
 		return nil, err
 	}
+
 	annotations[KubectlDefaultContainerAnnotation] = defaultContainer
 
 	volumes, volumeNames, err := renderVolumes(
@@ -367,22 +398,29 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 	if err != nil {
 		return nil, err
 	}
-	volumes = append(volumes, k8scorev1.Volume{
-		Name: planVolumeName,
-		VolumeSource: k8scorev1.VolumeSource{ConfigMap: &k8scorev1.ConfigMapVolumeSource{
-			LocalObjectReference: k8scorev1.LocalObjectReference{Name: options.PlanConfigMapName},
-			Items:                []k8scorev1.KeyToPath{{Key: "plan.json", Path: "plan.json"}},
-		}},
-	})
+	//nolint:gocritic // one append per planned element reads clearest.
+	volumes = append(
+		volumes,
+		k8scorev1.Volume{ //nolint:gocritic // one append per rendered volume reads clearest.
+			Name: planVolumeName,
+			VolumeSource: k8scorev1.VolumeSource{ConfigMap: &k8scorev1.ConfigMapVolumeSource{
+				LocalObjectReference: k8scorev1.LocalObjectReference{
+					Name: options.PlanConfigMapName,
+				},
+				Items: []k8scorev1.KeyToPath{{Key: "plan.json", Path: "plan.json"}},
+			}},
+		},
+	)
 	volumes = append(volumes, k8scorev1.Volume{
 		Name:         connectivityStateName,
 		VolumeSource: k8scorev1.VolumeSource{EmptyDir: &k8scorev1.EmptyDirVolumeSource{}},
 	})
 	hostEndpointPathType := k8scorev1.HostPathDirectory
+
 	volumes = append(volumes, k8scorev1.Volume{
 		Name: hostEndpointSocketVolumeName,
 		VolumeSource: k8scorev1.VolumeSource{HostPath: &k8scorev1.HostPathVolumeSource{
-			Path: claberneteshostendpoint.SocketDirectory, Type: &hostEndpointPathType,
+			Path: clabernetesinternalhostendpoint.SocketDirectory, Type: &hostEndpointPathType,
 		}},
 	})
 	if options.ConnectivityRevisionConfigMapName != "" {
@@ -396,6 +434,7 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 			}},
 		})
 	}
+
 	if hasImportedEndpointLifecycle(normalized) {
 		hostPathType := k8scorev1.HostPathDirectory
 		volumes = append(volumes, k8scorev1.Volume{
@@ -405,10 +444,14 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 			}},
 		})
 	}
-	volumes = append(volumes, k8scorev1.Volume{
-		Name:         preparationScratchName,
-		VolumeSource: k8scorev1.VolumeSource{EmptyDir: &k8scorev1.EmptyDirVolumeSource{}},
-	})
+	//nolint:gocritic // one append per planned element reads clearest.
+	volumes = append(
+		volumes,
+		k8scorev1.Volume{ //nolint:gocritic // one append per rendered volume reads clearest.
+			Name:         preparationScratchName,
+			VolumeSource: k8scorev1.VolumeSource{EmptyDir: &k8scorev1.EmptyDirVolumeSource{}},
+		},
+	)
 	volumes = append(volumes, k8scorev1.Volume{
 		Name: inputVolumeName,
 		VolumeSource: k8scorev1.VolumeSource{ConfigMap: &k8scorev1.ConfigMapVolumeSource{
@@ -416,6 +459,7 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 			Items:                []k8scorev1.KeyToPath{{Key: "input.json", Path: "input.json"}},
 		}},
 	})
+
 	payloadVolumes, payloadMounts, err := renderPayloadSources(
 		normalized,
 		options.Namespace,
@@ -424,6 +468,7 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 	if err != nil {
 		return nil, err
 	}
+
 	volumes = append(volumes, payloadVolumes...)
 	if options.CertificateSecretName != "" {
 		volumes = append(volumes, k8scorev1.Volume{
@@ -433,34 +478,40 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 			}},
 		})
 	}
+
 	if options.EntropySecretName != "" {
 		volumes = append(volumes, k8scorev1.Volume{
 			Name: entropyVolumeName,
 			VolumeSource: k8scorev1.VolumeSource{Secret: &k8scorev1.SecretVolumeSource{
 				SecretName: options.EntropySecretName,
 				Items: []k8scorev1.KeyToPath{{
-					Key:  clabernetesdeviceplan.EntropySeedKey,
-					Path: clabernetesdeviceplan.EntropySeedKey,
+					Key:  clabernetesinternaldeviceplan.EntropySeedKey,
+					Path: clabernetesinternaldeviceplan.EntropySeedKey,
 				}},
 			}},
 		})
 	}
-	lifecycleCertificateVolumes, lifecycleCertificateNames, err := renderLifecycleCertificateVolumes(
+
+	certificateVolumes, certificateNames, err := renderLifecycleCertificateVolumes(
 		normalized,
 		options,
 	)
 	if err != nil {
 		return nil, err
 	}
-	volumes = append(volumes, lifecycleCertificateVolumes...)
+
+	volumes = append(volumes, certificateVolumes...)
+
 	endpointCertificateVolume, err := renderEndpointCertificateVolume(normalized, options)
 	if err != nil {
 		return nil, err
 	}
+
 	hasEndpointCertificates := endpointCertificateVolume != nil
 	if hasEndpointCertificates {
 		volumes = append(volumes, *endpointCertificateVolume)
 	}
+
 	if options.ProbeSecretName != "" {
 		volumes = append(volumes, k8scorev1.Volume{
 			Name: probeSecretVolumeName,
@@ -469,10 +520,12 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 			}},
 		})
 	}
+
 	mountsByContainer, err := indexMounts(normalized, volumeNames)
 	if err != nil {
 		return nil, err
 	}
+
 	containers, deviceVolumes, dns, err := renderContainers(
 		normalized,
 		mountsByContainer,
@@ -481,21 +534,24 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 	if err != nil {
 		return nil, err
 	}
+
 	enableApplicationLogBroker := options.EnableApplicationLogBroker &&
 		hasImportedPostDeployLifecycle(normalized)
+
 	hasLifecycle, hasRuntimeScratch, err := renderApplicationLifecycle(
 		normalized,
 		containers,
 		volumeNames,
 		options.ProbePolicies,
 		options.ProbeSecretName,
-		lifecycleCertificateNames,
+		certificateNames,
 		enableApplicationLogBroker,
 		options.EntropySecretName != "",
 	)
 	if err != nil {
 		return nil, err
 	}
+
 	if hasLifecycle {
 		volumes = append(volumes, k8scorev1.Volume{
 			Name: lifecycleVolumeName,
@@ -504,6 +560,7 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 			},
 		})
 	}
+
 	if hasRuntimeScratch {
 		volumes = append(volumes, k8scorev1.Volume{
 			Name: lifecycleScratchName,
@@ -512,10 +569,12 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 			},
 		})
 	}
+
 	if enableApplicationLogBroker {
 		if options.ServiceAccountName == "" {
-			return nil, fmt.Errorf("application log broker has no service account")
+			return nil, errors.New("application log broker has no service account")
 		}
+
 		expirationSeconds := int64(3600)
 		volumes = append(
 			volumes,
@@ -545,6 +604,7 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 			},
 		)
 	}
+
 	if err = applyApplicationImagePullPolicy(
 		normalized,
 		containers,
@@ -552,11 +612,14 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 	); err != nil {
 		return nil, err
 	}
+
 	applyPrimaryContainerResources(normalized, containers, options.PrimaryContainerResources)
+
 	volumes = append(volumes, deviceVolumes...)
 	if err = validateUniqueVolumeNames(volumes); err != nil {
 		return nil, err
 	}
+
 	initContainers, err := renderHelpers(
 		normalized,
 		options,
@@ -569,6 +632,7 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 	if err != nil {
 		return nil, err
 	}
+
 	one := int32(1)
 	zero := int32(0)
 	falseValue := false
@@ -610,15 +674,16 @@ func Render(plan clabernetesdeviceplan.Plan, options Options) (*k8sappsv1.Deploy
 }
 
 func defaultApplicationContainer(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	workloadName string,
 ) (string, error) {
 	for _, node := range plan.Nodes {
 		if node.Name != workloadName {
 			continue
 		}
+
 		if len(node.ContainerIDs) == 0 {
-			return "", fmt.Errorf("direct workload primary Node has no application container")
+			return "", errors.New("direct workload primary Node has no application container")
 		}
 
 		return ApplicationContainerName(node.ContainerIDs[0]), nil
@@ -628,32 +693,38 @@ func defaultApplicationContainer(
 }
 
 func applyPrimaryContainerResources(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	containers []k8scorev1.Container,
 	policy *k8scorev1.ResourceRequirements,
 ) {
 	if policy == nil {
 		return
 	}
+
 	primaryIDs := make(map[string]bool, len(plan.Nodes))
 	for _, node := range plan.Nodes {
 		if len(node.ContainerIDs) != 0 {
 			primaryIDs[node.ContainerIDs[0]] = true
 		}
 	}
+
 	for index, planned := range plan.Containers {
 		if !primaryIDs[planned.ID] {
 			continue
 		}
+
 		if containers[index].Resources.Requests == nil {
 			containers[index].Resources.Requests = k8scorev1.ResourceList{}
 		}
+
 		if containers[index].Resources.Limits == nil {
 			containers[index].Resources.Limits = k8scorev1.ResourceList{}
 		}
+
 		for name, quantity := range policy.Requests {
 			containers[index].Resources.Requests[name] = quantity.DeepCopy()
 		}
+
 		for name, quantity := range policy.Limits {
 			containers[index].Resources.Limits[name] = quantity.DeepCopy()
 		}
@@ -661,17 +732,19 @@ func applyPrimaryContainerResources(
 }
 
 func applyApplicationImagePullPolicy(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	containers []k8scorev1.Container,
 	policy string,
 ) error {
 	if policy == "" {
 		return nil
 	}
+
 	resolved, err := pullPolicy(policy)
 	if err != nil {
 		return fmt.Errorf("direct Pod application image pull policy: %w", err)
 	}
+
 	for index, planned := range plan.Containers {
 		if !planned.ImagePullPolicyExplicit {
 			containers[index].ImagePullPolicy = resolved
@@ -693,19 +766,25 @@ func validateOptions(options Options) error {
 			return fmt.Errorf("direct Pod %s is required", field)
 		}
 	}
-	if errors := validation.IsDNS1123Subdomain(options.Name); len(errors) != 0 {
-		return fmt.Errorf("direct Pod name is invalid: %s", strings.Join(errors, "; "))
+
+	if problems := validation.IsDNS1123Subdomain(options.Name); len(problems) != 0 {
+		return fmt.Errorf("direct Pod name is invalid: %s", strings.Join(problems, "; "))
 	}
-	if errors := validation.IsDNS1123Label(options.Namespace); len(errors) != 0 {
-		return fmt.Errorf("direct Pod namespace is invalid: %s", strings.Join(errors, "; "))
+
+	if problems := validation.IsDNS1123Label(options.Namespace); len(problems) != 0 {
+		return fmt.Errorf("direct Pod namespace is invalid: %s", strings.Join(problems, "; "))
 	}
+
 	usesProbeSecret := false
+
 	for nodeID, policy := range options.ProbePolicies {
 		if nodeID == "" || policy.StartupSeconds < 0 || !validProbePort(policy.TCPPort) ||
 			!validProbePort(policy.SSHPort) {
-			return fmt.Errorf("direct Pod probe policy is invalid")
+			return errors.New("direct Pod probe policy is invalid")
 		}
+
 		sshFields := 0
+
 		for _, present := range []bool{
 			policy.SSHUsername != "", policy.SSHPort != 0, policy.SSHPasswordKey != "",
 		} {
@@ -713,32 +792,40 @@ func validateOptions(options Options) error {
 				sshFields++
 			}
 		}
+
 		if sshFields != 0 && sshFields != 3 {
-			return fmt.Errorf("direct Pod SSH probe policy is incomplete")
+			return errors.New("direct Pod SSH probe policy is incomplete")
 		}
+
 		usesProbeSecret = usesProbeSecret || policy.SSHPasswordKey != ""
 	}
+
 	if usesProbeSecret != (options.ProbeSecretName != "") {
-		return fmt.Errorf("direct Pod probe Secret identity is inconsistent")
+		return errors.New("direct Pod probe Secret identity is inconsistent")
 	}
+
 	hasLifecycleMode := options.LinkLifecycleMode != ""
+
 	hasLifecycleDigest := options.LinkLifecyclePlanDigest != ""
 	if hasLifecycleMode != hasLifecycleDigest {
-		return fmt.Errorf("direct Pod Link lifecycle identity is incomplete")
+		return errors.New("direct Pod Link lifecycle identity is incomplete")
 	}
+
 	if hasLifecycleMode {
-		if options.LinkLifecycleMode != clabernetesdeviceplan.LinkApplyRecreate {
+		if options.LinkLifecycleMode != clabernetesinternaldeviceplan.LinkApplyRecreate {
 			return fmt.Errorf(
 				"direct Pod Link lifecycle mode %q does not roll a Pod",
 				options.LinkLifecycleMode,
 			)
 		}
+
 		encoded := strings.TrimPrefix(options.LinkLifecyclePlanDigest, "sha256:")
 		if len(encoded) != 64 {
-			return fmt.Errorf("direct Pod Link lifecycle plan digest is invalid")
+			return errors.New("direct Pod Link lifecycle plan digest is invalid")
 		}
+
 		if _, err := hex.DecodeString(encoded); err != nil {
-			return fmt.Errorf("direct Pod Link lifecycle plan digest is invalid")
+			return errors.New("direct Pod Link lifecycle plan digest is invalid")
 		}
 	}
 
@@ -755,7 +842,7 @@ type renderedDNS struct {
 }
 
 func renderContainers(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	mountsByContainer map[string][]k8scorev1.VolumeMount,
 	enableStopSignals bool,
 ) ([]k8scorev1.Container, []k8scorev1.Volume, renderedDNS, error) {
@@ -764,7 +851,9 @@ func renderContainers(
 	containerNames := map[string]string{}
 	usedNames := map[string]string{}
 	sysctlValues := map[string]string{}
-	var commonDNS *clabernetesdeviceplan.DNSConfig
+
+	var commonDNS *clabernetesinternaldeviceplan.DNSConfig
+
 	for _, planned := range plan.Containers {
 		name := ApplicationContainerName(planned.ID)
 		if previous := usedNames[name]; previous != "" && previous != planned.ID {
@@ -775,9 +864,11 @@ func renderContainers(
 				name,
 			)
 		}
+
 		usedNames[name] = planned.ID
 		containerNames[planned.ID] = name
 	}
+
 	for _, planned := range plan.Containers {
 		if _, exists := containerNames[planned.NamespaceOwnerID]; !exists {
 			return nil, nil, renderedDNS{}, fmt.Errorf(
@@ -786,6 +877,7 @@ func renderContainers(
 				planned.NamespaceOwnerID,
 			)
 		}
+
 		container, extraVolumes, err := renderContainer(
 			planned,
 			containerNames[planned.ID],
@@ -795,8 +887,10 @@ func renderContainers(
 		if err != nil {
 			return nil, nil, renderedDNS{}, err
 		}
+
 		containers = append(containers, container)
 		deviceVolumes = append(deviceVolumes, extraVolumes...)
+
 		for _, sysctl := range planned.Security.Sysctls {
 			if existing, exists := sysctlValues[sysctl.Name]; exists && existing != sysctl.Value {
 				return nil, nil, renderedDNS{}, fmt.Errorf(
@@ -804,21 +898,24 @@ func renderContainers(
 					sysctl.Name,
 				)
 			}
+
 			sysctlValues[sysctl.Name] = sysctl.Value
 		}
+
 		if !emptyDNS(planned.DNS) {
 			if commonDNS != nil && !reflectDNS(*commonDNS, planned.DNS) {
-				return nil, nil, renderedDNS{}, fmt.Errorf(
-					"containers request conflicting Pod DNS",
-				)
+				return nil, nil, renderedDNS{}, errors.New("containers request conflicting Pod DNS")
 			}
-			copy := planned.DNS
-			commonDNS = &copy
+
+			duplicate := planned.DNS
+			commonDNS = &duplicate
 		}
 	}
+
 	dns := renderedDNS{policy: k8scorev1.DNSClusterFirst}
 	if commonDNS != nil {
 		dns.policy = k8scorev1.DNSNone
+
 		dns.config = &k8scorev1.PodDNSConfig{
 			Nameservers: slices.Clone(commonDNS.Servers),
 			Searches:    slices.Clone(commonDNS.Search),
@@ -835,20 +932,23 @@ func renderContainers(
 }
 
 func renderLifecycleCertificateVolumes(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	options Options,
 ) ([]k8scorev1.Volume, map[string]string, error) {
 	result := []k8scorev1.Volume{}
 	byNode := map[string]string{}
+
 	itemsByNode, err := certificateProjectionItemsByNode(plan, options)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	for _, node := range plan.Nodes {
 		items := itemsByNode[node.ID]
 		if len(items) == 0 {
 			continue
 		}
+
 		name := dnsName("device-lifecycle-cert", node.ID)
 		byNode[node.ID] = name
 		result = append(result, k8scorev1.Volume{
@@ -864,31 +964,37 @@ func renderLifecycleCertificateVolumes(
 }
 
 func renderEndpointCertificateVolume(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	options Options,
 ) (*k8scorev1.Volume, error) {
 	itemsByNode, err := certificateProjectionItemsByNode(plan, options)
 	if err != nil {
 		return nil, err
 	}
+
 	keys := map[string]bool{}
+
 	for _, action := range plan.Actions {
-		if action.Phase != clabernetesdeviceplan.PhaseInterfaceFixup ||
-			action.Kind != clabernetesdeviceplan.ActionImportedDeployEndpoints ||
+		if action.Phase != clabernetesinternaldeviceplan.PhaseInterfaceFixup ||
+			action.Kind != clabernetesinternaldeviceplan.ActionImportedDeployEndpoints ||
 			action.ImportedDeployEndpoints == nil {
 			continue
 		}
+
 		for _, item := range itemsByNode[action.Target.NodeID] {
 			keys[item.Key] = true
 		}
 	}
+
 	if len(keys) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil // no keys means no projection to render.
 	}
+
 	items := make([]k8scorev1.KeyToPath, 0, len(keys))
 	for key := range keys {
 		items = append(items, k8scorev1.KeyToPath{Key: key, Path: key})
 	}
+
 	slices.SortFunc(items, func(left, right k8scorev1.KeyToPath) int {
 		return strings.Compare(left.Key, right.Key)
 	})
@@ -903,42 +1009,50 @@ func renderEndpointCertificateVolume(
 }
 
 func certificateProjectionItemsByNode(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	options Options,
 ) (map[string][]k8scorev1.KeyToPath, error) {
 	result := map[string][]k8scorev1.KeyToPath{}
 	if len(options.CertificateInputs) == 0 {
 		return result, nil
 	}
+
 	if options.CertificateSecretName == "" {
-		return nil, fmt.Errorf("lifecycle certificates have no backing Secret")
+		return nil, errors.New("lifecycle certificates have no backing Secret")
 	}
+
 	plannedNodes := make(map[string]bool, len(plan.Nodes))
 	for _, node := range plan.Nodes {
 		plannedNodes[node.ID] = true
 	}
+
 	keysByNode := map[string]map[string]bool{}
+
 	for _, input := range options.CertificateInputs {
 		if !plannedNodes[input.NodeID] || input.StorageName == "" {
-			return nil, fmt.Errorf("lifecycle certificate input has no planned Node identity")
+			return nil, errors.New("lifecycle certificate input has no planned Node identity")
 		}
+
 		if keysByNode[input.NodeID] == nil {
 			keysByNode[input.NodeID] = map[string]bool{
-				clabernetesdeviceplan.CertificateCACertKey: true,
+				clabernetesinternaldeviceplan.CertificateCACertKey: true,
 			}
 		}
-		certificateKey, privateKeyKey := clabernetesdeviceplan.CertificateMaterialKeys(
+
+		certificateKey, privateKeyKey := clabernetesinternaldeviceplan.CertificateMaterialKeys(
 			input.NodeID,
 			input.StorageName,
 		)
 		keysByNode[input.NodeID][certificateKey] = true
 		keysByNode[input.NodeID][privateKeyKey] = true
 	}
+
 	for nodeID, keys := range keysByNode {
 		items := make([]k8scorev1.KeyToPath, 0, len(keys))
 		for key := range keys {
 			items = append(items, k8scorev1.KeyToPath{Key: key, Path: key})
 		}
+
 		slices.SortFunc(items, func(left, right k8scorev1.KeyToPath) int {
 			return strings.Compare(left.Key, right.Key)
 		})
@@ -953,33 +1067,39 @@ func certificateProjectionItemsByNode(
 // Node's artifact volume; no grouped Node can observe another Node's generated or secret-derived
 // files.
 func renderApplicationLifecycle(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	containers []k8scorev1.Container,
 	volumeNames map[string]string,
 	probePolicies map[string]ProbePolicy,
 	probeSecretName string,
-	lifecycleCertificateNames map[string]string,
+	certificateNames map[string]string,
 	enableApplicationLogBroker bool,
 	hasEntropy bool,
 ) (bool, bool, error) {
 	containerIndexes := make(map[string]int, len(plan.Containers))
+
 	containerNodes := make(map[string]string, len(plan.Containers))
 	for index, container := range plan.Containers {
 		containerIndexes[container.ID] = index
 		containerNodes[container.ID] = container.NodeID
 	}
-	files := make(map[string]clabernetesdeviceplan.FilePlan, len(plan.Files))
+
+	files := make(map[string]clabernetesinternaldeviceplan.FilePlan, len(plan.Files))
 	for _, file := range plan.Files {
 		files[file.ID] = file
 	}
+
 	artifactVolumes := map[string]string{}
+
 	for _, volume := range plan.Volumes {
-		if volume.Kind != clabernetesdeviceplan.VolumeArtifacts {
+		if volume.Kind != clabernetesinternaldeviceplan.VolumeArtifacts {
 			continue
 		}
+
 		if artifactVolumes[volume.NodeID] != "" {
-			return false, false, fmt.Errorf("logical Node has multiple artifact volumes")
+			return false, false, errors.New("logical Node has multiple artifact volumes")
 		}
+
 		artifactVolumes[volume.NodeID] = volumeNames[volume.ID]
 	}
 
@@ -990,6 +1110,7 @@ func renderApplicationLifecycle(
 	importedPostDeployTargets := map[string]bool{}
 	importedSaveTargets := map[string]bool{}
 	readinessTargets := map[string]bool{}
+
 	for _, planned := range plan.Containers {
 		// Every direct application container receives the fixed c9s lifecycle binary and a
 		// Pod-scoped state directory. This is the generic, shell-independent boundary used when
@@ -1000,17 +1121,20 @@ func renderApplicationLifecycle(
 			targets[planned.ID] = true
 		}
 	}
+
 	for _, action := range plan.Actions {
-		preStartMount := action.Phase == clabernetesdeviceplan.PhasePreStart &&
-			action.Kind == clabernetesdeviceplan.ActionMount
-		importedReadiness := action.Phase == clabernetesdeviceplan.PhaseReadiness &&
-			action.Kind == clabernetesdeviceplan.ActionImportedReadiness
-		importedSave := action.Phase == clabernetesdeviceplan.PhaseSave &&
-			action.Kind == clabernetesdeviceplan.ActionSave
-		if action.Phase != clabernetesdeviceplan.PhasePostStart && !preStartMount &&
+		preStartMount := action.Phase == clabernetesinternaldeviceplan.PhasePreStart &&
+			action.Kind == clabernetesinternaldeviceplan.ActionMount
+		importedReadiness := action.Phase == clabernetesinternaldeviceplan.PhaseReadiness &&
+			action.Kind == clabernetesinternaldeviceplan.ActionImportedReadiness
+
+		importedSave := action.Phase == clabernetesinternaldeviceplan.PhaseSave &&
+			action.Kind == clabernetesinternaldeviceplan.ActionSave
+		if action.Phase != clabernetesinternaldeviceplan.PhasePostStart && !preStartMount &&
 			!importedReadiness && !importedSave {
 			continue
 		}
+
 		containerIndex, exists := containerIndexes[action.Target.ContainerID]
 		if !exists || action.Target.ContainerID == "" {
 			return false, false, fmt.Errorf(
@@ -1018,6 +1142,7 @@ func renderApplicationLifecycle(
 				action.ID,
 			)
 		}
+
 		nodeID := containerNodes[action.Target.ContainerID]
 		if nodeID == "" || action.Target.NodeID != nodeID {
 			return false, false, fmt.Errorf(
@@ -1025,6 +1150,7 @@ func renderApplicationLifecycle(
 				action.ID,
 			)
 		}
+
 		if importedReadiness {
 			if action.ImportedReadiness == nil {
 				return false, false, fmt.Errorf(
@@ -1032,27 +1158,32 @@ func renderApplicationLifecycle(
 					action.ID,
 				)
 			}
+
 			readinessTargets[action.Target.ContainerID] = true
 			targets[action.Target.ContainerID] = true
 
 			continue
 		}
+
 		if importedSave {
 			if action.Save == nil ||
-				action.Save.Method != clabernetesdeviceplan.SaveMethodImported {
+				action.Save.Method != clabernetesinternaldeviceplan.SaveMethodImported {
 				return false, false, fmt.Errorf(
 					"save action %q has no imported save payload",
 					action.ID,
 				)
 			}
+
 			artifactTargets[action.Target.ContainerID] = true
 			importedSaveTargets[action.Target.ContainerID] = true
 			targets[action.Target.ContainerID] = true
 
 			continue
 		}
+
 		if preStartMount {
 			planned := plan.Containers[containerIndex]
+
 			if action.Mount == nil || action.Mount.Filesystem != "tmpfs" ||
 				action.Mount.Source != "tmpfs" {
 				return false, false, fmt.Errorf(
@@ -1060,6 +1191,7 @@ func renderApplicationLifecycle(
 					action.ID,
 				)
 			}
+
 			if !planned.Security.Privileged &&
 				!containsLinuxCapability(planned.Security.CapabilitiesAdd, "SYS_ADMIN") {
 				return false, false, fmt.Errorf(
@@ -1067,37 +1199,42 @@ func renderApplicationLifecycle(
 					action.ID,
 				)
 			}
+
 			preStartTargets[action.Target.ContainerID] = true
 			targets[action.Target.ContainerID] = true
 
 			continue
 		}
+
 		switch action.Kind {
-		case clabernetesdeviceplan.ActionImportedPostDeploy:
+		case clabernetesinternaldeviceplan.ActionImportedPostDeploy:
 			if action.ImportedPostDeploy == nil {
 				return false, false, fmt.Errorf(
 					"post-start action %q has no imported post-deploy payload",
 					action.ID,
 				)
 			}
+
 			artifactTargets[action.Target.ContainerID] = true
 			importedPostDeployTargets[action.Target.ContainerID] = true
-		case clabernetesdeviceplan.ActionExec:
-		case clabernetesdeviceplan.ActionFile:
+		case clabernetesinternaldeviceplan.ActionExec:
+		case clabernetesinternaldeviceplan.ActionFile:
 			if action.File == nil || files[action.File.FileID].NodeID != nodeID {
 				return false, false, fmt.Errorf(
 					"post-start action %q has an unscoped file",
 					action.ID,
 				)
 			}
+
 			artifactTargets[action.Target.ContainerID] = true
-		case clabernetesdeviceplan.ActionWriteStdin:
+		case clabernetesinternaldeviceplan.ActionWriteStdin:
 			if action.WriteStdin == nil || files[action.WriteStdin.FileID].NodeID != nodeID {
 				return false, false, fmt.Errorf(
 					"post-start action %q has unscoped stdin data",
 					action.ID,
 				)
 			}
+
 			artifactTargets[action.Target.ContainerID] = true
 		default:
 			return false, false, fmt.Errorf(
@@ -1106,11 +1243,11 @@ func renderApplicationLifecycle(
 				action.Kind,
 			)
 		}
+
 		if containerIndex >= len(containers) {
-			return false, false, fmt.Errorf(
-				"post-start target is absent from rendered containers",
-			)
+			return false, false, errors.New("post-start target is absent from rendered containers")
 		}
+
 		targets[action.Target.ContainerID] = true
 		postStartTargets[action.Target.ContainerID] = true
 	}
@@ -1118,6 +1255,7 @@ func renderApplicationLifecycle(
 	for containerID := range targets {
 		index := containerIndexes[containerID]
 		container := &containers[index]
+
 		mounts := []k8scorev1.VolumeMount{
 			{Name: lifecycleVolumeName, MountPath: lifecycleBinaryRoot, ReadOnly: true},
 			{Name: planVolumeName, MountPath: lifecyclePlanRoot, ReadOnly: true},
@@ -1131,48 +1269,56 @@ func renderApplicationLifecycle(
 				},
 			)
 		}
+
 		if hasEntropy && (readinessTargets[containerID] ||
 			importedPostDeployTargets[containerID] || importedSaveTargets[containerID]) {
 			mounts = append(mounts, k8scorev1.VolumeMount{
 				Name: entropyVolumeName, MountPath: lifecycleEntropyRoot, ReadOnly: true,
 			})
 		}
+
 		if readinessTargets[containerID] {
 			policy := probePolicies[containerNodes[containerID]]
 			if policy.SSHPasswordKey != "" {
 				if probeSecretName == "" {
-					return false, false, fmt.Errorf("readiness target has no probe Secret")
+					return false, false, errors.New("readiness target has no probe Secret")
 				}
+
 				mounts = append(mounts, k8scorev1.VolumeMount{
 					Name: probeSecretVolumeName, MountPath: probePasswordPath,
 					SubPath: policy.SSHPasswordKey, ReadOnly: true,
 				})
 			}
 		}
+
 		if artifactTargets[containerID] {
 			nodeID := containerNodes[containerID]
+
 			volumeName := artifactVolumes[nodeID]
 			if volumeName == "" {
-				return false, false, fmt.Errorf(
-					"post-start target has no plan-owned artifact volume",
-				)
+				return false,
+					false,
+					errors.New("post-start target has no plan-owned artifact volume")
 			}
+
 			mounts = append(mounts, k8scorev1.VolumeMount{
 				Name: volumeName,
 				MountPath: path.Join(
 					lifecycleArtifactRoot,
-					clabernetesdeviceplan.ArtifactNodeDirectory(nodeID),
+					clabernetesinternaldeviceplan.ArtifactNodeDirectory(nodeID),
 				),
 				ReadOnly: !importedPostDeployTargets[containerID] &&
 					!importedSaveTargets[containerID],
 			})
 		}
-		if certificateVolume := lifecycleCertificateNames[containerNodes[containerID]]; importedPostDeployTargets[containerID] &&
-			certificateVolume != "" {
+
+		certificateVolume := certificateNames[containerNodes[containerID]]
+		if importedPostDeployTargets[containerID] && certificateVolume != "" {
 			mounts = append(mounts, k8scorev1.VolumeMount{
 				Name: certificateVolume, MountPath: lifecycleCertificateRoot, ReadOnly: true,
 			})
 		}
+
 		if importedPostDeployTargets[containerID] && enableApplicationLogBroker {
 			mounts = append(mounts, k8scorev1.VolumeMount{
 				Name:      applicationRuntimeAPIName,
@@ -1180,6 +1326,7 @@ func renderApplicationLifecycle(
 				ReadOnly:  true,
 			})
 		}
+
 		for _, mount := range mounts {
 			for _, existing := range container.VolumeMounts {
 				if existing.MountPath == mount.MountPath {
@@ -1190,8 +1337,10 @@ func renderApplicationLifecycle(
 					)
 				}
 			}
+
 			container.VolumeMounts = append(container.VolumeMounts, mount)
 		}
+
 		slices.SortFunc(container.VolumeMounts, func(left, right k8scorev1.VolumeMount) int {
 			return strings.Compare(left.MountPath, right.MountPath)
 		})
@@ -1207,11 +1356,13 @@ func renderApplicationLifecycle(
 			"--containerID",
 			containerID,
 		}
+
 		container.Args = nil
 		if postStartTargets[containerID] {
 			if container.Lifecycle == nil {
 				container.Lifecycle = &k8scorev1.Lifecycle{}
 			}
+
 			container.Lifecycle.PostStart = &k8scorev1.LifecycleHandler{
 				Exec: &k8scorev1.ExecAction{Command: []string{
 					lifecycleBinaryPath,
@@ -1222,7 +1373,7 @@ func renderApplicationLifecycle(
 					"--input",
 					lifecycleInputRoot + "/input.json",
 					"--phase",
-					string(clabernetesdeviceplan.PhasePostStart),
+					string(clabernetesinternaldeviceplan.PhasePostStart),
 					"--containerID",
 					containerID,
 					"--artifacts",
@@ -1234,13 +1385,14 @@ func renderApplicationLifecycle(
 				}},
 			}
 			if importedPostDeployTargets[containerID] &&
-				lifecycleCertificateNames[containerNodes[containerID]] != "" {
+				certificateNames[containerNodes[containerID]] != "" {
 				container.Lifecycle.PostStart.Exec.Command = append(
 					container.Lifecycle.PostStart.Exec.Command,
 					"--certificates",
 					lifecycleCertificateRoot,
 				)
 			}
+
 			if hasEntropy && importedPostDeployTargets[containerID] {
 				container.Lifecycle.PostStart.Exec.Command = append(
 					container.Lifecycle.PostStart.Exec.Command,
@@ -1249,8 +1401,10 @@ func renderApplicationLifecycle(
 				)
 			}
 		}
+
 		if readinessTargets[containerID] {
 			policy := probePolicies[containerNodes[containerID]]
+
 			command := []string{
 				lifecycleBinaryPath,
 				"device-runtime",
@@ -1269,9 +1423,11 @@ func renderApplicationLifecycle(
 			if hasEntropy {
 				command = append(command, "--entropy", lifecycleEntropyRoot)
 			}
+
 			if policy.TCPPort != 0 {
 				command = append(command, "--tcpPort", strconv.Itoa(policy.TCPPort))
 			}
+
 			if policy.SSHPasswordKey != "" {
 				command = append(
 					command,
@@ -1283,6 +1439,7 @@ func renderApplicationLifecycle(
 					probePasswordPath,
 				)
 			}
+
 			container.StartupProbe, container.ReadinessProbe = composeImportedReadinessProbes(
 				container.StartupProbe,
 				container.ReadinessProbe,
@@ -1299,18 +1456,21 @@ func renderApplicationLifecycle(
 // one direct application container after a planner-declared Restart connectivity transition.
 func ApplicationRestartCommand(
 	requestDigest string,
-	container clabernetesdeviceplan.ContainerPlan,
+	container clabernetesinternaldeviceplan.ContainerPlan,
 ) ([]string, error) {
 	encoded := strings.TrimPrefix(requestDigest, "sha256:")
 	if len(encoded) != 64 || encoded == requestDigest {
-		return nil, fmt.Errorf("application restart plan digest is invalid")
+		return nil, errors.New("application restart plan digest is invalid")
 	}
+
 	if _, err := hex.DecodeString(encoded); err != nil {
-		return nil, fmt.Errorf("application restart plan digest is invalid")
+		return nil, errors.New("application restart plan digest is invalid")
 	}
+
 	if container.ID == "" {
-		return nil, fmt.Errorf("application restart container identity is empty")
+		return nil, errors.New("application restart container identity is empty")
 	}
+
 	command := []string{
 		lifecycleBinaryPath,
 		"device-runtime",
@@ -1330,14 +1490,16 @@ func ApplicationRestartCommand(
 // ApplicationSaveCommand returns the shell-independent command for one package-owned SaveConfig
 // action in the primary direct application container of a logical Node.
 func ApplicationSaveCommand(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	containerID string,
 ) ([]string, error) {
-	normalized, err := clabernetesdeviceplan.NormalizePlan(plan)
+	normalized, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
 		return nil, err
 	}
-	var container *clabernetesdeviceplan.ContainerPlan
+
+	var container *clabernetesinternaldeviceplan.ContainerPlan
+
 	for index := range normalized.Containers {
 		if normalized.Containers[index].ID == containerID {
 			container = &normalized.Containers[index]
@@ -1345,39 +1507,43 @@ func ApplicationSaveCommand(
 			break
 		}
 	}
+
 	if container == nil {
-		return nil, fmt.Errorf("application save container is absent from the accepted plan")
+		return nil, errors.New("application save container is absent from the accepted plan")
 	}
+
 	owned := false
+
 	for _, node := range normalized.Nodes {
 		if node.ID != container.NodeID {
 			continue
 		}
-		for _, candidate := range node.ContainerIDs {
-			if candidate == containerID {
-				owned = true
 
-				break
-			}
+		if slices.Contains(node.ContainerIDs, containerID) {
+			owned = true
 		}
 
 		break
 	}
+
 	if !owned {
-		return nil, fmt.Errorf("application save target is not a logical Node container")
+		return nil, errors.New("application save target is not a logical Node container")
 	}
+
 	actionCount := 0
+
 	for _, action := range normalized.Actions {
-		if action.Phase == clabernetesdeviceplan.PhaseSave &&
-			action.Kind == clabernetesdeviceplan.ActionSave &&
+		if action.Phase == clabernetesinternaldeviceplan.PhaseSave &&
+			action.Kind == clabernetesinternaldeviceplan.ActionSave &&
 			action.Target.NodeID == container.NodeID &&
 			action.Target.ContainerID == containerID && action.Save != nil &&
-			action.Save.Method == clabernetesdeviceplan.SaveMethodImported {
+			action.Save.Method == clabernetesinternaldeviceplan.SaveMethodImported {
 			actionCount++
 		}
 	}
+
 	if actionCount != 1 {
-		return nil, fmt.Errorf("application save target requires exactly one imported save action")
+		return nil, errors.New("application save target requires exactly one imported save action")
 	}
 
 	return []string{
@@ -1389,7 +1555,7 @@ func ApplicationSaveCommand(
 		"--input",
 		lifecycleInputRoot + "/input.json",
 		"--phase",
-		string(clabernetesdeviceplan.PhaseSave),
+		string(clabernetesinternaldeviceplan.PhaseSave),
 		"--containerID",
 		containerID,
 		"--artifacts",
@@ -1406,20 +1572,24 @@ func ApplicationSaveCommand(
 // PacketCaptureCommand returns the fixed connectivity-helper command for a finite capture of one
 // interface owned by the requested opaque logical Node in the accepted plan.
 func PacketCaptureCommand(
-	plan clabernetesdeviceplan.Plan,
-	options clabernetesdirectruntime.PacketCaptureOptions,
+	plan clabernetesinternaldeviceplan.Plan,
+	options clabernetesinternaldirectruntime.PacketCaptureOptions,
 ) ([]string, error) {
-	normalizedOptions, err := clabernetesdirectruntime.NormalizePacketCaptureOptions(options)
+	normalizedOptions, err := clabernetesinternaldirectruntime.NormalizePacketCaptureOptions(
+		options,
+	)
 	if err != nil {
 		return nil, err
 	}
-	if _, err = clabernetesdirectruntime.PacketCaptureTarget(
+
+	if _, err = clabernetesinternaldirectruntime.PacketCaptureTarget(
 		plan,
 		normalizedOptions.NodeID,
 		normalizedOptions.InterfaceName,
 	); err != nil {
 		return nil, err
 	}
+
 	command := []string{
 		runtimeBinaryPath,
 		"device-runtime",
@@ -1440,6 +1610,7 @@ func PacketCaptureCommand(
 	if normalizedOptions.PacketLimit != 0 {
 		command = append(command, "--packetLimit", strconv.Itoa(normalizedOptions.PacketLimit))
 	}
+
 	if normalizedOptions.Duration != 0 {
 		command = append(command, "--duration", normalizedOptions.Duration.String())
 	}
@@ -1461,6 +1632,7 @@ func composeImportedReadinessProbes(
 	} else {
 		readiness = readiness.DeepCopy()
 	}
+
 	readiness.ProbeHandler = k8scorev1.ProbeHandler{
 		Exec: &k8scorev1.ExecAction{Command: slices.Clone(command)},
 	}
@@ -1470,12 +1642,18 @@ func composeImportedReadinessProbes(
 	} else {
 		startup = startup.DeepCopy()
 	}
+
 	if startupSeconds == 0 {
 		startupSeconds = 15 * 60
 	}
+
 	startup.FailureThreshold = max(
 		startup.FailureThreshold,
-		max(1, int32((startupSeconds+int(startup.PeriodSeconds)-1)/int(startup.PeriodSeconds))),
+		max(
+			1,
+			//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+			int32((startupSeconds+int(startup.PeriodSeconds)-1)/int(startup.PeriodSeconds)),
+		),
 	)
 	startup.ProbeHandler = k8scorev1.ProbeHandler{
 		Exec: &k8scorev1.ExecAction{Command: slices.Clone(command)},
@@ -1487,6 +1665,7 @@ func composeImportedReadinessProbes(
 func containsLinuxCapability(values []string, expected string) bool {
 	for _, value := range values {
 		value = strings.ToUpper(strings.TrimSpace(value))
+
 		value = strings.TrimPrefix(value, "CAP_")
 		if value == expected {
 			return true
@@ -1497,7 +1676,7 @@ func containsLinuxCapability(values []string, expected string) bool {
 }
 
 func renderContainer(
-	planned clabernetesdeviceplan.ContainerPlan,
+	planned clabernetesinternaldeviceplan.ContainerPlan,
 	name string,
 	mounts []k8scorev1.VolumeMount,
 	enableStopSignals bool,
@@ -1508,12 +1687,14 @@ func renderContainer(
 			planned.ID,
 		)
 	}
+
 	if planned.StopSignal != "" && !enableStopSignals {
 		return k8scorev1.Container{}, nil, fmt.Errorf(
 			"container %q requires the Kubernetes ContainerStopSignals feature",
 			planned.ID,
 		)
 	}
+
 	if !portableRestartPolicy(planned.RestartPolicy) {
 		return k8scorev1.Container{}, nil, fmt.Errorf(
 			"container %q restart policy %q has no shared-Pod mapping",
@@ -1521,20 +1702,24 @@ func renderContainer(
 			planned.RestartPolicy,
 		)
 	}
+
 	security, err := renderSecurity(planned.Security, planned.User)
 	if err != nil {
 		return k8scorev1.Container{}, nil, fmt.Errorf("container %q: %w", planned.ID, err)
 	}
+
 	resources, err := renderResources(planned.Resources)
 	if err != nil {
 		return k8scorev1.Container{}, nil, fmt.Errorf("container %q: %w", planned.ID, err)
 	}
+
 	container := k8scorev1.Container{
 		Name: name, Image: immutableImage(planned.Image, planned.ImageDigest),
 		Command: slices.Clone(planned.Entrypoint), Args: slices.Clone(planned.Command),
 		WorkingDir: planned.WorkingDir, TTY: planned.TTY, Stdin: planned.Stdin,
 		SecurityContext: security, Resources: resources, VolumeMounts: slices.Clone(mounts),
 	}
+
 	container.ImagePullPolicy, err = pullPolicy(planned.ImagePullPolicy)
 	if err != nil {
 		return k8scorev1.Container{}, nil, fmt.Errorf("container %q: %w", planned.ID, err)
@@ -1544,35 +1729,40 @@ func renderContainer(
 	// unaddressed. A planned variable of the same name wins because Kubernetes resolves the last
 	// occurrence.
 	container.Env = append(container.Env, k8scorev1.EnvVar{
-		Name: clabernetesdirectruntime.PodAddressEnvironmentVariable,
+		Name: clabernetesinternaldirectruntime.PodAddressEnvironmentVariable,
 		ValueFrom: &k8scorev1.EnvVarSource{FieldRef: &k8scorev1.ObjectFieldSelector{
 			FieldPath: "status.podIP",
 		}},
 	})
 	for _, variable := range planned.Environment {
-		if errors := validation.IsEnvVarName(variable.Name); len(errors) != 0 {
-			return k8scorev1.Container{}, nil, fmt.Errorf("invalid environment variable name")
+		if problems := validation.IsEnvVarName(variable.Name); len(problems) != 0 {
+			return k8scorev1.Container{}, nil, errors.New("invalid environment variable name")
 		}
+
 		container.Env = append(
 			container.Env,
 			k8scorev1.EnvVar{Name: variable.Name, Value: variable.Value},
 		)
 	}
+
 	for _, port := range planned.Ports {
 		container.Ports = append(container.Ports, k8scorev1.ContainerPort{
-			ContainerPort: int32(
+			ContainerPort: int32( //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
 				port.Number,
 			), Protocol: k8scorev1.Protocol(strings.ToUpper(port.Protocol)),
 		})
 	}
+
 	container.StartupProbe, container.ReadinessProbe, err = renderHealthcheck(planned.Healthcheck)
 	if err != nil {
 		return k8scorev1.Container{}, nil, fmt.Errorf("container %q: %w", planned.ID, err)
 	}
+
 	if planned.StopSignal != "" {
 		signal := k8scorev1.Signal(planned.StopSignal)
 		container.Lifecycle = &k8scorev1.Lifecycle{StopSignal: &signal}
 	}
+
 	extraVolumes := make([]k8scorev1.Volume, 0, len(planned.Security.Devices))
 	for index, device := range planned.Security.Devices {
 		if !planned.Security.Privileged {
@@ -1581,6 +1771,7 @@ func renderContainer(
 				device.HostPath,
 			)
 		}
+
 		volumeName := dnsName("device", planned.ID+"/"+strconv.Itoa(index)+"/"+device.HostPath)
 		hostPathType := k8scorev1.HostPathCharDev
 		extraVolumes = append(extraVolumes, k8scorev1.Volume{
@@ -1599,7 +1790,7 @@ func renderContainer(
 }
 
 func renderSecurity(
-	planned clabernetesdeviceplan.SecurityPlan,
+	planned clabernetesinternaldeviceplan.SecurityPlan,
 	user string,
 ) (*k8scorev1.SecurityContext, error) {
 	security := &k8scorev1.SecurityContext{
@@ -1610,18 +1801,22 @@ func renderSecurity(
 			Drop: mapCapabilities(planned.CapabilitiesDrop),
 		},
 	}
+
 	if user != "" {
 		uid, gid, err := parseUser(user)
 		if err != nil {
 			return nil, err
 		}
+
 		security.RunAsUser = uid
 		security.RunAsGroup = gid
 	}
+
 	security.SeccompProfile = mapSeccomp(planned.SeccompProfile)
 	if planned.SeccompProfile != "" && security.SeccompProfile == nil {
 		return nil, fmt.Errorf("seccomp profile %q is not portable", planned.SeccompProfile)
 	}
+
 	security.AppArmorProfile = mapAppArmor(planned.AppArmorProfile)
 	if planned.AppArmorProfile != "" && security.AppArmorProfile == nil {
 		return nil, fmt.Errorf("AppArmor profile %q is not portable", planned.AppArmorProfile)
@@ -1631,9 +1826,10 @@ func renderSecurity(
 }
 
 func renderResources(
-	planned clabernetesdeviceplan.ResourcePlan,
+	planned clabernetesinternaldeviceplan.ResourcePlan,
 ) (k8scorev1.ResourceRequirements, error) {
 	result := k8scorev1.ResourceRequirements{}
+
 	for _, item := range []struct {
 		value    string
 		name     k8scorev1.ResourceName
@@ -1647,19 +1843,23 @@ func renderResources(
 		if item.value == "" {
 			continue
 		}
+
 		quantity, err := apiresource.ParseQuantity(item.value)
 		if err != nil {
-			return k8scorev1.ResourceRequirements{}, fmt.Errorf("invalid resource quantity")
+			return k8scorev1.ResourceRequirements{}, errors.New("invalid resource quantity")
 		}
+
 		if item.requests {
 			if result.Requests == nil {
 				result.Requests = k8scorev1.ResourceList{}
 			}
+
 			result.Requests[item.name] = quantity
 		} else {
 			if result.Limits == nil {
 				result.Limits = k8scorev1.ResourceList{}
 			}
+
 			result.Limits[item.name] = quantity
 		}
 	}
@@ -1668,39 +1868,47 @@ func renderResources(
 }
 
 func renderHealthcheck(
-	value *clabernetesdeviceplan.Healthcheck,
+	value *clabernetesinternaldeviceplan.Healthcheck,
 ) (*k8scorev1.Probe, *k8scorev1.Probe, error) {
 	if value == nil || len(value.Test) == 0 || strings.EqualFold(value.Test[0], "NONE") {
 		return nil, nil, nil
 	}
+
 	command := slices.Clone(value.Test)
 	switch strings.ToUpper(command[0]) {
 	case "CMD":
 		command = command[1:]
 	case "CMD-SHELL":
 		if len(command) < 2 {
-			return nil, nil, fmt.Errorf("healthcheck shell command is empty")
+			return nil, nil, errors.New("healthcheck shell command is empty")
 		}
+
 		command = []string{"/bin/sh", "-c", strings.Join(command[1:], " ")}
 	}
+
 	if len(command) == 0 {
-		return nil, nil, fmt.Errorf("healthcheck command is empty")
+		return nil, nil, errors.New("healthcheck command is empty")
 	}
+
 	periodSeconds, err := healthcheckSeconds(value.Interval, 30)
 	if err != nil {
 		return nil, nil, fmt.Errorf("healthcheck interval: %w", err)
 	}
+
 	timeoutSeconds, err := healthcheckSeconds(value.Timeout, 30)
 	if err != nil {
 		return nil, nil, fmt.Errorf("healthcheck timeout: %w", err)
 	}
+
 	failureThreshold := value.Retries
 	if failureThreshold == 0 {
 		failureThreshold = 3
 	}
+
 	if failureThreshold < 1 || failureThreshold > math.MaxInt32 {
-		return nil, nil, fmt.Errorf("healthcheck retries are outside Kubernetes probe limits")
+		return nil, nil, errors.New("healthcheck retries are outside Kubernetes probe limits")
 	}
+
 	readiness := &k8scorev1.Probe{
 		ProbeHandler:     k8scorev1.ProbeHandler{Exec: &k8scorev1.ExecAction{Command: command}},
 		PeriodSeconds:    periodSeconds,
@@ -1711,6 +1919,7 @@ func renderHealthcheck(
 	if value.StartPeriod == 0 {
 		return nil, readiness, nil
 	}
+
 	startSeconds, err := healthcheckSeconds(value.StartPeriod, 0)
 	if err != nil {
 		return nil, nil, fmt.Errorf("healthcheck start period: %w", err)
@@ -1721,12 +1930,17 @@ func renderHealthcheck(
 	// point while making an application that never becomes healthy restart instead of run
 	// indefinitely as an unready Pod.
 	startIntervals := (int64(startSeconds) + int64(periodSeconds) - 1) / int64(periodSeconds)
+
 	startupFailures := startIntervals + int64(failureThreshold)
 	if startupFailures > math.MaxInt32 {
-		return nil, nil, fmt.Errorf("healthcheck startup allowance exceeds Kubernetes probe limits")
+		return nil, nil, errors.New("healthcheck startup allowance exceeds Kubernetes probe limits")
 	}
+
 	startup := readiness.DeepCopy()
-	startup.FailureThreshold = int32(startupFailures)
+	//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+	startup.FailureThreshold = int32(
+		startupFailures,
+	) //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
 
 	return startup, readiness, nil
 }
@@ -1735,27 +1949,31 @@ func healthcheckSeconds(value int64, defaultSeconds int32) (int32, error) {
 	if value == 0 {
 		return defaultSeconds, nil
 	}
+
 	if value < 0 {
-		return 0, fmt.Errorf("duration is negative")
+		return 0, errors.New("duration is negative")
 	}
+
 	seconds := value / int64(time.Second)
 	if value%int64(time.Second) != 0 {
 		seconds++
 	}
+
 	if seconds < 1 || seconds > math.MaxInt32 {
-		return 0, fmt.Errorf("duration is outside Kubernetes probe limits")
+		return 0, errors.New("duration is outside Kubernetes probe limits")
 	}
 
 	return int32(seconds), nil
 }
 
 func renderVolumes(
-	plans []clabernetesdeviceplan.VolumePlan,
+	plans []clabernetesinternaldeviceplan.VolumePlan,
 	persistentVolumeClaims map[string]string,
 ) ([]k8scorev1.Volume, map[string]string, error) {
 	volumes := make([]k8scorev1.Volume, 0, len(plans))
 	names := make(map[string]string, len(plans))
 	used := map[string]string{}
+
 	for _, planned := range plans {
 		name := dnsName("volume", planned.ID)
 		if previous := used[name]; previous != "" && previous != planned.ID {
@@ -1765,60 +1983,70 @@ func renderVolumes(
 				planned.ID,
 			)
 		}
+
 		used[name] = planned.ID
 		names[planned.ID] = name
 		volume := k8scorev1.Volume{Name: name}
+
 		switch planned.Kind {
-		case clabernetesdeviceplan.VolumeArtifacts:
+		case clabernetesinternaldeviceplan.VolumeArtifacts:
 			if claimName := persistentVolumeClaims[planned.NodeID]; claimName != "" {
-				if errors := validation.IsDNS1123Subdomain(claimName); len(errors) != 0 {
+				if problems := validation.IsDNS1123Subdomain(claimName); len(problems) != 0 {
 					return nil, nil, fmt.Errorf("volume %q has an invalid claim name", planned.ID)
 				}
+
 				volume.PersistentVolumeClaim = &k8scorev1.PersistentVolumeClaimVolumeSource{
 					ClaimName: claimName,
 				}
 			} else {
 				volume.EmptyDir = &k8scorev1.EmptyDirVolumeSource{}
 			}
-		case clabernetesdeviceplan.VolumeEmptyDir:
+		case clabernetesinternaldeviceplan.VolumeEmptyDir:
 			empty := &k8scorev1.EmptyDirVolumeSource{}
 			if strings.EqualFold(planned.Medium, "Memory") {
 				empty.Medium = k8scorev1.StorageMediumMemory
 			} else if planned.Medium != "" {
 				return nil, nil, fmt.Errorf("volume %q has unsupported medium", planned.ID)
 			}
+
 			if planned.Size != "" {
 				quantity, err := apiresource.ParseQuantity(planned.Size)
 				if err != nil {
 					return nil, nil, fmt.Errorf("volume %q has invalid size", planned.ID)
 				}
+
 				empty.SizeLimit = &quantity
 			}
+
 			volume.EmptyDir = empty
-		case clabernetesdeviceplan.VolumeConfigMap:
+		case clabernetesinternaldeviceplan.VolumeConfigMap:
 			if planned.Reference == "" {
 				return nil, nil, fmt.Errorf("volume %q has no ConfigMap reference", planned.ID)
 			}
+
 			volume.ConfigMap = &k8scorev1.ConfigMapVolumeSource{
 				LocalObjectReference: k8scorev1.LocalObjectReference{Name: planned.Reference},
 			}
-		case clabernetesdeviceplan.VolumeSecret:
+		case clabernetesinternaldeviceplan.VolumeSecret:
 			if planned.Reference == "" {
 				return nil, nil, fmt.Errorf("volume %q has no Secret reference", planned.ID)
 			}
+
 			volume.Secret = &k8scorev1.SecretVolumeSource{SecretName: planned.Reference}
-		case clabernetesdeviceplan.VolumePersistent:
+		case clabernetesinternaldeviceplan.VolumePersistent:
 			if planned.Reference == "" {
 				return nil, nil, fmt.Errorf("volume %q has no claim reference", planned.ID)
 			}
+
 			volume.PersistentVolumeClaim = &k8scorev1.PersistentVolumeClaimVolumeSource{
 				ClaimName: planned.Reference,
 			}
-		case clabernetesdeviceplan.VolumeDevice:
+		case clabernetesinternaldeviceplan.VolumeDevice:
 			cleanReference := path.Clean(planned.Reference)
 			if cleanReference != planned.Reference || !strings.HasPrefix(cleanReference, "/dev/") {
 				return nil, nil, fmt.Errorf("volume %q is not a portable host device", planned.ID)
 			}
+
 			hostPathType := k8scorev1.HostPathCharDev
 			volume.HostPath = &k8scorev1.HostPathVolumeSource{
 				Path: planned.Reference, Type: &hostPathType,
@@ -1830,6 +2058,7 @@ func renderVolumes(
 				planned.Kind,
 			)
 		}
+
 		volumes = append(volumes, volume)
 	}
 
@@ -1837,19 +2066,22 @@ func renderVolumes(
 }
 
 func indexMounts(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	volumeNames map[string]string,
 ) (map[string][]k8scorev1.VolumeMount, error) {
 	result := map[string][]k8scorev1.VolumeMount{}
+
 	for _, mount := range plan.Mounts {
 		volumeName := volumeNames[mount.VolumeID]
 		if volumeName == "" {
 			return nil, fmt.Errorf("mount %q references unknown volume", mount.ID)
 		}
+
 		propagation, err := mountPropagation(mount.Propagation)
 		if err != nil {
 			return nil, fmt.Errorf("mount %q: %w", mount.ID, err)
 		}
+
 		result[mount.ContainerID] = append(result[mount.ContainerID], k8scorev1.VolumeMount{
 			Name: volumeName, MountPath: mount.Destination, SubPath: mount.SourcePath,
 			ReadOnly: mount.ReadOnly, MountPropagation: propagation,
@@ -1860,31 +2092,38 @@ func indexMounts(
 }
 
 func renderPayloadSources(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	namespace string,
-	payloads []clabernetesdeviceplan.PayloadInput,
+	payloads []clabernetesinternaldeviceplan.PayloadInput,
 ) ([]k8scorev1.Volume, []k8scorev1.VolumeMount, error) {
-	planned := map[string]clabernetesdeviceplan.FilePlan{}
+	planned := map[string]clabernetesinternaldeviceplan.FilePlan{}
+
 	for _, file := range plan.Files {
-		if file.SourceKind != clabernetesdeviceplan.FileSourcePayload {
+		if file.SourceKind != clabernetesinternaldeviceplan.FileSourcePayload {
 			continue
 		}
+
 		if _, exists := planned[file.SourceReference]; exists {
 			return nil, nil, fmt.Errorf(
 				"payload %q is referenced by multiple file plans",
 				file.SourceReference,
 			)
 		}
+
 		planned[file.SourceReference] = file
 	}
+
 	volumes := []k8scorev1.Volume{}
 	mounts := []k8scorev1.VolumeMount{}
+
 	seen := map[string]bool{}
 	for _, payload := range payloads {
 		if seen[payload.ID] {
 			return nil, nil, fmt.Errorf("payload input %q is duplicated", payload.ID)
 		}
+
 		seen[payload.ID] = true
+
 		file, exists := planned[payload.ID]
 		if !exists || file.NodeID != payload.NodeID || file.Destination != payload.Destination ||
 			file.Mode != payload.Mode || file.Digest != payload.Digest {
@@ -1893,14 +2132,18 @@ func renderPayloadSources(
 				payload.ID,
 			)
 		}
+
 		delete(planned, payload.ID)
-		if payload.Kind == clabernetesdeviceplan.PayloadURL {
+
+		if payload.Kind == clabernetesinternaldeviceplan.PayloadURL {
 			continue
 		}
-		if payload.Kind != clabernetesdeviceplan.PayloadConfigMap &&
-			payload.Kind != clabernetesdeviceplan.PayloadSecret {
+
+		if payload.Kind != clabernetesinternaldeviceplan.PayloadConfigMap &&
+			payload.Kind != clabernetesinternaldeviceplan.PayloadSecret {
 			return nil, nil, fmt.Errorf("payload input %q has no typed Pod source", payload.ID)
 		}
+
 		objectNamespace, objectName, key, err := parsePayloadObjectReference(payload.Reference)
 		if err != nil || objectNamespace != namespace {
 			return nil, nil, fmt.Errorf(
@@ -1912,8 +2155,9 @@ func renderPayloadSources(
 		// requested destination mode when staging the verified artifact.
 		mode := int32(0o444)
 		item := k8scorev1.KeyToPath{Key: key, Path: "source", Mode: &mode}
+
 		volume := k8scorev1.Volume{Name: dnsName("payload", payload.ID)}
-		if payload.Kind == clabernetesdeviceplan.PayloadConfigMap {
+		if payload.Kind == clabernetesinternaldeviceplan.PayloadConfigMap {
 			volume.ConfigMap = &k8scorev1.ConfigMapVolumeSource{
 				LocalObjectReference: k8scorev1.LocalObjectReference{Name: objectName},
 				Items:                []k8scorev1.KeyToPath{item},
@@ -1924,20 +2168,22 @@ func renderPayloadSources(
 				Items:      []k8scorev1.KeyToPath{item},
 			}
 		}
+
 		volumes = append(volumes, volume)
 		mounts = append(mounts, k8scorev1.VolumeMount{
 			Name: volume.Name,
 			MountPath: path.Join(
 				payloadRootPath,
-				clabernetesdeviceplan.ArtifactNodeDirectory(payload.ID),
+				clabernetesinternaldeviceplan.ArtifactNodeDirectory(payload.ID),
 			),
 			ReadOnly: true,
 		})
 	}
+
 	if len(planned) != 0 {
-		return nil, nil, fmt.Errorf(
-			"accepted file plan references an unavailable typed payload source",
-		)
+		return nil,
+			nil,
+			errors.New("accepted file plan references an unavailable typed payload source")
 	}
 
 	return volumes, mounts, nil
@@ -1945,17 +2191,18 @@ func renderPayloadSources(
 
 func parsePayloadObjectReference(reference string) (string, string, string, error) {
 	object, key, found := strings.Cut(reference, ":")
+
 	namespace, name, separated := strings.Cut(object, "/")
 	if !found || !separated || namespace == "" || name == "" || key == "" ||
 		strings.Contains(key, "/") {
-		return "", "", "", fmt.Errorf("expected namespace/name:key")
+		return "", "", "", errors.New("expected namespace/name:key")
 	}
 
 	return namespace, name, key, nil
 }
 
 func renderHelpers(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	options Options,
 	volumeNames map[string]string,
 	payloadMounts []k8scorev1.VolumeMount,
@@ -1990,18 +2237,21 @@ func renderHelpers(
 		"--payloads", payloadRootPath,
 		"--revision", plan.Planner.Revision,
 	}
+
 	if options.CertificateSecretName != "" {
 		preparationMounts = append(preparationMounts, k8scorev1.VolumeMount{
 			Name: certificateVolumeName, MountPath: certificateRootPath, ReadOnly: true,
 		})
 		preparationArgs = append(preparationArgs, "--certificates", certificateRootPath)
 	}
+
 	if options.EntropySecretName != "" {
 		preparationMounts = append(preparationMounts, k8scorev1.VolumeMount{
 			Name: entropyVolumeName, MountPath: entropyRootPath, ReadOnly: true,
 		})
 		preparationArgs = append(preparationArgs, "--entropy", entropyRootPath)
 	}
+
 	if hasLifecycle {
 		preparationMounts = append(preparationMounts, k8scorev1.VolumeMount{
 			Name: lifecycleVolumeName, MountPath: lifecycleBinaryRoot,
@@ -2012,7 +2262,9 @@ func renderHelpers(
 			lifecycleBinaryPath,
 		)
 	}
+
 	deviceSources := map[string]string{}
+
 	for _, container := range plan.Containers {
 		for index, device := range container.Security.Devices {
 			if existing := deviceSources[device.ContainerPath]; existing != "" {
@@ -2022,8 +2274,10 @@ func renderHelpers(
 						device.ContainerPath,
 					)
 				}
+
 				continue
 			}
+
 			deviceSources[device.ContainerPath] = device.HostPath
 			preparationMounts = append(preparationMounts, k8scorev1.VolumeMount{
 				Name: dnsName(
@@ -2035,17 +2289,20 @@ func renderHelpers(
 			})
 		}
 	}
+
 	preparationMounts = append(preparationMounts, payloadMounts...)
+
 	for _, volume := range plan.Volumes {
-		if volume.Kind == clabernetesdeviceplan.VolumeArtifacts {
+		if volume.Kind == clabernetesinternaldeviceplan.VolumeArtifacts {
 			preparationMounts = append(preparationMounts, k8scorev1.VolumeMount{
 				Name: volumeNames[volume.ID], MountPath: path.Join(
 					artifactRootPath,
-					clabernetesdeviceplan.ArtifactNodeDirectory(volume.NodeID),
+					clabernetesinternaldeviceplan.ArtifactNodeDirectory(volume.NodeID),
 				),
 			})
 		}
 	}
+
 	preparationPaths := map[string]string{}
 	for _, mount := range preparationMounts {
 		if previous := preparationPaths[mount.MountPath]; previous != "" {
@@ -2056,11 +2313,14 @@ func renderHelpers(
 				mount.Name,
 			)
 		}
+
 		preparationPaths[mount.MountPath] = mount.Name
 	}
+
 	slices.SortFunc(preparationMounts, func(left, right k8scorev1.VolumeMount) int {
 		return strings.Compare(left.MountPath, right.MountPath)
 	})
+
 	falseValue := false
 	trueValue := true
 	rootUser := int64(0)
@@ -2084,9 +2344,11 @@ func renderHelpers(
 		inputMount,
 		stateMount,
 		{
-			Name: hostEndpointSocketVolumeName, MountPath: claberneteshostendpoint.SocketDirectory,
+			Name:      hostEndpointSocketVolumeName,
+			MountPath: clabernetesinternalhostendpoint.SocketDirectory,
 		},
 	}
+
 	if options.ConnectivityRevisionConfigMapName != "" {
 		connectivityArgs = append(
 			connectivityArgs,
@@ -2103,6 +2365,7 @@ func renderHelpers(
 			ReadOnly: true,
 		})
 	}
+
 	connectivityEnvironment := []k8scorev1.EnvVar{}
 	for _, item := range []struct {
 		name      string
@@ -2120,11 +2383,12 @@ func renderHelpers(
 			}},
 		})
 	}
+
 	if enableApplicationLogBroker {
 		connectivityArgs = append(
 			connectivityArgs,
 			"--applicationRuntimeSocket",
-			clabernetesdirectruntime.ApplicationRuntimeSocketPath,
+			clabernetesinternaldirectruntime.ApplicationRuntimeSocketPath,
 		)
 		connectivityMounts = append(
 			connectivityMounts,
@@ -2138,12 +2402,13 @@ func renderHelpers(
 			},
 		)
 	}
+
 	if endpointLifecycle {
 		connectivityArgs = append(
 			connectivityArgs,
 			"--artifacts", artifactRootPath,
 			"--revision", plan.Planner.Revision,
-			"--hostNetworkNamespace", clabernetesdirectruntime.HostNetworkNamespacePath,
+			"--hostNetworkNamespace", clabernetesinternaldirectruntime.HostNetworkNamespacePath,
 		)
 		connectivityMounts = append(
 			connectivityMounts,
@@ -2153,6 +2418,7 @@ func renderHelpers(
 				ReadOnly:  true,
 			},
 		)
+
 		connectivityMounts = append(connectivityMounts, payloadMounts...)
 		if options.EntropySecretName != "" {
 			connectivityArgs = append(connectivityArgs, "--entropy", entropyRootPath)
@@ -2160,17 +2426,20 @@ func renderHelpers(
 				Name: entropyVolumeName, MountPath: entropyRootPath, ReadOnly: true,
 			})
 		}
+
 		for _, volume := range plan.Volumes {
-			if volume.Kind != clabernetesdeviceplan.VolumeArtifacts {
+			if volume.Kind != clabernetesinternaldeviceplan.VolumeArtifacts {
 				continue
 			}
+
 			connectivityMounts = append(connectivityMounts, k8scorev1.VolumeMount{
 				Name: volumeNames[volume.ID], MountPath: path.Join(
 					artifactRootPath,
-					clabernetesdeviceplan.ArtifactNodeDirectory(volume.NodeID),
+					clabernetesinternaldeviceplan.ArtifactNodeDirectory(volume.NodeID),
 				),
 			})
 		}
+
 		if hasEndpointCertificates {
 			connectivityArgs = append(
 				connectivityArgs,
@@ -2181,6 +2450,7 @@ func renderHelpers(
 			})
 		}
 	}
+
 	slices.SortFunc(connectivityMounts, func(left, right k8scorev1.VolumeMount) int {
 		return strings.Compare(left.MountPath, right.MountPath)
 	})
@@ -2193,7 +2463,7 @@ func renderHelpers(
 			// Preparation records the Pod's prefixed management identity while the primary
 			// interface is still pristine; devices may strip it at boot.
 			Env: []k8scorev1.EnvVar{{
-				Name: clabernetesdirectruntime.PodAddressEnvironmentVariable,
+				Name: clabernetesinternaldirectruntime.PodAddressEnvironmentVariable,
 				ValueFrom: &k8scorev1.EnvVarSource{FieldRef: &k8scorev1.ObjectFieldSelector{
 					FieldPath: "status.podIP",
 				}},
@@ -2239,10 +2509,10 @@ func renderHelpers(
 	}, nil
 }
 
-func hasImportedEndpointLifecycle(plan clabernetesdeviceplan.Plan) bool {
+func hasImportedEndpointLifecycle(plan clabernetesinternaldeviceplan.Plan) bool {
 	for _, action := range plan.Actions {
-		if action.Phase == clabernetesdeviceplan.PhaseInterfaceFixup &&
-			action.Kind == clabernetesdeviceplan.ActionImportedDeployEndpoints &&
+		if action.Phase == clabernetesinternaldeviceplan.PhaseInterfaceFixup &&
+			action.Kind == clabernetesinternaldeviceplan.ActionImportedDeployEndpoints &&
 			action.ImportedDeployEndpoints != nil {
 			return true
 		}
@@ -2251,10 +2521,10 @@ func hasImportedEndpointLifecycle(plan clabernetesdeviceplan.Plan) bool {
 	return false
 }
 
-func hasImportedPostDeployLifecycle(plan clabernetesdeviceplan.Plan) bool {
+func hasImportedPostDeployLifecycle(plan clabernetesinternaldeviceplan.Plan) bool {
 	for _, action := range plan.Actions {
-		if action.Phase == clabernetesdeviceplan.PhasePostStart &&
-			action.Kind == clabernetesdeviceplan.ActionImportedPostDeploy &&
+		if action.Phase == clabernetesinternaldeviceplan.PhasePostStart &&
+			action.Kind == clabernetesinternaldeviceplan.ActionImportedPostDeploy &&
 			action.ImportedPostDeploy != nil {
 			return true
 		}
@@ -2267,8 +2537,10 @@ func immutableImage(reference, digest string) string {
 	if digest == "" || strings.Contains(reference, "@") {
 		return reference
 	}
+
 	repository := reference
-	if slash, colon := strings.LastIndex(repository, "/"), strings.LastIndex(repository, ":"); colon > slash {
+	if slash, colon := strings.LastIndex(repository,
+		"/"), strings.LastIndex(repository, ":"); colon > slash {
 		repository = repository[:colon]
 	}
 
@@ -2299,6 +2571,7 @@ func portableRestartPolicy(value string) bool {
 
 func parseUser(value string) (*int64, *int64, error) {
 	uidValue, gidValue, hasGroup := strings.Cut(value, ":")
+
 	uid, err := strconv.ParseInt(uidValue, 10, 64)
 	if err != nil || uid < 0 {
 		return nil, nil, fmt.Errorf(
@@ -2306,9 +2579,11 @@ func parseUser(value string) (*int64, *int64, error) {
 			value,
 		)
 	}
+
 	if !hasGroup || gidValue == "" {
 		return &uid, nil, nil
 	}
+
 	gid, err := strconv.ParseInt(gidValue, 10, 64)
 	if err != nil || gid < 0 {
 		return nil, nil, fmt.Errorf("invalid OCI group in user %q", value)
@@ -2364,9 +2639,10 @@ func mapAppArmor(value string) *k8scorev1.AppArmorProfile {
 
 func mountPropagation(value string) (*k8scorev1.MountPropagationMode, error) {
 	var mode k8scorev1.MountPropagationMode
+
 	switch strings.ToLower(value) {
 	case "", "private", "rprivate":
-		return nil, nil
+		return nil, nil //nolint:nilnil // private propagation renders no explicit mode.
 	case "slave", "rslave":
 		mode = k8scorev1.MountPropagationHostToContainer
 	case "shared", "rshared":
@@ -2387,11 +2663,15 @@ func dnsName(prefix, identity string) string {
 			builder.WriteByte('-')
 		}
 	}
+
 	base := strings.Trim(builder.String(), "-")
 	if base == "" {
 		base = prefix
 	}
-	suffix := strings.TrimPrefix(clabernetesdeviceplan.Digest([]byte(identity)), "sha256:")[:10]
+
+	suffix := strings.TrimPrefix(clabernetesinternaldeviceplan.Digest([]byte(identity)),
+		"sha256:")[:10]
+
 	maxBase := 63 - len(prefix) - len(suffix) - 2
 	if len(base) > maxBase {
 		base = strings.TrimRight(base[:maxBase], "-")
@@ -2421,11 +2701,11 @@ func optionalString(value string) *string {
 	return &value
 }
 
-func emptyDNS(value clabernetesdeviceplan.DNSConfig) bool {
+func emptyDNS(value clabernetesinternaldeviceplan.DNSConfig) bool {
 	return len(value.Servers) == 0 && len(value.Search) == 0 && len(value.Options) == 0
 }
 
-func reflectDNS(left, right clabernetesdeviceplan.DNSConfig) bool {
+func reflectDNS(left, right clabernetesinternaldeviceplan.DNSConfig) bool {
 	return slices.Equal(left.Servers, right.Servers) && slices.Equal(left.Search, right.Search) &&
 		slices.Equal(left.Options, right.Options)
 }
@@ -2436,6 +2716,7 @@ func validateUniqueVolumeNames(volumes []k8scorev1.Volume) error {
 		if seen[volume.Name] {
 			return fmt.Errorf("rendered volume name %q is duplicated", volume.Name)
 		}
+
 		seen[volume.Name] = true
 	}
 

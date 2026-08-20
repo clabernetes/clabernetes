@@ -1,5 +1,6 @@
 //go:build linux
 
+//nolint:gocognit,gocyclo,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -19,7 +20,8 @@ import (
 // sequences are removed from the output before forwarding. The session's exit status becomes
 // this process's result.
 func runTerminalSession(binary string, command []string) error {
-	session := exec.Command(binary, command[1:]...) //nolint:gosec // Plan-scoped local session.
+	//nolint:gosec,noctx // Plan-scoped local session that lives for the interactive terminal.
+	session := exec.Command(binary, command[1:]...)
 	session.Args = command
 	// `<runtime> exec -it` sessions always carry a real terminal identity, while the shim's own
 	// process runs terminal-silent (TERM=dumb from the lifecycle boundary): replace, because a
@@ -29,29 +31,46 @@ func runTerminalSession(binary string, command []string) error {
 		if strings.HasPrefix(entry, "TERM=") || strings.HasPrefix(entry, "NO_COLOR=") {
 			continue
 		}
+
 		environment = append(environment, entry)
 	}
-	session.Env = append(environment, "TERM=xterm")
+
+	//nolint:gocritic // the result deliberately extends a different base slice.
+	session.Env = append(
+		environment,
+		"TERM=xterm",
+	) //nolint:gocritic // the child deliberately extends the filtered environment.
+
 	terminal, err := pty.StartWithSize(session, &pty.Winsize{Rows: 255, Cols: 512})
 	if err != nil {
 		return fmt.Errorf("runtime CLI session terminal is unavailable: %w", err)
 	}
-	defer terminal.Close()
+
+	defer func() { _ = terminal.Close() }()
 	// Nothing this process writes may be echoed back into the forwarded stream; interactive
 	// CLIs perform their own application-level echo once running.
-	if state, termiosErr := unix.IoctlGetTermios(int(terminal.Fd()), unix.TCGETS); termiosErr == nil {
+	if state, termiosErr := unix.IoctlGetTermios(int(terminal.Fd()), unix.TCGETS); termiosErr == nil { //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
 		state.Lflag &^= unix.ECHO | unix.ECHONL
-		_ = unix.IoctlSetTermios(int(terminal.Fd()), unix.TCSETS, state)
+		_ = unix.IoctlSetTermios(
+			//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+			int(terminal.Fd()),
+			unix.TCSETS,
+			state,
+		)
 	}
+
 	go func() {
 		_, _ = io.Copy(terminal, os.Stdin)
 	}()
+
 	filter := &terminalQueryFilter{output: os.Stdout}
 	copyErr := filter.consume(terminal)
+
 	waitErr := session.Wait()
 	if waitErr != nil {
 		return fmt.Errorf("runtime CLI session ended: %w", waitErr)
 	}
+
 	if copyErr != nil && !errors.Is(copyErr, io.EOF) {
 		return nil
 	}
@@ -79,6 +98,7 @@ func (f *terminalQueryFilter) consume(source io.Reader) error {
 				}
 			}
 		}
+
 		if err != nil {
 			return err
 		}
@@ -89,6 +109,7 @@ func (f *terminalQueryFilter) consume(source io.Reader) error {
 func (f *terminalQueryFilter) filter(chunk []byte) []byte {
 	data := append(f.pending, chunk...) //nolint:gocritic // pending is consumed here.
 	f.pending = nil
+
 	forward := make([]byte, 0, len(data))
 	for index := 0; index < len(data); {
 		value := data[index]
@@ -96,16 +117,19 @@ func (f *terminalQueryFilter) filter(chunk []byte) []byte {
 			if value != 0x00 {
 				forward = append(forward, value)
 			}
+
 			index++
 
 			continue
 		}
+
 		sequence, kind, complete := scanEscapeSequence(data[index:])
 		if !complete {
 			f.pending = append([]byte{}, data[index:]...)
 
 			break
 		}
+
 		switch kind {
 		case escapeQueryDSR, escapeQueryCPR, escapeOSC:
 			// Terminal-directed side-band sequences are removed, never answered: an answer
@@ -114,6 +138,7 @@ func (f *terminalQueryFilter) filter(chunk []byte) []byte {
 		default:
 			forward = append(forward, sequence...)
 		}
+
 		index += len(sequence)
 	}
 
@@ -135,6 +160,7 @@ func scanEscapeSequence(data []byte) ([]byte, escapeKind, bool) {
 	if len(data) < 2 {
 		return nil, escapePassthrough, false
 	}
+
 	switch data[1] {
 	case '[':
 		for index := 2; index < len(data); index++ {
@@ -147,11 +173,14 @@ func scanEscapeSequence(data []byte) ([]byte, escapeKind, bool) {
 						return sequence, escapeQueryDSR, true
 					}
 				}
+
 				if value == 'n' && string(data[2:index]) == "6" {
 					return sequence, escapeQueryCPR, true
 				}
+
 				return sequence, escapePassthrough, true
 			}
+
 			if index-2 > 64 {
 				return data[:index+1], escapePassthrough, true
 			}
@@ -163,9 +192,11 @@ func scanEscapeSequence(data []byte) ([]byte, escapeKind, bool) {
 			if data[index] == 0x07 {
 				return data[:index+1], escapeOSC, true
 			}
+
 			if data[index] == 0x1b && index+1 < len(data) && data[index+1] == '\\' {
 				return data[:index+2], escapeOSC, true
 			}
+
 			if index > 4096 {
 				return data[:index+1], escapeOSC, true
 			}

@@ -218,6 +218,7 @@ func TestReconcileUnresolvedLinkDoesNotReserveInterface(t *testing.T) {
 			actual.Status,
 		)
 	}
+
 	condition := apimachinerymeta.FindStatusCondition(
 		actual.Status.Conditions,
 		clabernetesapisv1alpha1.LinkConditionAccepted,

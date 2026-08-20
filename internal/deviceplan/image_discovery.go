@@ -1,3 +1,4 @@
+//nolint:funlen,gocognit,gocyclo // single-pass boundary logic reads clearest unsplit.
 package deviceplan
 
 import (
@@ -61,14 +62,17 @@ func DiscoverDeclaredImages(input Input, revision string) (*ImageDiscovery, erro
 			nil,
 		)
 	}
+
 	normalized, err := NormalizeInput(input)
 	if err != nil {
 		return nil, err
 	}
+
 	inputDigest, err := normalized.Digest()
 	if err != nil {
 		return nil, err
 	}
+
 	result := ImageDiscovery{
 		SchemaVersion: SchemaVersion,
 		Compatibility: normalized.Compatibility,
@@ -80,9 +84,11 @@ func DiscoverDeclaredImages(input Input, revision string) (*ImageDiscovery, erro
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
+
 		if strings.TrimSpace(definition.Image) == "" {
 			continue
 		}
+
 		result.Images = append(result.Images, ImageRequirement{
 			NodeID: node.ID, Role: declaredImageRole, SourceReference: definition.Image,
 		})
@@ -99,6 +105,7 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 	if ctx == nil {
 		return nil, planningError(ErrorInvalidInput, "context", "context is nil", nil)
 	}
+
 	if strings.TrimSpace(a.Revision) == "" {
 		return nil, planningError(
 			ErrorMissingInput,
@@ -107,19 +114,23 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 			nil,
 		)
 	}
+
 	normalized, err := NormalizeInput(input)
 	if err != nil {
 		return nil, err
 	}
+
 	inputDigest, err := normalized.Digest()
 	if err != nil {
 		return nil, err
 	}
+
 	finishEntropy, err := a.beginEntropy(normalized)
 	if err != nil {
 		return nil, err
 	}
 	defer finishEntropy()
+
 	registry := a.Registry
 	if registry == nil {
 		registry = NewContainerlabRegistry()
@@ -127,6 +138,7 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 			return nil, err
 		}
 	}
+
 	scratchRoot, err := os.MkdirTemp("", "clabernetes-device-images-")
 	if err != nil {
 		return nil, planningError(
@@ -136,7 +148,8 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 			err,
 		)
 	}
-	defer os.RemoveAll(scratchRoot)
+
+	defer func() { _ = os.RemoveAll(scratchRoot) }()
 
 	result := &ImageDiscovery{
 		SchemaVersion: SchemaVersion, Compatibility: normalized.Compatibility,
@@ -145,6 +158,7 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 	}
 	evaluatedNodes := make([]EvaluatedNode, 0, len(normalized.Nodes))
 	metadataComplete := true
+
 	for index, nodeInput := range normalized.Nodes {
 		evaluated, evaluateErr := evaluateNode(
 			ctx,
@@ -160,6 +174,7 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 			var metadataRequired *imageMetadataRequiredError
 			if errors.As(evaluateErr, &metadataRequired) {
 				metadataComplete = false
+
 				for _, reference := range metadataRequired.references {
 					result.Images = append(result.Images, ImageRequirement{
 						NodeID:          metadataRequired.nodeID,
@@ -170,9 +185,12 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 
 				continue
 			}
+
 			return nil, evaluateErr
 		}
+
 		evaluatedNodes = append(evaluatedNodes, *evaluated)
+
 		represented := make(map[string]bool, len(evaluated.Images))
 		for _, image := range evaluated.Images {
 			result.Images = append(result.Images, ImageRequirement{
@@ -180,16 +198,20 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 			})
 			represented[image.Reference] = true
 		}
+
 		for _, reference := range evaluated.MissingImages {
 			if represented[reference] {
 				continue
 			}
+
 			result.Images = append(result.Images, ImageRequirement{
 				NodeID: nodeInput.ID, Role: "runtime-inspect-" + shortDigest(reference),
 				SourceReference: reference,
 			})
 		}
-		if validateErr := validateImageInputs(nodeInput.ID, evaluated.Images, normalized.Images); validateErr != nil {
+
+		if validateErr := validateImageInputs(nodeInput.ID,
+			evaluated.Images, normalized.Images); validateErr != nil {
 			var planningErr *Error
 			if errors.As(validateErr, &planningErr) && planningErr.Code == ErrorMissingInput {
 				metadataComplete = false
@@ -198,20 +220,23 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 			}
 		}
 	}
+
 	if metadataComplete && len(evaluatedNodes) == len(normalized.Nodes) {
-		certificateInfrastructure, certificateStorage, certificateErr := newRecordingCertificateInfrastructure()
+		infrastructure, storage, certificateErr := newRecordingCertificateInfrastructure()
 		if certificateErr != nil {
 			return nil, certificateErr
 		}
+
 		if certificateErr = discoverCertificateRequests(
 			ctx,
 			evaluatedNodes,
 			normalized.TopologyName,
-			certificateInfrastructure,
+			infrastructure,
 		); certificateErr != nil {
 			return nil, certificateErr
 		}
-		result.Certificates = certificateStorage.Requirements()
+
+		result.Certificates = storage.Requirements()
 	}
 
 	return NormalizeImageDiscovery(*result)
@@ -238,9 +263,11 @@ func NormalizeImageDiscovery(discovery ImageDiscovery) (*ImageDiscovery, error) 
 			err,
 		)
 	}
+
 	if err = validateHeader(normalized.SchemaVersion, normalized.Compatibility); err != nil {
 		return nil, err
 	}
+
 	if !validDigest(normalized.InputDigest) || normalized.Planner.Name == "" ||
 		normalized.Planner.Revision == "" {
 		return nil, planningError(
@@ -250,7 +277,9 @@ func NormalizeImageDiscovery(discovery ImageDiscovery) (*ImageDiscovery, error) 
 			nil,
 		)
 	}
+
 	seen := map[string]bool{}
+
 	for index, image := range normalized.Images {
 		field := fmt.Sprintf("imageDiscovery.images[%d]", index)
 		if image.NodeID == "" || image.Role == "" || image.SourceReference == "" {
@@ -261,6 +290,7 @@ func NormalizeImageDiscovery(discovery ImageDiscovery) (*ImageDiscovery, error) 
 				nil,
 			)
 		}
+
 		key := image.NodeID + "\x00" + image.Role
 		if seen[key] {
 			return nil, planningError(
@@ -270,8 +300,10 @@ func NormalizeImageDiscovery(discovery ImageDiscovery) (*ImageDiscovery, error) 
 				nil,
 			)
 		}
+
 		seen[key] = true
 	}
+
 	slices.SortFunc(normalized.Images, func(left, right ImageRequirement) int {
 		if compared := strings.Compare(left.NodeID, right.NodeID); compared != 0 {
 			return compared
@@ -279,6 +311,7 @@ func NormalizeImageDiscovery(discovery ImageDiscovery) (*ImageDiscovery, error) 
 
 		return strings.Compare(left.Role, right.Role)
 	})
+
 	normalized.Certificates, err = NormalizeCertificateRequirements(normalized.Certificates)
 	if err != nil {
 		return nil, err
@@ -301,9 +334,12 @@ func NormalizeCertificateRequirements(
 			err,
 		)
 	}
+
 	certificateSeen := map[string]bool{}
+
 	for index := range normalized {
 		certificate := &normalized[index]
+
 		field := fmt.Sprintf("certificateRequirements[%d]", index)
 		if certificate.NodeID == "" || strings.TrimSpace(certificate.StorageName) == "" ||
 			strings.TrimSpace(certificate.CommonName) == "" || certificate.KeySize < 2048 ||
@@ -316,6 +352,7 @@ func NormalizeCertificateRequirements(
 				nil,
 			)
 		}
+
 		key := certificate.NodeID + "\x00" + certificate.StorageName
 		if certificateSeen[key] {
 			return nil, planningError(
@@ -325,10 +362,13 @@ func NormalizeCertificateRequirements(
 				nil,
 			)
 		}
+
 		certificateSeen[key] = true
+
 		slices.Sort(certificate.DNSNames)
 		certificate.DNSNames = slices.Compact(certificate.DNSNames)
 		slices.Sort(certificate.IPAddresses)
+
 		certificate.IPAddresses = slices.Compact(certificate.IPAddresses)
 		for _, address := range certificate.IPAddresses {
 			if net.ParseIP(address) == nil {
@@ -341,6 +381,7 @@ func NormalizeCertificateRequirements(
 			}
 		}
 	}
+
 	slices.SortFunc(normalized, func(left, right CertificateRequirement) int {
 		if compared := strings.Compare(left.NodeID, right.NodeID); compared != 0 {
 			return compared
@@ -358,6 +399,7 @@ func DecodeImageDiscovery(raw []byte) (ImageDiscovery, error) {
 	if err != nil {
 		return ImageDiscovery{}, err
 	}
+
 	normalized, err := NormalizeImageDiscovery(decoded)
 	if err != nil {
 		return ImageDiscovery{}, err

@@ -1,7 +1,9 @@
+//nolint:gocyclo // dense fixture-driven tests exercise one boundary end to end.
 package default_values_test
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -54,19 +56,23 @@ func TestDirectRuntimeRoleIsReadOnlyAndCannotImportImages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(raw), 4096)
+
 	for {
 		role := &k8srbacv1.ClusterRole{}
 		if err = decoder.Decode(role); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 
 			t.Fatal(err)
 		}
+
 		if role.GetName() != "clabernetes-direct-runtime-role" {
 			continue
 		}
+
 		want := []k8srbacv1.PolicyRule{
 			{
 				APIGroups: []string{"c9s.run"}, Resources: []string{"links"},
@@ -94,6 +100,7 @@ func TestRestrictedManagerRolesCanPublishEventsAndExecDirectContainers(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	raw := clabernetestesthelper.HelmCommand(
 		t,
 		chartsDir,
@@ -110,26 +117,31 @@ func TestRestrictedManagerRolesCanPublishEventsAndExecDirectContainers(t *testin
 	)
 	decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(renderedHelmYAML(t, raw)), 4096)
 	wantNamespaces := map[string]bool{"c9s-system": false, "lab-a": false}
+
 	for {
 		role := &k8srbacv1.Role{}
 		if err = decoder.Decode(role); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 
 			t.Fatal(err)
 		}
+
 		if role.Kind != "Role" || role.GetName() != "clabernetes-restricted-role" {
 			continue
 		}
+
 		if _, expected := wantNamespaces[role.GetNamespace()]; !expected {
 			t.Fatalf("unexpected restricted manager Role namespace %q", role.GetNamespace())
 		}
+
 		wantNamespaces[role.GetNamespace()] = true
 		want := k8srbacv1.PolicyRule{
 			APIGroups: []string{"", "events.k8s.io"}, Resources: []string{"events"},
 			Verbs: []string{"create", "patch", "update"},
 		}
+
 		if !slices.ContainsFunc(role.Rules, func(rule k8srbacv1.PolicyRule) bool {
 			return reflect.DeepEqual(rule, want)
 		}) {
@@ -139,9 +151,11 @@ func TestRestrictedManagerRolesCanPublishEventsAndExecDirectContainers(t *testin
 				role.Rules,
 			)
 		}
+
 		wantExec := k8srbacv1.PolicyRule{
 			APIGroups: []string{""}, Resources: []string{"pods/exec"}, Verbs: []string{"create"},
 		}
+
 		if !slices.ContainsFunc(role.Rules, func(rule k8srbacv1.PolicyRule) bool {
 			return reflect.DeepEqual(rule, wantExec)
 		}) {
@@ -152,6 +166,7 @@ func TestRestrictedManagerRolesCanPublishEventsAndExecDirectContainers(t *testin
 			)
 		}
 	}
+
 	for namespace, found := range wantNamespaces {
 		if !found {
 			t.Fatalf("restricted manager Role is absent from namespace %q", namespace)
@@ -168,6 +183,7 @@ func TestRestrictedClusterRoleDoesNotGrantClusterWideExecLogsOrEvents(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	raw := clabernetestesthelper.HelmCommand(
 		t,
 		chartsDir,
@@ -182,19 +198,23 @@ func TestRestrictedClusterRoleDoesNotGrantClusterWideExecLogsOrEvents(t *testing
 	)
 	decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(renderedHelmYAML(t, raw)), 4096)
 	seenManagerRole := false
+
 	for {
 		role := &k8srbacv1.ClusterRole{}
 		if err = decoder.Decode(role); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 
 			t.Fatal(err)
 		}
+
 		if role.Kind != "ClusterRole" || role.GetName() != "clabernetes-cluster-role" {
 			continue
 		}
+
 		seenManagerRole = true
+
 		for _, rule := range role.Rules {
 			for _, resource := range rule.Resources {
 				switch resource {
@@ -208,6 +228,7 @@ func TestRestrictedClusterRoleDoesNotGrantClusterWideExecLogsOrEvents(t *testing
 			}
 		}
 	}
+
 	if !seenManagerRole {
 		t.Fatal("manager ClusterRole is absent")
 	}
@@ -220,6 +241,7 @@ func TestDirectHostEndpointDaemonHasMinimalHostAndAPIAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	daemonRaw := clabernetestesthelper.HelmCommand(
 		t,
 		chartsDir,
@@ -233,10 +255,12 @@ func TestDirectHostEndpointDaemonHasMinimalHostAndAPIAuthority(t *testing.T) {
 		"templates/host-endpoint-daemonset.yaml",
 	)
 	daemonRaw = renderedHelmYAML(t, daemonRaw)
+
 	daemon := &k8sappsv1.DaemonSet{}
 	if err = k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(daemonRaw), 4096).Decode(daemon); err != nil {
 		t.Fatal(err)
 	}
+
 	pod := daemon.Spec.Template.Spec
 	if !pod.HostNetwork || pod.HostPID || pod.ServiceAccountName != "clabernetes-host-endpoint" ||
 		pod.NodeSelector[k8scorev1.LabelOSStable] != "linux" || len(pod.Containers) != 1 ||
@@ -245,6 +269,7 @@ func TestDirectHostEndpointDaemonHasMinimalHostAndAPIAuthority(t *testing.T) {
 		!*pod.Containers[0].SecurityContext.Privileged {
 		t.Fatalf("host endpoint DaemonSet has an unexpected privilege boundary: %#v", pod)
 	}
+
 	if len(pod.Volumes) != 1 || pod.Volumes[0].HostPath == nil ||
 		pod.Volumes[0].HostPath.Path != "/var/run/clabernetes/host-endpoint" ||
 		pod.Volumes[0].HostPath.Type == nil ||
@@ -266,18 +291,21 @@ func TestDirectHostEndpointDaemonHasMinimalHostAndAPIAuthority(t *testing.T) {
 	)
 	rbacRaw = renderedHelmYAML(t, rbacRaw)
 	decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(rbacRaw), 4096)
+
 	for {
 		role := &k8srbacv1.ClusterRole{}
 		if err = decoder.Decode(role); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 
 			t.Fatal(err)
 		}
+
 		if role.Kind != "ClusterRole" || role.GetName() != "clabernetes-host-endpoint" {
 			continue
 		}
+
 		want := []k8srbacv1.PolicyRule{
 			{
 				APIGroups: []string{"c9s.run"}, Resources: []string{"links"},
@@ -304,6 +332,7 @@ func TestDirectHostEndpointDaemonHasMinimalHostAndAPIAuthority(t *testing.T) {
 
 func renderedHelmYAML(t *testing.T, output []byte) []byte {
 	t.Helper()
+
 	start := bytes.Index(output, []byte("---\n# Source:"))
 	if start < 0 {
 		t.Fatalf("Helm output contains no rendered YAML: %s", output)

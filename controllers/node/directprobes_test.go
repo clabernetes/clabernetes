@@ -1,3 +1,4 @@
+//nolint:gocyclo,testpackage // dense fixture-driven tests exercise one boundary end to end.
 package node
 
 import (
@@ -37,6 +38,7 @@ func TestDirectProbePolicyUsesImmutableSecretWithoutSerializingPassword(t *testi
 			secondary.GetName(): {StartupSeconds: 37},
 		},
 	}}
+
 	resolution, err := reconciler.resolveDirectProbePolicies(
 		ctx,
 		owner,
@@ -49,35 +51,42 @@ func TestDirectProbePolicyUsesImmutableSecretWithoutSerializingPassword(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	ownerPolicy := resolution.Policies[string(owner.GetUID())]
 	if ownerPolicy.StartupSeconds != 21 || ownerPolicy.TCPPort != 830 ||
 		ownerPolicy.SSHUsername != "operator" || ownerPolicy.SSHPort != 22 ||
 		ownerPolicy.SSHPasswordKey == "" || resolution.SecretName == "" {
 		t.Fatalf("owner probe policy = %#v", ownerPolicy)
 	}
+
 	if secondaryPolicy := resolution.Policies[string(secondary.GetUID())]; secondaryPolicy.StartupSeconds != 37 ||
 		secondaryPolicy.TCPPort != 0 ||
 		secondaryPolicy.SSHPasswordKey != "" {
 		t.Fatalf("secondary probe policy = %#v", secondaryPolicy)
 	}
+
 	rawPolicies, err := json.Marshal(resolution.Policies)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(rawPolicies) == "" || bytes.Contains(rawPolicies, []byte("sensitive-password")) {
+
+	if len(rawPolicies) == 0 || bytes.Contains(rawPolicies, []byte("sensitive-password")) {
 		t.Fatalf("non-secret probe policy leaked password: %s", rawPolicies)
 	}
+
 	secret := &k8scorev1.Secret{}
 	if err = client.Get(ctx, ctrlruntimeclient.ObjectKey{
 		Namespace: owner.GetNamespace(), Name: resolution.SecretName,
 	}, secret); err != nil {
 		t.Fatal(err)
 	}
+
 	if secret.Immutable == nil || !*secret.Immutable ||
 		string(secret.Data[ownerPolicy.SSHPasswordKey]) != "sensitive-password" ||
 		len(secret.OwnerReferences) != 1 || secret.OwnerReferences[0].UID != owner.GetUID() {
 		t.Fatalf("direct probe Secret = %#v", secret)
 	}
+
 	again, err := reconciler.resolveDirectProbePolicies(
 		ctx,
 		owner,
@@ -90,6 +99,7 @@ func TestDirectProbePolicyUsesImmutableSecretWithoutSerializingPassword(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if again.SecretName != resolution.SecretName ||
 		!reflect.DeepEqual(again.Policies, resolution.Policies) {
 		t.Fatalf("idempotent probe resolution = %#v, want %#v", again, resolution)

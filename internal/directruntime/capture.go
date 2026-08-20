@@ -1,3 +1,4 @@
+//nolint:err113,funlen,gocognit,gocyclo,mnd,nestif // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -12,13 +13,14 @@ import (
 	"strings"
 	"time"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
 
 const (
 	// PacketCaptureAuditSchemaVersion identifies the bounded JSON audit records written on stderr.
 	PacketCaptureAuditSchemaVersion = "c9s.direct-packet-capture-audit/v1alpha1"
-	// DefaultPacketCaptureSnapLength retains complete ordinary Ethernet frames while bounding memory.
+	// DefaultPacketCaptureSnapLength retains complete ordinary Ethernet frames while bounding
+	// memory.
 	DefaultPacketCaptureSnapLength = 256 << 10
 	maximumPacketCaptureSnapLength = 1 << 20
 	maximumPacketCapturePackets    = 1_000_000
@@ -63,7 +65,7 @@ type capturedPacket struct {
 }
 
 type packetCaptureSource interface {
-	ReadPacket(context.Context) (capturedPacket, error)
+	ReadPacket(ctx context.Context) (capturedPacket, error)
 	Close() error
 }
 
@@ -72,32 +74,34 @@ type packetCaptureSourceFactory func(string, int) (packetCaptureSource, error)
 // NormalizePacketCaptureOptions validates finite resource bounds and fills the default snap length.
 func NormalizePacketCaptureOptions(options PacketCaptureOptions) (PacketCaptureOptions, error) {
 	options.NodeID = strings.TrimSpace(options.NodeID)
+
 	options.InterfaceName = strings.TrimSpace(options.InterfaceName)
 	if options.NodeID == "" || options.InterfaceName == "" {
-		return PacketCaptureOptions{}, fmt.Errorf("packet capture target identity is incomplete")
+		return PacketCaptureOptions{}, errors.New("packet capture target identity is incomplete")
 	}
+
 	if options.SnapLength == 0 {
 		options.SnapLength = DefaultPacketCaptureSnapLength
 	}
+
 	if options.SnapLength < 64 || options.SnapLength > maximumPacketCaptureSnapLength {
-		return PacketCaptureOptions{}, fmt.Errorf(
-			"packet capture snap length is outside the supported range",
-		)
+		return PacketCaptureOptions{},
+			errors.New("packet capture snap length is outside the supported range")
 	}
+
 	if options.PacketLimit < 0 || options.PacketLimit > maximumPacketCapturePackets {
-		return PacketCaptureOptions{}, fmt.Errorf(
-			"packet capture packet limit is outside the supported range",
-		)
+		return PacketCaptureOptions{},
+			errors.New("packet capture packet limit is outside the supported range")
 	}
+
 	if options.Duration < 0 || options.Duration > maximumPacketCaptureDuration {
-		return PacketCaptureOptions{}, fmt.Errorf(
-			"packet capture duration is outside the supported range",
-		)
+		return PacketCaptureOptions{},
+			errors.New("packet capture duration is outside the supported range")
 	}
+
 	if options.PacketLimit == 0 && options.Duration == 0 {
-		return PacketCaptureOptions{}, fmt.Errorf(
-			"packet capture requires a packet or duration limit",
-		)
+		return PacketCaptureOptions{},
+			errors.New("packet capture requires a packet or duration limit")
 	}
 
 	return options, nil
@@ -106,33 +110,36 @@ func NormalizePacketCaptureOptions(options PacketCaptureOptions) (PacketCaptureO
 // PacketCaptureTarget resolves only an interface owned by the requested logical Node in the
 // accepted plan. Kind and vendor identifiers remain opaque and never participate in selection.
 func PacketCaptureTarget(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	nodeID,
 	interfaceName string,
-) (clabernetesdeviceplan.InterfacePlan, error) {
-	normalized, err := clabernetesdeviceplan.NormalizePlan(plan)
+) (clabernetesinternaldeviceplan.InterfacePlan, error) {
+	normalized, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
-		return clabernetesdeviceplan.InterfacePlan{}, err
+		return clabernetesinternaldeviceplan.InterfacePlan{}, err
 	}
+
 	nodeExists := slices.ContainsFunc(
 		normalized.Nodes,
-		func(node clabernetesdeviceplan.NodePlan) bool {
+		func(node clabernetesinternaldeviceplan.NodePlan) bool {
 			return node.ID == nodeID
 		},
 	)
 	if !nodeExists {
-		return clabernetesdeviceplan.InterfacePlan{}, fmt.Errorf(
-			"packet capture logical Node is absent from the accepted plan",
-		)
+		return clabernetesinternaldeviceplan.InterfacePlan{},
+			errors.New("packet capture logical Node is absent from the accepted plan")
 	}
-	targets := []clabernetesdeviceplan.InterfacePlan{}
+
+	targets := []clabernetesinternaldeviceplan.InterfacePlan{}
+
 	for _, intf := range normalized.Interfaces {
 		if intf.NodeID == nodeID && intf.Name == interfaceName {
 			targets = append(targets, intf)
 		}
 	}
+
 	if len(targets) != 1 {
-		return clabernetesdeviceplan.InterfacePlan{}, fmt.Errorf(
+		return clabernetesinternaldeviceplan.InterfacePlan{}, fmt.Errorf(
 			"packet capture interface %q is not uniquely planned for logical Node",
 			interfaceName,
 		)
@@ -145,7 +152,7 @@ func PacketCaptureTarget(
 // to run inside the fixed connectivity helper through the Kubernetes Pod exec subresource.
 func RunPacketCapture(
 	ctx context.Context,
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	options PacketCaptureOptions,
 	output,
 	audit io.Writer,
@@ -158,8 +165,8 @@ func RunPacketCapture(
 // interface. This permits Live Link additions without trusting an unverified interface name.
 func RunPacketCaptureWithRevision(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	revisionPath string,
 	options PacketCaptureOptions,
 	output,
@@ -179,17 +186,18 @@ func RunPacketCaptureWithRevision(
 
 func runPacketCaptureWithRevision(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	revisionPath string,
 	options PacketCaptureOptions,
 	output,
 	audit io.Writer,
 	openSource packetCaptureSourceFactory,
 ) error {
-	if err := clabernetesdeviceplan.ValidatePlanInputIdentity(input, plan); err != nil {
+	if err := clabernetesinternaldeviceplan.ValidatePlanInputIdentity(input, plan); err != nil {
 		return err
 	}
+
 	_, effectivePlan, _, err := loadConnectivityRevision(input, plan, revisionPath)
 	if err != nil {
 		return err
@@ -200,26 +208,30 @@ func runPacketCaptureWithRevision(
 
 func runPacketCapture(
 	ctx context.Context,
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	options PacketCaptureOptions,
 	output,
 	audit io.Writer,
 	openSource packetCaptureSourceFactory,
 ) (returnErr error) {
 	if ctx == nil {
-		return fmt.Errorf("packet capture context is nil")
+		return errors.New("packet capture context is nil")
 	}
+
 	if output == nil || openSource == nil {
-		return fmt.Errorf("packet capture output boundary is incomplete")
+		return errors.New("packet capture output boundary is incomplete")
 	}
+
 	options, err := NormalizePacketCaptureOptions(options)
 	if err != nil {
 		return err
 	}
+
 	planDigest, err := plan.Digest()
 	if err != nil {
 		return err
 	}
+
 	target, err := PacketCaptureTarget(plan, options.NodeID, options.InterfaceName)
 	if err != nil {
 		writePacketCaptureAudit(audit, PacketCaptureAuditRecord{
@@ -229,6 +241,7 @@ func runPacketCapture(
 
 		return err
 	}
+
 	record := PacketCaptureAuditRecord{
 		PlanDigest: planDigest, NodeID: options.NodeID, InterfaceID: target.ID,
 		InterfaceName: options.InterfaceName, SnapLength: options.SnapLength,
@@ -237,12 +250,15 @@ func runPacketCapture(
 	if options.Duration != 0 {
 		record.Duration = options.Duration.String()
 	}
+
 	writePacketCaptureAudit(audit, withPacketCaptureStatus(record, "Started", ""))
+
 	defer func() {
 		status, reason := "Succeeded", ""
 		if returnErr != nil {
 			status, reason = "Failed", boundedPacketCaptureReason(returnErr.Error())
 		}
+
 		writePacketCaptureAudit(audit, withPacketCaptureStatus(record, status, reason))
 	}()
 
@@ -250,18 +266,23 @@ func runPacketCapture(
 	if err != nil {
 		return fmt.Errorf("opening plan-owned packet capture interface: %w", err)
 	}
+
 	defer func() {
 		returnErr = errors.Join(returnErr, source.Close())
 	}()
+
 	if err = writePCAPGlobalHeader(output, options.SnapLength); err != nil {
 		return fmt.Errorf("writing packet capture header: %w", err)
 	}
+
 	captureCtx := ctx
+
 	cancel := func() {}
 	if options.Duration != 0 {
 		captureCtx, cancel = context.WithTimeout(ctx, options.Duration)
 	}
 	defer cancel()
+
 	for options.PacketLimit == 0 || record.Packets < options.PacketLimit {
 		packet, readErr := source.ReadPacket(captureCtx)
 		if readErr != nil {
@@ -269,6 +290,7 @@ func runPacketCapture(
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
+
 				if options.Duration != 0 && captureCtx.Err() == context.DeadlineExceeded {
 					break
 				}
@@ -276,21 +298,27 @@ func runPacketCapture(
 
 			return fmt.Errorf("reading packet capture interface: %w", readErr)
 		}
+
 		if packet.OriginalLength == 0 {
 			packet.OriginalLength = len(packet.Data)
 		}
+
 		if packet.OriginalLength < len(packet.Data) || packet.OriginalLength > math.MaxUint32 {
-			return fmt.Errorf("captured packet length is invalid")
+			return errors.New("captured packet length is invalid")
 		}
+
 		if len(packet.Data) > options.SnapLength {
 			packet.Data = packet.Data[:options.SnapLength]
 		}
+
 		if packet.Timestamp.IsZero() {
 			packet.Timestamp = time.Now()
 		}
+
 		if err = writePCAPPacket(output, packet); err != nil {
 			return fmt.Errorf("writing captured packet: %w", err)
 		}
+
 		record.Packets++
 		record.CapturedBytes += uint64(len(packet.Data))
 	}
@@ -308,7 +336,7 @@ func writePCAPGlobalHeader(output io.Writer, snapLength int) error {
 		SnapLength  uint32
 		NetworkType uint32
 	}{
-		Magic: 0xa1b2c3d4, Major: 2, Minor: 4, SnapLength: uint32(snapLength),
+		Magic: 0xa1b2c3d4, Major: 2, Minor: 4, SnapLength: uint32(snapLength), //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
 		NetworkType: packetCaptureLinkTypeEthernet,
 	})
 }
@@ -316,20 +344,27 @@ func writePCAPGlobalHeader(output io.Writer, snapLength int) error {
 func writePCAPPacket(output io.Writer, packet capturedPacket) error {
 	seconds := packet.Timestamp.Unix()
 	if seconds < 0 || seconds > math.MaxUint32 {
-		return fmt.Errorf("packet timestamp is outside the pcap range")
+		return errors.New("packet timestamp is outside the pcap range")
 	}
+
 	header := struct {
 		Seconds        uint32
 		Microseconds   uint32
 		CapturedLength uint32
 		OriginalLength uint32
 	}{
-		Seconds: uint32(seconds), Microseconds: uint32(packet.Timestamp.Nanosecond() / 1_000),
-		CapturedLength: uint32(len(packet.Data)), OriginalLength: uint32(packet.OriginalLength),
+		Seconds: uint32(
+			seconds,
+		), Microseconds: uint32(packet.Timestamp.Nanosecond() / 1_000), //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		CapturedLength: uint32(
+			len(packet.Data),
+		), OriginalLength: uint32(packet.OriginalLength), //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
 	}
 	if err := binary.Write(output, binary.LittleEndian, header); err != nil {
 		return err
 	}
+
 	_, err := output.Write(packet.Data)
 
 	return err
@@ -353,9 +388,12 @@ func writePacketCaptureAudit(output io.Writer, record PacketCaptureAuditRecord) 
 	if output == nil {
 		return
 	}
+
 	if record.SchemaVersion == "" {
 		record = withPacketCaptureStatus(record, record.Status, record.Reason)
 	}
+
+	//nolint:errchkjson // The trailer is best-effort diagnostics on an already-failing stream.
 	_ = json.NewEncoder(output).Encode(record)
 }
 

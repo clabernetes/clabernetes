@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultCEOSImage   = "ghcr.io/clab-labs/ceos:4.33.1F"
-	ceosRegistrySecret = "ceos-registry" //nolint:gosec // resource name, not a credential.
+	ceosRegistrySecret = "ceos-registry"
 	deploymentWait     = 10 * time.Minute
 	datapathWait       = 5 * time.Minute
 	datapathPollPeriod = 10 * time.Second
@@ -147,6 +147,7 @@ func assertRenderedManagement(t *testing.T, namespace string) {
 	if podIP == "" {
 		t.Fatal("ceos1 Pod has no address")
 	}
+
 	output := string(runKubectl(
 		t,
 		"exec",

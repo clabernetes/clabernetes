@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	vrRegistrySecret   = "vr-registry" //nolint:gosec // resource name, not a credential.
+	vrRegistrySecret   = "vr-registry"
 	datapathWait       = 5 * time.Minute
 	datapathPollPeriod = 10 * time.Second
 )
@@ -282,7 +282,7 @@ tn = telnetlib.Telnet("127.0.0.1", 5000, 30)
 for line in sys.argv[1:]:
     tn.write(line.encode() + b"\r\n")
     time.sleep(3)
-time.sleep(3)
+time.sleep(4)
 out = tn.read_very_eager()
 sys.stdout.write(out.decode(errors="replace"))
 `

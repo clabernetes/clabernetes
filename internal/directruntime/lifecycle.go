@@ -1,4 +1,4 @@
-//nolint:nlreturn,wsl_v5 // Lifecycle execution fails closed at each typed action boundary.
+//nolint:err113,funlen,gocognit,gocyclo,mnd,wsl_v5 // Lifecycle execution fails closed at each typed action boundary.
 package directruntime
 
 import (
@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	"golang.org/x/sys/unix"
 )
 
@@ -42,14 +42,14 @@ func (processRestartOperations) SignalPID(pid int, signal syscall.Signal) error 
 func InstallLifecycleBinary(destination string) error {
 	destination = filepath.Clean(destination)
 	if !filepath.IsAbs(destination) || destination == string(filepath.Separator) {
-		return fmt.Errorf("lifecycle binary destination must be a scoped absolute path")
+		return errors.New("lifecycle binary destination must be a scoped absolute path")
 	}
 	parent := filepath.Dir(destination)
 	if info, err := os.Stat(parent); err != nil || !info.IsDir() {
-		return fmt.Errorf("lifecycle binary destination parent is unavailable")
+		return errors.New("lifecycle binary destination parent is unavailable")
 	}
 	if existing, err := os.Lstat(destination); err == nil && existing.IsDir() {
-		return fmt.Errorf("lifecycle binary destination is a directory")
+		return errors.New("lifecycle binary destination is a directory")
 	} else if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("cannot inspect lifecycle binary destination: %w", err)
 	}
@@ -62,13 +62,13 @@ func InstallLifecycleBinary(destination string) error {
 	if err != nil {
 		return fmt.Errorf("cannot open lifecycle binary source: %w", err)
 	}
-	defer source.Close()
+	defer func() { _ = source.Close() }()
 	info, err := source.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return fmt.Errorf("lifecycle binary source is not a regular file")
+		return errors.New("lifecycle binary source is not a regular file")
 	}
 	if info.Size() < 1 || info.Size() > maxLifecycleBinaryBytes {
-		return fmt.Errorf("lifecycle binary source is outside the bounded size")
+		return errors.New("lifecycle binary source is outside the bounded size")
 	}
 
 	temporary, err := os.CreateTemp(parent, ".c9s-lifecycle-binary-")
@@ -76,13 +76,13 @@ func InstallLifecycleBinary(destination string) error {
 		return fmt.Errorf("cannot create staged lifecycle binary: %w", err)
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	written, copyErr := io.Copy(
 		temporary,
 		io.LimitReader(source, maxLifecycleBinaryBytes+1),
 	)
 	if copyErr == nil && (written < 1 || written > maxLifecycleBinaryBytes) {
-		copyErr = fmt.Errorf("copied lifecycle binary is outside the bounded size")
+		copyErr = errors.New("copied lifecycle binary is outside the bounded size")
 	}
 	if copyErr == nil {
 		copyErr = temporary.Chmod(0o555)
@@ -133,14 +133,14 @@ func RunApplicationRestartWithOperations(
 	operations ApplicationRestartOperations,
 ) error {
 	if !validRevisionDigest(requestDigest) {
-		return fmt.Errorf("application restart request digest is invalid")
+		return errors.New("application restart request digest is invalid")
 	}
 	stateDirectory = filepath.Clean(stateDirectory)
 	if !filepath.IsAbs(stateDirectory) || stateDirectory == string(filepath.Separator) {
-		return fmt.Errorf("application restart state directory must be a scoped absolute path")
+		return errors.New("application restart state directory must be a scoped absolute path")
 	}
 	if operations == nil {
-		return fmt.Errorf("application restart operations are nil")
+		return errors.New("application restart operations are nil")
 	}
 	if err := os.MkdirAll(stateDirectory, 0o750); err != nil {
 		return fmt.Errorf("creating application restart state: %w", err)
@@ -169,7 +169,7 @@ func RunApplicationRestartWithOperations(
 		return fmt.Errorf("creating application restart marker: %w", err)
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	if _, err = temporary.WriteString(requestDigest + "\n"); err == nil {
 		err = temporary.Sync()
 	}
@@ -189,12 +189,13 @@ func RunApplicationRestartWithOperations(
 // RunLifecycle executes typed lifecycle actions that need no imported package rehydration.
 func RunLifecycle(
 	ctx context.Context,
-	plan clabernetesdeviceplan.Plan,
-	phase clabernetesdeviceplan.ActionPhase,
+	plan clabernetesinternaldeviceplan.Plan,
+	phase clabernetesinternaldeviceplan.ActionPhase,
 	containerID,
 	artifactRoot string,
 ) error {
-	return runLifecycle(ctx, clabernetesdeviceplan.Input{}, plan, phase, containerID, artifactRoot,
+	return runLifecycle(ctx, clabernetesinternaldeviceplan.Input{},
+		plan, phase, containerID, artifactRoot,
 		"", "", "", "", false)
 }
 
@@ -202,9 +203,9 @@ func RunLifecycle(
 // The immutable Input is required before any opaque imported package hook may run.
 func RunLifecycleWithImported(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
-	phase clabernetesdeviceplan.ActionPhase,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
+	phase clabernetesinternaldeviceplan.ActionPhase,
 	containerID,
 	artifactRoot,
 	scratchRoot,
@@ -218,9 +219,9 @@ func RunLifecycleWithImported(
 
 func runLifecycle(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
-	phase clabernetesdeviceplan.ActionPhase,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
+	phase clabernetesinternaldeviceplan.ActionPhase,
 	containerID,
 	artifactRoot,
 	scratchRoot,
@@ -230,18 +231,19 @@ func runLifecycle(
 	validateInput bool,
 ) error {
 	if ctx == nil {
-		return fmt.Errorf("lifecycle context is nil")
+		return errors.New("lifecycle context is nil")
 	}
-	if phase != clabernetesdeviceplan.PhasePostStart &&
-		phase != clabernetesdeviceplan.PhaseSave {
+	if phase != clabernetesinternaldeviceplan.PhasePostStart &&
+		phase != clabernetesinternaldeviceplan.PhaseSave {
 		return fmt.Errorf("lifecycle phase %q is not executable in an application container", phase)
 	}
-	normalized, err := clabernetesdeviceplan.NormalizePlan(plan)
+	normalized, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
 		return err
 	}
 	if validateInput {
-		if err = clabernetesdeviceplan.ValidatePlanInputIdentity(input, normalized); err != nil {
+		if err = clabernetesinternaldeviceplan.ValidatePlanInputIdentity(input,
+			normalized); err != nil {
 			return err
 		}
 	}
@@ -256,21 +258,21 @@ func runLifecycle(
 		}
 	}
 	if !containerExists {
-		return fmt.Errorf("lifecycle target container is absent from the plan")
+		return errors.New("lifecycle target container is absent from the plan")
 	}
 	if validateInput {
 		prepareImportedRuntimeCLI(normalized, containerID)
 	}
 	root := filepath.Clean(artifactRoot)
 	if !filepath.IsAbs(root) || root == string(filepath.Separator) {
-		return fmt.Errorf("lifecycle artifact root must be a scoped absolute path")
+		return errors.New("lifecycle artifact root must be a scoped absolute path")
 	}
-	files := make(map[string]clabernetesdeviceplan.FilePlan, len(normalized.Files))
+	files := make(map[string]clabernetesinternaldeviceplan.FilePlan, len(normalized.Files))
 	for _, file := range normalized.Files {
 		files[file.ID] = file
 	}
 	actions := slices.Clone(normalized.Actions)
-	slices.SortStableFunc(actions, func(left, right clabernetesdeviceplan.Action) int {
+	slices.SortStableFunc(actions, func(left, right clabernetesinternaldeviceplan.Action) int {
 		if left.Order != right.Order {
 			return left.Order - right.Order
 		}
@@ -285,7 +287,7 @@ func runLifecycle(
 			return fmt.Errorf("lifecycle action %q crosses logical Node ownership", action.ID)
 		}
 		switch action.Kind {
-		case clabernetesdeviceplan.ActionImportedPostDeploy:
+		case clabernetesinternaldeviceplan.ActionImportedPostDeploy:
 			if !validateInput {
 				return fmt.Errorf(
 					"lifecycle action %q requires immutable imported input",
@@ -297,7 +299,7 @@ func runLifecycle(
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, runtimeErr)
 			}
 			podAddress, podGateway := runtimePodAddressWithRecord(root)
-			if err = (clabernetesdeviceplan.Adapter{
+			if err = (clabernetesinternaldeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
 				PodAddress: podAddress, PodGateway: podGateway,
 				PodDNSServers: RuntimePodDNSServers(),
@@ -313,21 +315,21 @@ func runLifecycle(
 			); err != nil {
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, err)
 			}
-		case clabernetesdeviceplan.ActionExec:
+		case clabernetesinternaldeviceplan.ActionExec:
 			if err = runLifecycleExec(ctx, action); err != nil {
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, err)
 			}
-		case clabernetesdeviceplan.ActionFile:
+		case clabernetesinternaldeviceplan.ActionFile:
 			if err = runLifecycleFile(action, files, root); err != nil {
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, err)
 			}
-		case clabernetesdeviceplan.ActionWriteStdin:
+		case clabernetesinternaldeviceplan.ActionWriteStdin:
 			if err = runLifecycleStdin(action, files, root); err != nil {
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, err)
 			}
-		case clabernetesdeviceplan.ActionSave:
+		case clabernetesinternaldeviceplan.ActionSave:
 			if !validateInput || action.Save == nil ||
-				action.Save.Method != clabernetesdeviceplan.SaveMethodImported {
+				action.Save.Method != clabernetesinternaldeviceplan.SaveMethodImported {
 				return fmt.Errorf(
 					"lifecycle action %q requires immutable imported save input",
 					action.ID,
@@ -338,7 +340,7 @@ func runLifecycle(
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, runtimeErr)
 			}
 			podAddress, podGateway := runtimePodAddressWithRecord(root)
-			if err = (clabernetesdeviceplan.Adapter{
+			if err = (clabernetesinternaldeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
 				PodAddress: podAddress, PodGateway: podGateway,
 				PodDNSServers: RuntimePodDNSServers(),
@@ -364,9 +366,9 @@ func runLifecycle(
 	return nil
 }
 
-func runLifecycleExec(ctx context.Context, action clabernetesdeviceplan.Action) error {
+func runLifecycleExec(ctx context.Context, action clabernetesinternaldeviceplan.Action) error {
 	if action.Exec == nil || len(action.Exec.Command) == 0 {
-		return fmt.Errorf("exec payload is incomplete")
+		return errors.New("exec payload is incomplete")
 	}
 	commandContext := ctx
 	cancel := func() {}
@@ -392,12 +394,12 @@ func runLifecycleExec(ctx context.Context, action clabernetesdeviceplan.Action) 
 }
 
 func runLifecycleFile(
-	action clabernetesdeviceplan.Action,
-	files map[string]clabernetesdeviceplan.FilePlan,
+	action clabernetesinternaldeviceplan.Action,
+	files map[string]clabernetesinternaldeviceplan.FilePlan,
 	artifactRoot string,
 ) error {
 	if action.File == nil {
-		return fmt.Errorf("file payload is incomplete")
+		return errors.New("file payload is incomplete")
 	}
 	file, content, err := readLifecycleFile(action.File.FileID, files, artifactRoot)
 	if err != nil {
@@ -409,19 +411,19 @@ func runLifecycleFile(
 	}
 	destination = filepath.Clean(destination)
 	if !filepath.IsAbs(destination) || destination == string(filepath.Separator) {
-		return fmt.Errorf("file destination must be a scoped absolute path")
+		return errors.New("file destination must be a scoped absolute path")
 	}
 	parent := filepath.Dir(destination)
 	if info, statErr := os.Stat(parent); statErr != nil || !info.IsDir() {
-		return fmt.Errorf("file destination parent is unavailable")
+		return errors.New("file destination parent is unavailable")
 	}
 	if existing, statErr := os.Lstat(destination); statErr == nil &&
 		existing.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("file destination is a symbolic link")
+		return errors.New("file destination is a symbolic link")
 	} else if statErr != nil && !os.IsNotExist(statErr) {
 		return fmt.Errorf("cannot inspect file destination: %w", statErr)
 	}
-	if action.File.WriteMode == clabernetesdeviceplan.FileWriteAppend {
+	if action.File.WriteMode == clabernetesinternaldeviceplan.FileWriteAppend {
 		return appendLifecycleFile(destination, content)
 	}
 	temporary, err := os.CreateTemp(parent, ".c9s-lifecycle-")
@@ -429,7 +431,7 @@ func runLifecycleFile(
 		return fmt.Errorf("cannot create staged lifecycle file: %w", err)
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	if _, err = temporary.Write(content); err == nil {
 		err = temporary.Chmod(os.FileMode(file.Mode))
 	}
@@ -461,7 +463,12 @@ func runLifecycleFile(
 }
 
 func appendLifecycleFile(destination string, content []byte) error {
-	file, err := os.OpenFile(destination, os.O_WRONLY|os.O_APPEND, 0)
+	//nolint:gosec // reads are confined to plan-scoped roots.
+	file, err := os.OpenFile(
+		destination,
+		os.O_WRONLY|os.O_APPEND,
+		0,
+	) //nolint:gosec // reads are confined to plan-scoped roots.
 	if err != nil {
 		return fmt.Errorf("cannot open lifecycle append destination: %w", err)
 	}
@@ -477,7 +484,12 @@ func appendLifecycleFile(destination string, content []byte) error {
 }
 
 func writeLifecycleMountedFile(destination string, content []byte) error {
-	file, err := os.OpenFile(destination, os.O_WRONLY|os.O_TRUNC, 0)
+	//nolint:gosec // reads are confined to plan-scoped roots.
+	file, err := os.OpenFile(
+		destination,
+		os.O_WRONLY|os.O_TRUNC,
+		0,
+	) //nolint:gosec // reads are confined to plan-scoped roots.
 	if err != nil {
 		return fmt.Errorf("cannot open lifecycle destination: %w", err)
 	}
@@ -493,12 +505,12 @@ func writeLifecycleMountedFile(destination string, content []byte) error {
 }
 
 func runLifecycleStdin(
-	action clabernetesdeviceplan.Action,
-	files map[string]clabernetesdeviceplan.FilePlan,
+	action clabernetesinternaldeviceplan.Action,
+	files map[string]clabernetesinternaldeviceplan.FilePlan,
 	artifactRoot string,
 ) error {
 	if action.WriteStdin == nil {
-		return fmt.Errorf("stdin payload is incomplete")
+		return errors.New("stdin payload is incomplete")
 	}
 	_, content, err := readLifecycleFile(action.WriteStdin.FileID, files, artifactRoot)
 	if err != nil {
@@ -522,54 +534,56 @@ func runLifecycleStdin(
 
 func readLifecycleFile(
 	fileID string,
-	files map[string]clabernetesdeviceplan.FilePlan,
+	files map[string]clabernetesinternaldeviceplan.FilePlan,
 	artifactRoot string,
-) (clabernetesdeviceplan.FilePlan, []byte, error) {
+) (clabernetesinternaldeviceplan.FilePlan, []byte, error) {
 	file, exists := files[fileID]
 	if !exists {
-		return clabernetesdeviceplan.FilePlan{}, nil, fmt.Errorf(
-			"file identity is absent from the plan",
-		)
+		return clabernetesinternaldeviceplan.FilePlan{},
+			nil,
+			errors.New("file identity is absent from the plan")
 	}
-	if file.ArtifactKind != clabernetesdeviceplan.ArtifactRegular {
-		return clabernetesdeviceplan.FilePlan{}, nil, fmt.Errorf(
-			"non-regular artifact is not readable lifecycle content",
-		)
+	if file.ArtifactKind != clabernetesinternaldeviceplan.ArtifactRegular {
+		return clabernetesinternaldeviceplan.FilePlan{},
+			nil,
+			errors.New("non-regular artifact is not readable lifecycle content")
 	}
 	if file.ArtifactPath == "" || filepath.IsAbs(file.ArtifactPath) {
-		return clabernetesdeviceplan.FilePlan{}, nil, fmt.Errorf("file source path is not scoped")
+		return clabernetesinternaldeviceplan.FilePlan{},
+			nil,
+			errors.New("file source path is not scoped")
 	}
 	nodeRoot := filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(file.NodeID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(file.NodeID),
 	)
 	source := filepath.Join(nodeRoot, filepath.FromSlash(file.ArtifactPath))
 	relative, err := filepath.Rel(nodeRoot, source)
 	if err != nil || relative == "." || relative == ".." || filepath.IsAbs(relative) ||
 		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return clabernetesdeviceplan.FilePlan{}, nil, fmt.Errorf(
-			"file source escapes its Node root",
-		)
+		return clabernetesinternaldeviceplan.FilePlan{},
+			nil,
+			errors.New("file source escapes its Node root")
 	}
 	sourceFile, err := os.Open(source) //nolint:gosec // Confined to a mounted plan-owned root.
 	if err != nil {
-		return clabernetesdeviceplan.FilePlan{}, nil, fmt.Errorf(
+		return clabernetesinternaldeviceplan.FilePlan{}, nil, fmt.Errorf(
 			"cannot open lifecycle source: %w",
 			err,
 		)
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 	content, err := io.ReadAll(io.LimitReader(sourceFile, maxLifecycleFileBytes+1))
 	if err != nil || len(content) > maxLifecycleFileBytes {
-		return clabernetesdeviceplan.FilePlan{}, nil, fmt.Errorf(
-			"cannot read bounded lifecycle source",
-		)
+		return clabernetesinternaldeviceplan.FilePlan{},
+			nil,
+			errors.New("cannot read bounded lifecycle source")
 	}
-	digest := clabernetesdeviceplan.Digest(content)
+	digest := clabernetesinternaldeviceplan.Digest(content)
 	if digest != file.Digest && !runtimeGeneratorContent(file, digest, artifactRoot) {
-		return clabernetesdeviceplan.FilePlan{}, nil, fmt.Errorf(
-			"lifecycle source digest differs from plan",
-		)
+		return clabernetesinternaldeviceplan.FilePlan{},
+			nil,
+			errors.New("lifecycle source digest differs from plan")
 	}
 
 	return file, content, nil
@@ -579,16 +593,16 @@ func readLifecycleFile(
 // a generator file: preparation re-renders generator files with the Pod's runtime management
 // identity and records their digests beside the staged artifacts.
 func runtimeGeneratorContent(
-	file clabernetesdeviceplan.FilePlan,
+	file clabernetesinternaldeviceplan.FilePlan,
 	digest,
 	artifactRoot string,
 ) bool {
-	if file.SourceKind != clabernetesdeviceplan.FileSourceGenerator &&
-		file.SourceKind != clabernetesdeviceplan.FileSourceCertificate {
+	if file.SourceKind != clabernetesinternaldeviceplan.FileSourceGenerator &&
+		file.SourceKind != clabernetesinternaldeviceplan.FileSourceCertificate {
 		return false
 	}
 
-	return clabernetesdeviceplan.LoadRuntimeArtifactDigests(
+	return clabernetesinternaldeviceplan.LoadRuntimeArtifactDigests(
 		artifactRoot,
 		file.NodeID,
 	)[file.ArtifactPath] == digest

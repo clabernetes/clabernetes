@@ -1,17 +1,19 @@
+//nolint:err113,funlen,gocognit,gocyclo,maintidx,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
 	clabernetesclicker "github.com/clabernetes/clabernetes/clicker"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
-	claberneteshostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
-	clabernetesupgradepreflight "github.com/clabernetes/clabernetes/internal/upgradepreflight"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesinternalhostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
+	clabernetesinternalupgradepreflight "github.com/clabernetes/clabernetes/internal/upgradepreflight"
 	clabernetesmanager "github.com/clabernetes/clabernetes/manager"
 	"github.com/urfave/cli/v2"
 	"k8s.io/client-go/dynamic"
@@ -169,8 +171,9 @@ func upgradePreflightCommand(run upgradePreflightRunner) *cli.Command {
 		Usage: "report stored fields that cannot survive the direct-runtime API upgrade",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "kubeconfig",
-				Usage: "path to kubeconfig; defaults to standard loading rules or in-cluster config",
+				Name: "kubeconfig",
+				Usage: "path to kubeconfig; defaults to standard loading rules " +
+					"or in-cluster config",
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -193,12 +196,13 @@ func runClusterUpgradePreflight(
 	if err != nil {
 		return fmt.Errorf("loading Kubernetes configuration for upgrade preflight: %w", err)
 	}
+
 	client, err := dynamic.NewForConfig(config)
 	if err != nil {
 		return fmt.Errorf("creating Kubernetes client for upgrade preflight: %w", err)
 	}
 
-	return clabernetesupgradepreflight.Run(ctx, client, output)
+	return clabernetesinternalupgradepreflight.Run(ctx, client, output)
 }
 
 func devicePayloadWorkerCommand() *cli.Command {
@@ -212,30 +216,34 @@ func devicePayloadWorkerCommand() *cli.Command {
 		},
 		Action: func(c *cli.Context) error {
 			if c.Int64(devicePlanMaxInputBytes) <= 0 {
-				return fmt.Errorf("payload input size limit must be positive")
+				return errors.New("payload input size limit must be positive")
 			}
+
 			inputReader, closeInput, err := openDevicePlanInput(c.String(devicePlanInput))
 			if err != nil {
 				return err
 			}
 			defer closeInput()
+
 			raw, err := io.ReadAll(io.LimitReader(
 				inputReader,
 				c.Int64(devicePlanMaxInputBytes)+1,
 			))
 			if err != nil || int64(len(raw)) > c.Int64(devicePlanMaxInputBytes) {
-				return fmt.Errorf("reading bounded payload input")
+				return errors.New("reading bounded payload input")
 			}
-			input, err := clabernetesdeviceplan.DecodeInput(raw)
+
+			input, err := clabernetesinternaldeviceplan.DecodeInput(raw)
 			if err != nil {
 				return err
 			}
+
 			ctx := c.Context
 			if ctx == nil {
 				ctx = context.Background()
 			}
 
-			return (clabernetesdeviceplan.PayloadFetcher{}).FetchURLPayloads(
+			return (clabernetesinternaldeviceplan.PayloadFetcher{}).FetchURLPayloads(
 				ctx,
 				input,
 				c.String(devicePlanPayloads),
@@ -261,14 +269,16 @@ func deviceImageWorkerCommand() *cli.Command {
 				return err
 			}
 			defer closeInput()
+
 			ctx := c.Context
 			if ctx == nil {
 				ctx = context.Background()
 			}
 
-			return (clabernetesdeviceplan.ImageWorker{
-				Adapter: clabernetesdeviceplan.Adapter{
-					Revision: c.String(devicePlanRevision), PayloadRoot: c.String(devicePlanPayloads),
+			return (clabernetesinternaldeviceplan.ImageWorker{
+				Adapter: clabernetesinternaldeviceplan.Adapter{
+					Revision:    c.String(devicePlanRevision),
+					PayloadRoot: c.String(devicePlanPayloads),
 					EntropyRoot: c.String(devicePlanEntropy),
 				},
 				Input: input, Output: c.App.Writer,
@@ -292,7 +302,7 @@ func deviceRuntimeCommand() *cli.Command {
 					&cli.StringFlag{Name: deviceRuntimeWorkerNodeAddress, Required: true},
 					&cli.StringFlag{
 						Name:  deviceRuntimeHostEndpointSocket,
-						Value: claberneteshostendpoint.DefaultSocketPath,
+						Value: clabernetesinternalhostendpoint.DefaultSocketPath,
 					},
 				},
 				Action: func(c *cli.Context) error {
@@ -301,7 +311,7 @@ func deviceRuntimeCommand() *cli.Command {
 						ctx = context.Background()
 					}
 
-					return claberneteshostendpoint.Run(
+					return clabernetesinternalhostendpoint.Run(
 						ctx,
 						c.String(deviceRuntimeWorkerNodeName),
 						c.String(deviceRuntimeWorkerNodeAddress),
@@ -327,32 +337,39 @@ func deviceRuntimeCommand() *cli.Command {
 					if err != nil {
 						return fmt.Errorf("reading device input: %w", err)
 					}
-					input, err := clabernetesdeviceplan.DecodeInput(inputRaw)
+
+					input, err := clabernetesinternaldeviceplan.DecodeInput(inputRaw)
 					if err != nil {
 						return err
 					}
+
 					planRaw, err := readBoundedFile(c.String(deviceRuntimePlan), 1<<20)
 					if err != nil {
 						return fmt.Errorf("reading device plan: %w", err)
 					}
-					plan, err := clabernetesdeviceplan.DecodePlan(planRaw)
+
+					plan, err := clabernetesinternaldeviceplan.DecodePlan(planRaw)
 					if err != nil {
 						return err
 					}
+
 					ctx := c.Context
 					if ctx == nil {
 						ctx = context.Background()
 					}
 
-					podAddress, podGateway := clabernetesdirectruntime.RuntimePodManagementIdentity()
-					err = (clabernetesdeviceplan.Preparer{
-						Adapter: clabernetesdeviceplan.Adapter{
+					podAddress, podGateway := clabernetesinternaldirectruntime.
+						RuntimePodManagementIdentity()
+
+					err = (clabernetesinternaldeviceplan.Preparer{
+						Adapter: clabernetesinternaldeviceplan.Adapter{
 							Revision:        c.String(devicePlanRevision),
 							CertificateRoot: c.String(devicePlanCertificates),
 							EntropyRoot:     c.String(devicePlanEntropy),
 							PodAddress:      podAddress,
 							PodGateway:      podGateway,
-							PodDNSServers:   clabernetesdirectruntime.RuntimePodDNSServers(),
+							PodDNSServers: clabernetesinternaldirectruntime.
+								RuntimePodDNSServers(),
 						},
 						PayloadRoot: c.String(deviceRuntimePayloads),
 					}).Prepare(ctx, input, plan, c.String(deviceRuntimeArtifacts))
@@ -361,13 +378,13 @@ func deviceRuntimeCommand() *cli.Command {
 					}
 					// Record the Pod's prefixed management identity while the primary
 					// interface is still pristine; devices may strip it at boot.
-					if err = clabernetesdirectruntime.RecordPodAddress(
+					if err = clabernetesinternaldirectruntime.RecordPodAddress(
 						c.String(deviceRuntimeArtifacts),
 					); err != nil {
 						return err
 					}
 
-					return clabernetesdirectruntime.InstallLifecycleBinary(
+					return clabernetesinternaldirectruntime.InstallLifecycleBinary(
 						c.String(deviceRuntimeBinary),
 					)
 				},
@@ -384,12 +401,13 @@ func deviceRuntimeCommand() *cli.Command {
 					if err != nil {
 						return fmt.Errorf("reading device plan: %w", err)
 					}
-					plan, err := clabernetesdeviceplan.DecodePlan(planRaw)
+
+					plan, err := clabernetesinternaldeviceplan.DecodePlan(planRaw)
 					if err != nil {
 						return err
 					}
 
-					return clabernetesdirectruntime.RunLaunch(
+					return clabernetesinternaldirectruntime.RunLaunch(
 						plan,
 						c.String(deviceRuntimeContainer),
 					)
@@ -405,7 +423,7 @@ func deviceRuntimeCommand() *cli.Command {
 					&cli.StringFlag{Name: deviceRuntimeSignal},
 				},
 				Action: func(c *cli.Context) error {
-					return clabernetesdirectruntime.RunApplicationRestart(
+					return clabernetesinternaldirectruntime.RunApplicationRestart(
 						c.String(deviceRuntimeRequest),
 						c.String(deviceRuntimeState),
 						c.String(deviceRuntimeSignal),
@@ -434,16 +452,17 @@ func deviceRuntimeCommand() *cli.Command {
 					if err != nil {
 						return err
 					}
+
 					ctx := c.Context
 					if ctx == nil {
 						ctx = context.Background()
 					}
 
-					return clabernetesdirectruntime.RunLifecycleWithImported(
+					return clabernetesinternaldirectruntime.RunLifecycleWithImported(
 						ctx,
 						input,
 						plan,
-						clabernetesdeviceplan.ActionPhase(c.String(deviceRuntimePhase)),
+						clabernetesinternaldeviceplan.ActionPhase(c.String(deviceRuntimePhase)),
 						c.String(deviceRuntimeContainer),
 						c.String(deviceRuntimeArtifacts),
 						c.String(deviceRuntimeScratch),
@@ -476,12 +495,13 @@ func deviceRuntimeCommand() *cli.Command {
 					if err != nil {
 						return err
 					}
+
 					ctx := c.Context
 					if ctx == nil {
 						ctx = context.Background()
 					}
 
-					return clabernetesdirectruntime.RunReadiness(
+					return clabernetesinternaldirectruntime.RunReadiness(
 						ctx,
 						input,
 						plan,
@@ -489,7 +509,7 @@ func deviceRuntimeCommand() *cli.Command {
 						c.String(deviceRuntimeScratch),
 						c.String(devicePlanEntropy),
 						c.String(devicePlanRevision),
-						clabernetesdirectruntime.ReadinessChecks{
+						clabernetesinternaldirectruntime.ReadinessChecks{
 							TCPPort:         c.Int(deviceRuntimeTCPPort),
 							SSHUsername:     c.String(deviceRuntimeSSHUser),
 							SSHPort:         c.Int(deviceRuntimeSSHPort),
@@ -525,16 +545,17 @@ func deviceRuntimeCommand() *cli.Command {
 					if err != nil {
 						return err
 					}
+
 					ctx := c.Context
 					if ctx == nil {
 						ctx = context.Background()
 					}
 
-					return clabernetesdirectruntime.RunConnectivityWithOptions(
+					return clabernetesinternaldirectruntime.RunConnectivityWithOptions(
 						ctx,
 						input,
 						plan,
-						clabernetesdirectruntime.ConnectivityOptions{
+						clabernetesinternaldirectruntime.ConnectivityOptions{
 							StateDirectory:  c.String(deviceRuntimeState),
 							ArtifactRoot:    c.String(deviceRuntimeArtifacts),
 							CertificateRoot: c.String(devicePlanCertificates),
@@ -578,17 +599,18 @@ func deviceRuntimeCommand() *cli.Command {
 					if err != nil {
 						return err
 					}
+
 					ctx := c.Context
 					if ctx == nil {
 						ctx = context.Background()
 					}
 
-					return clabernetesdirectruntime.RunPacketCaptureWithRevision(
+					return clabernetesinternaldirectruntime.RunPacketCaptureWithRevision(
 						ctx,
 						input,
 						plan,
 						c.String(deviceRuntimeConnectivityRevision),
-						clabernetesdirectruntime.PacketCaptureOptions{
+						clabernetesinternaldirectruntime.PacketCaptureOptions{
 							NodeID:        c.String(deviceRuntimeNodeID),
 							InterfaceName: c.String(deviceRuntimeInterface),
 							SnapLength:    c.Int(deviceRuntimeSnapLength),
@@ -613,12 +635,13 @@ func deviceRuntimeCommand() *cli.Command {
 					if err != nil {
 						return fmt.Errorf("reading device plan: %w", err)
 					}
-					plan, err := clabernetesdeviceplan.DecodePlan(planRaw)
+
+					plan, err := clabernetesinternaldeviceplan.DecodePlan(planRaw)
 					if err != nil {
 						return err
 					}
 
-					return clabernetesdirectruntime.ConnectivityReadyWithRevision(
+					return clabernetesinternaldirectruntime.ConnectivityReadyWithRevision(
 						plan,
 						c.String(deviceRuntimeState),
 						c.String(deviceRuntimeConnectivityRevision),
@@ -632,28 +655,35 @@ func deviceRuntimeCommand() *cli.Command {
 func readRuntimePlanInput(
 	inputPath,
 	planPath string,
-) (clabernetesdeviceplan.Input, clabernetesdeviceplan.Plan, error) {
+) (clabernetesinternaldeviceplan.Input, clabernetesinternaldeviceplan.Plan, error) {
 	inputRaw, err := readBoundedFile(inputPath, 4<<20)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, fmt.Errorf(
-			"reading device input: %w",
-			err,
-		)
+		return clabernetesinternaldeviceplan.Input{},
+			clabernetesinternaldeviceplan.Plan{},
+			fmt.Errorf(
+				"reading device input: %w",
+				err,
+			)
 	}
-	input, err := clabernetesdeviceplan.DecodeInput(inputRaw)
+
+	input, err := clabernetesinternaldeviceplan.DecodeInput(inputRaw)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	planRaw, err := readBoundedFile(planPath, 1<<20)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, fmt.Errorf(
-			"reading device plan: %w",
-			err,
-		)
+		return clabernetesinternaldeviceplan.Input{},
+			clabernetesinternaldeviceplan.Plan{},
+			fmt.Errorf(
+				"reading device plan: %w",
+				err,
+			)
 	}
-	plan, err := clabernetesdeviceplan.DecodePlan(planRaw)
+
+	plan, err := clabernetesinternaldeviceplan.DecodePlan(planRaw)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
 
 	return input, plan, nil
@@ -677,14 +707,16 @@ func devicePlanWorkerCommand() *cli.Command {
 				return err
 			}
 			defer closeInput()
+
 			ctx := c.Context
 			if ctx == nil {
 				ctx = context.Background()
 			}
 
-			return (clabernetesdeviceplan.Worker{
-				Adapter: clabernetesdeviceplan.Adapter{
-					Revision: c.String(devicePlanRevision), PayloadRoot: c.String(devicePlanPayloads),
+			return (clabernetesinternaldeviceplan.Worker{
+				Adapter: clabernetesinternaldeviceplan.Adapter{
+					Revision:        c.String(devicePlanRevision),
+					PayloadRoot:     c.String(devicePlanPayloads),
 					CertificateRoot: c.String(devicePlanCertificates),
 					EntropyRoot:     c.String(devicePlanEntropy),
 				},
@@ -699,9 +731,10 @@ func openDevicePlanInput(path string) (io.Reader, func(), error) {
 	if path == "-" {
 		return os.Stdin, func() {}, nil
 	}
-	file, err := os.Open(
+
+	file, err := os.Open( //nolint:gosec // reads are confined to plan-scoped roots.
 		path,
-	) //nolint:gosec // Path is an explicit worker flag backed by a mounted input.
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening device-plan input: %w", err)
 	}
@@ -714,11 +747,14 @@ func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+
+	defer func() { _ = file.Close() }()
+
 	raw, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
 	if err != nil {
 		return nil, err
 	}
+
 	if int64(len(raw)) > maxBytes {
 		return nil, fmt.Errorf("file exceeds %d-byte limit", maxBytes)
 	}

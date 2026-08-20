@@ -1,4 +1,4 @@
-//nolint:ireturn,nlreturn,wsl_v5 // This file implements the imported generic runtime interface.
+//nolint:err113,funcorder,gocyclo,ireturn,mnd,wsl_v5 // This file implements the imported generic runtime interface.
 package directruntime
 
 import (
@@ -15,7 +15,7 @@ import (
 	"sync"
 	"syscall"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabexec "github.com/srl-labs/containerlab/exec"
 	clabruntime "github.com/srl-labs/containerlab/runtime"
 	clabtypes "github.com/srl-labs/containerlab/types"
@@ -25,10 +25,10 @@ var _ clabruntime.ContainerRuntime = (*importedApplicationRuntime)(nil)
 
 type importedApplicationRuntime struct {
 	mu                   sync.Mutex
-	plan                 clabernetesdeviceplan.Plan
-	target               clabernetesdeviceplan.ContainerPlan
-	containersByID       map[string]clabernetesdeviceplan.ContainerPlan
-	managementByNode     map[string]clabernetesdeviceplan.ManagementInput
+	plan                 clabernetesinternaldeviceplan.Plan
+	target               clabernetesinternaldeviceplan.ContainerPlan
+	containersByID       map[string]clabernetesinternaldeviceplan.ContainerPlan
+	managementByNode     map[string]clabernetesinternaldeviceplan.ManagementInput
 	images               map[string]*clabruntime.ImageInspect
 	created              map[string]bool
 	started              map[string]bool
@@ -43,18 +43,18 @@ type importedApplicationRuntime struct {
 }
 
 func newImportedApplicationRuntime(
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	targetContainerID string,
 ) (*importedApplicationRuntime, error) {
 	runtime := &importedApplicationRuntime{
 		plan: plan,
 		containersByID: make(
-			map[string]clabernetesdeviceplan.ContainerPlan,
+			map[string]clabernetesinternaldeviceplan.ContainerPlan,
 			len(plan.Containers),
 		),
 		managementByNode: make(
-			map[string]clabernetesdeviceplan.ManagementInput,
+			map[string]clabernetesinternaldeviceplan.ManagementInput,
 			len(input.Management),
 		),
 		images:           make(map[string]*clabruntime.ImageInspect, len(input.Images)*2),
@@ -68,10 +68,10 @@ func newImportedApplicationRuntime(
 	}
 	for _, container := range plan.Containers {
 		if container.RuntimeID == "" {
-			return nil, fmt.Errorf("planned application container has no imported runtime identity")
+			return nil, errors.New("planned application container has no imported runtime identity")
 		}
 		if _, exists := runtime.containersByID[container.RuntimeID]; exists {
-			return nil, fmt.Errorf("planned imported runtime identity is duplicated")
+			return nil, errors.New("planned imported runtime identity is duplicated")
 		}
 		runtime.containersByID[container.RuntimeID] = container
 		if container.ID == targetContainerID {
@@ -79,7 +79,7 @@ func newImportedApplicationRuntime(
 		}
 	}
 	if runtime.target.ID == "" {
-		return nil, fmt.Errorf("imported runtime target is absent from the plan")
+		return nil, errors.New("imported runtime target is absent from the plan")
 	}
 	for _, management := range input.Management {
 		runtime.managementByNode[management.NodeID] = management
@@ -110,8 +110,8 @@ func newImportedApplicationRuntime(
 // runs from a distinct host namespace, but it cannot accidentally execute commands or mutate
 // files in its own helper container as though they belonged to the application container.
 func NewImportedEndpointRuntime(
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	targetContainerID,
 	networkNamespacePath string,
 ) (clabruntime.ContainerRuntime, error) {
@@ -120,7 +120,7 @@ func NewImportedEndpointRuntime(
 		return nil, err
 	}
 	if filepath.Clean(networkNamespacePath) == "." || !filepath.IsAbs(networkNamespacePath) {
-		return nil, fmt.Errorf("target application network namespace path must be absolute")
+		return nil, errors.New("target application network namespace path must be absolute")
 	}
 	runtime.applicationLocal = false
 	runtime.networkNamespacePath = filepath.Clean(networkNamespacePath)
@@ -132,8 +132,8 @@ func NewImportedEndpointRuntime(
 // imported lifecycle hooks. It is exported within the internal module so registry conformance
 // tests can exercise future package kinds without adding c9s registrations.
 func NewImportedApplicationRuntime(
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	targetContainerID string,
 ) (clabruntime.ContainerRuntime, error) {
 	return newImportedApplicationRuntime(input, plan, targetContainerID)
@@ -143,8 +143,8 @@ func NewImportedApplicationRuntime(
 // an explicit Pod-local broker path. Production uses ApplicationRuntimeSocketPath; the explicit
 // form keeps package-driven conformance hermetic.
 func NewImportedApplicationRuntimeWithLogSocket(
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	targetContainerID,
 	logSocketPath string,
 ) (clabruntime.ContainerRuntime, error) {
@@ -162,10 +162,10 @@ func (*importedApplicationRuntime) Init(...clabruntime.RuntimeOption) error { re
 func (r *importedApplicationRuntime) Mgmt() *clabtypes.MgmtNet {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	copy := *r.management
-	copy.DriverOpts = maps.Clone(r.management.DriverOpts)
+	duplicate := *r.management
+	duplicate.DriverOpts = maps.Clone(r.management.DriverOpts)
 
-	return &copy
+	return &duplicate
 }
 
 func (r *importedApplicationRuntime) WithConfig(config *clabruntime.RuntimeConfig) {
@@ -183,9 +183,9 @@ func (r *importedApplicationRuntime) WithMgmtNet(management *clabtypes.MgmtNet) 
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	copy := *management
-	copy.DriverOpts = maps.Clone(management.DriverOpts)
-	r.management = &copy
+	duplicate := *management
+	duplicate.DriverOpts = maps.Clone(management.DriverOpts)
+	r.management = &duplicate
 }
 
 func (r *importedApplicationRuntime) WithKeepMgmtNet() {
@@ -218,7 +218,7 @@ func (r *importedApplicationRuntime) PullImage(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.images[imageName]; !exists {
-		return fmt.Errorf("imported post-deploy requested image absent from immutable input")
+		return errors.New("imported post-deploy requested image absent from immutable input")
 	}
 
 	return nil
@@ -229,7 +229,7 @@ func (r *importedApplicationRuntime) CreateContainer(
 	config *clabtypes.NodeConfig,
 ) (string, error) {
 	if config == nil {
-		return "", fmt.Errorf("imported post-deploy supplied no container configuration")
+		return "", errors.New("imported post-deploy supplied no container configuration")
 	}
 	runtimeID := config.LongName
 	if runtimeID == "" {
@@ -239,7 +239,7 @@ func (r *importedApplicationRuntime) CreateContainer(
 	defer r.mu.Unlock()
 	container, exists := r.containersByID[runtimeID]
 	if !exists || container.NodeID != r.target.NodeID {
-		return "", fmt.Errorf(
+		return "", errors.New(
 			"imported post-deploy requested a container outside the accepted target Node",
 		)
 	}
@@ -256,7 +256,7 @@ func (r *importedApplicationRuntime) StartContainer(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.created[runtimeID] {
-		return nil, fmt.Errorf("imported post-deploy started an unrecognized container")
+		return nil, errors.New("imported post-deploy started an unrecognized container")
 	}
 	r.started[runtimeID] = true
 
@@ -326,7 +326,7 @@ func (r *importedApplicationRuntime) GetNSPath(
 	defer r.mu.Unlock()
 	container, exists := r.containersByID[runtimeID]
 	if !exists || container.NamespaceOwnerID != r.target.NamespaceOwnerID {
-		return "", fmt.Errorf("imported post-deploy requested a foreign network namespace")
+		return "", errors.New("imported post-deploy requested a foreign network namespace")
 	}
 	if r.networkNamespacePath != "" {
 		return r.networkNamespacePath, nil
@@ -377,14 +377,14 @@ func (r *importedApplicationRuntime) Exec(
 		return nil, err
 	}
 	if command == nil || len(command.GetCmd()) == 0 {
-		return nil, fmt.Errorf("imported post-deploy exec has no command")
+		return nil, errors.New("imported post-deploy exec has no command")
 	}
 	result := clabexec.NewExecResult(command)
-	process := exec.CommandContext(
+	process := exec.CommandContext( //nolint:gosec // the command comes from the accepted immutable plan.
 		ctx,
 		command.GetCmd()[0],
 		command.GetCmd()[1:]...,
-	) //nolint:gosec // Command originates in the pinned imported package/input lifecycle.
+	)
 	var stdout, stderr bytes.Buffer
 	process.Stdout = &stdout
 	process.Stderr = &stderr
@@ -420,13 +420,13 @@ func (r *importedApplicationRuntime) ExecNotWait(
 		return err
 	}
 	if command == nil || len(command.GetCmd()) == 0 {
-		return fmt.Errorf("imported post-deploy exec has no command")
+		return errors.New("imported post-deploy exec has no command")
 	}
-	process := exec.CommandContext(
+	process := exec.CommandContext( //nolint:gosec // the command comes from the accepted immutable plan.
 		ctx,
 		command.GetCmd()[0],
 		command.GetCmd()[1:]...,
-	) //nolint:gosec // Command originates in the pinned imported package/input lifecycle.
+	)
 	process.Stdout = os.Stdout
 	process.Stderr = os.Stderr
 	if err := process.Start(); err != nil {
@@ -584,12 +584,12 @@ func (r *importedApplicationRuntime) InspectImage(
 	defer r.mu.Unlock()
 	image := r.images[imageName]
 	if image == nil {
-		return nil, fmt.Errorf("image metadata is absent from immutable input")
+		return nil, errors.New("image metadata is absent from immutable input")
 	}
-	copy := *image
-	copy.Config.Labels = maps.Clone(image.Config.Labels)
+	duplicate := *image
+	duplicate.Config.Labels = maps.Clone(image.Config.Labels)
 
-	return &copy, nil
+	return &duplicate, nil
 }
 
 func (r *importedApplicationRuntime) CopyToContainer(
@@ -609,38 +609,38 @@ func (r *importedApplicationRuntime) CopyToContainer(
 		return err
 	}
 	if destination == "" || source == "" {
-		return fmt.Errorf("imported post-deploy copy has an empty path")
+		return errors.New("imported post-deploy copy has an empty path")
 	}
-	content, err := os.ReadFile(
+	content, err := os.ReadFile( //nolint:gosec // reads are confined to plan-scoped roots.
 		source,
-	) //nolint:gosec // Source is selected by the imported hook in its scoped Node workspace.
+	)
 	if err != nil {
 		return err
 	}
 	info, err := os.Stat(source)
 	if err != nil || !info.Mode().IsRegular() {
-		return fmt.Errorf("imported post-deploy copy source is not a regular file")
+		return errors.New("imported post-deploy copy source is not a regular file")
 	}
 	destination = filepath.Clean(destination)
 	if !filepath.IsAbs(destination) || destination == string(filepath.Separator) {
-		return fmt.Errorf("imported post-deploy copy destination must be a scoped absolute path")
+		return errors.New("imported post-deploy copy destination must be a scoped absolute path")
 	}
 	if existing, statErr := os.Lstat(destination); statErr == nil &&
 		existing.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("imported post-deploy copy destination is a symbolic link")
+		return errors.New("imported post-deploy copy destination is a symbolic link")
 	} else if statErr != nil && !os.IsNotExist(statErr) {
 		return statErr
 	}
 	parent := filepath.Dir(destination)
 	if parentInfo, statErr := os.Stat(parent); statErr != nil || !parentInfo.IsDir() {
-		return fmt.Errorf("imported post-deploy copy destination parent is unavailable")
+		return errors.New("imported post-deploy copy destination parent is unavailable")
 	}
 	temporary, err := os.CreateTemp(parent, ".c9s-imported-copy-")
 	if err != nil {
 		return err
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	if _, err = temporary.Write(content); err == nil {
 		// The imported container runtime realizes CopyToContainer with a fixed world-readable
 		// mode regardless of the source file's permissions (its tar header is always 0666);
@@ -669,12 +669,10 @@ func (r *importedApplicationRuntime) requireLocalContainer(runtimeID string) err
 	defer r.mu.Unlock()
 	container, exists := r.containersByID[runtimeID]
 	if !exists {
-		return fmt.Errorf("imported post-deploy targets an unknown container")
+		return errors.New("imported post-deploy targets an unknown container")
 	}
 	if container.ID != r.target.ID {
-		return fmt.Errorf(
-			"imported post-deploy operation targets another application container",
-		)
+		return errors.New("imported post-deploy operation targets another application container")
 	}
 
 	return nil
@@ -685,10 +683,10 @@ func (r *importedApplicationRuntime) requireNodeContainer(runtimeID string) erro
 	defer r.mu.Unlock()
 	container, exists := r.containersByID[runtimeID]
 	if !exists {
-		return fmt.Errorf("imported post-deploy targets an unknown container")
+		return errors.New("imported post-deploy targets an unknown container")
 	}
 	if container.NodeID != r.target.NodeID {
-		return fmt.Errorf("imported post-deploy operation targets another logical Node")
+		return errors.New("imported post-deploy operation targets another logical Node")
 	}
 
 	return nil
@@ -720,8 +718,8 @@ func (r *importedApplicationRuntime) unsupportedCapabilityLocked(
 	field,
 	message string,
 ) error {
-	err := &clabernetesdeviceplan.Error{
-		Code: clabernetesdeviceplan.ErrorUnsupported, Field: field,
+	err := &clabernetesinternaldeviceplan.Error{
+		Code: clabernetesinternaldeviceplan.ErrorUnsupported, Field: field,
 		Behavior: operation, Message: message,
 	}
 	if r.boundaryFailure == nil {
@@ -732,7 +730,7 @@ func (r *importedApplicationRuntime) unsupportedCapabilityLocked(
 }
 
 func plannedContainerMatches(
-	container clabernetesdeviceplan.ContainerPlan,
+	container clabernetesinternaldeviceplan.ContainerPlan,
 	filters []*clabtypes.GenericFilter,
 ) bool {
 	labels := make(map[string]string, len(container.Labels))
@@ -775,7 +773,7 @@ func plannedContainerMatches(
 }
 
 func genericRuntimeManagement(
-	management clabernetesdeviceplan.ManagementInput,
+	management clabernetesinternaldeviceplan.ManagementInput,
 ) clabruntime.GenericMgmtIPs {
 	result := clabruntime.GenericMgmtIPs{
 		IPv4Gw: management.IPv4Gateway,

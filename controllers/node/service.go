@@ -181,6 +181,7 @@ func (r *ServiceReconciler) RenderDirectExposeService(
 	if service == nil {
 		return nil
 	}
+
 	for index := range service.Spec.Ports {
 		service.Spec.Ports[index].TargetPort = intstr.FromInt32(service.Spec.Ports[index].Port)
 	}

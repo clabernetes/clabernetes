@@ -22,7 +22,9 @@ func openPacketCaptureSource(interfaceName string, snapLength int) (packetCaptur
 	if err != nil {
 		return nil, fmt.Errorf("resolving interface: %w", err)
 	}
+
 	protocol := hostToNetworkShort(uint16(unix.ETH_P_ALL))
+
 	fd, err := unix.Socket(
 		unix.AF_PACKET,
 		unix.SOCK_RAW|unix.SOCK_CLOEXEC|unix.SOCK_NONBLOCK,
@@ -31,6 +33,7 @@ func openPacketCaptureSource(interfaceName string, snapLength int) (packetCaptur
 	if err != nil {
 		return nil, fmt.Errorf("opening packet socket: %w", err)
 	}
+
 	if err = unix.Bind(fd, &unix.SockaddrLinklayer{
 		Protocol: protocol,
 		Ifindex:  intf.Index,
@@ -48,6 +51,7 @@ func (s *linuxPacketCaptureSource) ReadPacket(ctx context.Context) (capturedPack
 		if err := ctx.Err(); err != nil {
 			return capturedPacket{}, err
 		}
+
 		n, _, err := unix.Recvfrom(s.fd, s.buffer, unix.MSG_DONTWAIT|unix.MSG_TRUNC)
 		if err == nil {
 			capturedLength := min(n, len(s.buffer))
@@ -57,10 +61,15 @@ func (s *linuxPacketCaptureSource) ReadPacket(ctx context.Context) (capturedPack
 				OriginalLength: n,
 			}, nil
 		}
+
 		if !errors.Is(err, unix.EAGAIN) && !errors.Is(err, unix.EWOULDBLOCK) {
 			return capturedPacket{}, err
 		}
-		poll := []unix.PollFd{{Fd: int32(s.fd), Events: unix.POLLIN}}
+
+		poll := []unix.PollFd{
+			//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+			{Fd: int32(s.fd), Events: unix.POLLIN},
+		}
 		if _, err = unix.Poll(poll, int(packetCapturePollInterval.Milliseconds())); err != nil &&
 			!errors.Is(err, unix.EINTR) {
 			return capturedPacket{}, err

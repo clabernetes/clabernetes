@@ -3,11 +3,11 @@ package directruntime_test
 import (
 	"testing"
 
-	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 )
 
 func TestRuntimeCLIShimFailsClosedOutsideTheDeclaredExecSurface(t *testing.T) {
-	t.Setenv(clabernetesdirectruntime.RuntimeExecTargetEnvironmentVariable, "device-a")
+	t.Setenv(clabernetesinternaldirectruntime.RuntimeExecTargetEnvironmentVariable, "device-a")
 
 	for name, arguments := range map[string][]string{
 		"non-exec operation":  {"docker", "run", "device-a", "Cli"},
@@ -15,16 +15,16 @@ func TestRuntimeCLIShimFailsClosedOutsideTheDeclaredExecSurface(t *testing.T) {
 		"foreign container":   {"docker", "exec", "-it", "device-b", "Cli"},
 		"no operation at all": {"docker"},
 	} {
-		if err := clabernetesdirectruntime.RunRuntimeCLIShim(arguments); err == nil {
+		if err := clabernetesinternaldirectruntime.RunRuntimeCLIShim(arguments); err == nil {
 			t.Fatalf("%s was accepted by the runtime CLI shim", name)
 		}
 	}
 }
 
 func TestRuntimeCLIShimRequiresADeclaredExecTarget(t *testing.T) {
-	t.Setenv(clabernetesdirectruntime.RuntimeExecTargetEnvironmentVariable, "")
+	t.Setenv(clabernetesinternaldirectruntime.RuntimeExecTargetEnvironmentVariable, "")
 
-	err := clabernetesdirectruntime.RunRuntimeCLIShim(
+	err := clabernetesinternaldirectruntime.RunRuntimeCLIShim(
 		[]string{"docker", "exec", "-it", "device-a", "Cli"},
 	)
 	if err == nil {
@@ -35,11 +35,11 @@ func TestRuntimeCLIShimRequiresADeclaredExecTarget(t *testing.T) {
 func TestRuntimeCLIInvocationDetection(t *testing.T) {
 	t.Parallel()
 
-	if !clabernetesdirectruntime.IsRuntimeCLIInvocation(
+	if !clabernetesinternaldirectruntime.IsRuntimeCLIInvocation(
 		"/var/lib/clabernetes/lifecycle-bin/docker",
 	) ||
-		!clabernetesdirectruntime.IsRuntimeCLIInvocation("podman") ||
-		clabernetesdirectruntime.IsRuntimeCLIInvocation("/usr/local/bin/manager") {
+		!clabernetesinternaldirectruntime.IsRuntimeCLIInvocation("podman") ||
+		clabernetesinternaldirectruntime.IsRuntimeCLIInvocation("/usr/local/bin/manager") {
 		t.Fatal("runtime CLI shim name detection is wrong")
 	}
 }

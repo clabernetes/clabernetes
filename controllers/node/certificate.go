@@ -1,4 +1,4 @@
-//nolint:nlreturn,wsl_v5 // Secret reconciliation validates each immutable identity boundary.
+//nolint:err113,funcorder,gocyclo,mnd,nestif,wsl_v5 // Secret reconciliation validates each immutable identity boundary.
 package node
 
 import (
@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,10 +16,10 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabcert "github.com/srl-labs/containerlab/cert"
 	k8scorev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -34,7 +35,7 @@ const (
 // CertificateResolution is the non-secret identity and Secret reference supplied to workers.
 type CertificateResolution struct {
 	SecretName      string
-	Inputs          []clabernetesdeviceplan.CertificateInput
+	Inputs          []clabernetesinternaldeviceplan.CertificateInput
 	SensitiveValues [][]byte
 }
 
@@ -58,14 +59,14 @@ func (r *CertificateReconciler) Resolve(
 	ctx context.Context,
 	owner *clabernetesapisv1alpha1.Node,
 	topologyName string,
-	requirements []clabernetesdeviceplan.CertificateRequirement,
+	requirements []clabernetesinternaldeviceplan.CertificateRequirement,
 ) (*CertificateResolution, error) {
 	if len(requirements) == 0 {
 		return &CertificateResolution{}, nil
 	}
 	if ctx == nil || r == nil || r.Client == nil || owner == nil || owner.GetNamespace() == "" ||
 		owner.GetName() == "" || owner.GetUID() == "" || strings.TrimSpace(topologyName) == "" {
-		return nil, fmt.Errorf("certificate reconciliation identity is incomplete")
+		return nil, errors.New("certificate reconciliation identity is incomplete")
 	}
 	requirements, requestDigest, err := normalizeCertificateRequirements(requirements)
 	if err != nil {
@@ -75,9 +76,9 @@ func (r *CertificateReconciler) Resolve(
 	if err != nil {
 		return nil, err
 	}
-	caCertificate := caSecret.Data[clabernetesdeviceplan.CertificateCACertKey]
-	caPrivateKey := caSecret.Data[clabernetesdeviceplan.CertificateCAKeyKey]
-	caDigest := clabernetesdeviceplan.Digest(caCertificate)
+	caCertificate := caSecret.Data[clabernetesinternaldeviceplan.CertificateCACertKey]
+	caPrivateKey := caSecret.Data[clabernetesinternaldeviceplan.CertificateCAKeyKey]
+	caDigest := clabernetesinternaldeviceplan.Digest(caCertificate)
 	name := certificateBundleName(owner.GetName(), requestDigest, caDigest)
 	existing := &k8scorev1.Secret{}
 	err = r.reader().Get(
@@ -85,7 +86,7 @@ func (r *CertificateReconciler) Resolve(
 		ctrlruntimeclient.ObjectKey{Namespace: owner.GetNamespace(), Name: name},
 		existing,
 	)
-	if apierrors.IsNotFound(err) {
+	if apimachineryerrors.IsNotFound(err) {
 		rendered, renderErr := renderCertificateBundle(
 			owner,
 			name,
@@ -98,7 +99,7 @@ func (r *CertificateReconciler) Resolve(
 			return nil, renderErr
 		}
 		if err = r.Client.Create(ctx, rendered); err != nil {
-			if !apierrors.IsAlreadyExists(err) {
+			if !apimachineryerrors.IsAlreadyExists(err) {
 				return nil, fmt.Errorf("creating direct certificate Secret: %w", err)
 			}
 			existing = &k8scorev1.Secret{}
@@ -141,7 +142,7 @@ func (r *CertificateReconciler) ensureCertificateAuthority(
 		ctrlruntimeclient.ObjectKey{Namespace: owner.GetNamespace(), Name: name},
 		existing,
 	)
-	if apierrors.IsNotFound(err) {
+	if apimachineryerrors.IsNotFound(err) {
 		ca := clabcert.NewCA()
 		certificate, generateErr := ca.GenerateCACert(&clabcert.CACSRInput{
 			CommonName: topologyName + " direct device CA",
@@ -165,15 +166,15 @@ func (r *CertificateReconciler) ensureCertificateAuthority(
 			Immutable: &immutable,
 			Type:      k8scorev1.SecretTypeOpaque,
 			Data: map[string][]byte{
-				clabernetesdeviceplan.CertificateCACertKey: certificate.Cert,
-				clabernetesdeviceplan.CertificateCAKeyKey:  certificate.Key,
+				clabernetesinternaldeviceplan.CertificateCACertKey: certificate.Cert,
+				clabernetesinternaldeviceplan.CertificateCAKeyKey:  certificate.Key,
 			},
 		}
 		if topologyOwner := directTopologyOwnerReference(owner); topologyOwner != nil {
 			existing.OwnerReferences = []metav1.OwnerReference{*topologyOwner}
 		}
 		if err = r.Client.Create(ctx, existing); err != nil {
-			if !apierrors.IsAlreadyExists(err) {
+			if !apimachineryerrors.IsAlreadyExists(err) {
 				return nil, fmt.Errorf("creating direct certificate authority Secret: %w", err)
 			}
 			existing = &k8scorev1.Secret{}
@@ -197,8 +198,8 @@ func (r *CertificateReconciler) ensureCertificateAuthority(
 			existing.GetNamespace(), existing.GetName())
 	}
 	certificate := &clabcert.Certificate{
-		Cert: existing.Data[clabernetesdeviceplan.CertificateCACertKey],
-		Key:  existing.Data[clabernetesdeviceplan.CertificateCAKeyKey],
+		Cert: existing.Data[clabernetesinternaldeviceplan.CertificateCACertKey],
+		Key:  existing.Data[clabernetesinternaldeviceplan.CertificateCAKeyKey],
 	}
 	ca := clabcert.NewCA()
 	if err = ca.SetCACert(certificate); err != nil {
@@ -214,15 +215,16 @@ func renderCertificateBundle(
 	requestDigest string,
 	caCertificate,
 	caPrivateKey []byte,
-	requirements []clabernetesdeviceplan.CertificateRequirement,
+	requirements []clabernetesinternaldeviceplan.CertificateRequirement,
 ) (*k8scorev1.Secret, error) {
 	ca := clabcert.NewCA()
-	if err := ca.SetCACert(&clabcert.Certificate{Cert: caCertificate, Key: caPrivateKey}); err != nil {
+	authority := &clabcert.Certificate{Cert: caCertificate, Key: caPrivateKey}
+	if err := ca.SetCACert(authority); err != nil {
 		return nil, fmt.Errorf("initializing direct certificate authority: %w", err)
 	}
 	data := map[string][]byte{
-		clabernetesdeviceplan.CertificateCACertKey: slices.Clone(caCertificate),
-		clabernetesdeviceplan.CertificateCAKeyKey:  slices.Clone(caPrivateKey),
+		clabernetesinternaldeviceplan.CertificateCACertKey: slices.Clone(caCertificate),
+		clabernetesinternaldeviceplan.CertificateCAKeyKey:  slices.Clone(caPrivateKey),
 	}
 	for _, requirement := range requirements {
 		hosts := append(slices.Clone(requirement.DNSNames), requirement.IPAddresses...)
@@ -240,7 +242,7 @@ func renderCertificateBundle(
 		if err != nil {
 			return nil, fmt.Errorf("issuing package-requested node certificate: %w", err)
 		}
-		certificateKey, privateKeyKey := clabernetesdeviceplan.CertificateMaterialKeys(
+		certificateKey, privateKeyKey := clabernetesinternaldeviceplan.CertificateMaterialKeys(
 			requirement.NodeID,
 			requirement.StorageName,
 		)
@@ -263,7 +265,7 @@ func renderCertificateBundle(
 			},
 			Annotations: map[string]string{
 				directCertificateRequest:     requestDigest,
-				directCertificateAuthorityID: clabernetesdeviceplan.Digest(caCertificate),
+				directCertificateAuthorityID: clabernetesinternaldeviceplan.Digest(caCertificate),
 			},
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: "Node",
@@ -281,18 +283,20 @@ func validateCertificateBundle(
 	requestDigest string,
 	caCertificate,
 	caPrivateKey []byte,
-	requirements []clabernetesdeviceplan.CertificateRequirement,
+	requirements []clabernetesinternaldeviceplan.CertificateRequirement,
 ) (*CertificateResolution, error) {
 	if secret == nil || secret.Labels[directCertificateLabel] != directCertificateBundle ||
 		secret.Annotations[directCertificateRequest] != requestDigest ||
 		secret.Annotations[directCertificateAuthorityID] !=
-			clabernetesdeviceplan.Digest(caCertificate) ||
+			clabernetesinternaldeviceplan.Digest(caCertificate) ||
 		secret.Immutable == nil || !*secret.Immutable || len(secret.OwnerReferences) != 1 ||
 		secret.OwnerReferences[0].UID != owner.GetUID() ||
-		!slices.Equal(secret.Data[clabernetesdeviceplan.CertificateCACertKey], caCertificate) ||
-		!slices.Equal(secret.Data[clabernetesdeviceplan.CertificateCAKeyKey], caPrivateKey) ||
+		!slices.Equal(secret.Data[clabernetesinternaldeviceplan.CertificateCACertKey],
+			caCertificate) ||
+		!slices.Equal(secret.Data[clabernetesinternaldeviceplan.CertificateCAKeyKey],
+			caPrivateKey) ||
 		len(secret.Data) != 2+len(requirements)*2 {
-		return nil, fmt.Errorf("direct certificate Secret conflicts with accepted identity")
+		return nil, errors.New("direct certificate Secret conflicts with accepted identity")
 	}
 	ca, err := parseCertificate(caCertificate)
 	if err != nil {
@@ -305,7 +309,7 @@ func validateCertificateBundle(
 		slices.Clone(caPrivateKey),
 	)
 	for _, requirement := range requirements {
-		certificateKey, privateKeyKey := clabernetesdeviceplan.CertificateMaterialKeys(
+		certificateKey, privateKeyKey := clabernetesinternaldeviceplan.CertificateMaterialKeys(
 			requirement.NodeID,
 			requirement.StorageName,
 		)
@@ -317,14 +321,14 @@ func validateCertificateBundle(
 		parsed, parseErr := parseCertificate(certificate)
 		if parseErr != nil || parsed.CheckSignatureFrom(ca) != nil ||
 			!certificateMatchesRequirement(parsed, requirement) {
-			return nil, fmt.Errorf("issued certificate differs from package request")
+			return nil, errors.New("issued certificate differs from package request")
 		}
-		result.Inputs = append(result.Inputs, clabernetesdeviceplan.CertificateInput{
+		result.Inputs = append(result.Inputs, clabernetesinternaldeviceplan.CertificateInput{
 			NodeID: requirement.NodeID, StorageName: requirement.StorageName,
-			CertificateDigest:   clabernetesdeviceplan.Digest(certificate),
-			PrivateKeyDigest:    clabernetesdeviceplan.Digest(privateKey),
-			CACertificateDigest: clabernetesdeviceplan.Digest(caCertificate),
-			CAPrivateKeyDigest:  clabernetesdeviceplan.Digest(caPrivateKey),
+			CertificateDigest:   clabernetesinternaldeviceplan.Digest(certificate),
+			PrivateKeyDigest:    clabernetesinternaldeviceplan.Digest(privateKey),
+			CACertificateDigest: clabernetesinternaldeviceplan.Digest(caCertificate),
+			CAPrivateKeyDigest:  clabernetesinternaldeviceplan.Digest(caPrivateKey),
 		})
 		result.SensitiveValues = append(
 			result.SensitiveValues,
@@ -337,9 +341,9 @@ func validateCertificateBundle(
 }
 
 func normalizeCertificateRequirements(
-	requirements []clabernetesdeviceplan.CertificateRequirement,
-) ([]clabernetesdeviceplan.CertificateRequirement, string, error) {
-	normalized, err := clabernetesdeviceplan.NormalizeCertificateRequirements(requirements)
+	requirements []clabernetesinternaldeviceplan.CertificateRequirement,
+) ([]clabernetesinternaldeviceplan.CertificateRequirement, string, error) {
+	normalized, err := clabernetesinternaldeviceplan.NormalizeCertificateRequirements(requirements)
 	if err != nil {
 		return nil, "", err
 	}
@@ -348,12 +352,12 @@ func normalizeCertificateRequirements(
 		return nil, "", fmt.Errorf("serializing package certificate requirements: %w", err)
 	}
 
-	return normalized, clabernetesdeviceplan.Digest(raw), nil
+	return normalized, clabernetesinternaldeviceplan.Digest(raw), nil
 }
 
 func certificateMatchesRequirement(
 	certificate *x509.Certificate,
-	requirement clabernetesdeviceplan.CertificateRequirement,
+	requirement clabernetesinternaldeviceplan.CertificateRequirement,
 ) bool {
 	publicKey, ok := certificate.PublicKey.(*rsa.PublicKey)
 	if !ok || publicKey.N.BitLen() != requirement.KeySize ||
@@ -379,7 +383,7 @@ func certificateMatchesRequirement(
 func parseCertificate(raw []byte) (*x509.Certificate, error) {
 	block, _ := pem.Decode(raw)
 	if block == nil || block.Type != "CERTIFICATE" {
-		return nil, fmt.Errorf("certificate is not PEM encoded")
+		return nil, errors.New("certificate is not PEM encoded")
 	}
 
 	return x509.ParseCertificate(block.Bytes)
@@ -394,14 +398,15 @@ func firstString(values []string) string {
 }
 
 func certificateAuthorityName(topologyName string) string {
-	suffix := strings.TrimPrefix(clabernetesdeviceplan.Digest([]byte(topologyName)), "sha256:")[:16]
+	suffix := strings.TrimPrefix(clabernetesinternaldeviceplan.Digest([]byte(topologyName)),
+		"sha256:")[:16]
 
 	return "direct-device-ca-" + suffix
 }
 
 func certificateBundleName(ownerName, requestDigest, caDigest string) string {
 	suffix := strings.TrimPrefix(
-		clabernetesdeviceplan.Digest([]byte(requestDigest+"\x00"+caDigest)),
+		clabernetesinternaldeviceplan.Digest([]byte(requestDigest+"\x00"+caDigest)),
 		"sha256:",
 	)[:16]
 	const separator = "-certificates-"
@@ -417,9 +422,9 @@ func directTopologyOwnerReference(node *clabernetesapisv1alpha1.Node) *metav1.Ow
 	topologyName := node.GetLabels()[clabernetesconstants.LabelTopologyOwner]
 	for _, reference := range node.GetOwnerReferences() {
 		if reference.Kind == topologyOwnerKind && reference.Name == topologyName {
-			copy := reference
+			duplicate := reference
 
-			return &copy
+			return &duplicate
 		}
 	}
 

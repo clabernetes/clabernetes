@@ -1,4 +1,4 @@
-//nolint:noinlineerr,wsl_v5 // Ownership checks are clearer as fail-closed guards.
+//nolint:err113,noinlineerr,wsl_v5 // Ownership checks are clearer as fail-closed guards.
 package node
 
 import (
@@ -13,9 +13,9 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesdirectpod "github.com/clabernetes/clabernetes/internal/directpod"
-	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +39,7 @@ const (
 )
 
 type directConnectivityLifecycleAction struct {
-	Mode            clabernetesdeviceplan.LinkApplyMode
+	Mode            clabernetesinternaldeviceplan.LinkApplyMode
 	PlanDigest      string
 	AffectedNodeIDs []string
 }
@@ -62,14 +62,16 @@ type ConnectivityRevisionConfigMapReconciler struct {
 	Client ctrlruntimeclient.Client
 }
 
+// RecordLifecycleAction persists the outcome of one applied connectivity lifecycle action into
+// the revision ConfigMap so replays observe the already-applied state.
 func (r *ConnectivityRevisionConfigMapReconciler) RecordLifecycleAction(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
 	configMap *k8scorev1.ConfigMap,
 	action directConnectivityLifecycleAction,
 ) (*k8scorev1.ConfigMap, error) {
-	if action.Mode != clabernetesdeviceplan.LinkApplyLive &&
-		action.Mode != clabernetesdeviceplan.LinkApplyRestart {
+	if action.Mode != clabernetesinternaldeviceplan.LinkApplyLive &&
+		action.Mode != clabernetesinternaldeviceplan.LinkApplyRestart {
 		return nil, fmt.Errorf(
 			"direct connectivity lifecycle action %q is not Pod-retaining",
 			action.Mode,
@@ -77,13 +79,13 @@ func (r *ConnectivityRevisionConfigMapReconciler) RecordLifecycleAction(
 	}
 	if configMap == nil || !controlledByNodeUID(configMap, node.GetUID()) ||
 		configMap.Annotations[connectivityRevisionDesiredAnnotation] != action.PlanDigest {
-		return nil, fmt.Errorf("direct connectivity lifecycle artifact identity differs")
+		return nil, errors.New("direct connectivity lifecycle artifact identity differs")
 	}
 	nodeIDs := slices.Clone(action.AffectedNodeIDs)
 	slices.Sort(nodeIDs)
 	nodeIDs = slices.Compact(nodeIDs)
 	if len(nodeIDs) == 0 || nodeIDs[0] == "" {
-		return nil, fmt.Errorf("direct connectivity lifecycle action has no affected Node identity")
+		return nil, errors.New("direct connectivity lifecycle action has no affected Node identity")
 	}
 	rawNodeIDs, err := json.Marshal(nodeIDs)
 	if err != nil {
@@ -116,11 +118,11 @@ func directConnectivityLifecycleActionFrom(
 		configMap.Annotations[connectivityRevisionActionDigestAnnotation] != planDigest {
 		return directConnectivityLifecycleAction{}
 	}
-	mode := clabernetesdeviceplan.LinkApplyMode(
+	mode := clabernetesinternaldeviceplan.LinkApplyMode(
 		configMap.Annotations[connectivityRevisionActionModeAnnotation],
 	)
-	if mode != clabernetesdeviceplan.LinkApplyLive &&
-		mode != clabernetesdeviceplan.LinkApplyRestart {
+	if mode != clabernetesinternaldeviceplan.LinkApplyLive &&
+		mode != clabernetesinternaldeviceplan.LinkApplyRestart {
 		return directConnectivityLifecycleAction{}
 	}
 	var nodeIDs []string
@@ -144,7 +146,7 @@ func directConnectivityLifecycleActionFrom(
 // Render returns the mutable, Node-UID-owned ConfigMap for one canonical revision.
 func (r *ConnectivityRevisionConfigMapReconciler) Render(
 	node *clabernetesapisv1alpha1.Node,
-	revision clabernetesdirectruntime.ConnectivityRevision,
+	revision clabernetesinternaldirectruntime.ConnectivityRevision,
 ) (*k8scorev1.ConfigMap, error) {
 	if node == nil || node.GetName() == "" || node.GetNamespace() == "" || node.GetUID() == "" {
 		return nil, fmt.Errorf(
@@ -188,7 +190,7 @@ func (r *ConnectivityRevisionConfigMapReconciler) Render(
 func (r *ConnectivityRevisionConfigMapReconciler) Ensure(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
-	revision clabernetesdirectruntime.ConnectivityRevision,
+	revision clabernetesinternaldirectruntime.ConnectivityRevision,
 ) (*k8scorev1.ConfigMap, error) {
 	if r.Client == nil {
 		return nil, fmt.Errorf(
@@ -263,7 +265,8 @@ func (r *ConnectivityRevisionConfigMapReconciler) GarbageCollect(
 	referenced := map[string]bool{}
 	for podIndex := range pods.Items {
 		pod := &pods.Items[podIndex]
-		if pod.GetAnnotations()[clabernetesdirectpod.NodeUIDAnnotation] != string(node.GetUID()) {
+		if pod.GetAnnotations()[clabernetesinternaldirectpod.NodeUIDAnnotation] !=
+			string(node.GetUID()) {
 			continue
 		}
 		for volumeIndex := range pod.Spec.Volumes {

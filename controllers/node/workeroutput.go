@@ -1,4 +1,4 @@
-//nolint:nlreturn,noinlineerr,wsl_v5 // Worker output persistence uses compact fail-closed guards.
+//nolint:gocyclo,noinlineerr,wsl_v5 // Worker output persistence uses compact fail-closed guards.
 package node
 
 import (
@@ -10,7 +10,7 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	k8scorev1 "k8s.io/api/core/v1"
 	k8snetworkingv1 "k8s.io/api/networking/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -56,7 +56,8 @@ func (s workerOutputStore) Lookup(
 		return nil, false, fmt.Errorf("reading direct-runtime worker output ConfigMap: %w", err)
 	}
 	if existing.Immutable == nil || !*existing.Immutable ||
-		existing.GetLabels()[clabernetesconstants.LabelComponent] != workerOutputComponentLabelValue ||
+		existing.GetLabels()[clabernetesconstants.LabelComponent] !=
+			workerOutputComponentLabelValue ||
 		existing.GetLabels()[planOwnerUIDLabel] != string(node.GetUID()) ||
 		!metav1.IsControlledBy(existing, node) ||
 		len(existing.Data) != 1 || len(existing.BinaryData) != 0 {
@@ -92,7 +93,7 @@ func (s workerOutputStore) Persist(
 	if len(frame) == 0 {
 		return fmt.Errorf("%w: empty worker record", ErrWorkerOutputConflict)
 	}
-	payload, ok := clabernetesdeviceplan.DecodeWorkerFramePayload(frame)
+	payload, ok := clabernetesinternaldeviceplan.DecodeWorkerFramePayload(frame)
 	if !ok {
 		return fmt.Errorf("%w: record is not a framed worker output", ErrWorkerOutputConflict)
 	}
@@ -219,7 +220,10 @@ func (r *Reconciler) garbageCollectWorkerArtifacts(
 			return fmt.Errorf("deleting superseded worker NetworkPolicy: %w", err)
 		}
 	}
-	for _, component := range []string{plannerInputComponentLabelValue, workerOutputComponentLabelValue} {
+	for _, component := range []string{
+		plannerInputComponentLabelValue,
+		workerOutputComponentLabelValue,
+	} {
 		configMaps := &k8scorev1.ConfigMapList{}
 		if err := r.Client.List(
 			ctx,

@@ -1,4 +1,4 @@
-//nolint:nlreturn,wsl_v5 // Preparation guards fail closed at the artifact boundary.
+//nolint:funlen,gocognit,gocyclo,maintidx,mnd,nlreturn,wsl_v5 // Preparation guards fail closed at the artifact boundary.
 package deviceplan
 
 import (
@@ -73,7 +73,8 @@ func (p Preparer) Prepare(
 	if !filepath.IsAbs(artifactRoot) || artifactRoot == string(filepath.Separator) {
 		return &Error{
 			Code: ErrorInvalidInput, Field: "preparation.artifactRoot",
-			Behavior: "artifact-generation", Message: "artifact root must be a scoped absolute path",
+			Behavior: "artifact-generation",
+			Message:  "artifact root must be a scoped absolute path",
 		}
 	}
 	if err = os.MkdirAll(artifactRoot, 0o700); err != nil {
@@ -94,7 +95,7 @@ func (p Preparer) Prepare(
 			err,
 		)
 	}
-	defer os.RemoveAll(scratchRoot)
+	defer func() { _ = os.RemoveAll(scratchRoot) }()
 	registry := p.Adapter.Registry
 	if registry == nil {
 		registry = NewContainerlabRegistry()
@@ -409,7 +410,8 @@ func (p Preparer) stagePayloads(
 			file.Mode != payload.Mode || file.Digest != payload.Digest {
 			return &Error{
 				Code: ErrorInvariant, NodeID: payload.NodeID, Field: "preparation.payloads",
-				Behavior: "payload-staging", Message: "payload input differs from the accepted file plan",
+				Behavior: "payload-staging",
+				Message:  "payload input differs from the accepted file plan",
 			}
 		}
 		contentIdentity := strings.Join([]string{
@@ -427,7 +429,8 @@ func (p Preparer) stagePayloads(
 		if Digest(content) != payload.Digest {
 			return &Error{
 				Code: ErrorInvariant, NodeID: payload.NodeID, Field: "preparation.payloads",
-				Behavior: "payload-staging", Message: "payload bytes do not match the accepted digest",
+				Behavior: "payload-staging",
+				Message:  "payload bytes do not match the accepted digest",
 			}
 		}
 		if stageErr := stageArtifactContent(
@@ -463,9 +466,9 @@ func (p Preparer) readPayload(
 	switch payload.Kind {
 	case PayloadConfigMap, PayloadSecret:
 		source := filepath.Join(payloadRoot, ArtifactNodeDirectory(payload.ID), "source")
-		content, err := os.ReadFile(
+		content, err := os.ReadFile( //nolint:gosec // reads are confined to plan-scoped roots.
 			source,
-		) //nolint:gosec // The renderer supplies this scoped mount.
+		)
 		if err != nil {
 			return nil, planningError(
 				ErrorSideEffect,
@@ -531,9 +534,9 @@ func stagePreparedArtifact(
 			"artifact-generation",
 		)
 	}
-	content, err := os.ReadFile(
+	content, err := os.ReadFile( //nolint:gosec // reads are confined to plan-scoped roots.
 		source,
-	) //nolint:gosec // Source was inventoried below private scratch.
+	)
 	if err != nil {
 		return planningError(
 			ErrorSideEffect,
@@ -592,7 +595,7 @@ func stageArtifactContent(
 		)
 	}
 	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	_, err = temporary.Write(content)
 	if err == nil {
 		err = applyGeneratedArtifactMetadata(
@@ -718,7 +721,7 @@ func stageArtifactSymlink(
 			err,
 		)
 	}
-	defer os.Remove(temporaryName)
+	defer func() { _ = os.Remove(temporaryName) }()
 	if err = os.Rename(temporaryName, destination); err != nil {
 		return planningError(
 			ErrorSideEffect,
@@ -877,7 +880,7 @@ func ensureNoSymlinkParents(root, directory string) error {
 		)
 	}
 	current := root
-	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+	for part := range strings.SplitSeq(relative, string(filepath.Separator)) {
 		if part == "" || part == "." {
 			continue
 		}

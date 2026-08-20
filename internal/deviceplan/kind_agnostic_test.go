@@ -1,3 +1,4 @@
+//nolint:gocognit,gocyclo // dense fixture-driven tests exercise one boundary end to end.
 package deviceplan_test
 
 import (
@@ -21,6 +22,7 @@ func TestDirectRuntimeSourceContainsNoContainerlabKindKnowledge(t *testing.T) {
 	legacyNestedFiles := map[string]bool{
 		filepath.Clean("../../controllers/node/deployment.go"): true,
 	}
+
 	for _, directory := range []string{
 		".",
 		"../compatibility",
@@ -35,6 +37,7 @@ func TestDirectRuntimeSourceContainsNoContainerlabKindKnowledge(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		for _, entry := range entries {
 			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") ||
 				strings.HasSuffix(entry.Name(), "_test.go") {
@@ -45,19 +48,23 @@ func TestDirectRuntimeSourceContainsNoContainerlabKindKnowledge(t *testing.T) {
 			if legacyNestedFiles[filename] {
 				continue
 			}
+
 			parsed, parseErr := parser.ParseFile(fset, filename, nil, 0)
 			if parseErr != nil {
 				t.Fatal(parseErr)
 			}
+
 			for _, imported := range parsed.Imports {
 				path, unquoteErr := strconv.Unquote(imported.Path.Value)
 				if unquoteErr != nil {
 					t.Fatal(unquoteErr)
 				}
+
 				if strings.HasPrefix(path, "github.com/srl-labs/containerlab/nodes/") {
 					t.Errorf("%s imports concrete node implementation %q", filename, path)
 				}
 			}
+
 			assertNoKindDispatch(t, fset, parsed)
 		}
 	}
@@ -67,11 +74,13 @@ func assertNoKindDispatch(t *testing.T, fset *token.FileSet, parsed *ast.File) {
 	t.Helper()
 
 	kindConstants := map[string]bool{}
+
 	ast.Inspect(parsed, func(node ast.Node) bool {
 		spec, ok := node.(*ast.ValueSpec)
 		if !ok {
 			return true
 		}
+
 		for index, name := range spec.Names {
 			if kindKnowledgeName(name.Name) && index < len(spec.Values) &&
 				nonEmptyStringLiteral(spec.Values[index]) {
@@ -88,6 +97,7 @@ func assertNoKindDispatch(t *testing.T, fset *token.FileSet, parsed *ast.File) {
 			if value.Op != token.EQL && value.Op != token.NEQ {
 				return true
 			}
+
 			if (expressionCarriesKindIdentity(value.X) && kindIdentityValue(value.Y, kindConstants)) ||
 				(expressionCarriesKindIdentity(value.Y) && kindIdentityValue(value.X, kindConstants)) {
 				reportKindDispatch(t, fset, value.Pos())
@@ -96,11 +106,13 @@ func assertNoKindDispatch(t *testing.T, fset *token.FileSet, parsed *ast.File) {
 			if !expressionCarriesKindIdentity(value.Tag) {
 				return true
 			}
+
 			for _, statement := range value.Body.List {
 				clause, ok := statement.(*ast.CaseClause)
 				if !ok {
 					continue
 				}
+
 				for _, expression := range clause.List {
 					if kindIdentityValue(expression, kindConstants) {
 						reportKindDispatch(t, fset, expression.Pos())
@@ -132,7 +144,9 @@ func expressionCarriesKindIdentity(expression ast.Expr) bool {
 	if expression == nil {
 		return false
 	}
+
 	result := false
+
 	ast.Inspect(expression, func(node ast.Node) bool {
 		switch value := node.(type) {
 		case *ast.Ident:
@@ -155,6 +169,7 @@ func kindIdentityValue(expression ast.Expr, kindConstants map[string]bool) bool 
 	if nonEmptyStringLiteral(expression) {
 		return true
 	}
+
 	identifier, ok := expression.(*ast.Ident)
 
 	return ok && kindConstants[identifier.Name]
@@ -175,11 +190,13 @@ func kindKnowledgeName(name string) bool {
 
 func nodeIdentityReceiver(expression ast.Expr) bool {
 	result := false
+
 	ast.Inspect(expression, func(node ast.Node) bool {
 		identifier, ok := node.(*ast.Ident)
 		if !ok {
 			return true
 		}
+
 		name := strings.ToLower(identifier.Name)
 		result = result || strings.Contains(name, "node") || name == "input" ||
 			strings.Contains(name, "definition") || strings.Contains(name, "config")
@@ -195,6 +212,7 @@ func nonEmptyStringLiteral(expression ast.Expr) bool {
 	if !ok || literal.Kind != token.STRING {
 		return false
 	}
+
 	value, err := strconv.Unquote(literal.Value)
 
 	return err == nil && value != ""
@@ -202,6 +220,7 @@ func nonEmptyStringLiteral(expression ast.Expr) bool {
 
 func containsNonEmptyStringLiteral(node ast.Node) bool {
 	result := false
+
 	ast.Inspect(node, func(current ast.Node) bool {
 		expression, ok := current.(ast.Expr)
 		if ok && nonEmptyStringLiteral(expression) {
@@ -216,6 +235,7 @@ func containsNonEmptyStringLiteral(node ast.Node) bool {
 
 func reportKindDispatch(t *testing.T, fset *token.FileSet, position token.Pos) {
 	t.Helper()
+
 	location := fset.Position(position)
 	t.Errorf(
 		"%s:%d dispatches on containerlab kind, type, vendor, or alias identity",

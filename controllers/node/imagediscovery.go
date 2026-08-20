@@ -1,4 +1,4 @@
-//nolint:nlreturn,noinlineerr,wsl_v5 // Worker reconciliation uses compact fail-closed guards.
+//nolint:err113,gocyclo,noinlineerr,wsl_v5 // Worker reconciliation uses compact fail-closed guards.
 package node
 
 import (
@@ -8,7 +8,7 @@ import (
 	"reflect"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	k8scorev1 "k8s.io/api/core/v1"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -16,7 +16,7 @@ import (
 // ImageDiscoveryAttempt contains explicit input and execution policy for imported image hooks.
 type ImageDiscoveryAttempt struct {
 	Node              *clabernetesapisv1alpha1.Node
-	Input             clabernetesdeviceplan.Input
+	Input             clabernetesinternaldeviceplan.Input
 	SensitiveValues   [][]byte
 	Image             string
 	PlannerRevision   string
@@ -33,7 +33,7 @@ type ImageDiscoveryResult struct {
 	PodName            string
 	InputConfigMapName string
 	InputDigest        string
-	Discovery          *clabernetesdeviceplan.ImageDiscovery
+	Discovery          *clabernetesinternaldeviceplan.ImageDiscovery
 }
 
 // ImageDiscoveryReconciler runs image hooks in the same locked-down worker boundary as planning.
@@ -48,10 +48,10 @@ func (r *ImageDiscoveryReconciler) Reconcile(
 	attempt ImageDiscoveryAttempt,
 ) (*ImageDiscoveryResult, error) {
 	if r.Client == nil {
-		return nil, fmt.Errorf("image discovery reconciler client is required")
+		return nil, errors.New("image discovery reconciler client is required")
 	}
 	if (attempt.Input.EntropyDigest != "") != (attempt.EntropySecretName != "") {
-		return nil, fmt.Errorf(
+		return nil, errors.New(
 			"image discovery entropy digest and Secret identity must be supplied together",
 		)
 	}
@@ -108,15 +108,19 @@ func (r *ImageDiscoveryReconciler) Reconcile(
 	if pending {
 		return result, nil
 	}
-	if clabernetesdeviceplan.FrameKind(frame) == clabernetesdeviceplan.WorkerFrameError {
-		diagnostic, decodeErr := clabernetesdeviceplan.DecodeWorkerError(frame, maxOutputBytes)
+	if clabernetesinternaldeviceplan.FrameKind(
+		frame,
+	) == clabernetesinternaldeviceplan.WorkerFrameError {
+		diagnostic, decodeErr := clabernetesinternaldeviceplan.DecodeWorkerError(frame,
+			maxOutputBytes)
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
 
 		return nil, errors.Join(ErrPlannerFailed, diagnostic)
 	}
-	discovery, decodeErr := clabernetesdeviceplan.DecodeImageWorkerOutput(frame, maxOutputBytes)
+	discovery, decodeErr := clabernetesinternaldeviceplan.DecodeImageWorkerOutput(frame,
+		maxOutputBytes)
 	if decodeErr != nil {
 		return nil, decodeErr
 	}
@@ -136,8 +140,8 @@ func (r *ImageDiscoveryReconciler) Reconcile(
 }
 
 func discoveryReferencesInputNodes(
-	discovery clabernetesdeviceplan.ImageDiscovery,
-	input clabernetesdeviceplan.Input,
+	discovery clabernetesinternaldeviceplan.ImageDiscovery,
+	input clabernetesinternaldeviceplan.Input,
 ) bool {
 	nodes := make(map[string]bool, len(input.Nodes))
 	for _, node := range input.Nodes {

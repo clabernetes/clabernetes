@@ -1,4 +1,4 @@
-//nolint:nlreturn,wsl_v5 // Registry resolution fails closed at each external identity boundary.
+//nolint:gocyclo,wsl_v5 // Registry resolution fails closed at each external identity boundary.
 package node
 
 import (
@@ -10,8 +10,8 @@ import (
 	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternalocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,19 +22,19 @@ const imageMetadataResolveTimeout = 60 * time.Second
 
 func compileRegistryMetadataTrust(
 	entries []clabernetesapisv1alpha1.RegistryMetadataTrustEntry,
-) (*clabernetesocimetadata.RegistryTrustPolicy, error) {
-	trust := make([]clabernetesocimetadata.RegistryTrust, 0, len(entries))
+) (*clabernetesinternalocimetadata.RegistryTrustPolicy, error) {
+	trust := make([]clabernetesinternalocimetadata.RegistryTrust, 0, len(entries))
 	for _, entry := range entries {
-		trust = append(trust, clabernetesocimetadata.RegistryTrust{
+		trust = append(trust, clabernetesinternalocimetadata.RegistryTrust{
 			Registry:  entry.Registry,
 			CABundle:  []byte(entry.CABundle),
 			PlainHTTP: entry.PlainHTTP,
 		})
 	}
-	policy, err := clabernetesocimetadata.NewRegistryTrustPolicy(trust)
+	policy, err := clabernetesinternalocimetadata.NewRegistryTrustPolicy(trust)
 	if err != nil {
 		return nil, planInputError(
-			clabernetesdeviceplan.ErrorInvalidInput,
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
 			"config.imagePull.registryMetadataTrust",
 			err.Error(),
 		)
@@ -46,15 +46,15 @@ func compileRegistryMetadataTrust(
 // OCIMetadataResolver is satisfied by the bounded metadata cache and by focused test fakes.
 type OCIMetadataResolver interface {
 	Resolve(
-		context.Context,
-		clabernetesocimetadata.Request,
-	) (*clabernetesocimetadata.Metadata, error)
+		ctx context.Context,
+		request clabernetesinternalocimetadata.Request,
+	) (*clabernetesinternalocimetadata.Metadata, error)
 }
 
 // ImageMetadataResolution contains non-secret planner metadata plus sensitive values used only to
 // prove those bytes never appear in an immutable planner-input ConfigMap.
 type ImageMetadataResolution struct {
-	Images          []clabernetesdeviceplan.ImageInput
+	Images          []clabernetesinternaldeviceplan.ImageInput
 	SensitiveValues [][]byte
 	PullSecrets     []k8scorev1.LocalObjectReference
 }
@@ -64,8 +64,8 @@ type ImageMetadataResolution struct {
 type ImageMetadataResolver struct {
 	Client     ctrlruntimeclient.Reader
 	Resolver   OCIMetadataResolver
-	Platform   clabernetesocimetadata.Platform
-	TrustFor   func(reference string) *clabernetesocimetadata.RegistryTrust
+	Platform   clabernetesinternalocimetadata.Platform
+	TrustFor   func(reference string) *clabernetesinternalocimetadata.RegistryTrust
 	MaxSecrets int
 }
 
@@ -73,18 +73,18 @@ type ImageMetadataResolver struct {
 func (r ImageMetadataResolver) Resolve(
 	ctx context.Context,
 	namespace string,
-	discovery clabernetesdeviceplan.ImageDiscovery,
+	discovery clabernetesinternaldeviceplan.ImageDiscovery,
 	pullSecretNames []string,
 ) (*ImageMetadataResolution, error) {
 	if ctx == nil || r.Client == nil || r.Resolver == nil || namespace == "" ||
 		r.Platform.OS == "" || r.Platform.Architecture == "" {
 		return nil, planInputError(
-			clabernetesdeviceplan.ErrorInvalidInput,
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
 			"images",
 			"metadata resolver identity, client, namespace, and platform are required",
 		)
 	}
-	normalized, err := clabernetesdeviceplan.NormalizeImageDiscovery(discovery)
+	normalized, err := clabernetesinternaldeviceplan.NormalizeImageDiscovery(discovery)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (r ImageMetadataResolver) Resolve(
 	}
 	if maxSecrets < 0 || len(pullSecretNames) > maxSecrets {
 		return nil, planInputError(
-			clabernetesdeviceplan.ErrorInvalidInput,
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
 			"imagePullSecrets",
 			"image pull Secret count exceeds the configured bound",
 		)
@@ -105,7 +105,7 @@ func (r ImageMetadataResolver) Resolve(
 	for _, name := range pullSecretNames {
 		if strings.TrimSpace(name) == "" || seenSecrets[name] {
 			return nil, planInputError(
-				clabernetesdeviceplan.ErrorInvalidInput,
+				clabernetesinternaldeviceplan.ErrorInvalidInput,
 				"imagePullSecrets",
 				"image pull Secret names must be non-empty and unique",
 			)
@@ -129,24 +129,25 @@ func (r ImageMetadataResolver) Resolve(
 	}
 
 	for _, requirement := range normalized.Images {
-		authentication, authErr := clabernetesocimetadata.AuthenticationFromPullSecrets(
+		authentication, authErr := clabernetesinternalocimetadata.AuthenticationFromPullSecrets(
 			requirement.SourceReference,
 			secrets,
 		)
 		if authErr != nil {
 			return nil, authErr
 		}
-		var trust *clabernetesocimetadata.RegistryTrust
+		var trust *clabernetesinternalocimetadata.RegistryTrust
 		if r.TrustFor != nil {
 			trust = r.TrustFor(requirement.SourceReference)
 		}
 		// The reconcile context carries no deadline, so bound each registry exchange here;
 		// a hung registry must fail this Node instead of stalling the shared worker.
 		resolveCtx, cancelResolve := context.WithTimeout(ctx, imageMetadataResolveTimeout)
-		metadata, resolveErr := r.Resolver.Resolve(resolveCtx, clabernetesocimetadata.Request{
-			Reference: requirement.SourceReference, Platform: r.Platform,
-			Authentication: authentication, Trust: trust,
-		})
+		metadata, resolveErr := r.Resolver.Resolve(resolveCtx,
+			clabernetesinternalocimetadata.Request{
+				Reference: requirement.SourceReference, Platform: r.Platform,
+				Authentication: authentication, Trust: trust,
+			})
 		cancelResolve()
 		if resolveErr != nil {
 			return nil, resolveErr
@@ -162,20 +163,20 @@ func (r ImageMetadataResolver) Resolve(
 }
 
 func imageInputFromMetadata(
-	requirement clabernetesdeviceplan.ImageRequirement,
-	metadata *clabernetesocimetadata.Metadata,
-) (clabernetesdeviceplan.ImageInput, error) {
+	requirement clabernetesinternaldeviceplan.ImageRequirement,
+	metadata *clabernetesinternalocimetadata.Metadata,
+) (clabernetesinternaldeviceplan.ImageInput, error) {
 	if metadata == nil || metadata.SourceReference == "" || metadata.DigestReference == "" {
-		return clabernetesdeviceplan.ImageInput{}, planInputError(
-			clabernetesdeviceplan.ErrorInvariant,
+		return clabernetesinternaldeviceplan.ImageInput{}, planInputError(
+			clabernetesinternaldeviceplan.ErrorInvariant,
 			"images."+requirement.Role,
 			"resolved OCI metadata identity differs from the imported image requirement",
 		)
 	}
 	if metadata.Config.NetworkDisabled || metadata.Config.MacAddress != "" ||
 		metadata.Config.Hostname != "" || metadata.Config.Domainname != "" {
-		return clabernetesdeviceplan.ImageInput{}, planInputError(
-			clabernetesdeviceplan.ErrorUnsupported,
+		return clabernetesinternaldeviceplan.ImageInput{}, planInputError(
+			clabernetesinternaldeviceplan.ErrorUnsupported,
 			"images."+requirement.Role+".config",
 			"OCI image requests container-local network identity with no shared-Pod mapping",
 		)
@@ -184,15 +185,15 @@ func imageInputFromMetadata(
 	for _, raw := range metadata.Config.Env {
 		name, value, _ := strings.Cut(raw, "=")
 		if name == "" {
-			return clabernetesdeviceplan.ImageInput{}, planInputError(
-				clabernetesdeviceplan.ErrorInvalidInput,
+			return clabernetesinternaldeviceplan.ImageInput{}, planInputError(
+				clabernetesinternaldeviceplan.ErrorInvalidInput,
 				"images."+requirement.Role+".config.env",
 				"OCI environment contains an empty name",
 			)
 		}
 		environment[name] = value
 	}
-	ports := make([]clabernetesdeviceplan.Port, 0, len(metadata.Config.ExposedPorts))
+	ports := make([]clabernetesinternaldeviceplan.Port, 0, len(metadata.Config.ExposedPorts))
 	for _, raw := range metadata.Config.ExposedPorts {
 		numberValue, protocol, hasProtocol := strings.Cut(raw, "/")
 		if !hasProtocol {
@@ -202,15 +203,16 @@ func imageInputFromMetadata(
 		protocol = strings.ToUpper(protocol)
 		if parseErr != nil || number < 1 || number > 65535 ||
 			(protocol != "TCP" && protocol != "UDP") {
-			return clabernetesdeviceplan.ImageInput{}, planInputError(
-				clabernetesdeviceplan.ErrorUnsupported,
+			return clabernetesinternaldeviceplan.ImageInput{}, planInputError(
+				clabernetesinternaldeviceplan.ErrorUnsupported,
 				"images."+requirement.Role+".config.exposedPorts",
 				"OCI exposed port has no portable direct-runtime representation",
 			)
 		}
-		ports = append(ports, clabernetesdeviceplan.Port{Number: number, Protocol: protocol})
+		ports = append(ports,
+			clabernetesinternaldeviceplan.Port{Number: number, Protocol: protocol})
 	}
-	config := clabernetesdeviceplan.ImageConfig{
+	config := clabernetesinternaldeviceplan.ImageConfig{
 		Entrypoint: slices.Clone(metadata.Config.Entrypoint),
 		Command:    slices.Clone(metadata.Config.Cmd),
 		User:       metadata.Config.User, WorkingDir: metadata.Config.WorkingDir,
@@ -218,17 +220,17 @@ func imageInputFromMetadata(
 		DeclaredDirs: slices.Clone(metadata.Config.Volumes),
 	}
 	for name, value := range environment {
-		config.Environment = append(config.Environment, clabernetesdeviceplan.KeyValue{
+		config.Environment = append(config.Environment, clabernetesinternaldeviceplan.KeyValue{
 			Name: name, Value: value,
 		})
 	}
 	for _, label := range metadata.Config.Labels {
-		config.Labels = append(config.Labels, clabernetesdeviceplan.KeyValue{
+		config.Labels = append(config.Labels, clabernetesinternaldeviceplan.KeyValue{
 			Name: label.Name, Value: label.Value,
 		})
 	}
 	if metadata.Config.Healthcheck != nil {
-		config.Healthcheck = &clabernetesdeviceplan.Healthcheck{
+		config.Healthcheck = &clabernetesinternaldeviceplan.Healthcheck{
 			Test:        slices.Clone(metadata.Config.Healthcheck.Test),
 			Interval:    int64(metadata.Config.Healthcheck.Interval),
 			Timeout:     int64(metadata.Config.Healthcheck.Timeout),
@@ -236,13 +238,14 @@ func imageInputFromMetadata(
 			Retries:     metadata.Config.Healthcheck.Retries,
 		}
 	}
-	slices.SortFunc(config.Environment, func(left, right clabernetesdeviceplan.KeyValue) int {
+	slices.SortFunc(config.Environment,
+		func(left, right clabernetesinternaldeviceplan.KeyValue) int {
+			return strings.Compare(left.Name, right.Name)
+		})
+	slices.SortFunc(config.Labels, func(left, right clabernetesinternaldeviceplan.KeyValue) int {
 		return strings.Compare(left.Name, right.Name)
 	})
-	slices.SortFunc(config.Labels, func(left, right clabernetesdeviceplan.KeyValue) int {
-		return strings.Compare(left.Name, right.Name)
-	})
-	slices.SortFunc(ports, func(left, right clabernetesdeviceplan.Port) int {
+	slices.SortFunc(ports, func(left, right clabernetesinternaldeviceplan.Port) int {
 		if left.Number != right.Number {
 			return left.Number - right.Number
 		}
@@ -250,10 +253,10 @@ func imageInputFromMetadata(
 		return strings.Compare(left.Protocol, right.Protocol)
 	})
 
-	return clabernetesdeviceplan.ImageInput{
+	return clabernetesinternaldeviceplan.ImageInput{
 		NodeID: requirement.NodeID, Role: requirement.Role,
 		SourceReference: metadata.SourceReference, DigestReference: metadata.DigestReference,
-		Platform: clabernetesdeviceplan.Platform{
+		Platform: clabernetesinternaldeviceplan.Platform{
 			OS: metadata.Platform.OS, Architecture: metadata.Platform.Architecture,
 			Variant: metadata.Platform.Variant, OSVersion: metadata.Platform.OSVersion,
 			OSFeatures: slices.Clone(metadata.Platform.OSFeatures),

@@ -1,4 +1,4 @@
-//nolint:noinlineerr,wsl_v5 // Keep command dispatch compact.
+//nolint:funlen,gocognit,gocyclo,noinlineerr,wsl_v5 // Keep command dispatch compact.
 package main
 
 import (
@@ -81,7 +81,8 @@ func main() {
 			fatal(err)
 		}
 		baseline.Invalidation = current
-		if err = clabernetesinternalcompatibility.SaveBaseline(*baselinePath, baseline); err != nil {
+		if err = clabernetesinternalcompatibility.SaveBaseline(*baselinePath,
+			baseline); err != nil {
 			fatal(err)
 		}
 		if _, err = fmt.Fprintln(

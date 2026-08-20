@@ -647,7 +647,6 @@ func (r *testRegistry) plainHTTPTrust() *RegistryTrust {
 	}
 }
 
-//nolint:gocritic // Platform is copied so the fixture cannot retain caller-owned slices.
 func newTestImage(t *testing.T, platform Platform, marker string) (v1.Image, v1.Hash) {
 	t.Helper()
 
@@ -753,7 +752,6 @@ func assertErrorCode(t *testing.T, err error, want ErrorCode) {
 	}
 }
 
-//nolint:gocritic // Value comparison is intentional and keeps this assertion helper simple.
 func platformEqual(left, right Platform) bool {
 	return left.OS == right.OS &&
 		left.Architecture == right.Architecture &&

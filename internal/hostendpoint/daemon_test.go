@@ -1,4 +1,4 @@
-//nolint:gocritic,noinlineerr,testpackage,wsl_v5 // RPC tests use compact fail-fast assertions.
+//nolint:noinlineerr,testpackage,wsl_v5 // RPC tests use compact fail-fast assertions.
 package hostendpoint
 
 import (

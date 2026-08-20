@@ -43,11 +43,11 @@ type NodeDefinition struct {
 	// EnforceStartupConfig makes the node boot from StartupConfig even when it already has a
 	// saved (persisted) configuration.
 	// +optional
-	EnforceStartupConfig *bool `json:"enforce-startup-config,omitempty" yaml:"enforce-startup-config,omitempty"` //nolint:lll
+	EnforceStartupConfig *bool `json:"enforce-startup-config,omitempty" yaml:"enforce-startup-config,omitempty"`
 	// SuppressStartupConfig boots the node with its factory configuration -- containerlab
 	// generates and mounts no startup config at all.
 	// +optional
-	SuppressStartupConfig *bool `json:"suppress-startup-config,omitempty" yaml:"suppress-startup-config,omitempty"` //nolint:lll
+	SuppressStartupConfig *bool `json:"suppress-startup-config,omitempty" yaml:"suppress-startup-config,omitempty"`
 	// Config holds containerlab config engine settings for the node.
 	// +optional
 	Config *ConfigDispatcher `json:"config,omitempty" yaml:"config,omitempty"`
@@ -221,7 +221,7 @@ type Extras struct {
 	// CeosCopyToFlash is a list of paths to files which are to be copied to the ceos flash dir.
 	// +listType=atomic
 	// +optional
-	CeosCopyToFlash []string `json:"ceos-copy-to-flash,omitempty" yaml:"ceos-copy-to-flash,omitempty"` //nolint:lll
+	CeosCopyToFlash []string `json:"ceos-copy-to-flash,omitempty" yaml:"ceos-copy-to-flash,omitempty"`
 }
 
 // DNSConfig represents DNS configuration options a node has.
@@ -253,7 +253,7 @@ type CertificateConfig struct {
 	// i.e. 8760h for a year.
 	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
 	// +optional
-	ValidityDuration string `json:"validity-duration,omitempty" yaml:"validity-duration,omitempty"` //nolint:lll
+	ValidityDuration string `json:"validity-duration,omitempty" yaml:"validity-duration,omitempty"`
 	// SANs is the list of subject alternative names to add to the node's certificate.
 	// +listType=atomic
 	// +optional

@@ -113,6 +113,7 @@ func TestDirectPacketCaptureOperation(t *testing.T) {
 	nodeID, interfaceName := planInterfaceTarget(t, namespace, device, "lin1")
 
 	trafficDone := make(chan struct{})
+
 	go func() {
 		defer close(trafficDone)
 
@@ -203,7 +204,7 @@ func lifecyclePhaseCommand(
 		device.podName,
 		"-o",
 		fmt.Sprintf(
-			`jsonpath={.spec.containers[?(@.name=="%s")].lifecycle.postStart.exec.command}`,
+			`jsonpath={.spec.containers[?(@.name==%q)].lifecycle.postStart.exec.command}`,
 			device.containerName,
 		),
 	)
@@ -243,6 +244,7 @@ func planInterfaceTarget(
 	t.Helper()
 
 	inputPath := ""
+
 	postStart := lifecyclePhaseCommand(t, namespace, device, "PostStart")
 	for index, argument := range postStart {
 		if argument == "--input" && index+1 < len(postStart) {
@@ -289,6 +291,7 @@ func planInterfaceTarget(
 	}
 
 	nodeID := ""
+
 	for _, node := range input.Nodes {
 		if node.Name == nodeName {
 			nodeID = node.ID
@@ -333,7 +336,7 @@ func connectivityContainerName(
 			`{range .spec.containers[*]}{.name}{"\n"}{end}`,
 	)
 
-	for _, name := range strings.Split(string(clabernetestesthelper.Execute(t, cmd)), "\n") {
+	for name := range strings.SplitSeq(string(clabernetestesthelper.Execute(t, cmd)), "\n") {
 		if strings.Contains(name, "connectivity") {
 			return name
 		}

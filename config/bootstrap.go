@@ -25,7 +25,7 @@ type bootstrapConfig struct {
 	naming                string
 }
 
-func bootstrapFromConfigMap( //nolint:gocyclo,funlen,gocognit
+func bootstrapFromConfigMap( //nolint:gocyclo,funlen
 	inMap map[string]string,
 ) (*bootstrapConfig, error) {
 	bc := &bootstrapConfig{
@@ -211,10 +211,12 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 	for _, entry := range config.Spec.ImagePull.RegistryMetadataTrust {
 		existingRegistryTrust[entry.Registry] = true
 	}
+
 	for _, entry := range bootstrap.registryMetadataTrust {
 		if existingRegistryTrust[entry.Registry] {
 			continue
 		}
+
 		config.Spec.ImagePull.RegistryMetadataTrust = append(
 			config.Spec.ImagePull.RegistryMetadataTrust,
 			entry,

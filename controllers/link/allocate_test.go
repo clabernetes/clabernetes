@@ -330,12 +330,14 @@ func TestResolveDesiredTunnelIDIsClusterWide(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got != 2 {
 		t.Fatalf("cross-namespace tunnel allocation = %d, want 2", got)
 	}
 
 	// Retention still works when this Link already holds a cluster-unique ID.
 	local.Status.TunnelID = 5
+
 	got, err = clabernetescontrollerslink.ResolveDesiredTunnelID(
 		&local,
 		[]clabernetesapisv1alpha1.Link{foreign},

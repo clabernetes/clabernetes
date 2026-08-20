@@ -1,3 +1,4 @@
+//nolint:testpackage // dense fixture-driven tests exercise one boundary end to end.
 package directruntime
 
 import (
@@ -7,10 +8,10 @@ import (
 	"sync"
 	"testing"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8stypes "k8s.io/apimachinery/pkg/types"
+	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 )
 
 type fakeApplicationLogStreamer struct {
@@ -40,6 +41,7 @@ func TestApplicationLogBrokerStreamsOnlyAcceptedRuntimeTarget(t *testing.T) {
 	t.Parallel()
 
 	streamer := &fakeApplicationLogStreamer{}
+
 	broker, err := StartApplicationLogBroker(
 		context.Background(),
 		t.TempDir()+"/runtime.sock",
@@ -49,6 +51,7 @@ func TestApplicationLogBrokerStreamsOnlyAcceptedRuntimeTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = broker.Close() })
 
 	stream, err := openApplicationLogStream(
@@ -59,16 +62,20 @@ func TestApplicationLogBrokerStreamsOnlyAcceptedRuntimeTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	raw, err := io.ReadAll(stream)
 	if closeErr := stream.Close(); err == nil {
 		err = closeErr
 	}
+
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if string(raw) != "package boot log\n" {
 		t.Fatalf("streamed logs = %q", raw)
 	}
+
 	if got := streamer.Targets(); len(got) != 1 || got[0] != "device-a" {
 		t.Fatalf("Kubernetes log targets = %#v", got)
 	}
@@ -78,6 +85,7 @@ func TestApplicationLogBrokerRejectsUnplannedRuntimeTarget(t *testing.T) {
 	t.Parallel()
 
 	streamer := &fakeApplicationLogStreamer{}
+
 	broker, err := StartApplicationLogBroker(
 		context.Background(),
 		t.TempDir()+"/runtime.sock",
@@ -87,6 +95,7 @@ func TestApplicationLogBrokerRejectsUnplannedRuntimeTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = broker.Close() })
 
 	stream, err := openApplicationLogStream(
@@ -97,9 +106,11 @@ func TestApplicationLogBrokerRejectsUnplannedRuntimeTarget(t *testing.T) {
 	if stream != nil {
 		_ = stream.Close()
 	}
+
 	if err == nil || !strings.Contains(err.Error(), "not present in the accepted plan") {
 		t.Fatalf("unplanned target error = %v", err)
 	}
+
 	if got := streamer.Targets(); len(got) != 0 {
 		t.Fatalf("unplanned target reached Kubernetes log source: %#v", got)
 	}
@@ -109,7 +120,7 @@ func TestApplicationLogTargetsAreBoundToPodUIDAndNormalizedPlanOrder(t *testing.
 	t.Parallel()
 
 	plan := applicationLogTestPlan(t)
-	plan.Containers = append(plan.Containers, clabernetesdeviceplan.ContainerPlan{
+	plan.Containers = append(plan.Containers, clabernetesinternaldeviceplan.ContainerPlan{
 		ID: "container-b", NodeID: "node-a", RuntimeID: "runtime-b",
 		NamespaceOwnerID: "container-a", Image: "example/device:1",
 		ImageDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -121,64 +132,72 @@ func TestApplicationLogTargetsAreBoundToPodUIDAndNormalizedPlanOrder(t *testing.
 		"container-b",
 	)
 	pod := &k8scorev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{UID: k8stypes.UID("pod-uid")},
+		ObjectMeta: metav1.ObjectMeta{UID: apimachinerytypes.UID("pod-uid")},
 		Spec: k8scorev1.PodSpec{Containers: []k8scorev1.Container{
 			{Name: "device-a"},
 			{Name: "device-b"},
 		}},
 	}
+
 	targets, err := applicationLogTargets(plan, pod, "pod-uid")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if targets["runtime-a"] != "device-a" || targets["runtime-b"] != "device-b" {
 		t.Fatalf("application log targets = %#v", targets)
 	}
+
 	if _, err = applicationLogTargets(plan, pod, "replacement-uid"); err == nil ||
 		!strings.Contains(err.Error(), "Pod UID differs") {
 		t.Fatalf("stale Pod target error = %v", err)
 	}
 }
 
-func applicationLogTestPlan(t *testing.T) clabernetesdeviceplan.Plan {
+func applicationLogTestPlan(t *testing.T) clabernetesinternaldeviceplan.Plan {
 	t.Helper()
-	compatibility := clabernetesdeviceplan.Compatibility{
-		ContainerlabModule:  clabernetesdeviceplan.ContainerlabModulePath,
-		ContainerlabVersion: "v-test", PlanSchemaVersion: clabernetesdeviceplan.SchemaVersion,
+
+	compatibility := clabernetesinternaldeviceplan.Compatibility{
+		ContainerlabModule:  clabernetesinternaldeviceplan.ContainerlabModulePath,
+		ContainerlabVersion: "v-test", PlanSchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		RegistryDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
-	input := clabernetesdeviceplan.Input{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion,
+	input := clabernetesinternaldeviceplan.Input{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		TopologyName:  "lab",
 		Compatibility: compatibility,
-		Nodes: []clabernetesdeviceplan.NodeInput{{
+		Nodes: []clabernetesinternaldeviceplan.NodeInput{{
 			ID: "node-a", Name: "router", Kind: "package-kind",
 			Definition: []byte(`{"kind":"package-kind","image":"example/device:1"}`),
 		}},
-		Images: []clabernetesdeviceplan.ImageInput{{
+		Images: []clabernetesinternaldeviceplan.ImageInput{{
 			NodeID: "node-a", Role: "device", SourceReference: "example/device:1",
 			DigestReference: "example/device@sha256:aaaaaaaa",
-			Platform:        clabernetesdeviceplan.Platform{OS: "linux", Architecture: "amd64"},
+			Platform: clabernetesinternaldeviceplan.Platform{
+				OS:           "linux",
+				Architecture: "amd64",
+			},
 		}},
 	}
+
 	digest, err := input.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return clabernetesdeviceplan.Plan{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion,
+	return clabernetesinternaldeviceplan.Plan{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		Compatibility: compatibility,
 		InputDigest:   digest,
-		Planner: clabernetesdeviceplan.PlannerIdentity{
+		Planner: clabernetesinternaldeviceplan.PlannerIdentity{
 			Name: "clabernetes", Revision: "test",
 		},
-		Nodes: []clabernetesdeviceplan.NodePlan{{
+		Nodes: []clabernetesinternaldeviceplan.NodePlan{{
 			ID: "node-a", Name: "router", Kind: "package-kind",
 			ContainerIDs:          []string{"container-a"},
 			ReadinessContainerIDs: []string{"container-a"},
 		}},
-		Containers: []clabernetesdeviceplan.ContainerPlan{{
+		Containers: []clabernetesinternaldeviceplan.ContainerPlan{{
 			ID: "container-a", NodeID: "node-a", RuntimeID: "runtime-a",
 			NamespaceOwnerID: "container-a", Image: "example/device:1",
 			ImageDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

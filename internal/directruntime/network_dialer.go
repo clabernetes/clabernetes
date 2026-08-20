@@ -51,7 +51,9 @@ func dialInNetworkNamespace(
 	if networkNamespace == nil {
 		return dialer.DialContext(ctx, network, address)
 	}
+
 	var connection net.Conn
+
 	err := networkNamespace.Execute(func() error {
 		var dialErr error
 

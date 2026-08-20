@@ -5,13 +5,6 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 )
 
-const (
-	// exposePortAllocationStart is the first port used when auto allocating expose ports.
-	exposePortAllocationStart = 60_000
-	// exposePortAllocationEnd is the (exclusive) ceiling for auto allocated expose ports.
-	exposePortAllocationEnd = 65_000
-)
-
 // defaultExposePorts returns the destination ports (and protocols) that get exposed
 // automagically when auto expose is not disabled.
 func defaultExposePorts() []clabernetesapisv1alpha1.NodeExposedPort {

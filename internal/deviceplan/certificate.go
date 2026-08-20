@@ -1,3 +1,4 @@
+//nolint:err113,funcorder,mnd // structured one-off diagnostics and protocol literals are the design here.
 package deviceplan
 
 import (
@@ -21,10 +22,11 @@ import (
 
 const (
 	// CertificateCACertKey and CertificateCAKeyKey are the stable Secret keys and mounted
-	// filenames used by the generic certificate boundary.
+	// CertificateCACertKey is the projected Secret key holding the CA certificate.
 	CertificateCACertKey = "ca.crt"
-	CertificateCAKeyKey  = "ca.key"
-	maxCertificateBytes  = 1 << 20
+	// CertificateCAKeyKey is the projected Secret key holding the CA private key.
+	CertificateCAKeyKey = "ca.key"
+	maxCertificateBytes = 1 << 20
 )
 
 // CertificateMaterialKeys returns deterministic Secret keys for one package storage identity.
@@ -40,8 +42,9 @@ func mountedCertificateInfrastructure(
 	root string,
 ) (*clabcert.Cert, error) {
 	if len(inputs) == 0 {
-		return nil, nil
+		return nil, nil //nolint:nilnil // no certificate inputs means no infrastructure to mount.
 	}
+
 	root = filepath.Clean(root)
 	if !filepath.IsAbs(root) || root == string(filepath.Separator) {
 		return nil, planningError(
@@ -51,14 +54,17 @@ func mountedCertificateInfrastructure(
 			nil,
 		)
 	}
+
 	caCertificate, err := readCertificateFile(filepath.Join(root, CertificateCACertKey))
 	if err != nil {
 		return nil, err
 	}
+
 	caPrivateKey, err := readCertificateFile(filepath.Join(root, CertificateCAKeyKey))
 	if err != nil {
 		return nil, err
 	}
+
 	storage := &mountedCertificateStorage{
 		ca:    &clabcert.Certificate{Cert: caCertificate, Key: caPrivateKey},
 		nodes: make(map[string]*clabcert.Certificate, len(inputs)),
@@ -72,15 +78,19 @@ func mountedCertificateInfrastructure(
 				Message:  "mounted certificate authority differs from accepted metadata",
 			}
 		}
+
 		certificateKey, privateKeyKey := CertificateMaterialKeys(input.NodeID, input.StorageName)
+
 		certificate, readErr := readCertificateFile(filepath.Join(root, certificateKey))
 		if readErr != nil {
 			return nil, withNodeID(readErr, input.NodeID)
 		}
+
 		privateKey, readErr := readCertificateFile(filepath.Join(root, privateKeyKey))
 		if readErr != nil {
 			return nil, withNodeID(readErr, input.NodeID)
 		}
+
 		if Digest(certificate) != input.CertificateDigest ||
 			Digest(privateKey) != input.PrivateKeyDigest {
 			return nil, &Error{
@@ -89,6 +99,7 @@ func mountedCertificateInfrastructure(
 				Message:  "mounted node certificate differs from accepted metadata",
 			}
 		}
+
 		if _, exists := storage.nodes[input.StorageName]; exists {
 			return nil, &Error{
 				Code: ErrorInvariant, NodeID: input.NodeID, Field: "certificates.storageName",
@@ -96,10 +107,12 @@ func mountedCertificateInfrastructure(
 				Message:  "package certificate storage name is ambiguous across the workload group",
 			}
 		}
+
 		storage.nodes[input.StorageName] = &clabcert.Certificate{
 			Cert: slices.Clone(certificate), Key: slices.Clone(privateKey),
 		}
 	}
+
 	ca := clabcert.NewCA()
 	if err = ca.SetCACert(storage.ca); err != nil {
 		return nil, planningError(
@@ -123,7 +136,9 @@ func readCertificateFile(path string) ([]byte, error) {
 			err,
 		)
 	}
-	defer file.Close()
+
+	defer func() { _ = file.Close() }()
+
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() < 1 ||
 		info.Size() > maxCertificateBytes {
@@ -134,6 +149,7 @@ func readCertificateFile(path string) ([]byte, error) {
 			err,
 		)
 	}
+
 	content, err := io.ReadAll(io.LimitReader(file, maxCertificateBytes+1))
 	if err != nil || len(content) < 1 || len(content) > maxCertificateBytes {
 		return nil, planningError(
@@ -182,6 +198,7 @@ type recordingCertificateStorage struct {
 
 func newRecordingCertificateInfrastructure() (*clabcert.Cert, *recordingCertificateStorage, error) {
 	ca := clabcert.NewCA()
+
 	caCertificate, err := ca.GenerateCACert(&clabcert.CACSRInput{
 		CommonName: "disposable package certificate discovery CA",
 		Country:    "US", Organization: "clabernetes", Expiry: 24 * time.Hour, KeySize: 2048,
@@ -194,6 +211,7 @@ func newRecordingCertificateInfrastructure() (*clabcert.Cert, *recordingCertific
 			err,
 		)
 	}
+
 	if err = ca.SetCACert(caCertificate); err != nil {
 		return nil, nil, planningError(
 			ErrorInvariant,
@@ -202,6 +220,7 @@ func newRecordingCertificateInfrastructure() (*clabcert.Cert, *recordingCertific
 			err,
 		)
 	}
+
 	storage := &recordingCertificateStorage{
 		ca: caCertificate, nodes: map[string]*clabcert.Certificate{},
 		requirements: map[string]CertificateRequirement{},
@@ -218,6 +237,7 @@ func activateCertificateStorage(infrastructure *clabcert.Cert, nodeID string) {
 	if infrastructure == nil {
 		return
 	}
+
 	if storage, ok := infrastructure.CertStorage.(*recordingCertificateStorage); ok {
 		storage.activate(nodeID)
 	}
@@ -240,6 +260,7 @@ func (s *recordingCertificateStorage) StoreCaCert(certificate *clabcert.Certific
 	if certificate == nil {
 		return errors.New("cannot store an empty certificate authority")
 	}
+
 	s.ca = cloneCertificate(certificate)
 
 	return nil
@@ -252,14 +273,17 @@ func (s *recordingCertificateStorage) StoreNodeCert(
 	if s.activeNodeID == "" || strings.TrimSpace(name) == "" || certificate == nil {
 		return errors.New("certificate request has no active Node or storage identity")
 	}
+
 	parsed, err := parsePublicCertificate(certificate.Cert)
 	if err != nil {
 		return err
 	}
+
 	publicKey, ok := parsed.PublicKey.(*rsa.PublicKey)
 	if !ok {
 		return errors.New("package-generated node certificate does not use an RSA public key")
 	}
+
 	requirement := CertificateRequirement{
 		NodeID: s.activeNodeID, StorageName: name,
 		CommonName: parsed.Subject.CommonName,
@@ -273,11 +297,13 @@ func (s *recordingCertificateStorage) StoreNodeCert(
 	for _, address := range parsed.IPAddresses {
 		requirement.IPAddresses = append(requirement.IPAddresses, address.String())
 	}
+
 	identity := requirement.NodeID + "\x00" + requirement.StorageName
 	if existing, exists := s.requirements[identity]; exists &&
 		!reflect.DeepEqual(existing, requirement) {
 		return errors.New("package changed a certificate request during one lifecycle evaluation")
 	}
+
 	s.requirements[identity] = requirement
 	s.nodes[name] = cloneCertificate(certificate)
 
@@ -354,6 +380,7 @@ func discoverCertificateRequests(
 				})
 			},
 		)
+
 		config := node.implementation.Config()
 		if config == nil {
 			return &Error{
@@ -362,10 +389,12 @@ func discoverCertificateRequests(
 				Message:  "package node returned no configuration during certificate discovery",
 			}
 		}
+
 		if config.Certificate == nil || config.Certificate.Issue == nil ||
 			!*config.Certificate.Issue {
 			continue
 		}
+
 		overwrites, ok := node.implementation.(clabnodes.NodeOverwrites)
 		if !ok {
 			return &Error{
@@ -374,17 +403,21 @@ func discoverCertificateRequests(
 				Message:  "certificate-issuing package node lacks the generic overwrite interface",
 			}
 		}
+
 		configCopy := *config
+
 		certificateCopy := &clabtypes.CertificateConfig{}
 		if config.Certificate != nil {
 			*certificateCopy = *config.Certificate
 			certificateCopy.SANs = slices.Clone(config.Certificate.SANs)
 		}
+
 		issue := true
 		certificateCopy.Issue = &issue
 		configCopy.Certificate = certificateCopy
 		genericNode := clabnodes.NewDefaultNode(overwrites)
 		genericNode.Cfg = &configCopy
+
 		err := invokeImported(
 			node.Input.ID,
 			"certificates",

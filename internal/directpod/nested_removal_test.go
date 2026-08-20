@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	clabernetesdirectpod "github.com/clabernetes/clabernetes/internal/directpod"
+	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 )
 
 // TestRenderShipsNoNestedRuntimeSurface is the negative half of the nested-runtime removal: a
@@ -14,14 +14,17 @@ import (
 func TestRenderShipsNoNestedRuntimeSurface(t *testing.T) {
 	t.Parallel()
 
-	deployment, err := clabernetesdirectpod.Render(renderablePlan(), clabernetesdirectpod.Options{
-		Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
-		InputConfigMapName:                "device-a-plan-input-abc",
-		ConnectivityRevisionConfigMapName: "device-a-connectivity",
-		PreparationImage:                  "example/c9s@sha256:1111",
-		ConnectivityImage:                 "example/c9s@sha256:1111",
-		EnableContainerStopSignals:        true,
-	})
+	deployment, err := clabernetesinternaldirectpod.Render(
+		renderablePlan(),
+		clabernetesinternaldirectpod.Options{
+			Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+			InputConfigMapName:                "device-a-plan-input-abc",
+			ConnectivityRevisionConfigMapName: "device-a-connectivity",
+			PreparationImage:                  "example/c9s@sha256:1111",
+			ConnectivityImage:                 "example/c9s@sha256:1111",
+			EnableContainerStopSignals:        true,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

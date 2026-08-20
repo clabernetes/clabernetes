@@ -1,3 +1,4 @@
+//nolint:err113,gocyclo,testpackage // dense fixture-driven tests exercise one boundary end to end.
 package directruntime
 
 import (
@@ -13,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
 
 type fakePacketCaptureSource struct {
@@ -27,6 +28,7 @@ func (s *fakePacketCaptureSource) ReadPacket(ctx context.Context) (capturedPacke
 
 		return capturedPacket{}, ctx.Err()
 	}
+
 	packet := s.packets[0]
 	s.packets = s.packets[1:]
 
@@ -48,8 +50,12 @@ func TestRunPacketCaptureWritesPCAPAndSecretFreeAuditForOpaqueFutureKind(t *test
 		{Timestamp: time.Unix(100, 123_000), Data: payloads[0], OriginalLength: 4},
 		{Timestamp: time.Unix(101, 456_000), Data: payloads[1], OriginalLength: 128},
 	}}
-	var capture bytes.Buffer
-	var audit bytes.Buffer
+
+	var (
+		capture bytes.Buffer
+		audit   bytes.Buffer
+	)
+
 	err := runPacketCapture(
 		context.Background(),
 		plan,
@@ -70,20 +76,26 @@ func TestRunPacketCaptureWritesPCAPAndSecretFreeAuditForOpaqueFutureKind(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !source.closed {
 		t.Fatal("packet source was not closed")
 	}
+
 	raw := capture.Bytes()
 	if len(raw) != 24+16+len(payloads[0])+16+len(payloads[1]) {
 		t.Fatalf("pcap size = %d", len(raw))
 	}
+
 	if magic := binary.LittleEndian.Uint32(raw[:4]); magic != 0xa1b2c3d4 {
 		t.Fatalf("pcap magic = %#x", magic)
 	}
+
 	if snapLength := binary.LittleEndian.Uint32(raw[16:20]); snapLength != 128 {
 		t.Fatalf("pcap snap length = %d", snapLength)
 	}
+
 	firstCaptured := binary.LittleEndian.Uint32(raw[32:36])
+
 	firstOriginal := binary.LittleEndian.Uint32(raw[36:40])
 	if firstCaptured != 4 || firstOriginal != 4 ||
 		!bytes.Equal(raw[40:44], payloads[0]) {
@@ -94,9 +106,11 @@ func TestRunPacketCaptureWritesPCAPAndSecretFreeAuditForOpaqueFutureKind(t *test
 			raw[40:44],
 		)
 	}
+
 	if strings.Contains(audit.String(), "packet-payload-must-not-enter-audit") {
 		t.Fatalf("packet payload leaked into audit: %s", audit.String())
 	}
+
 	records := decodePacketCaptureAudit(t, audit.Bytes())
 	if len(records) != 2 || records[0].Status != "Started" ||
 		records[1].Status != "Succeeded" || records[1].Packets != 2 ||
@@ -111,18 +125,20 @@ func TestRunPacketCaptureDeniesInterfaceOutsideRequestedLogicalNode(t *testing.T
 	t.Parallel()
 
 	plan := packetCaptureTestPlan()
-	plan.Nodes = append(plan.Nodes, clabernetesdeviceplan.NodePlan{
+	plan.Nodes = append(plan.Nodes, clabernetesinternaldeviceplan.NodePlan{
 		ID: "other-node-uid", Name: "other", Kind: "another-opaque-kind",
 		ContainerIDs: []string{
 			"other-container",
 		}, ReadinessContainerIDs: []string{"other-container"},
 	})
-	plan.Containers = append(plan.Containers, clabernetesdeviceplan.ContainerPlan{
+	plan.Containers = append(plan.Containers, clabernetesinternaldeviceplan.ContainerPlan{
 		ID: "other-container", NodeID: "other-node-uid", NamespaceOwnerID: "container-a",
 		Image: "example/other:1", Required: true,
 	})
 	opened := false
+
 	var audit bytes.Buffer
+
 	err := runPacketCapture(
 		context.Background(),
 		plan,
@@ -140,6 +156,7 @@ func TestRunPacketCaptureDeniesInterfaceOutsideRequestedLogicalNode(t *testing.T
 	if err == nil || !strings.Contains(err.Error(), "not uniquely planned") || opened {
 		t.Fatalf("unauthorized capture = opened %t, error %v", opened, err)
 	}
+
 	records := decodePacketCaptureAudit(t, audit.Bytes())
 	if len(records) != 1 || records[0].Status != "Denied" ||
 		records[0].NodeID != "other-node-uid" || records[0].PlanDigest == "" {
@@ -162,6 +179,7 @@ func TestRunPacketCaptureCompletesAtDurationBound(t *testing.T) {
 	t.Parallel()
 
 	source := &fakePacketCaptureSource{}
+
 	err := runPacketCapture(
 		context.Background(),
 		packetCaptureTestPlan(),
@@ -182,22 +200,27 @@ func TestRunPacketCaptureAuthorizesLiveInterfaceFromValidatedRevision(t *testing
 	t.Parallel()
 
 	baseInput, basePlan, desiredInput, desiredPlan := packetCaptureRevisionPlans(t)
+
 	revision, err := NewConnectivityRevision(baseInput, basePlan, desiredInput, desiredPlan)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	raw, err := revision.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	revisionPath := filepath.Join(t.TempDir(), "revision.json")
 	if err = os.WriteFile(revisionPath, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	source := &fakePacketCaptureSource{packets: []capturedPacket{{
 		Timestamp: time.Unix(100, 0), Data: []byte{1, 2, 3}, OriginalLength: 3,
 	}}}
 	opened := false
+
 	err = runPacketCaptureWithRevision(
 		context.Background(),
 		baseInput,
@@ -224,62 +247,65 @@ func decodePacketCaptureAudit(t *testing.T, raw []byte) []PacketCaptureAuditReco
 
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	records := []PacketCaptureAuditRecord{}
+
 	for {
 		var record PacketCaptureAuditRecord
 		if err := decoder.Decode(&record); err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			t.Fatal(err)
 		}
+
 		records = append(records, record)
 	}
 
 	return records
 }
 
-func packetCaptureTestPlan() clabernetesdeviceplan.Plan {
-	return clabernetesdeviceplan.Plan{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion,
-		Compatibility: clabernetesdeviceplan.Compatibility{
-			ContainerlabModule:  clabernetesdeviceplan.ContainerlabModulePath,
-			ContainerlabVersion: "v-test", PlanSchemaVersion: clabernetesdeviceplan.SchemaVersion,
+func packetCaptureTestPlan() clabernetesinternaldeviceplan.Plan {
+	return clabernetesinternaldeviceplan.Plan{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
+		Compatibility: clabernetesinternaldeviceplan.Compatibility{
+			ContainerlabModule:  clabernetesinternaldeviceplan.ContainerlabModulePath,
+			ContainerlabVersion: "v-test", PlanSchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 			RegistryDigest: "sha256:" + strings.Repeat("a", 64),
 		},
 		InputDigest: "sha256:" + strings.Repeat("b", 64),
-		Planner: clabernetesdeviceplan.PlannerIdentity{
+		Planner: clabernetesinternaldeviceplan.PlannerIdentity{
 			Name: "clabernetes", Revision: "capture-test",
 		},
-		Nodes: []clabernetesdeviceplan.NodePlan{{
+		Nodes: []clabernetesinternaldeviceplan.NodePlan{{
 			ID: "opaque-node-uid", Name: "future-device", Kind: "future-package-kind",
 			ContainerIDs: []string{"container-a"}, ReadinessContainerIDs: []string{"container-a"},
 		}},
-		Containers: []clabernetesdeviceplan.ContainerPlan{{
+		Containers: []clabernetesinternaldeviceplan.ContainerPlan{{
 			ID: "container-a", NodeID: "opaque-node-uid", NamespaceOwnerID: "container-a",
 			Image: "example/device:1", Required: true,
 		}},
-		Interfaces: []clabernetesdeviceplan.InterfacePlan{
+		Interfaces: []clabernetesinternaldeviceplan.InterfacePlan{
 			{
 				ID: "link-uid/a", NodeID: "opaque-node-uid", NamespaceOwnerID: "container-a",
 				Name: "package-a", LinkID: "link-uid", PeerNodeID: "opaque-node-uid",
 				PeerInterface: "package-b", Connectivity: "loopback", MTU: 1500,
-				LinkApplyMode: clabernetesdeviceplan.LinkApplyLive, RequiredAtStart: true,
+				LinkApplyMode: clabernetesinternaldeviceplan.LinkApplyLive, RequiredAtStart: true,
 			},
 			{
 				ID: "link-uid/b", NodeID: "opaque-node-uid", NamespaceOwnerID: "container-a",
 				Name: "package-b", LinkID: "link-uid", PeerNodeID: "opaque-node-uid",
 				PeerInterface: "package-a", Connectivity: "loopback", MTU: 1500,
-				LinkApplyMode: clabernetesdeviceplan.LinkApplyLive, RequiredAtStart: true,
+				LinkApplyMode: clabernetesinternaldeviceplan.LinkApplyLive, RequiredAtStart: true,
 			},
 		},
 	}
 }
 
 func packetCaptureRevisionPlans(t *testing.T) (
-	clabernetesdeviceplan.Input,
-	clabernetesdeviceplan.Plan,
-	clabernetesdeviceplan.Input,
-	clabernetesdeviceplan.Plan,
+	clabernetesinternaldeviceplan.Input,
+	clabernetesinternaldeviceplan.Plan,
+	clabernetesinternaldeviceplan.Input,
+	clabernetesinternaldeviceplan.Plan,
 ) {
 	t.Helper()
 
@@ -287,26 +313,31 @@ func packetCaptureRevisionPlans(t *testing.T) (
 	basePlan := desiredPlan
 	basePlan.Interfaces = nil
 	compatibility := desiredPlan.Compatibility
-	baseInput := clabernetesdeviceplan.Input{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion, TopologyName: "capture-test",
+	baseInput := clabernetesinternaldeviceplan.Input{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion, TopologyName: "capture-test",
 		Compatibility: compatibility,
-		Nodes: []clabernetesdeviceplan.NodeInput{{
+		Nodes: []clabernetesinternaldeviceplan.NodeInput{{
 			ID: "opaque-node-uid", Name: "future-device", Kind: "future-package-kind",
 			Definition: []byte(`{"kind":"future-package-kind","image":"example/device:1"}`),
 		}},
-		Images: []clabernetesdeviceplan.ImageInput{{
+		Images: []clabernetesinternaldeviceplan.ImageInput{{
 			NodeID: "opaque-node-uid", Role: "device", SourceReference: "example/device:1",
 			DigestReference: "example/device@sha256:aaaaaaaa",
-			Platform:        clabernetesdeviceplan.Platform{OS: "linux", Architecture: "amd64"},
+			Platform: clabernetesinternaldeviceplan.Platform{
+				OS:           "linux",
+				Architecture: "amd64",
+			},
 		}},
 	}
+
 	baseDigest, err := baseInput.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	basePlan.InputDigest = baseDigest
 	desiredInput := baseInput
-	desiredInput.Interfaces = []clabernetesdeviceplan.InterfaceInput{
+	desiredInput.Interfaces = []clabernetesinternaldeviceplan.InterfaceInput{
 		{
 			ID: "link-uid/a", NodeID: "opaque-node-uid", Name: "package-a",
 			LinkID: "link-uid", PeerNodeID: "opaque-node-uid", PeerInterface: "package-b",
@@ -318,20 +349,22 @@ func packetCaptureRevisionPlans(t *testing.T) (
 			Connectivity: "loopback", MTU: 1500,
 		},
 	}
+
 	desiredDigest, err := desiredInput.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	desiredPlan.InputDigest = desiredDigest
 	for _, intf := range desiredPlan.Interfaces {
-		desiredPlan.Actions = append(desiredPlan.Actions, clabernetesdeviceplan.Action{
-			ID: "wait/" + intf.ID, Phase: clabernetesdeviceplan.PhasePreStart,
-			Target: clabernetesdeviceplan.ActionTarget{
+		desiredPlan.Actions = append(desiredPlan.Actions, clabernetesinternaldeviceplan.Action{
+			ID: "wait/" + intf.ID, Phase: clabernetesinternaldeviceplan.PhasePreStart,
+			Target: clabernetesinternaldeviceplan.ActionTarget{
 				NodeID: "opaque-node-uid", ContainerID: "container-a",
 				NamespaceOwnerID: "container-a",
 			},
-			Kind: clabernetesdeviceplan.ActionWaitInterface,
-			WaitInterface: &clabernetesdeviceplan.WaitInterfaceAction{
+			Kind: clabernetesinternaldeviceplan.ActionWaitInterface,
+			WaitInterface: &clabernetesinternaldeviceplan.WaitInterfaceAction{
 				InterfaceID: intf.ID, TimeoutSeconds: 30,
 			},
 		})

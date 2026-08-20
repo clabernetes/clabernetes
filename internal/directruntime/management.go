@@ -1,6 +1,8 @@
+//nolint:err113,mnd // structured one-off diagnostics and protocol literals are the design here.
 package directruntime
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -40,22 +42,27 @@ func RecordPodAddress(artifactRoot string) error {
 	if address == "" {
 		return nil
 	}
+
 	root := filepath.Clean(artifactRoot)
 	if !filepath.IsAbs(root) || root == string(filepath.Separator) {
-		return fmt.Errorf("pod address record root must be a scoped absolute path")
+		return errors.New("pod address record root must be a scoped absolute path")
 	}
+
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return fmt.Errorf("listing pod address record root: %w", err)
 	}
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
+
 		record := address + "\n"
 		if gateway := runtimePodGateway(); gateway != "" {
 			record += gateway + "\n"
 		}
+
 		if err = os.WriteFile( //nolint:gosec // Non-sensitive plan-scoped identity record.
 			filepath.Join(root, entry.Name(), podAddressRecordName),
 			[]byte(record),
@@ -76,28 +83,35 @@ func runtimePodAddressWithRecord(artifactRoot string) (string, string) {
 	if address == "" {
 		return "", ""
 	}
+
 	gateway := runtimePodGateway()
+
 	entries, err := os.ReadDir(filepath.Clean(artifactRoot))
 	if err != nil {
 		return address, gateway
 	}
+
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		recorded, readErr := os.ReadFile( //nolint:gosec // Plan-scoped identity record.
+
+		recorded, readErr := os.ReadFile(
 			filepath.Join(filepath.Clean(artifactRoot), entry.Name(), podAddressRecordName),
 		)
 		if readErr != nil {
 			continue
 		}
+
 		lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
 		if len(lines) == 0 || !strings.HasPrefix(lines[0], strings.Split(address, "/")[0]) {
 			continue
 		}
+
 		if strings.Contains(address, "/") == false && strings.HasPrefix(lines[0], address+"/") {
 			address = lines[0]
 		}
+
 		if gateway == "" && len(lines) > 1 {
 			gateway = strings.TrimSpace(lines[1])
 		}
@@ -132,11 +146,13 @@ func runtimePodGateway() string {
 	if err != nil {
 		return ""
 	}
+
 	for _, line := range strings.Split(string(raw), "\n")[1:] {
 		fields := strings.Fields(line)
 		if len(fields) < 3 || fields[1] != "00000000" {
 			continue
 		}
+
 		var value uint32
 		if _, scanErr := fmt.Sscanf(fields[2], "%x", &value); scanErr != nil {
 			continue
@@ -158,20 +174,24 @@ func runtimePodAddress() string {
 	if address == "" {
 		return ""
 	}
+
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return address
 	}
+
 	for _, item := range interfaces {
 		addresses, addressErr := item.Addrs()
 		if addressErr != nil {
 			continue
 		}
+
 		for _, candidate := range addresses {
 			network, ok := candidate.(*net.IPNet)
 			if !ok || network.IP.String() != address {
 				continue
 			}
+
 			length, _ := network.Mask.Size()
 
 			return fmt.Sprintf("%s/%d", address, length)

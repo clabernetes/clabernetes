@@ -1,18 +1,20 @@
+//nolint:gocognit,gocyclo,testpackage // dense fixture-driven tests exercise one boundary end to end.
 package upgradepreflight
 
 import (
 	"bytes"
 	"context"
 	"errors"
+	"maps"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
+	clientgofake "k8s.io/client-go/dynamic/fake"
 )
 
 const secretSentinel = "do-not-leak-this-legacy-secret-value"
@@ -78,14 +80,13 @@ func TestInspectReportsCompleteMigrationInventoryWithoutMutation(t *testing.T) {
 	}
 
 	for kind, wantPaths := range expectedPaths {
-		kind := kind
-		wantPaths := wantPaths
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 
 			object := legacyObject(kind, "migration-system", strings.ToLower(kind))
 			for index, rule := range rulesForKind(kind) {
 				value := any(secretSentinel)
+
 				switch index % 5 {
 				case 0:
 					value = ""
@@ -98,8 +99,10 @@ func TestInspectReportsCompleteMigrationInventoryWithoutMutation(t *testing.T) {
 				case 4:
 					value = map[string]any{}
 				}
+
 				setPath(object.Object, rule.Lookup, value)
 			}
+
 			if kind == "Topology" {
 				setPath(object.Object, []string{"spec", "definition", "containerlab"}, `
 name: migration
@@ -116,10 +119,12 @@ topology:
 			}
 
 			before := object.DeepCopy()
+
 			diagnostics, err := Inspect(kind, object)
 			if err != nil {
 				t.Fatalf("Inspect() error = %v", err)
 			}
+
 			if !reflect.DeepEqual(object.Object, before.Object) {
 				t.Fatal("preflight mutated the stored resource")
 			}
@@ -130,15 +135,19 @@ topology:
 				if diagnostic.SourcePath != "" {
 					location += "#" + diagnostic.SourcePath
 				}
+
 				gotPaths = append(gotPaths, location)
+
 				if diagnostic.Kind != kind || diagnostic.Namespace != "migration-system" ||
-					diagnostic.Name != strings.ToLower(kind) || diagnostic.Disposition == "" ||
+					!strings.EqualFold(diagnostic.Name, kind) || diagnostic.Disposition == "" ||
 					diagnostic.Guidance == "" {
 					t.Fatalf("incomplete diagnostic = %#v", diagnostic)
 				}
 			}
+
 			sort.Strings(gotPaths)
 			sort.Strings(wantPaths)
+
 			if !reflect.DeepEqual(gotPaths, wantPaths) {
 				t.Fatalf("diagnostic paths = %#v, want %#v", gotPaths, wantPaths)
 			}
@@ -207,18 +216,17 @@ topology:
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.kind, func(t *testing.T) {
 			t.Parallel()
 
 			object := legacyObject(test.kind, "default", "retained")
-			for key, value := range test.object {
-				object.Object[key] = value
-			}
+			maps.Copy(object.Object, test.object)
+
 			diagnostics, err := Inspect(test.kind, object)
 			if err != nil {
 				t.Fatalf("Inspect() error = %v", err)
 			}
+
 			if len(diagnostics) != 0 {
 				t.Fatalf("retained fields produced diagnostics = %#v", diagnostics)
 			}
@@ -235,20 +243,24 @@ func TestInspectDoesNotConvertPullThroughOverrideToPullPolicy(t *testing.T) {
 		[]string{"spec", "imagePull", "pullThroughOverride"},
 		"always",
 	)
+
 	diagnostics, err := Inspect("LauncherProfile", object)
 	if err != nil {
 		t.Fatalf("Inspect() error = %v", err)
 	}
+
 	if len(diagnostics) != 1 ||
 		diagnostics[0].Path != "$.spec.imagePull.pullThroughOverride" {
 		t.Fatalf("pull-through diagnostics = %#v", diagnostics)
 	}
+
 	if _, present, lookupErr := pathValue(
 		object.Object,
 		[]string{"spec", "imagePull", "policy"},
 	); lookupErr != nil || present {
 		t.Fatalf("preflight created imagePull.policy, present=%v err=%v", present, lookupErr)
 	}
+
 	if got, _, lookupErr := pathValue(
 		object.Object,
 		[]string{"spec", "imagePull", "pullThroughOverride"},
@@ -262,10 +274,12 @@ func TestInspectReportsPresentNull(t *testing.T) {
 
 	object := legacyObject("Config", "default", "null-field")
 	setPath(object.Object, []string{"spec", "deployment", "extraEnv"}, nil)
+
 	diagnostics, err := Inspect("Config", object)
 	if err != nil {
 		t.Fatalf("Inspect() error = %v", err)
 	}
+
 	if len(diagnostics) != 1 || diagnostics[0].Path != "$.spec.deployment.extraEnv" {
 		t.Fatalf("null-field diagnostics = %#v", diagnostics)
 	}
@@ -280,12 +294,14 @@ func TestRunSortsValueFreeDiagnosticsAndReturnsIncompatible(t *testing.T) {
 		[]string{"spec", "imagePull", "pullThroughOverride"},
 		secretSentinel,
 	)
+
 	profile := legacyObject("LauncherProfile", "a-system", "a-profile")
 	setPath(
 		profile.Object,
 		[]string{"spec", "deployment", "privilegedLauncher"},
 		false,
 	)
+
 	topology := legacyObject("Topology", "b-system", "b-topology")
 	setPath(
 		topology.Object,
@@ -293,8 +309,8 @@ func TestRunSortsValueFreeDiagnosticsAndReturnsIncompatible(t *testing.T) {
 		"name: test\nmgmt:\n  mtu: 0\ntopology:\n  nodes: {}\n",
 	)
 
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
-		runtime.NewScheme(),
+	client := clientgofake.NewSimpleDynamicClientWithCustomListKinds(
+		apimachineryruntime.NewScheme(),
 		map[schema.GroupVersionResource]string{
 			resourceTargets[0].GVR: "ConfigList",
 			resourceTargets[1].GVR: "LauncherProfileList",
@@ -305,14 +321,17 @@ func TestRunSortsValueFreeDiagnosticsAndReturnsIncompatible(t *testing.T) {
 		topology,
 	)
 	output := &bytes.Buffer{}
+
 	err := Run(context.Background(), client, output)
 	if !errors.Is(err, ErrIncompatible) {
 		t.Fatalf("Run() error = %v, want ErrIncompatible", err)
 	}
+
 	var incompatible *IncompatibleError
 	if !errors.As(err, &incompatible) || incompatible.Count != 3 {
 		t.Fatalf("Run() error = %#v, want count 3", err)
 	}
+
 	if strings.Contains(output.String(), secretSentinel) {
 		t.Fatalf("diagnostics leaked stored value: %s", output.String())
 	}
@@ -323,10 +342,12 @@ func TestRunSortsValueFreeDiagnosticsAndReturnsIncompatible(t *testing.T) {
 		!strings.Contains(lines[2], `"kind":"Topology"`) {
 		t.Fatalf("diagnostics are not sorted JSON lines: %q", lines)
 	}
+
 	actions := client.Actions()
 	if len(actions) != len(resourceTargets) {
 		t.Fatalf("client actions = %#v", actions)
 	}
+
 	for _, action := range actions {
 		if action.GetVerb() != "list" {
 			t.Fatalf("preflight performed mutating action %#v", action)
@@ -337,8 +358,8 @@ func TestRunSortsValueFreeDiagnosticsAndReturnsIncompatible(t *testing.T) {
 func TestRunSucceedsWithoutRemovedFields(t *testing.T) {
 	t.Parallel()
 
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
-		runtime.NewScheme(),
+	client := clientgofake.NewSimpleDynamicClientWithCustomListKinds(
+		apimachineryruntime.NewScheme(),
 		map[schema.GroupVersionResource]string{
 			resourceTargets[0].GVR: "ConfigList",
 			resourceTargets[1].GVR: "LauncherProfileList",
@@ -346,10 +367,12 @@ func TestRunSucceedsWithoutRemovedFields(t *testing.T) {
 		},
 		legacyObject("Config", "default", "clabernetes"),
 	)
+
 	output := &bytes.Buffer{}
 	if err := Run(context.Background(), client, output); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
+
 	if got := output.String(); got != "upgrade preflight passed: no removed fields found\n" {
 		t.Fatalf("Run() output = %q", got)
 	}
@@ -364,10 +387,12 @@ func TestInspectMalformedTopologyDoesNotLeakDefinition(t *testing.T) {
 		[]string{"spec", "definition", "containerlab"},
 		"name: ["+secretSentinel,
 	)
+
 	_, err := Inspect("Topology", object)
 	if err == nil {
 		t.Fatal("Inspect() accepted malformed embedded topology")
 	}
+
 	if strings.Contains(err.Error(), secretSentinel) {
 		t.Fatalf("Inspect() error leaked topology source: %v", err)
 	}
@@ -393,7 +418,9 @@ func setPath(object map[string]any, path []string, value any) {
 			next = map[string]any{}
 			current[segment] = next
 		}
+
 		current = next
 	}
+
 	current[path[len(path)-1]] = value
 }

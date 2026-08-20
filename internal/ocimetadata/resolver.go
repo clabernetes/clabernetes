@@ -392,7 +392,7 @@ func (r Resolver) Resolve(ctx context.Context, request Request) (*Metadata, erro
 	}, nil
 }
 
-//nolint:err113,gocritic // Copy request for a redacted diagnostic snapshot.
+//nolint:err113 // Copy request for a redacted diagnostic snapshot.
 func resolverError(code ErrorCode, request Request, err error) *Error {
 	if err != nil {
 		message := err.Error()
@@ -406,7 +406,6 @@ func resolverError(code ErrorCode, request Request, err error) *Error {
 
 func supportedRootMediaType(mediaType types.MediaType) bool {
 	// Unknown and non-image media types are rejected by default.
-	//nolint:exhaustive
 	switch mediaType {
 	case types.OCIManifestSchema1,
 		types.DockerManifestSchema2,
@@ -435,7 +434,6 @@ func decodeConfig(raw []byte) (*v1.ConfigFile, error) {
 	return config, nil
 }
 
-//nolint:gocritic // Normalization intentionally returns a detached platform value.
 func normalizePlatform(platform Platform) Platform {
 	platform.OS = strings.ToLower(strings.TrimSpace(platform.OS))
 	platform.Architecture = strings.ToLower(strings.TrimSpace(platform.Architecture))

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -29,13 +29,16 @@ func TestCanonicalInputIsDeterministicAndDoesNotMutateCaller(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	rightJSON, err := right.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if diff := cmp.Diff(string(leftJSON), string(rightJSON)); diff != "" {
 		t.Fatalf("canonical input differs (-left +right):\n%s", diff)
 	}
+
 	if right.Images[1].Config.Environment[0].Name != original {
 		t.Fatal("CanonicalJSON() mutated caller-owned input")
 	}
@@ -44,18 +47,21 @@ func TestCanonicalInputIsDeterministicAndDoesNotMutateCaller(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if digest != clabernetesdeviceplan.Digest(leftJSON) {
+
+	if digest != clabernetesinternaldeviceplan.Digest(leftJSON) {
 		t.Fatalf("input digest = %q, want digest of canonical JSON", digest)
 	}
 
-	decoded, err := clabernetesdeviceplan.DecodeInput(leftJSON)
+	decoded, err := clabernetesinternaldeviceplan.DecodeInput(leftJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	decodedJSON, err := decoded.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !reflect.DeepEqual(leftJSON, decodedJSON) {
 		t.Fatalf("input round trip changed canonical JSON:\n%s\n%s", leftJSON, decodedJSON)
 	}
@@ -65,10 +71,12 @@ func TestCanonicalPlanOrdersSetsButPreservesCommandsAndDNS(t *testing.T) {
 	t.Parallel()
 
 	input := validInput()
+
 	inputDigest, err := input.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	left := validPlan(inputDigest)
 	right := validPlan(inputDigest)
 	slices.Reverse(right.Nodes)
@@ -85,32 +93,37 @@ func TestCanonicalPlanOrdersSetsButPreservesCommandsAndDNS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	rightJSON, err := right.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if diff := cmp.Diff(string(leftJSON), string(rightJSON)); diff != "" {
 		t.Fatalf("canonical plan differs (-left +right):\n%s", diff)
 	}
 
-	decoded, err := clabernetesdeviceplan.DecodePlan(leftJSON)
+	decoded, err := clabernetesinternaldeviceplan.DecodePlan(leftJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got, want := decoded.Containers[0].Command, []string{"serve", "--foreground"}; !reflect.DeepEqual(
 		got,
 		want,
 	) {
 		t.Fatalf("ordered command = %#v, want %#v", got, want)
 	}
+
 	if got, want := decoded.Containers[0].DNS.Servers, []string{"10.0.0.2", "10.0.0.3"}; !reflect.DeepEqual(
 		got,
 		want,
 	) {
 		t.Fatalf("ordered DNS servers = %#v, want %#v", got, want)
 	}
-	if got := decoded.Actions; got[0].Phase != clabernetesdeviceplan.PhasePrepare ||
-		got[1].Phase != clabernetesdeviceplan.PhasePostStart {
+
+	if got := decoded.Actions; got[0].Phase != clabernetesinternaldeviceplan.PhasePrepare ||
+		got[1].Phase != clabernetesinternaldeviceplan.PhasePostStart {
 		t.Fatalf("actions are not ordered by lifecycle phase: %#v", got)
 	}
 }
@@ -119,6 +132,7 @@ func TestPlanningSchemaFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	input := validInput()
+
 	inputDigest, err := input.Digest()
 	if err != nil {
 		t.Fatal(err)
@@ -126,67 +140,67 @@ func TestPlanningSchemaFailsClosed(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		mutate func(*clabernetesdeviceplan.Plan)
-		code   clabernetesdeviceplan.ErrorCode
+		mutate func(*clabernetesinternaldeviceplan.Plan)
+		code   clabernetesinternaldeviceplan.ErrorCode
 		field  string
 	}{
 		{
 			name: "unknown container reference",
-			mutate: func(plan *clabernetesdeviceplan.Plan) {
+			mutate: func(plan *clabernetesinternaldeviceplan.Plan) {
 				plan.Nodes[0].ContainerIDs = []string{"missing"}
 			},
-			code:  clabernetesdeviceplan.ErrorInvariant,
+			code:  clabernetesinternaldeviceplan.ErrorInvariant,
 			field: "nodes[0].containerIDs",
 		},
 		{
 			name: "mismatched action payload",
-			mutate: func(plan *clabernetesdeviceplan.Plan) {
-				plan.Actions[0].Kind = clabernetesdeviceplan.ActionFile
+			mutate: func(plan *clabernetesinternaldeviceplan.Plan) {
+				plan.Actions[0].Kind = clabernetesinternaldeviceplan.ActionFile
 			},
-			code:  clabernetesdeviceplan.ErrorInvariant,
+			code:  clabernetesinternaldeviceplan.ErrorInvariant,
 			field: "actions[0]",
 		},
 		{
 			name: "unknown action kind",
-			mutate: func(plan *clabernetesdeviceplan.Plan) {
+			mutate: func(plan *clabernetesinternaldeviceplan.Plan) {
 				plan.Actions[0].Kind = "RunAnything"
 			},
-			code:  clabernetesdeviceplan.ErrorUnsupported,
+			code:  clabernetesinternaldeviceplan.ErrorUnsupported,
 			field: "actions[0].kind",
 		},
 		{
 			name: "bad input digest",
-			mutate: func(plan *clabernetesdeviceplan.Plan) {
+			mutate: func(plan *clabernetesinternaldeviceplan.Plan) {
 				plan.InputDigest = "latest"
 			},
-			code:  clabernetesdeviceplan.ErrorInvalidInput,
+			code:  clabernetesinternaldeviceplan.ErrorInvalidInput,
 			field: "inputDigest",
 		},
 		{
 			name: "invalid container port",
-			mutate: func(plan *clabernetesdeviceplan.Plan) {
-				plan.Containers[0].Ports = []clabernetesdeviceplan.Port{
+			mutate: func(plan *clabernetesinternaldeviceplan.Plan) {
+				plan.Containers[0].Ports = []clabernetesinternaldeviceplan.Port{
 					{Number: 22, Protocol: "SCTP"},
 				}
 			},
-			code:  clabernetesdeviceplan.ErrorInvalidInput,
+			code:  clabernetesinternaldeviceplan.ErrorInvalidInput,
 			field: "containers[0].ports[0]",
 		},
 		{
 			name: "invalid image digest",
-			mutate: func(plan *clabernetesdeviceplan.Plan) {
+			mutate: func(plan *clabernetesinternaldeviceplan.Plan) {
 				plan.Containers[0].ImageDigest = "sha256:not-an-immutable-digest"
 			},
-			code:  clabernetesdeviceplan.ErrorInvalidInput,
+			code:  clabernetesinternaldeviceplan.ErrorInvalidInput,
 			field: "containers[0].imageDigest",
 		},
 		{
 			name: "invalid file ownership",
-			mutate: func(plan *clabernetesdeviceplan.Plan) {
+			mutate: func(plan *clabernetesinternaldeviceplan.Plan) {
 				invalid := int64(-1)
 				plan.Files[0].UID = &invalid
 			},
-			code:  clabernetesdeviceplan.ErrorInvalidInput,
+			code:  clabernetesinternaldeviceplan.ErrorInvalidInput,
 			field: "files[0]",
 		},
 	}
@@ -197,11 +211,13 @@ func TestPlanningSchemaFailsClosed(t *testing.T) {
 
 			plan := validPlan(inputDigest)
 			tt.mutate(&plan)
-			_, normalizeErr := clabernetesdeviceplan.NormalizePlan(plan)
-			var planningErr *clabernetesdeviceplan.Error
+			_, normalizeErr := clabernetesinternaldeviceplan.NormalizePlan(plan)
+
+			var planningErr *clabernetesinternaldeviceplan.Error
 			if !errors.As(normalizeErr, &planningErr) {
 				t.Fatalf("NormalizePlan() error = %v, want structured planning error", normalizeErr)
 			}
+
 			if planningErr.Code != tt.code || planningErr.Field != tt.field {
 				t.Fatalf(
 					"NormalizePlan() error = %#v, want code %q field %q",
@@ -225,18 +241,18 @@ func TestManagementPlanAcceptsOneGenericInterfaceSelection(t *testing.T) {
 	tests := []struct {
 		name              string
 		interfaceName     string
-		interfaceSelector clabernetesdeviceplan.ManagementInterfaceSelector
+		interfaceSelector clabernetesinternaldeviceplan.ManagementInterfaceSelector
 		wantErr           bool
 	}{
 		{name: "package name", interfaceName: "mgmt0"},
 		{
 			name:              "pod transport selector",
-			interfaceSelector: clabernetesdeviceplan.ManagementInterfacePodTransport,
+			interfaceSelector: clabernetesinternaldeviceplan.ManagementInterfacePodTransport,
 		},
 		{
 			name:              "both selections",
 			interfaceName:     "mgmt0",
-			interfaceSelector: clabernetesdeviceplan.ManagementInterfacePodTransport,
+			interfaceSelector: clabernetesinternaldeviceplan.ManagementInterfacePodTransport,
 			wantErr:           true,
 		},
 		{
@@ -254,10 +270,11 @@ func TestManagementPlanAcceptsOneGenericInterfaceSelection(t *testing.T) {
 			plan.Management[0].InterfaceName = tt.interfaceName
 			plan.Management[0].InterfaceSelector = tt.interfaceSelector
 
-			_, normalizeErr := clabernetesdeviceplan.NormalizePlan(plan)
+			_, normalizeErr := clabernetesinternaldeviceplan.NormalizePlan(plan)
 			if tt.wantErr && normalizeErr == nil {
 				t.Fatal("NormalizePlan() succeeded for an invalid interface selection")
 			}
+
 			if !tt.wantErr && normalizeErr != nil {
 				t.Fatalf("NormalizePlan() error = %v", normalizeErr)
 			}
@@ -277,17 +294,20 @@ func TestDecodeRejectsUnknownAndTrailingJSON(t *testing.T) {
 	if err = json.Unmarshal(inputJSON, &object); err != nil {
 		t.Fatal(err)
 	}
+
 	object["futureField"] = true
+
 	withUnknown, err := json.Marshal(object)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, raw := range [][]byte{withUnknown, append(slices.Clone(inputJSON), []byte(` {}`)...)} {
-		_, decodeErr := clabernetesdeviceplan.DecodeInput(raw)
-		var planningErr *clabernetesdeviceplan.Error
+		_, decodeErr := clabernetesinternaldeviceplan.DecodeInput(raw)
+
+		var planningErr *clabernetesinternaldeviceplan.Error
 		if !errors.As(decodeErr, &planningErr) ||
-			planningErr.Code != clabernetesdeviceplan.ErrorSerialization {
+			planningErr.Code != clabernetesinternaldeviceplan.ErrorSerialization {
 			t.Fatalf("DecodeInput() error = %v, want ErrorSerialization", decodeErr)
 		}
 	}
@@ -297,22 +317,24 @@ func TestPlanningErrorDoesNotExposeRejectedValue(t *testing.T) {
 	t.Parallel()
 
 	input := validInput()
-	input.Payloads[0].Kind = clabernetesdeviceplan.PayloadKind("actual-license-secret")
+	input.Payloads[0].Kind = clabernetesinternaldeviceplan.PayloadKind("actual-license-secret")
+
 	_, err := input.CanonicalJSON()
 	if err == nil {
 		t.Fatal("CanonicalJSON() succeeded for unsupported payload kind")
 	}
+
 	if strings.Contains(err.Error(), "actual-license-secret") {
 		t.Fatalf("planning error exposed rejected value: %v", err)
 	}
 }
 
-func validInput() clabernetesdeviceplan.Input {
-	return clabernetesdeviceplan.Input{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion,
+func validInput() clabernetesinternaldeviceplan.Input {
+	return clabernetesinternaldeviceplan.Input{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		TopologyName:  "test-topology",
 		Compatibility: testCompatibility(),
-		Nodes: []clabernetesdeviceplan.NodeInput{
+		Nodes: []clabernetesinternaldeviceplan.NodeInput{
 			{
 				ID:         "node-b",
 				Name:       "linecard",
@@ -327,16 +349,16 @@ func validInput() clabernetesdeviceplan.Input {
 				Definition: json.RawMessage(`{"kind":"future-kind","image":"example/router:1"}`),
 			},
 		},
-		Images: []clabernetesdeviceplan.ImageInput{
+		Images: []clabernetesinternaldeviceplan.ImageInput{
 			{
 				NodeID:          "node-b",
 				SourceReference: "example/linecard:1",
 				DigestReference: "example/linecard@sha256:bbbb",
-				Platform: clabernetesdeviceplan.Platform{
+				Platform: clabernetesinternaldeviceplan.Platform{
 					OS: "linux", Architecture: "amd64", OSFeatures: []string{"z", "a"},
 				},
-				Config: clabernetesdeviceplan.ImageConfig{
-					Environment: []clabernetesdeviceplan.KeyValue{
+				Config: clabernetesinternaldeviceplan.ImageConfig{
+					Environment: []clabernetesinternaldeviceplan.KeyValue{
 						{Name: "Z", Value: "last"},
 						{Name: "A", Value: "first"},
 					},
@@ -346,32 +368,32 @@ func validInput() clabernetesdeviceplan.Input {
 				NodeID:          "node-a",
 				SourceReference: "example/router:1",
 				DigestReference: "example/router@sha256:aaaa",
-				Platform: clabernetesdeviceplan.Platform{
+				Platform: clabernetesinternaldeviceplan.Platform{
 					OS: "linux", Architecture: "amd64", OSFeatures: []string{"z", "a"},
 				},
-				Config: clabernetesdeviceplan.ImageConfig{
-					Environment: []clabernetesdeviceplan.KeyValue{
+				Config: clabernetesinternaldeviceplan.ImageConfig{
+					Environment: []clabernetesinternaldeviceplan.KeyValue{
 						{Name: "Z", Value: "last"},
 						{Name: "A", Value: "first"},
 					},
 				},
 			},
 		},
-		Payloads: []clabernetesdeviceplan.PayloadInput{
+		Payloads: []clabernetesinternaldeviceplan.PayloadInput{
 			{
-				ID: "payload-b", NodeID: "node-b", Kind: clabernetesdeviceplan.PayloadConfigMap,
+				ID: "payload-b", NodeID: "node-b", Kind: clabernetesinternaldeviceplan.PayloadConfigMap,
 				Reference: "lab/linecard:startup.cfg", Destination: "/etc/startup.cfg",
 			},
 			{
-				ID: "payload-a", NodeID: "node-a", Kind: clabernetesdeviceplan.PayloadSecret,
+				ID: "payload-a", NodeID: "node-a", Kind: clabernetesinternaldeviceplan.PayloadSecret,
 				Reference: "lab/router-license:license.key", Destination: "/etc/license.key",
 				Sensitive: true,
 			},
 		},
-		Management: []clabernetesdeviceplan.ManagementInput{
+		Management: []clabernetesinternaldeviceplan.ManagementInput{
 			{NodeID: "node-a", InterfaceName: "mgmt0", IPv4: "10.0.0.10/24"},
 		},
-		Interfaces: []clabernetesdeviceplan.InterfaceInput{
+		Interfaces: []clabernetesinternaldeviceplan.InterfaceInput{
 			{
 				ID: "interface-b", NodeID: "node-b", Name: "eth1", LinkID: "link-1",
 				PeerNodeID: "node-a", PeerInterface: "eth1", Connectivity: "same-pod", MTU: 1500,
@@ -384,14 +406,16 @@ func validInput() clabernetesdeviceplan.Input {
 	}
 }
 
-//nolint:funlen // A complete plan fixture makes schema references explicit.
-func validPlan(inputDigest string) clabernetesdeviceplan.Plan {
-	return clabernetesdeviceplan.Plan{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion,
+func validPlan(inputDigest string) clabernetesinternaldeviceplan.Plan {
+	return clabernetesinternaldeviceplan.Plan{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		Compatibility: testCompatibility(),
 		InputDigest:   inputDigest,
-		Planner:       clabernetesdeviceplan.PlannerIdentity{Name: "clabernetes", Revision: "test"},
-		Nodes: []clabernetesdeviceplan.NodePlan{
+		Planner: clabernetesinternaldeviceplan.PlannerIdentity{
+			Name:     "clabernetes",
+			Revision: "test",
+		},
+		Nodes: []clabernetesinternaldeviceplan.NodePlan{
 			{
 				ID: "node-b", Name: "linecard", Kind: syntheticKind,
 				ContainerIDs: []string{
@@ -405,15 +429,15 @@ func validPlan(inputDigest string) clabernetesdeviceplan.Plan {
 				}, ReadinessContainerIDs: []string{"container-a"},
 			},
 		},
-		Containers: []clabernetesdeviceplan.ContainerPlan{
+		Containers: []clabernetesinternaldeviceplan.ContainerPlan{
 			{
 				ID: "container-b", NodeID: "node-b", NamespaceOwnerID: "container-a",
 				Image: "example/linecard:1", Command: []string{"serve", "--foreground"},
-				Environment: []clabernetesdeviceplan.KeyValue{
+				Environment: []clabernetesinternaldeviceplan.KeyValue{
 					{Name: "Z", Value: "2"},
 					{Name: "A", Value: "1"},
 				},
-				DNS: clabernetesdeviceplan.DNSConfig{
+				DNS: clabernetesinternaldeviceplan.DNSConfig{
 					Servers: []string{"10.0.0.2", "10.0.0.3"},
 				},
 				Required: true, MountIDs: []string{"mount-b"},
@@ -421,78 +445,80 @@ func validPlan(inputDigest string) clabernetesdeviceplan.Plan {
 			{
 				ID: "container-a", NodeID: "node-a", NamespaceOwnerID: "container-a",
 				Image: "example/router:1", Command: []string{"serve", "--foreground"},
-				Environment: []clabernetesdeviceplan.KeyValue{
+				Environment: []clabernetesinternaldeviceplan.KeyValue{
 					{Name: "Z", Value: "2"},
 					{Name: "A", Value: "1"},
 				},
-				DNS: clabernetesdeviceplan.DNSConfig{
+				DNS: clabernetesinternaldeviceplan.DNSConfig{
 					Servers: []string{"10.0.0.2", "10.0.0.3"},
 				},
 				Required: true, MountIDs: []string{"mount-a"},
 			},
 		},
-		Files: []clabernetesdeviceplan.FilePlan{
+		Files: []clabernetesinternaldeviceplan.FilePlan{
 			{
-				ID: "file-b", NodeID: "node-b", SourceKind: clabernetesdeviceplan.FileSourcePayload,
+				ID: "file-b", NodeID: "node-b", SourceKind: clabernetesinternaldeviceplan.FileSourcePayload,
 				SourceReference: "payload-b", ArtifactPath: "payloads/payload-b",
 				Destination: "/etc/startup.cfg",
 			},
 			{
-				ID: "file-a", NodeID: "node-a", SourceKind: clabernetesdeviceplan.FileSourcePayload,
+				ID: "file-a", NodeID: "node-a", SourceKind: clabernetesinternaldeviceplan.FileSourcePayload,
 				SourceReference: "payload-a", ArtifactPath: "payloads/payload-a",
 				Destination: "/etc/license.key", Sensitive: true,
 			},
 		},
-		Volumes: []clabernetesdeviceplan.VolumePlan{
-			{ID: "volume-b", NodeID: "node-b", Kind: clabernetesdeviceplan.VolumeArtifacts},
-			{ID: "volume-a", NodeID: "node-a", Kind: clabernetesdeviceplan.VolumeArtifacts},
+		Volumes: []clabernetesinternaldeviceplan.VolumePlan{
+			{ID: "volume-b", NodeID: "node-b", Kind: clabernetesinternaldeviceplan.VolumeArtifacts},
+			{ID: "volume-a", NodeID: "node-a", Kind: clabernetesinternaldeviceplan.VolumeArtifacts},
 		},
-		Mounts: []clabernetesdeviceplan.MountPlan{
+		Mounts: []clabernetesinternaldeviceplan.MountPlan{
 			{ID: "mount-b", ContainerID: "container-b", VolumeID: "volume-b", Destination: "/etc"},
 			{ID: "mount-a", ContainerID: "container-a", VolumeID: "volume-a", Destination: "/etc"},
 		},
-		Actions: []clabernetesdeviceplan.Action{
+		Actions: []clabernetesinternaldeviceplan.Action{
 			{
-				ID: "post-start", Phase: clabernetesdeviceplan.PhasePostStart, Order: 1,
-				Target: clabernetesdeviceplan.ActionTarget{
+				ID: "post-start", Phase: clabernetesinternaldeviceplan.PhasePostStart, Order: 1,
+				Target: clabernetesinternaldeviceplan.ActionTarget{
 					NodeID:      "node-a",
 					ContainerID: "container-a",
 				},
-				Kind: clabernetesdeviceplan.ActionExec,
-				Exec: &clabernetesdeviceplan.ExecAction{Command: []string{"configure", "apply"}},
+				Kind: clabernetesinternaldeviceplan.ActionExec,
+				Exec: &clabernetesinternaldeviceplan.ExecAction{
+					Command: []string{"configure", "apply"},
+				},
 			},
 			{
-				ID: "prepare-file", Phase: clabernetesdeviceplan.PhasePrepare, Order: 1,
-				Target: clabernetesdeviceplan.ActionTarget{NodeID: "node-a"},
-				Kind:   clabernetesdeviceplan.ActionFile,
-				File:   &clabernetesdeviceplan.FileAction{FileID: "file-a"},
+				ID: "prepare-file", Phase: clabernetesinternaldeviceplan.PhasePrepare, Order: 1,
+				Target: clabernetesinternaldeviceplan.ActionTarget{NodeID: "node-a"},
+				Kind:   clabernetesinternaldeviceplan.ActionFile,
+				File:   &clabernetesinternaldeviceplan.FileAction{FileID: "file-a"},
 			},
 		},
-		Management: []clabernetesdeviceplan.ManagementPlan{
+		Management: []clabernetesinternaldeviceplan.ManagementPlan{
 			{ID: "management-a", NodeID: "node-a", InterfaceName: "mgmt0", IPv4: "10.0.0.10/24"},
 		},
-		Interfaces: []clabernetesdeviceplan.InterfacePlan{
+		Interfaces: []clabernetesinternaldeviceplan.InterfacePlan{
 			{
 				ID: "interface-b", NodeID: "node-b", NamespaceOwnerID: "container-a", Name: "eth1",
 				LinkID: "link-a", PeerNodeID: "node-a", PeerInterface: "eth1",
 				Connectivity: "same-pod",
-				MTU:          1500, LinkApplyMode: clabernetesdeviceplan.LinkApplyLive, RequiredAtStart: true,
+				MTU:          1500, LinkApplyMode: clabernetesinternaldeviceplan.LinkApplyLive, RequiredAtStart: true,
 			},
 			{
 				ID: "interface-a", NodeID: "node-a", NamespaceOwnerID: "container-a", Name: "eth1",
 				LinkID: "link-a", PeerNodeID: "node-b", PeerInterface: "eth1",
 				Connectivity: "same-pod",
-				MTU:          1500, LinkApplyMode: clabernetesdeviceplan.LinkApplyLive, RequiredAtStart: true,
+				MTU:          1500, LinkApplyMode: clabernetesinternaldeviceplan.LinkApplyLive, RequiredAtStart: true,
 			},
 		},
 	}
 }
 
-func testCompatibility() clabernetesdeviceplan.Compatibility {
-	return clabernetesdeviceplan.Compatibility{
+func testCompatibility() clabernetesinternaldeviceplan.Compatibility {
+	return clabernetesinternaldeviceplan.Compatibility{
 		ContainerlabModule:  "github.com/srl-labs/containerlab",
 		ContainerlabVersion: "v0.78.0",
 		RegistryDigest:      "sha256:0320f230b9e54f6b5e3a0aaa8b6ee0ffe51bf834bffb7ba5d2200669ed9d7b7e",
-		PlanSchemaVersion:   clabernetesdeviceplan.SchemaVersion,
+		PlanSchemaVersion:   clabernetesinternaldeviceplan.SchemaVersion,
 	}
 }

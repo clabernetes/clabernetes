@@ -1,3 +1,4 @@
+//nolint:funlen // single-pass boundary logic reads clearest unsplit.
 package link
 
 import (
@@ -142,6 +143,7 @@ func (c *Controller) Reconcile(
 
 		return ctrlruntime.Result{}, err
 	}
+
 	desiredTunnelID, err := ResolveDesiredTunnelID(
 		link,
 		clusterLinks.Items,
@@ -160,6 +162,7 @@ func (c *Controller) Reconcile(
 			desiredTunnelID,
 		)
 	}
+
 	desiredStatus := desiredLinkStatus(
 		link,
 		desiredTunnelID,
@@ -216,6 +219,7 @@ func desiredLinkStatus(
 	if conditionStatus == metav1.ConditionFalse {
 		status.Error = message
 	}
+
 	apimachinerymeta.SetStatusCondition(&status.Conditions, metav1.Condition{
 		Type: clabernetesapisv1alpha1.LinkConditionAccepted, Status: conditionStatus,
 		ObservedGeneration: link.GetGeneration(), Reason: reason, Message: message,

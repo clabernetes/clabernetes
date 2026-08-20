@@ -139,6 +139,7 @@ func TestResolveProfilePreservesExplicitEmptyValues(t *testing.T) {
 	if resolved.PullSecrets == nil || resolved.NodeSelector == nil || resolved.Tolerations == nil {
 		t.Fatalf("expected explicit empty collections to remain non-nil, got %+v", resolved)
 	}
+
 	if len(resolved.PullSecrets) != 0 {
 		t.Fatalf("expected profile to clear global pull Secrets, got %+v", resolved.PullSecrets)
 	}

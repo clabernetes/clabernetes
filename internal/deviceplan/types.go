@@ -123,14 +123,25 @@ type CertificateInput struct {
 
 // ManagementInput is the controller-allocated management intent for one logical Node.
 type ManagementInput struct {
-	NodeID        string    `json:"nodeID"`
-	InterfaceName string    `json:"interfaceName"`
-	IPv4          string    `json:"ipv4,omitempty"`
-	IPv4Gateway   string    `json:"ipv4Gateway,omitempty"`
-	IPv6          string    `json:"ipv6,omitempty"`
-	IPv6Gateway   string    `json:"ipv6Gateway,omitempty"`
-	DNS           DNSConfig `json:"dns,omitempty"`
+	NodeID        string `json:"nodeID"`
+	InterfaceName string `json:"interfaceName"`
+	IPv4          string `json:"ipv4,omitempty"`
+	IPv4Gateway   string `json:"ipv4Gateway,omitempty"`
+	IPv6          string `json:"ipv6,omitempty"`
+	IPv6Gateway   string `json:"ipv6Gateway,omitempty"`
+	//nolint:modernize // the accepted schema freezes this tag and its serialization.
+	DNS DNSConfig `json:"dns,omitempty"`
 }
+
+// Connectivity vocabulary for accepted Link endpoints. The values are containerlab's own link
+// flavor identifiers carried verbatim through the plan.
+const (
+	ConnectivityVXLAN     = "vxlan"
+	ConnectivitySlurpeeth = "slurpeeth"
+	ConnectivityHost      = "host"
+	ConnectivitySamePod   = "same-pod"
+	ConnectivityLoopback  = "loopback"
+)
 
 // InterfaceInput is one accepted Link endpoint supplied before planning.
 type InterfaceInput struct {
@@ -195,27 +206,30 @@ type ContainerPlan struct {
 	ImagePullPolicy  string `json:"imagePullPolicy,omitempty"`
 	// ImagePullPolicyExplicit distinguishes imported Node intent from the package default so a
 	// LauncherProfile default never overwrites an explicitly declared policy.
-	ImagePullPolicyExplicit bool         `json:"imagePullPolicyExplicit,omitempty"`
-	ImageEntrypoint         []string     `json:"imageEntrypoint,omitempty"`
-	ImageCommand            []string     `json:"imageCommand,omitempty"`
-	Entrypoint              []string     `json:"entrypoint,omitempty"`
-	Command                 []string     `json:"command,omitempty"`
-	Environment             []KeyValue   `json:"environment,omitempty"`
-	Labels                  []KeyValue   `json:"labels,omitempty"`
-	User                    string       `json:"user,omitempty"`
-	WorkingDir              string       `json:"workingDir,omitempty"`
-	Ports                   []Port       `json:"ports,omitempty"`
-	StopSignal              string       `json:"stopSignal,omitempty"`
-	RestartPolicy           string       `json:"restartPolicy,omitempty"`
-	StartupDelay            uint         `json:"startupDelaySeconds,omitempty"`
-	TTY                     bool         `json:"tty,omitempty"`
-	Stdin                   bool         `json:"stdin,omitempty"`
-	Security                SecurityPlan `json:"security,omitempty"`
-	Resources               ResourcePlan `json:"resources,omitempty"`
-	DNS                     DNSConfig    `json:"dns,omitempty"`
-	Healthcheck             *Healthcheck `json:"healthcheck,omitempty"`
-	Required                bool         `json:"required"`
-	MountIDs                []string     `json:"mountIDs,omitempty"`
+	ImagePullPolicyExplicit bool       `json:"imagePullPolicyExplicit,omitempty"`
+	ImageEntrypoint         []string   `json:"imageEntrypoint,omitempty"`
+	ImageCommand            []string   `json:"imageCommand,omitempty"`
+	Entrypoint              []string   `json:"entrypoint,omitempty"`
+	Command                 []string   `json:"command,omitempty"`
+	Environment             []KeyValue `json:"environment,omitempty"`
+	Labels                  []KeyValue `json:"labels,omitempty"`
+	User                    string     `json:"user,omitempty"`
+	WorkingDir              string     `json:"workingDir,omitempty"`
+	Ports                   []Port     `json:"ports,omitempty"`
+	StopSignal              string     `json:"stopSignal,omitempty"`
+	RestartPolicy           string     `json:"restartPolicy,omitempty"`
+	StartupDelay            uint       `json:"startupDelaySeconds,omitempty"`
+	TTY                     bool       `json:"tty,omitempty"`
+	Stdin                   bool       `json:"stdin,omitempty"`
+	//nolint:modernize // the accepted schema freezes this tag and its serialization.
+	Security SecurityPlan `json:"security,omitempty"`
+	//nolint:modernize // the accepted schema freezes this tag and its serialization.
+	Resources ResourcePlan `json:"resources,omitempty"`
+	//nolint:modernize // the accepted schema freezes this tag and its serialization.
+	DNS         DNSConfig    `json:"dns,omitempty"`
+	Healthcheck *Healthcheck `json:"healthcheck,omitempty"`
+	Required    bool         `json:"required"`
+	MountIDs    []string     `json:"mountIDs,omitempty"`
 }
 
 // KeyValue is a deterministically sortable string map entry.
@@ -528,7 +542,8 @@ type ManagementPlan struct {
 	IPv6              string                      `json:"ipv6,omitempty"`
 	IPv6Gateway       string                      `json:"ipv6Gateway,omitempty"`
 	Routes            []Route                     `json:"routes,omitempty"`
-	DNS               DNSConfig                   `json:"dns,omitempty"`
+	//nolint:modernize // the accepted schema freezes this tag and its serialization.
+	DNS DNSConfig `json:"dns,omitempty"`
 }
 
 // ManagementInterfaceSelector identifies a generic runtime-owned interface when the imported

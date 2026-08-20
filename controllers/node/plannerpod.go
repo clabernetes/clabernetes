@@ -1,6 +1,8 @@
+//nolint:err113,funlen,gocyclo,maintidx,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package node
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"slices"
@@ -9,7 +11,7 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	k8scorev1 "k8s.io/api/core/v1"
 	k8snetworkingv1 "k8s.io/api/networking/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
@@ -48,7 +50,7 @@ type PlannerPodInput struct {
 	MaxInputBytes         int64
 	DeadlineSeconds       int64
 	ImagePullSecrets      []k8scorev1.LocalObjectReference
-	Payloads              []clabernetesdeviceplan.PayloadInput
+	Payloads              []clabernetesinternaldeviceplan.PayloadInput
 	CertificateSecretName string
 	EntropySecretName     string
 }
@@ -88,8 +90,9 @@ func RenderPlannerNetworkPolicy(input PlannerPodInput) (*k8snetworkingv1.Network
 func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 	if input.Node == nil || input.Node.GetName() == "" || input.Node.GetNamespace() == "" ||
 		input.Node.GetUID() == "" {
-		return nil, fmt.Errorf("planner Pod requires an identified owning Node")
+		return nil, errors.New("planner Pod requires an identified owning Node")
 	}
+
 	for field, value := range map[string]string{
 		"name": input.Name, "image": input.Image, "input ConfigMap": input.InputConfigMapName,
 		"input digest": input.InputDigest, "planner revision": input.PlannerRevision,
@@ -98,19 +101,24 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 			return nil, fmt.Errorf("planner Pod %s is required", field)
 		}
 	}
+
 	if input.MaxInputBytes <= 0 {
-		return nil, fmt.Errorf("planner Pod maximum input size must be positive")
+		return nil, errors.New("planner Pod maximum input size must be positive")
 	}
+
 	if input.DeadlineSeconds <= 0 {
-		return nil, fmt.Errorf("planner Pod deadline must be positive")
+		return nil, errors.New("planner Pod deadline must be positive")
 	}
+
 	workerCommand := input.WorkerCommand
 	if workerCommand == "" {
 		workerCommand = plannerWorkerPlan
 	}
+
 	if workerCommand != plannerWorkerPlan && workerCommand != plannerWorkerImages {
 		return nil, fmt.Errorf("planner Pod worker command %q is unsupported", workerCommand)
 	}
+
 	payloadVolumes, payloadMounts, err := renderPlannerPayloadSources(
 		input.Node.GetNamespace(),
 		input.Payloads,
@@ -142,6 +150,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 		},
 		SeccompProfile: &k8scorev1.SeccompProfile{Type: k8scorev1.SeccompProfileTypeRuntimeDefault},
 	}
+
 	var initContainers []k8scorev1.Container
 	if plannerHasURLPayloads(input.Payloads) {
 		initContainers = append(initContainers, k8scorev1.Container{
@@ -193,10 +202,12 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 	if len(payloadMounts) != 0 {
 		workerArgs = append(workerArgs, "--payloads", plannerPayloadRootPath)
 	}
+
 	workerMounts := []k8scorev1.VolumeMount{
 		{Name: "planner-input", MountPath: plannerInputMountPath, ReadOnly: true},
 		{Name: "planner-scratch", MountPath: plannerScratchPath},
 	}
+
 	workerMounts = append(workerMounts, payloadMounts...)
 	if input.CertificateSecretName != "" {
 		workerArgs = append(workerArgs, "--certificates", plannerCertificateRoot)
@@ -204,15 +215,18 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 			Name: plannerCertificateName, MountPath: plannerCertificateRoot, ReadOnly: true,
 		})
 	}
+
 	if input.EntropySecretName != "" {
 		workerArgs = append(workerArgs, "--entropy", plannerEntropyRoot)
 		workerMounts = append(workerMounts, k8scorev1.VolumeMount{
 			Name: plannerEntropyName, MountPath: plannerEntropyRoot, ReadOnly: true,
 		})
 	}
+
 	slices.SortFunc(workerMounts, func(left, right k8scorev1.VolumeMount) int {
 		return strings.Compare(left.MountPath, right.MountPath)
 	})
+
 	volumes := []k8scorev1.Volume{
 		{
 			Name: "planner-input",
@@ -232,6 +246,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 			},
 		},
 	}
+
 	volumes = append(volumes, payloadVolumes...)
 	if input.CertificateSecretName != "" {
 		volumes = append(volumes, k8scorev1.Volume{
@@ -241,14 +256,15 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 			}},
 		})
 	}
+
 	if input.EntropySecretName != "" {
 		volumes = append(volumes, k8scorev1.Volume{
 			Name: plannerEntropyName,
 			VolumeSource: k8scorev1.VolumeSource{Secret: &k8scorev1.SecretVolumeSource{
 				SecretName: input.EntropySecretName,
 				Items: []k8scorev1.KeyToPath{{
-					Key:  clabernetesdeviceplan.EntropySeedKey,
-					Path: clabernetesdeviceplan.EntropySeedKey,
+					Key:  clabernetesinternaldeviceplan.EntropySeedKey,
+					Path: clabernetesinternaldeviceplan.EntropySeedKey,
 				}},
 			}},
 		})
@@ -315,25 +331,30 @@ const plannerPayloadRootPath = "/var/run/clabernetes/planner/payloads"
 
 func renderPlannerPayloadSources(
 	namespace string,
-	payloads []clabernetesdeviceplan.PayloadInput,
+	payloads []clabernetesinternaldeviceplan.PayloadInput,
 ) ([]k8scorev1.Volume, []k8scorev1.VolumeMount, error) {
 	volumes := []k8scorev1.Volume{}
 	mounts := []k8scorev1.VolumeMount{}
 	seen := map[string]bool{}
 	urlPayloads := false
+
 	for _, payload := range payloads {
 		if seen[payload.ID] {
 			return nil, nil, fmt.Errorf("planner payload input %q is duplicated", payload.ID)
 		}
+
 		seen[payload.ID] = true
-		if payload.Kind == clabernetesdeviceplan.PayloadURL {
+		if payload.Kind == clabernetesinternaldeviceplan.PayloadURL {
 			urlPayloads = true
+
 			continue
 		}
-		if payload.Kind != clabernetesdeviceplan.PayloadConfigMap &&
-			payload.Kind != clabernetesdeviceplan.PayloadSecret {
+
+		if payload.Kind != clabernetesinternaldeviceplan.PayloadConfigMap &&
+			payload.Kind != clabernetesinternaldeviceplan.PayloadSecret {
 			return nil, nil, fmt.Errorf("planner payload input %q has no typed source", payload.ID)
 		}
+
 		objectNamespace, objectName, key, err := parsePlannerPayloadObjectReference(
 			payload.Reference,
 		)
@@ -347,8 +368,9 @@ func renderPlannerPayloadSources(
 		// mode is applied only at the final artifact destination by the preparation helper.
 		mode := int32(0o444)
 		item := k8scorev1.KeyToPath{Key: key, Path: "source", Mode: &mode}
+
 		volume := k8scorev1.Volume{Name: plannerPayloadVolumeName(payload.ID)}
-		if payload.Kind == clabernetesdeviceplan.PayloadConfigMap {
+		if payload.Kind == clabernetesinternaldeviceplan.PayloadConfigMap {
 			volume.ConfigMap = &k8scorev1.ConfigMapVolumeSource{
 				LocalObjectReference: k8scorev1.LocalObjectReference{Name: objectName},
 				Items:                []k8scorev1.KeyToPath{item},
@@ -359,16 +381,18 @@ func renderPlannerPayloadSources(
 				Items:      []k8scorev1.KeyToPath{item},
 			}
 		}
+
 		volumes = append(volumes, volume)
 		mounts = append(mounts, k8scorev1.VolumeMount{
 			Name: volume.Name,
 			MountPath: path.Join(
 				plannerPayloadRootPath,
-				clabernetesdeviceplan.ArtifactNodeDirectory(payload.ID),
+				clabernetesinternaldeviceplan.ArtifactNodeDirectory(payload.ID),
 			),
 			ReadOnly: true,
 		})
 	}
+
 	if urlPayloads {
 		volumes = append(volumes, k8scorev1.Volume{
 			Name: plannerURLPayloadName,
@@ -384,16 +408,18 @@ func renderPlannerPayloadSources(
 	return volumes, mounts, nil
 }
 
-func plannerHasURLPayloads(payloads []clabernetesdeviceplan.PayloadInput) bool {
-	return slices.ContainsFunc(payloads, func(payload clabernetesdeviceplan.PayloadInput) bool {
-		return payload.Kind == clabernetesdeviceplan.PayloadURL
-	})
+func plannerHasURLPayloads(payloads []clabernetesinternaldeviceplan.PayloadInput) bool {
+	return slices.ContainsFunc(payloads,
+		func(payload clabernetesinternaldeviceplan.PayloadInput) bool {
+			return payload.Kind == clabernetesinternaldeviceplan.PayloadURL
+		})
 }
 
 func plannerURLFetchEgressRules() []k8snetworkingv1.NetworkPolicyEgressRule {
 	protocolTCP := k8scorev1.ProtocolTCP
 	protocolUDP := k8scorev1.ProtocolUDP
 	dnsPort := intstr.FromInt32(53)
+
 	return []k8snetworkingv1.NetworkPolicyEgressRule{
 		{
 			Ports: []k8snetworkingv1.NetworkPolicyPort{
@@ -422,10 +448,11 @@ func plannerURLFetchEgressRules() []k8snetworkingv1.NetworkPolicyEgressRule {
 
 func parsePlannerPayloadObjectReference(reference string) (string, string, string, error) {
 	object, key, found := strings.Cut(reference, ":")
+
 	namespace, name, separated := strings.Cut(object, "/")
 	if !found || !separated || namespace == "" || name == "" || key == "" ||
 		strings.Contains(key, "/") {
-		return "", "", "", fmt.Errorf("expected namespace/name:key")
+		return "", "", "", errors.New("expected namespace/name:key")
 	}
 
 	return namespace, name, key, nil
@@ -433,7 +460,7 @@ func parsePlannerPayloadObjectReference(reference string) (string, string, strin
 
 func plannerPayloadVolumeName(id string) string {
 	return "planner-payload-" + strings.TrimPrefix(
-		clabernetesdeviceplan.Digest([]byte(id)),
+		clabernetesinternaldeviceplan.Digest([]byte(id)),
 		"sha256:",
 	)[:16]
 }

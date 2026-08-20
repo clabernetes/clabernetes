@@ -12,8 +12,8 @@ import (
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternalocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -66,8 +66,8 @@ type Reconciler struct {
 	// DirectRuntimeImage is the c9s manager image containing only the generic package adapter and
 	// helpers. DirectCompatibility is injectable so tests do not invent a kind inventory.
 	DirectRuntimeImage        string
-	DirectCompatibility       func() (clabernetesdeviceplan.Compatibility, error)
-	DirectPlatform            clabernetesocimetadata.Platform
+	DirectCompatibility       func() (clabernetesinternaldeviceplan.Compatibility, error)
+	DirectPlatform            clabernetesinternalocimetadata.Platform
 	directInitializationError error
 }
 
@@ -77,7 +77,6 @@ func NewReconciler(
 	client ctrlruntimeclient.Client,
 	apiReader ctrlruntimeclient.Reader,
 	managerAppName string,
-	managerNamespace string,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) *Reconciler {
 	reconciler := &Reconciler{

@@ -1,3 +1,4 @@
+//nolint:testpackage // dense fixture-driven tests exercise one boundary end to end.
 package node
 
 import (
@@ -6,7 +7,7 @@ import (
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 )
@@ -57,31 +58,36 @@ func TestCompilePlanInputTreatsKindsAsOpaqueAndCompilesUIDBoundInterfaces(t *tes
 			},
 		},
 	}
+
 	input, err := CompilePlanInput(PlanInputCompileRequest{
 		Primary: primary, GroupMembers: []string{secondary.GetName(), primary.GetName()},
 		NodesByName: nodes, Links: links, Compatibility: planInputTestCompatibility(),
-		Images: []clabernetesdeviceplan.ImageInput{
+		Images: []clabernetesinternaldeviceplan.ImageInput{
 			planInputTestImage(primary, primary.Spec.Image),
 			planInputTestImage(secondary, secondary.Spec.Image),
 		},
-		Management: []clabernetesdeviceplan.ManagementInput{{
+		Management: []clabernetesinternaldeviceplan.ManagementInput{{
 			NodeID: string(primary.GetUID()), IPv4: "192.0.2.10/24", IPv4Gateway: "192.0.2.1",
 		}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got, want := len(input.Nodes), 2; got != want {
 		t.Fatalf("compiled Nodes = %#v, want %d", input.Nodes, want)
 	}
+
 	for _, compiled := range input.Nodes {
 		if compiled.Name == secondary.GetName() && compiled.GroupOwner != string(primary.GetUID()) {
 			t.Fatalf("secondary group owner = %q", compiled.GroupOwner)
 		}
+
 		definition := map[string]any{}
 		if err = json.Unmarshal(compiled.Definition, &definition); err != nil {
 			t.Fatal(err)
 		}
+
 		if definition["kind"] != compiled.Kind {
 			t.Fatalf(
 				"opaque kind was rewritten: input=%q definition=%#v",
@@ -90,12 +96,15 @@ func TestCompilePlanInputTreatsKindsAsOpaqueAndCompilesUIDBoundInterfaces(t *tes
 			)
 		}
 	}
+
 	if got, want := len(input.Interfaces), 4; got != want {
 		t.Fatalf("compiled interfaces = %#v, want %d", input.Interfaces, want)
 	}
+
 	assertCompiledInterface(t, input.Interfaces, "eth1", connectivitySamePod, 0, "")
 	assertCompiledInterface(t, input.Interfaces, "eth2", "vxlan", 42, "remote-vx")
 	assertCompiledInterface(t, input.Interfaces, "eth3", connectivityHost, 0, "")
+
 	if input.Management[0].InterfaceName != "" {
 		t.Fatalf("compiler invented a kind-specific management interface: %#v", input.Management[0])
 	}
@@ -116,11 +125,14 @@ func TestCompilePlanInputRejectsUnacceptedTerminatingLink(t *testing.T) {
 			primary.GetName(): primary, remote.GetName(): remote,
 		},
 		Links: []clabernetesapisv1alpha1.Link{link}, Compatibility: planInputTestCompatibility(),
-		Images: []clabernetesdeviceplan.ImageInput{planInputTestImage(primary, primary.Spec.Image)},
+		Images: []clabernetesinternaldeviceplan.ImageInput{
+			planInputTestImage(primary, primary.Spec.Image),
+		},
 	})
-	var planningErr *clabernetesdeviceplan.Error
+
+	var planningErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &planningErr) ||
-		planningErr.Code != clabernetesdeviceplan.ErrorMissingInput ||
+		planningErr.Code != clabernetesinternaldeviceplan.ErrorMissingInput ||
 		planningErr.Behavior != "controller-input" {
 		t.Fatalf("CompilePlanInput() error = %#v, want controller-input MissingInput", err)
 	}
@@ -178,31 +190,32 @@ func planInputTestLink(
 func planInputTestImage(
 	node *clabernetesapisv1alpha1.Node,
 	reference string,
-) clabernetesdeviceplan.ImageInput {
-	return clabernetesdeviceplan.ImageInput{
+) clabernetesinternaldeviceplan.ImageInput {
+	return clabernetesinternaldeviceplan.ImageInput{
 		NodeID: string(node.GetUID()), SourceReference: reference,
 		DigestReference: reference + "@sha256:aaaaaaaa",
-		Platform:        clabernetesdeviceplan.Platform{OS: "linux", Architecture: "amd64"},
+		Platform:        clabernetesinternaldeviceplan.Platform{OS: "linux", Architecture: "amd64"},
 	}
 }
 
-func planInputTestCompatibility() clabernetesdeviceplan.Compatibility {
-	return clabernetesdeviceplan.Compatibility{
-		ContainerlabModule:  clabernetesdeviceplan.ContainerlabModulePath,
-		ContainerlabVersion: "v-test", PlanSchemaVersion: clabernetesdeviceplan.SchemaVersion,
+func planInputTestCompatibility() clabernetesinternaldeviceplan.Compatibility {
+	return clabernetesinternaldeviceplan.Compatibility{
+		ContainerlabModule:  clabernetesinternaldeviceplan.ContainerlabModulePath,
+		ContainerlabVersion: "v-test", PlanSchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		RegistryDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 }
 
 func assertCompiledInterface(
 	t *testing.T,
-	interfaces []clabernetesdeviceplan.InterfaceInput,
+	interfaces []clabernetesinternaldeviceplan.InterfaceInput,
 	name,
 	connectivity string,
 	tunnelID int,
 	peerTransport string,
 ) {
 	t.Helper()
+
 	for _, intf := range interfaces {
 		if intf.Name == name {
 			if intf.Connectivity != connectivity || intf.TunnelID != tunnelID ||
@@ -213,5 +226,6 @@ func assertCompiledInterface(
 			return
 		}
 	}
+
 	t.Fatalf("interface %q is missing from %#v", name, interfaces)
 }

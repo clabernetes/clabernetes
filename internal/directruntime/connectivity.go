@@ -1,3 +1,4 @@
+//nolint:err113,funlen,gocognit,gocyclo,maintidx,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -17,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	claberneteshostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternalhostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -91,13 +92,13 @@ type VethInterface struct {
 // DesiredPlanDigest identifies the effective running plan, which retains creation-time fields from
 // the cold plan when the imported package declares an interface-only transition Live-capable.
 type ConnectivityRevision struct {
-	SchemaVersion     string                                 `json:"schemaVersion"`
-	BasePlanDigest    string                                 `json:"basePlanDigest"`
-	DesiredPlanDigest string                                 `json:"desiredPlanDigest"`
-	MaximumMode       clabernetesdeviceplan.LinkApplyMode    `json:"maximumMode,omitempty"`
-	InputInterfaces   []clabernetesdeviceplan.InterfaceInput `json:"inputInterfaces,omitempty"`
-	Interfaces        []clabernetesdeviceplan.InterfacePlan  `json:"interfaces,omitempty"`
-	Actions           []clabernetesdeviceplan.Action         `json:"actions,omitempty"`
+	SchemaVersion     string                                         `json:"schemaVersion"`
+	BasePlanDigest    string                                         `json:"basePlanDigest"`
+	DesiredPlanDigest string                                         `json:"desiredPlanDigest"`
+	MaximumMode       clabernetesinternaldeviceplan.LinkApplyMode    `json:"maximumMode,omitempty"`
+	InputInterfaces   []clabernetesinternaldeviceplan.InterfaceInput `json:"inputInterfaces,omitempty"`
+	Interfaces        []clabernetesinternaldeviceplan.InterfacePlan  `json:"interfaces,omitempty"`
+	Actions           []clabernetesinternaldeviceplan.Action         `json:"actions,omitempty"`
 }
 
 // ConnectivityTransition describes the least disruptive imported lifecycle action that covers
@@ -105,7 +106,7 @@ type ConnectivityRevision struct {
 // need kind, vendor, or registry knowledge to apply it.
 type ConnectivityTransition struct {
 	Changed         bool
-	RequiredMode    clabernetesdeviceplan.LinkApplyMode
+	RequiredMode    clabernetesinternaldeviceplan.LinkApplyMode
 	AffectedNodeIDs []string
 }
 
@@ -114,39 +115,46 @@ type ConnectivityTransition struct {
 // derived from the changed endpoint inventory are intentionally projected from the running plan,
 // matching the imported package's Link lifecycle contract.
 func EvaluateConnectivityTransition(
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
-	desiredInput clabernetesdeviceplan.Input,
-	desiredPlan clabernetesdeviceplan.Plan,
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
+	desiredInput clabernetesinternaldeviceplan.Input,
+	desiredPlan clabernetesinternaldeviceplan.Plan,
 ) (ConnectivityTransition, error) {
-	normalizedBaseInput, err := clabernetesdeviceplan.NormalizeInput(baseInput)
+	normalizedBaseInput, err := clabernetesinternaldeviceplan.NormalizeInput(baseInput)
 	if err != nil {
 		return ConnectivityTransition{}, err
 	}
-	normalizedBasePlan, err := clabernetesdeviceplan.NormalizePlan(basePlan)
+
+	normalizedBasePlan, err := clabernetesinternaldeviceplan.NormalizePlan(basePlan)
 	if err != nil {
 		return ConnectivityTransition{}, err
 	}
+
 	if err = validateIdentity(normalizedBaseInput, normalizedBasePlan); err != nil {
 		return ConnectivityTransition{}, err
 	}
-	normalizedDesiredInput, err := clabernetesdeviceplan.NormalizeInput(desiredInput)
+
+	normalizedDesiredInput, err := clabernetesinternaldeviceplan.NormalizeInput(desiredInput)
 	if err != nil {
 		return ConnectivityTransition{}, err
 	}
-	normalizedDesiredPlan, err := clabernetesdeviceplan.NormalizePlan(desiredPlan)
+
+	normalizedDesiredPlan, err := clabernetesinternaldeviceplan.NormalizePlan(desiredPlan)
 	if err != nil {
 		return ConnectivityTransition{}, err
 	}
+
 	if err = validateIdentity(normalizedDesiredInput, normalizedDesiredPlan); err != nil {
 		return ConnectivityTransition{}, err
 	}
+
 	if !sameNonConnectivityInput(normalizedBaseInput, normalizedDesiredInput) {
 		return ConnectivityTransition{}, fmt.Errorf(
 			"%w: desired input differs outside connectivity",
 			ErrConnectivityRevision,
 		)
 	}
+
 	if normalizedBasePlan.SchemaVersion != normalizedDesiredPlan.SchemaVersion ||
 		!reflect.DeepEqual(normalizedBasePlan.Compatibility, normalizedDesiredPlan.Compatibility) ||
 		!reflect.DeepEqual(normalizedBasePlan.Planner, normalizedDesiredPlan.Planner) {
@@ -155,6 +163,7 @@ func EvaluateConnectivityTransition(
 			ErrConnectivityRevision,
 		)
 	}
+
 	effectiveInput, effectivePlan, err := projectLiveConnectivity(
 		normalizedBaseInput,
 		normalizedBasePlan,
@@ -179,17 +188,17 @@ func EvaluateConnectivityTransition(
 // endpoint inventory even though the package's Live contract requires no lifecycle action. Those
 // cold-only plan sections remain at their running values until a legitimate recreation.
 func NewConnectivityRevision(
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
-	desiredInput clabernetesdeviceplan.Input,
-	desiredPlan clabernetesdeviceplan.Plan,
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
+	desiredInput clabernetesinternaldeviceplan.Input,
+	desiredPlan clabernetesinternaldeviceplan.Plan,
 ) (ConnectivityRevision, error) {
 	return NewConnectivityRevisionForMode(
 		baseInput,
 		basePlan,
 		desiredInput,
 		desiredPlan,
-		clabernetesdeviceplan.LinkApplyLive,
+		clabernetesinternaldeviceplan.LinkApplyLive,
 	)
 }
 
@@ -198,48 +207,56 @@ func NewConnectivityRevision(
 // maximumMode. Restart revisions retain the Pod and its creation-time state; Recreate is never a
 // projected revision because it must build a new cold plan.
 func NewConnectivityRevisionForMode(
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
-	desiredInput clabernetesdeviceplan.Input,
-	desiredPlan clabernetesdeviceplan.Plan,
-	maximumMode clabernetesdeviceplan.LinkApplyMode,
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
+	desiredInput clabernetesinternaldeviceplan.Input,
+	desiredPlan clabernetesinternaldeviceplan.Plan,
+	maximumMode clabernetesinternaldeviceplan.LinkApplyMode,
 ) (ConnectivityRevision, error) {
-	if maximumMode != clabernetesdeviceplan.LinkApplyLive &&
-		maximumMode != clabernetesdeviceplan.LinkApplyRestart {
+	if maximumMode != clabernetesinternaldeviceplan.LinkApplyLive &&
+		maximumMode != clabernetesinternaldeviceplan.LinkApplyRestart {
 		return ConnectivityRevision{}, fmt.Errorf(
 			"%w: projected connectivity mode %q is invalid",
 			ErrConnectivityRevision,
 			maximumMode,
 		)
 	}
-	normalizedBaseInput, err := clabernetesdeviceplan.NormalizeInput(baseInput)
+
+	normalizedBaseInput, err := clabernetesinternaldeviceplan.NormalizeInput(baseInput)
 	if err != nil {
 		return ConnectivityRevision{}, err
 	}
-	normalizedBasePlan, err := clabernetesdeviceplan.NormalizePlan(basePlan)
+
+	normalizedBasePlan, err := clabernetesinternaldeviceplan.NormalizePlan(basePlan)
 	if err != nil {
 		return ConnectivityRevision{}, err
 	}
+
 	if err = validateIdentity(normalizedBaseInput, normalizedBasePlan); err != nil {
 		return ConnectivityRevision{}, err
 	}
-	normalizedDesiredInput, err := clabernetesdeviceplan.NormalizeInput(desiredInput)
+
+	normalizedDesiredInput, err := clabernetesinternaldeviceplan.NormalizeInput(desiredInput)
 	if err != nil {
 		return ConnectivityRevision{}, err
 	}
-	normalizedDesiredPlan, err := clabernetesdeviceplan.NormalizePlan(desiredPlan)
+
+	normalizedDesiredPlan, err := clabernetesinternaldeviceplan.NormalizePlan(desiredPlan)
 	if err != nil {
 		return ConnectivityRevision{}, err
 	}
+
 	if err = validateIdentity(normalizedDesiredInput, normalizedDesiredPlan); err != nil {
 		return ConnectivityRevision{}, err
 	}
+
 	if !sameNonConnectivityInput(normalizedBaseInput, normalizedDesiredInput) {
 		return ConnectivityRevision{}, fmt.Errorf(
 			"%w: desired input differs outside connectivity",
 			ErrConnectivityRevision,
 		)
 	}
+
 	if normalizedBasePlan.SchemaVersion != normalizedDesiredPlan.SchemaVersion ||
 		!reflect.DeepEqual(normalizedBasePlan.Compatibility, normalizedDesiredPlan.Compatibility) ||
 		!reflect.DeepEqual(normalizedBasePlan.Planner, normalizedDesiredPlan.Planner) {
@@ -248,10 +265,12 @@ func NewConnectivityRevisionForMode(
 			ErrConnectivityRevision,
 		)
 	}
+
 	baseDigest, err := normalizedBasePlan.Digest()
 	if err != nil {
 		return ConnectivityRevision{}, err
 	}
+
 	effectiveInput, effectivePlan, err := projectLiveConnectivity(
 		normalizedBaseInput,
 		normalizedBasePlan,
@@ -262,6 +281,7 @@ func NewConnectivityRevisionForMode(
 	if err != nil {
 		return ConnectivityRevision{}, err
 	}
+
 	transition, err := evaluateNormalizedConnectivityTransition(
 		normalizedBaseInput,
 		normalizedBasePlan,
@@ -271,6 +291,7 @@ func NewConnectivityRevisionForMode(
 	if err != nil {
 		return ConnectivityRevision{}, err
 	}
+
 	if linkApplyModeRank(transition.RequiredMode) > linkApplyModeRank(maximumMode) {
 		return ConnectivityRevision{}, fmt.Errorf(
 			"%w: affected connectivity requires %s rather than at most %s",
@@ -279,10 +300,12 @@ func NewConnectivityRevisionForMode(
 			maximumMode,
 		)
 	}
+
 	desiredDigest, err := effectivePlan.Digest()
 	if err != nil {
 		return ConnectivityRevision{}, err
 	}
+
 	revision := ConnectivityRevision{
 		SchemaVersion: ConnectivityRevisionSchemaVersion, BasePlanDigest: baseDigest,
 		DesiredPlanDigest: desiredDigest,
@@ -302,7 +325,7 @@ func NewConnectivityRevisionForMode(
 	return revision, nil
 }
 
-func sameNonConnectivityInput(left, right clabernetesdeviceplan.Input) bool {
+func sameNonConnectivityInput(left, right clabernetesinternaldeviceplan.Input) bool {
 	left.Interfaces = nil
 	right.Interfaces = nil
 
@@ -310,34 +333,45 @@ func sameNonConnectivityInput(left, right clabernetesdeviceplan.Input) bool {
 }
 
 func projectLiveConnectivity(
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
-	inputInterfaces []clabernetesdeviceplan.InterfaceInput,
-	interfaces []clabernetesdeviceplan.InterfacePlan,
-	waitActions []clabernetesdeviceplan.Action,
-) (clabernetesdeviceplan.Input, clabernetesdeviceplan.Plan, error) {
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
+	inputInterfaces []clabernetesinternaldeviceplan.InterfaceInput,
+	interfaces []clabernetesinternaldeviceplan.InterfacePlan,
+	waitActions []clabernetesinternaldeviceplan.Action,
+) (clabernetesinternaldeviceplan.Input, clabernetesinternaldeviceplan.Plan, error) {
 	baseInput.Interfaces = slices.Clone(inputInterfaces)
-	normalizedInput, err := clabernetesdeviceplan.NormalizeInput(baseInput)
+
+	normalizedInput, err := clabernetesinternaldeviceplan.NormalizeInput(baseInput)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	desiredInputDigest, err := normalizedInput.Digest()
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	basePlan.InputDigest = desiredInputDigest
 	basePlan.Interfaces = slices.Clone(interfaces)
-	actions := make([]clabernetesdeviceplan.Action, 0, len(basePlan.Actions)+len(waitActions))
+
+	actions := make([]clabernetesinternaldeviceplan.Action,
+		0, len(basePlan.Actions)+len(waitActions))
 	for _, action := range basePlan.Actions {
 		if isConnectivityWaitAction(action) {
 			continue
 		}
+
 		actions = append(actions, action)
 	}
-	basePlan.Actions = append(actions, waitActions...)
-	normalizedPlan, err := clabernetesdeviceplan.NormalizePlan(basePlan)
+
+	//nolint:gocritic // the result deliberately extends a different base slice.
+	basePlan.Actions = append(
+		actions,
+		waitActions...) //nolint:gocritic // the base plan deliberately adopts the extended action list.
+
+	normalizedPlan, err := clabernetesinternaldeviceplan.NormalizePlan(basePlan)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
 
 	return normalizedInput, normalizedPlan, nil
@@ -346,37 +380,46 @@ func projectLiveConnectivity(
 // ApplyConnectivityRevision merges a revision into an immutable cold plan and rejects it unless
 // the exact controller-projected effective-live plan and input identities are reproduced.
 func ApplyConnectivityRevision(
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
 	revision ConnectivityRevision,
-) (clabernetesdeviceplan.Input, clabernetesdeviceplan.Plan, error) {
+) (clabernetesinternaldeviceplan.Input, clabernetesinternaldeviceplan.Plan, error) {
 	normalizedRevision, err := normalizeConnectivityRevision(revision)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
-	normalizedInput, err := clabernetesdeviceplan.NormalizeInput(baseInput)
+
+	normalizedInput, err := clabernetesinternaldeviceplan.NormalizeInput(baseInput)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
-	normalizedPlan, err := clabernetesdeviceplan.NormalizePlan(basePlan)
+
+	normalizedPlan, err := clabernetesinternaldeviceplan.NormalizePlan(basePlan)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	if err = validateIdentity(normalizedInput, normalizedPlan); err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	normalizedBaseInput := normalizedInput
 	normalizedBasePlan := normalizedPlan
+
 	baseDigest, err := normalizedPlan.Digest()
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	if baseDigest != normalizedRevision.BasePlanDigest {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, fmt.Errorf(
-			"%w: base plan digest differs from the running Pod",
-			ErrConnectivityRevision,
-		)
+		return clabernetesinternaldeviceplan.Input{},
+			clabernetesinternaldeviceplan.Plan{},
+			fmt.Errorf(
+				"%w: base plan digest differs from the running Pod",
+				ErrConnectivityRevision,
+			)
 	}
+
 	normalizedInput, normalizedPlan, err = projectLiveConnectivity(
 		normalizedInput,
 		normalizedPlan,
@@ -385,21 +428,27 @@ func ApplyConnectivityRevision(
 		normalizedRevision.Actions,
 	)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	desiredPlanDigest, err := normalizedPlan.Digest()
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	if desiredPlanDigest != normalizedRevision.DesiredPlanDigest {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, fmt.Errorf(
-			"%w: merged connectivity does not reproduce the desired plan digest",
-			ErrConnectivityRevision,
-		)
+		return clabernetesinternaldeviceplan.Input{},
+			clabernetesinternaldeviceplan.Plan{},
+			fmt.Errorf(
+				"%w: merged connectivity does not reproduce the desired plan digest",
+				ErrConnectivityRevision,
+			)
 	}
+
 	if err = validateIdentity(normalizedInput, normalizedPlan); err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	transition, err := evaluateNormalizedConnectivityTransition(
 		normalizedBaseInput,
 		normalizedBasePlan,
@@ -407,25 +456,28 @@ func ApplyConnectivityRevision(
 		normalizedPlan,
 	)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, err
 	}
+
 	if transition.RequiredMode != normalizedRevision.MaximumMode {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, fmt.Errorf(
-			"%w: merged connectivity requires %s rather than declared cumulative mode %s",
-			ErrConnectivityRevision,
-			transition.RequiredMode,
-			normalizedRevision.MaximumMode,
-		)
+		return clabernetesinternaldeviceplan.Input{},
+			clabernetesinternaldeviceplan.Plan{},
+			fmt.Errorf(
+				"%w: merged connectivity requires %s rather than declared cumulative mode %s",
+				ErrConnectivityRevision,
+				transition.RequiredMode,
+				normalizedRevision.MaximumMode,
+			)
 	}
 
 	return normalizedInput, normalizedPlan, nil
 }
 
 func evaluateNormalizedConnectivityTransition(
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
-	desiredInput clabernetesdeviceplan.Input,
-	desiredPlan clabernetesdeviceplan.Plan,
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
+	desiredInput clabernetesinternaldeviceplan.Input,
+	desiredPlan clabernetesinternaldeviceplan.Plan,
 ) (ConnectivityTransition, error) {
 	changedInterfaces := changedConnectivityInterfaces(
 		baseInput,
@@ -434,36 +486,43 @@ func evaluateNormalizedConnectivityTransition(
 		desiredPlan,
 	)
 	affectedLinks := map[string]bool{}
+
 	for index := range basePlan.Interfaces {
 		intf := &basePlan.Interfaces[index]
 		if changedInterfaces[intf.ID] {
 			affectedLinks[intf.LinkID] = true
 		}
 	}
+
 	for index := range desiredPlan.Interfaces {
 		intf := &desiredPlan.Interfaces[index]
 		if changedInterfaces[intf.ID] {
 			affectedLinks[intf.LinkID] = true
 		}
 	}
+
 	for index := range baseInput.Interfaces {
 		intf := &baseInput.Interfaces[index]
 		if changedInterfaces[intf.ID] {
 			affectedLinks[intf.LinkID] = true
 		}
 	}
+
 	for index := range desiredInput.Interfaces {
 		intf := &desiredInput.Interfaces[index]
 		if changedInterfaces[intf.ID] {
 			affectedLinks[intf.LinkID] = true
 		}
 	}
-	transition := ConnectivityTransition{RequiredMode: clabernetesdeviceplan.LinkApplyLive}
+
+	transition := ConnectivityTransition{RequiredMode: clabernetesinternaldeviceplan.LinkApplyLive}
 	if len(affectedLinks) == 0 {
 		return transition, nil
 	}
+
 	transition.Changed = true
 	affectedNodeIDs := map[string]bool{}
+
 	for index := range basePlan.Interfaces {
 		intf := &basePlan.Interfaces[index]
 		if affectedLinks[intf.LinkID] {
@@ -474,6 +533,7 @@ func evaluateNormalizedConnectivityTransition(
 			}
 		}
 	}
+
 	for index := range desiredPlan.Interfaces {
 		intf := &desiredPlan.Interfaces[index]
 		if affectedLinks[intf.LinkID] {
@@ -484,22 +544,24 @@ func evaluateNormalizedConnectivityTransition(
 			}
 		}
 	}
+
 	transition.AffectedNodeIDs = make([]string, 0, len(affectedNodeIDs))
 	for nodeID := range affectedNodeIDs {
 		transition.AffectedNodeIDs = append(transition.AffectedNodeIDs, nodeID)
 	}
+
 	slices.Sort(transition.AffectedNodeIDs)
 
 	return transition, nil
 }
 
-func linkApplyModeRank(mode clabernetesdeviceplan.LinkApplyMode) int {
+func linkApplyModeRank(mode clabernetesinternaldeviceplan.LinkApplyMode) int {
 	switch mode {
-	case clabernetesdeviceplan.LinkApplyLive:
+	case clabernetesinternaldeviceplan.LinkApplyLive:
 		return 0
-	case clabernetesdeviceplan.LinkApplyRestart:
+	case clabernetesinternaldeviceplan.LinkApplyRestart:
 		return 1
-	case clabernetesdeviceplan.LinkApplyRecreate:
+	case clabernetesinternaldeviceplan.LinkApplyRecreate:
 		return 2
 	default:
 		return 3
@@ -507,10 +569,10 @@ func linkApplyModeRank(mode clabernetesdeviceplan.LinkApplyMode) int {
 }
 
 func changedConnectivityInterfaces(
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
-	desiredInput clabernetesdeviceplan.Input,
-	desiredPlan clabernetesdeviceplan.Plan,
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
+	desiredInput clabernetesinternaldeviceplan.Input,
+	desiredPlan clabernetesinternaldeviceplan.Plan,
 ) map[string]bool {
 	baseInputs := interfaceInputsByID(baseInput.Interfaces)
 	desiredInputs := interfaceInputsByID(desiredInput.Interfaces)
@@ -518,14 +580,18 @@ func changedConnectivityInterfaces(
 	desiredInterfaces := interfacePlansByID(desiredPlan.Interfaces)
 	baseWaits := interfaceWaitActionsByID(basePlan.Actions)
 	desiredWaits := interfaceWaitActionsByID(desiredPlan.Actions)
+
 	allIDs := map[string]bool{}
 	for id := range baseInputs {
 		allIDs[id] = true
 	}
+
 	for id := range desiredInputs {
 		allIDs[id] = true
 	}
+
 	changed := map[string]bool{}
+
 	for id := range allIDs {
 		if !reflect.DeepEqual(baseInputs[id], desiredInputs[id]) ||
 			!reflect.DeepEqual(baseInterfaces[id], desiredInterfaces[id]) ||
@@ -538,9 +604,9 @@ func changedConnectivityInterfaces(
 }
 
 func interfaceInputsByID(
-	interfaces []clabernetesdeviceplan.InterfaceInput,
-) map[string]clabernetesdeviceplan.InterfaceInput {
-	indexed := make(map[string]clabernetesdeviceplan.InterfaceInput, len(interfaces))
+	interfaces []clabernetesinternaldeviceplan.InterfaceInput,
+) map[string]clabernetesinternaldeviceplan.InterfaceInput {
+	indexed := make(map[string]clabernetesinternaldeviceplan.InterfaceInput, len(interfaces))
 	for _, intf := range interfaces {
 		indexed[intf.ID] = intf
 	}
@@ -549,9 +615,9 @@ func interfaceInputsByID(
 }
 
 func interfacePlansByID(
-	interfaces []clabernetesdeviceplan.InterfacePlan,
-) map[string]clabernetesdeviceplan.InterfacePlan {
-	indexed := make(map[string]clabernetesdeviceplan.InterfacePlan, len(interfaces))
+	interfaces []clabernetesinternaldeviceplan.InterfacePlan,
+) map[string]clabernetesinternaldeviceplan.InterfacePlan {
+	indexed := make(map[string]clabernetesinternaldeviceplan.InterfacePlan, len(interfaces))
 	for _, intf := range interfaces {
 		indexed[intf.ID] = intf
 	}
@@ -560,9 +626,10 @@ func interfacePlansByID(
 }
 
 func interfaceWaitActionsByID(
-	actions []clabernetesdeviceplan.Action,
-) map[string]clabernetesdeviceplan.Action {
-	indexed := map[string]clabernetesdeviceplan.Action{}
+	actions []clabernetesinternaldeviceplan.Action,
+) map[string]clabernetesinternaldeviceplan.Action {
+	indexed := map[string]clabernetesinternaldeviceplan.Action{}
+
 	for _, action := range actions {
 		if isConnectivityWaitAction(action) {
 			indexed[action.WaitInterface.InterfaceID] = action
@@ -578,10 +645,12 @@ func (r ConnectivityRevision) CanonicalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	raw, err := json.Marshal(normalized)
 	if err != nil {
 		return nil, fmt.Errorf("%w: serializing revision: %w", ErrConnectivityRevision, err)
 	}
+
 	if len(raw) > MaximumConnectivityRevisionJSONSize {
 		return nil, fmt.Errorf("%w: revision exceeds the size ceiling", ErrConnectivityRevision)
 	}
@@ -597,9 +666,12 @@ func DecodeConnectivityRevision(raw []byte) (ConnectivityRevision, error) {
 			ErrConnectivityRevision,
 		)
 	}
+
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
+
 	decoded := ConnectivityRevision{}
+
 	decodeErr := decoder.Decode(&decoded)
 	if decodeErr != nil {
 		return ConnectivityRevision{}, fmt.Errorf(
@@ -608,6 +680,7 @@ func DecodeConnectivityRevision(raw []byte) (ConnectivityRevision, error) {
 			decodeErr,
 		)
 	}
+
 	trailingErr := decoder.Decode(&struct{}{})
 	if !errors.Is(trailingErr, io.EOF) {
 		return ConnectivityRevision{}, fmt.Errorf(
@@ -630,6 +703,7 @@ func normalizeConnectivityRevision(
 			err,
 		)
 	}
+
 	normalized := ConnectivityRevision{}
 	if err = json.Unmarshal(raw, &normalized); err != nil {
 		return ConnectivityRevision{}, fmt.Errorf(
@@ -638,6 +712,7 @@ func normalizeConnectivityRevision(
 			err,
 		)
 	}
+
 	if normalized.SchemaVersion != ConnectivityRevisionSchemaVersion ||
 		!validRevisionDigest(normalized.BasePlanDigest) ||
 		!validRevisionDigest(normalized.DesiredPlanDigest) {
@@ -646,32 +721,36 @@ func normalizeConnectivityRevision(
 			ErrConnectivityRevision,
 		)
 	}
+
 	if normalized.MaximumMode == "" {
 		// Revisions written before the lifecycle field existed were Live-only.
-		normalized.MaximumMode = clabernetesdeviceplan.LinkApplyLive
+		normalized.MaximumMode = clabernetesinternaldeviceplan.LinkApplyLive
 	}
-	if normalized.MaximumMode != clabernetesdeviceplan.LinkApplyLive &&
-		normalized.MaximumMode != clabernetesdeviceplan.LinkApplyRestart {
+
+	if normalized.MaximumMode != clabernetesinternaldeviceplan.LinkApplyLive &&
+		normalized.MaximumMode != clabernetesinternaldeviceplan.LinkApplyRestart {
 		return ConnectivityRevision{}, fmt.Errorf(
 			"%w: cumulative lifecycle mode is invalid",
 			ErrConnectivityRevision,
 		)
 	}
+
 	slices.SortFunc(normalized.InputInterfaces, func(
 		left,
-		right clabernetesdeviceplan.InterfaceInput,
+		right clabernetesinternaldeviceplan.InterfaceInput,
 	) int {
 		return strings.Compare(left.ID, right.ID)
 	})
 	slices.SortFunc(normalized.Interfaces, func(
 		left,
-		right clabernetesdeviceplan.InterfacePlan,
+		right clabernetesinternaldeviceplan.InterfacePlan,
 	) int {
 		return strings.Compare(left.ID, right.ID)
 	})
-	slices.SortFunc(normalized.Actions, func(left, right clabernetesdeviceplan.Action) int {
+	slices.SortFunc(normalized.Actions, func(left, right clabernetesinternaldeviceplan.Action) int {
 		return strings.Compare(left.ID, right.ID)
 	})
+
 	inputIDs := map[string]bool{}
 	for _, intf := range normalized.InputInterfaces {
 		if intf.ID == "" || inputIDs[intf.ID] {
@@ -680,8 +759,10 @@ func normalizeConnectivityRevision(
 				ErrConnectivityRevision,
 			)
 		}
+
 		inputIDs[intf.ID] = true
 	}
+
 	interfaceIDs := map[string]bool{}
 	for _, intf := range normalized.Interfaces {
 		if intf.ID == "" || interfaceIDs[intf.ID] || !inputIDs[intf.ID] {
@@ -690,14 +771,17 @@ func normalizeConnectivityRevision(
 				ErrConnectivityRevision,
 			)
 		}
+
 		interfaceIDs[intf.ID] = true
 	}
+
 	if len(inputIDs) != len(interfaceIDs) {
 		return ConnectivityRevision{}, fmt.Errorf(
 			"%w: input and planned interface sets differ",
 			ErrConnectivityRevision,
 		)
 	}
+
 	waited := map[string]bool{}
 	for _, action := range normalized.Actions {
 		if !isConnectivityWaitAction(action) || waited[action.WaitInterface.InterfaceID] ||
@@ -707,8 +791,10 @@ func normalizeConnectivityRevision(
 				ErrConnectivityRevision,
 			)
 		}
+
 		waited[action.WaitInterface.InterfaceID] = true
 	}
+
 	if len(waited) != len(interfaceIDs) {
 		return ConnectivityRevision{}, fmt.Errorf(
 			"%w: interface wait coverage is incomplete",
@@ -720,9 +806,10 @@ func normalizeConnectivityRevision(
 }
 
 func connectivityWaitActions(
-	actions []clabernetesdeviceplan.Action,
-) []clabernetesdeviceplan.Action {
-	result := []clabernetesdeviceplan.Action{}
+	actions []clabernetesinternaldeviceplan.Action,
+) []clabernetesinternaldeviceplan.Action {
+	result := []clabernetesinternaldeviceplan.Action{}
+
 	for _, action := range actions {
 		if isConnectivityWaitAction(action) {
 			result = append(result, action)
@@ -732,9 +819,9 @@ func connectivityWaitActions(
 	return result
 }
 
-func isConnectivityWaitAction(action clabernetesdeviceplan.Action) bool {
-	return action.Phase == clabernetesdeviceplan.PhasePreStart &&
-		action.Kind == clabernetesdeviceplan.ActionWaitInterface &&
+func isConnectivityWaitAction(action clabernetesinternaldeviceplan.Action) bool {
+	return action.Phase == clabernetesinternaldeviceplan.PhasePreStart &&
+		action.Kind == clabernetesinternaldeviceplan.ActionWaitInterface &&
 		action.WaitInterface != nil
 }
 
@@ -743,6 +830,7 @@ func validRevisionDigest(value string) bool {
 	if len(encoded) != 64 || encoded == value {
 		return false
 	}
+
 	_, err := hex.DecodeString(encoded)
 
 	return err == nil
@@ -791,11 +879,14 @@ func (p *hostEndpointPacer) due(now time.Time) bool {
 	if p == nil {
 		return true
 	}
+
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+
 	if !p.lastSucceeded {
 		return true
 	}
+
 	if !p.lastReady {
 		return now.Sub(p.lastAttempt) >= fabricRetryInterval
 	}
@@ -807,8 +898,10 @@ func (p *hostEndpointPacer) record(now time.Time, succeeded, ready bool) {
 	if p == nil {
 		return
 	}
+
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+
 	p.lastAttempt = now
 	p.lastSucceeded = succeeded
 	p.lastReady = ready
@@ -819,6 +912,7 @@ func (p *hostEndpointPacer) lastKnownReady() bool {
 	if p == nil {
 		return false
 	}
+
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -832,9 +926,13 @@ func (p *hostEndpointPacer) lastKnownReady() bool {
 type HostEndpointReconciler interface {
 	Reconcile(
 		ctx context.Context,
-		request claberneteshostendpoint.ReconcileRequest,
+		request clabernetesinternalhostendpoint.ReconcileRequest,
 		networkNamespacePath string,
-	) ([]claberneteshostendpoint.FabricStatus, *claberneteshostendpoint.ManagementStatus, error)
+	) (
+		[]clabernetesinternalhostendpoint.FabricStatus,
+		*clabernetesinternalhostendpoint.ManagementStatus,
+		error,
+	)
 }
 
 // EndpointNamespace keeps a target Pod namespace handle open while one imported endpoint hook
@@ -849,8 +947,8 @@ type EndpointNamespace interface {
 // connectivity operations, and publishes plan-bound readiness.
 func RunConnectivity(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	stateDirectory string,
 ) error {
 	return runConnectivity(
@@ -868,21 +966,24 @@ func RunConnectivity(
 // generic imported endpoint action.
 func RunConnectivityWithOptions(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 ) error {
 	if options.HostEndpointReconciler == nil {
-		options.HostEndpointReconciler = claberneteshostendpoint.Client{
-			SocketPath: claberneteshostendpoint.DefaultSocketPath,
+		options.HostEndpointReconciler = clabernetesinternalhostendpoint.Client{
+			SocketPath: clabernetesinternalhostendpoint.DefaultSocketPath,
 		}
 	}
+
 	var namespace EndpointNamespace
+
 	if hasImportedEndpointActions(plan) || options.ApplicationRuntimeSocket != "" {
 		opened, err := openEndpointNamespace(options.HostNetworkNamespacePath)
 		if err != nil {
 			return err
 		}
+
 		namespace = opened
 	}
 
@@ -899,8 +1000,8 @@ func RunConnectivityWithOptions(
 // RunConnectivityWithOperations exposes the generic mutation seam for deterministic tests.
 func RunConnectivityWithOperations(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	stateDirectory string,
 	operations LinkOperations,
 ) error {
@@ -918,8 +1019,8 @@ func RunConnectivityWithOperations(
 // The function takes ownership of namespace and closes it after endpoint reconciliation.
 func RunConnectivityWithLifecycleOperations(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 	operations LinkOperations,
 	namespace EndpointNamespace,
@@ -929,8 +1030,8 @@ func RunConnectivityWithLifecycleOperations(
 
 func runConnectivity(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 	operations LinkOperations,
 	namespace EndpointNamespace,
@@ -940,31 +1041,40 @@ func runConnectivity(
 			returnErr = errors.Join(returnErr, namespace.Close())
 		}()
 	}
+
 	if ctx == nil {
-		return fmt.Errorf("connectivity context is nil")
+		return errors.New("connectivity context is nil")
 	}
+
 	if operations == nil {
-		return fmt.Errorf("connectivity link operations are nil")
+		return errors.New("connectivity link operations are nil")
 	}
+
 	options.hostEndpointPacer = &hostEndpointPacer{}
+
 	if err := validateIdentity(input, plan); err != nil {
 		return err
 	}
+
 	if err := ValidatePlanCapabilities(plan); err != nil {
 		return err
 	}
+
 	stateDirectory, err := prepareConnectivityStateDirectory(options.StateDirectory)
 	if err != nil {
 		return err
 	}
+
 	if err = clearConnectivityMarkers(stateDirectory); err != nil {
 		return err
 	}
+
 	defer func() {
 		if returnErr != nil {
 			returnErr = errors.Join(returnErr, clearConnectivityMarkers(stateDirectory))
 		}
 	}()
+
 	effectiveInput, effectivePlan, appliedRevision, err := loadConnectivityRevision(
 		input,
 		plan,
@@ -973,27 +1083,35 @@ func runConnectivity(
 	if err != nil {
 		return err
 	}
+
 	if err = ValidatePlanCapabilities(effectivePlan); err != nil {
 		return err
 	}
+
 	if err = reconcileSysctls(effectivePlan, operations); err != nil {
 		return err
 	}
+
 	var logBroker *ApplicationLogBroker
+
 	if options.ApplicationRuntimeSocket != "" {
 		var err error
+
 		logBroker, err = startKubernetesApplicationLogBroker(ctx, plan, options, namespace)
 		if err != nil {
 			return err
 		}
+
 		defer func() {
 			returnErr = errors.Join(returnErr, logBroker.Close())
 		}()
 	}
+
 	coldPlanDigest, err := plan.Digest()
 	if err != nil {
 		return err
 	}
+
 	if err = reconcileManagementAddresses(
 		effectivePlan,
 		operations,
@@ -1002,9 +1120,11 @@ func runConnectivity(
 	); err != nil {
 		return err
 	}
+
 	if err = reconcileLocalInterfaces(&effectivePlan, operations, options.PodUID); err != nil {
 		return err
 	}
+
 	connectivityReady, err := reconcileDaemonEndpoints(
 		ctx,
 		effectiveInput,
@@ -1016,6 +1136,7 @@ func runConnectivity(
 	if err != nil {
 		return err
 	}
+
 	if err = reconcileImportedEndpointLifecycle(
 		ctx,
 		effectiveInput,
@@ -1025,14 +1146,17 @@ func runConnectivity(
 	); err != nil {
 		return err
 	}
+
 	if connectivityReady {
 		if err = publishConnectivityReadiness(stateDirectory, coldPlanDigest); err != nil {
 			return err
 		}
+
 		if err = publishConnectivityAppliedRevision(stateDirectory, appliedRevision); err != nil {
 			return err
 		}
 	}
+
 	options.StateDirectory = stateDirectory
 
 	return waitForConnectivityRevisions(
@@ -1049,8 +1173,9 @@ func runConnectivity(
 	)
 }
 
-func reconcileSysctls(plan clabernetesdeviceplan.Plan, operations LinkOperations) error {
+func reconcileSysctls(plan clabernetesinternaldeviceplan.Plan, operations LinkOperations) error {
 	values := map[string]string{}
+
 	for _, container := range plan.Containers {
 		for _, sysctl := range container.Security.Sysctls {
 			if existing, ok := values[sysctl.Name]; ok && existing != sysctl.Value {
@@ -1059,14 +1184,18 @@ func reconcileSysctls(plan clabernetesdeviceplan.Plan, operations LinkOperations
 					sysctl.Name,
 				)
 			}
+
 			values[sysctl.Name] = sysctl.Value
 		}
 	}
+
 	names := make([]string, 0, len(values))
 	for name := range values {
 		names = append(names, name)
 	}
+
 	slices.Sort(names)
+
 	for _, name := range names {
 		if err := operations.EnsureSysctl(name, values[name]); err != nil {
 			return fmt.Errorf("applying network-namespace sysctl %q: %w", name, err)
@@ -1080,10 +1209,12 @@ func validLinuxSysctlName(name string) bool {
 	if name == "" || name != strings.TrimSpace(name) {
 		return false
 	}
+
 	parts := strings.Split(name, ".")
 	if len(parts) < 2 {
 		return false
 	}
+
 	for _, part := range parts {
 		if part == "" || part == "." || part == ".." ||
 			strings.ContainsAny(part, "/\x00") {
@@ -1097,14 +1228,16 @@ func validLinuxSysctlName(name string) bool {
 func prepareConnectivityStateDirectory(value string) (string, error) {
 	stateDirectory := filepath.Clean(value)
 	if !filepath.IsAbs(stateDirectory) || stateDirectory == string(filepath.Separator) {
-		return "", fmt.Errorf("connectivity state directory must be a scoped absolute path")
+		return "", errors.New("connectivity state directory must be a scoped absolute path")
 	}
+
 	if err := os.MkdirAll(stateDirectory, 0o700); err != nil {
 		return "", fmt.Errorf("creating connectivity state directory: %w", err)
 	}
+
 	info, err := os.Lstat(stateDirectory)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("connectivity state directory is not a real directory")
+		return "", errors.New("connectivity state directory is not a real directory")
 	}
 
 	return stateDirectory, nil
@@ -1130,6 +1263,7 @@ func publishConnectivityAppliedRevision(stateDirectory, digest string) error {
 
 func clearConnectivityMarkers(stateDirectory string) error {
 	var result error
+
 	for _, name := range []string{connectivityReadyFile, connectivityAppliedRevisionFile} {
 		if err := os.Remove(filepath.Join(stateDirectory, name)); err != nil &&
 			!errors.Is(err, os.ErrNotExist) {
@@ -1148,19 +1282,25 @@ func publishConnectivityMarker(stateDirectory, name, temporaryPattern, digest st
 	if err != nil {
 		return fmt.Errorf("creating connectivity marker: %w", err)
 	}
+
 	temporaryName := temporary.Name()
+
 	defer func() {
 		_ = os.Remove(temporaryName)
 	}()
+
 	if _, err = temporary.WriteString(digest + "\n"); err == nil {
 		err = temporary.Chmod(0o600)
 	}
+
 	if closeErr := temporary.Close(); err == nil {
 		err = closeErr
 	}
+
 	if err != nil {
 		return fmt.Errorf("writing connectivity marker: %w", err)
 	}
+
 	if err = os.Rename(temporaryName, filepath.Join(stateDirectory, name)); err != nil {
 		return fmt.Errorf("publishing connectivity marker: %w", err)
 	}
@@ -1169,22 +1309,24 @@ func publishConnectivityMarker(stateDirectory, name, temporaryPattern, digest st
 }
 
 func loadConnectivityRevision(
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
 	revisionPath string,
-) (clabernetesdeviceplan.Input, clabernetesdeviceplan.Plan, string, error) {
+) (clabernetesinternaldeviceplan.Input, clabernetesinternaldeviceplan.Plan, string, error) {
 	if revisionPath == "" {
 		digest, err := basePlan.Digest()
 
 		return baseInput, basePlan, digest, err
 	}
+
 	revision, err := readConnectivityRevisionFile(revisionPath)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, "", err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, "", err
 	}
+
 	revisedInput, revisedPlan, err := ApplyConnectivityRevision(baseInput, basePlan, revision)
 	if err != nil {
-		return clabernetesdeviceplan.Input{}, clabernetesdeviceplan.Plan{}, "", err
+		return clabernetesinternaldeviceplan.Input{}, clabernetesinternaldeviceplan.Plan{}, "", err
 	}
 
 	return revisedInput, revisedPlan, revision.DesiredPlanDigest, nil
@@ -1195,9 +1337,11 @@ func readConnectivityRevisionFile(path string) (ConnectivityRevision, error) {
 	if err != nil {
 		return ConnectivityRevision{}, fmt.Errorf("opening connectivity revision: %w", err)
 	}
+
 	defer func() {
 		_ = file.Close()
 	}()
+
 	raw, err := io.ReadAll(io.LimitReader(file, MaximumConnectivityRevisionJSONSize+1))
 	if err != nil {
 		return ConnectivityRevision{}, fmt.Errorf("reading connectivity revision: %w", err)
@@ -1208,8 +1352,8 @@ func readConnectivityRevisionFile(path string) (ConnectivityRevision, error) {
 
 func waitForConnectivityRevisions(
 	ctx context.Context,
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 	operations LinkOperations,
 	namespace EndpointNamespace,
@@ -1222,24 +1366,31 @@ func waitForConnectivityRevisions(
 	if logBroker != nil {
 		brokerErrors = logBroker.Errors()
 	}
-	var revisionTicks <-chan time.Time
-	var ticker *time.Ticker
+
+	var (
+		revisionTicks <-chan time.Time
+		ticker        *time.Ticker
+	)
+
 	if options.ConnectivityRevisionPath != "" || hasRemoteInterfaces(basePlan) {
 		interval := options.RevisionPollInterval
 		if interval == 0 {
 			interval = time.Second
 		}
+
 		if interval < 0 {
-			return fmt.Errorf("connectivity revision poll interval must not be negative")
+			return errors.New("connectivity revision poll interval must not be negative")
 		}
+
 		ticker = time.NewTicker(interval)
 		defer ticker.Stop()
+
 		revisionTicks = ticker.C
 	}
+
 	for {
 		select {
 		case <-ctx.Done():
-
 			return nil
 		case brokerErr, open := <-brokerErrors:
 			if !open {
@@ -1247,7 +1398,7 @@ func waitForConnectivityRevisions(
 					return nil
 				}
 
-				return fmt.Errorf("application log broker stopped unexpectedly")
+				return errors.New("application log broker stopped unexpectedly")
 			}
 
 			return fmt.Errorf("application log broker failed: %w", brokerErr)
@@ -1264,6 +1415,7 @@ func waitForConnectivityRevisions(
 			if err != nil {
 				return err
 			}
+
 			if nextReady && (!connectivityReady || nextRevision != appliedRevision) {
 				if err = publishConnectivityReadiness(
 					options.StateDirectory,
@@ -1271,6 +1423,7 @@ func waitForConnectivityRevisions(
 				); err != nil {
 					return err
 				}
+
 				if err = publishConnectivityAppliedRevision(
 					options.StateDirectory,
 					nextRevision,
@@ -1282,15 +1435,17 @@ func waitForConnectivityRevisions(
 					return err
 				}
 			}
+
 			appliedRevision = nextRevision
 			connectivityReady = nextReady
 		}
 	}
 }
 
-func hasRemoteInterfaces(plan clabernetesdeviceplan.Plan) bool {
+func hasRemoteInterfaces(plan clabernetesinternaldeviceplan.Plan) bool {
 	for _, intf := range plan.Interfaces {
-		if intf.Connectivity == "vxlan" || intf.Connectivity == "slurpeeth" {
+		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityVXLAN ||
+			intf.Connectivity == clabernetesinternaldeviceplan.ConnectivitySlurpeeth {
 			return true
 		}
 	}
@@ -1298,10 +1453,11 @@ func hasRemoteInterfaces(plan clabernetesdeviceplan.Plan) bool {
 	return false
 }
 
-func hasDaemonInterfaces(plan clabernetesdeviceplan.Plan) bool {
+func hasDaemonInterfaces(plan clabernetesinternaldeviceplan.Plan) bool {
 	for _, intf := range plan.Interfaces {
-		if intf.Connectivity == "host" || intf.Connectivity == "vxlan" ||
-			intf.Connectivity == "slurpeeth" {
+		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityHost ||
+			intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityVXLAN ||
+			intf.Connectivity == clabernetesinternaldeviceplan.ConnectivitySlurpeeth {
 			return true
 		}
 	}
@@ -1317,8 +1473,8 @@ func hasDaemonInterfaces(plan clabernetesdeviceplan.Plan) bool {
 //nolint:funlen,gocyclo // One request carries both endpoint families with shared identity.
 func reconcileDaemonEndpoints(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 	reconcileEmpty bool,
 	steadyState bool,
@@ -1326,17 +1482,22 @@ func reconcileDaemonEndpoints(
 	if steadyState && !options.hostEndpointPacer.due(time.Now()) {
 		return options.hostEndpointPacer.lastKnownReady(), nil
 	}
-	nodes := make(map[string]clabernetesdeviceplan.NodeInput, len(input.Nodes))
+
+	nodes := make(map[string]clabernetesinternaldeviceplan.NodeInput, len(input.Nodes))
 	for _, node := range input.Nodes {
 		nodes[node.ID] = node
 	}
-	endpoints := []claberneteshostendpoint.Endpoint{}
-	fabric := []claberneteshostendpoint.FabricEndpoint{}
+
+	endpoints := []clabernetesinternalhostendpoint.Endpoint{}
+	fabric := []clabernetesinternalhostendpoint.FabricEndpoint{}
+
 	for _, intf := range plan.Interfaces {
-		if intf.Connectivity != "host" && intf.Connectivity != "vxlan" &&
-			intf.Connectivity != "slurpeeth" {
+		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityHost &&
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityVXLAN &&
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivitySlurpeeth {
 			continue
 		}
+
 		node, exists := nodes[intf.NodeID]
 		if !exists || node.Name == "" {
 			return false, fmt.Errorf(
@@ -1344,18 +1505,20 @@ func reconcileDaemonEndpoints(
 				intf.LinkID,
 			)
 		}
-		link := claberneteshostendpoint.ObjectIdentity{
+
+		link := clabernetesinternalhostendpoint.ObjectIdentity{
 			Namespace: options.PodNamespace,
 			Name:      intf.LinkName,
 			UID:       intf.LinkID,
 		}
-		owner := claberneteshostendpoint.ObjectIdentity{
+
+		owner := clabernetesinternalhostendpoint.ObjectIdentity{
 			Namespace: options.PodNamespace,
 			Name:      node.Name,
 			UID:       intf.NodeID,
 		}
-		if intf.Connectivity == "host" {
-			endpoints = append(endpoints, claberneteshostendpoint.Endpoint{
+		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityHost {
+			endpoints = append(endpoints, clabernetesinternalhostendpoint.Endpoint{
 				Link:          link,
 				Node:          owner,
 				HostInterface: intf.PeerInterface,
@@ -1365,7 +1528,8 @@ func reconcileDaemonEndpoints(
 
 			continue
 		}
-		fabric = append(fabric, claberneteshostendpoint.FabricEndpoint{
+
+		fabric = append(fabric, clabernetesinternalhostendpoint.FabricEndpoint{
 			Link:         link,
 			Node:         owner,
 			PodInterface: intf.Name,
@@ -1373,16 +1537,19 @@ func reconcileDaemonEndpoints(
 			MTU:          intf.MTU,
 		})
 	}
+
 	management := desiredManagementEndpoint(input, options)
 	if len(endpoints) == 0 && len(fabric) == 0 && management == nil && !reconcileEmpty {
 		return true, nil
 	}
+
 	if options.HostEndpointReconciler == nil {
-		return false, fmt.Errorf("host-endpoint daemon reconciliation is unavailable")
+		return false, errors.New("host-endpoint daemon reconciliation is unavailable")
 	}
-	request := claberneteshostendpoint.ReconcileRequest{
-		SchemaVersion: claberneteshostendpoint.SchemaVersion,
-		Pod: claberneteshostendpoint.ObjectIdentity{
+
+	request := clabernetesinternalhostendpoint.ReconcileRequest{
+		SchemaVersion: clabernetesinternalhostendpoint.SchemaVersion,
+		Pod: clabernetesinternalhostendpoint.ObjectIdentity{
 			Namespace: options.PodNamespace,
 			Name:      options.PodName,
 			UID:       options.PodUID,
@@ -1396,12 +1563,14 @@ func reconcileDaemonEndpoints(
 		request,
 		podNetworkNamespacePath,
 	)
+
 	ready := err == nil
 	if ready {
 		readyByLink := make(map[string]bool, len(statuses))
 		for _, status := range statuses {
 			readyByLink[status.LinkUID] = status.Ready
 		}
+
 		for _, endpoint := range fabric {
 			if !readyByLink[endpoint.Link.UID] {
 				ready = false
@@ -1409,11 +1578,14 @@ func reconcileDaemonEndpoints(
 				break
 			}
 		}
+
 		if management != nil && (managementStatus == nil || !managementStatus.Ready) {
 			ready = false
 		}
 	}
+
 	options.hostEndpointPacer.record(time.Now(), err == nil, ready)
+
 	if err != nil {
 		return false, fmt.Errorf("reconciling daemon-owned Links: %w", err)
 	}
@@ -1426,25 +1598,26 @@ func reconcileDaemonEndpoints(
 // identity the direct runtime realizes when the operator declared no management policy. IPv6
 // Pod addresses are not requested yet.
 func desiredManagementEndpoint(
-	input clabernetesdeviceplan.Input,
+	input clabernetesinternaldeviceplan.Input,
 	options ConnectivityOptions,
-) *claberneteshostendpoint.ManagementEndpoint {
+) *clabernetesinternalhostendpoint.ManagementEndpoint {
 	address, err := netip.ParseAddr(options.PodAddress)
 	if err != nil || !address.Is4() {
 		return nil
 	}
+
 	for _, node := range input.Nodes {
 		if node.GroupOwner != "" || node.Name == "" || node.ID == "" {
 			continue
 		}
 
-		return &claberneteshostendpoint.ManagementEndpoint{
-			Node: claberneteshostendpoint.ObjectIdentity{
+		return &clabernetesinternalhostendpoint.ManagementEndpoint{
+			Node: clabernetesinternalhostendpoint.ObjectIdentity{
 				Namespace: options.PodNamespace,
 				Name:      node.Name,
 				UID:       node.ID,
 			},
-			PodInterface: claberneteshostendpoint.ManagementPodInterface,
+			PodInterface: clabernetesinternalhostendpoint.ManagementPodInterface,
 			PodAddress:   address.String(),
 		}
 	}
@@ -1454,8 +1627,8 @@ func desiredManagementEndpoint(
 
 func applyProjectedConnectivityRevision(
 	ctx context.Context,
-	baseInput clabernetesdeviceplan.Input,
-	basePlan clabernetesdeviceplan.Plan,
+	baseInput clabernetesinternaldeviceplan.Input,
+	basePlan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 	operations LinkOperations,
 	namespace EndpointNamespace,
@@ -1469,6 +1642,7 @@ func applyProjectedConnectivityRevision(
 	if err != nil {
 		return appliedRevision, false, err
 	}
+
 	if desiredDigest == appliedRevision {
 		ready, reconcileErr := reconcileDaemonEndpoints(
 			ctx,
@@ -1484,12 +1658,15 @@ func applyProjectedConnectivityRevision(
 
 		return appliedRevision, ready, nil
 	}
+
 	if err = ValidatePlanCapabilities(revisedPlan); err != nil {
 		return appliedRevision, false, err
 	}
+
 	if err = reconcileLocalInterfaces(&revisedPlan, operations, options.PodUID); err != nil {
 		return appliedRevision, false, err
 	}
+
 	ready, err := reconcileDaemonEndpoints(
 		ctx,
 		revisedInput,
@@ -1501,6 +1678,7 @@ func applyProjectedConnectivityRevision(
 	if err != nil {
 		return appliedRevision, false, err
 	}
+
 	if err = reconcileImportedEndpointLifecycle(
 		ctx,
 		revisedInput,
@@ -1554,24 +1732,28 @@ func (s *kubernetesApplicationLogStreamer) StreamLogs(
 
 func startKubernetesApplicationLogBroker(
 	ctx context.Context,
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 	networkNamespace EndpointNamespace,
 ) (*ApplicationLogBroker, error) {
 	if options.PodNamespace == "" || options.PodName == "" || options.PodUID == "" {
-		return nil, fmt.Errorf("application log broker Pod identity is incomplete")
+		return nil, errors.New("application log broker Pod identity is incomplete")
 	}
+
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, fmt.Errorf("loading application log broker Kubernetes credentials: %w", err)
 	}
+
 	if networkNamespace != nil {
 		config.Dial = networkNamespaceDialContext(networkNamespace)
 	}
+
 	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("creating application log broker Kubernetes client: %w", err)
 	}
+
 	pod, err := client.CoreV1().Pods(options.PodNamespace).Get(
 		ctx,
 		options.PodName,
@@ -1580,6 +1762,7 @@ func startKubernetesApplicationLogBroker(
 	if err != nil {
 		return nil, fmt.Errorf("reading application log broker Pod identity: %w", err)
 	}
+
 	targets, err := applicationLogTargets(plan, pod, options.PodUID)
 	if err != nil {
 		return nil, err
@@ -1598,27 +1781,32 @@ func startKubernetesApplicationLogBroker(
 }
 
 func applicationLogTargets(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	pod *k8scorev1.Pod,
 	expectedUID string,
 ) (map[string]string, error) {
 	if pod == nil || string(pod.GetUID()) == "" || string(pod.GetUID()) != expectedUID {
-		return nil, fmt.Errorf("application log broker Pod UID differs from the running workload")
+		return nil, errors.New("application log broker Pod UID differs from the running workload")
 	}
-	normalized, err := clabernetesdeviceplan.NormalizePlan(plan)
+
+	normalized, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
 		return nil, err
 	}
+
 	if len(normalized.Containers) != len(pod.Spec.Containers) {
-		return nil, fmt.Errorf("application log broker container inventory differs from the plan")
+		return nil, errors.New("application log broker container inventory differs from the plan")
 	}
+
 	targets := make(map[string]string, len(normalized.Containers))
+
 	containerNames := make(map[string]bool, len(normalized.Containers))
 	for index, planned := range normalized.Containers {
 		containerName := pod.Spec.Containers[index].Name
 		if planned.RuntimeID == "" || containerName == "" || containerNames[containerName] {
-			return nil, fmt.Errorf("application log broker container identity is invalid")
+			return nil, errors.New("application log broker container identity is invalid")
 		}
+
 		containerNames[containerName] = true
 		targets[planned.RuntimeID] = containerName
 	}
@@ -1626,10 +1814,10 @@ func applicationLogTargets(
 	return targets, nil
 }
 
-func hasImportedEndpointActions(plan clabernetesdeviceplan.Plan) bool {
+func hasImportedEndpointActions(plan clabernetesinternaldeviceplan.Plan) bool {
 	for _, action := range plan.Actions {
-		if action.Phase == clabernetesdeviceplan.PhaseInterfaceFixup &&
-			action.Kind == clabernetesdeviceplan.ActionImportedDeployEndpoints &&
+		if action.Phase == clabernetesinternaldeviceplan.PhaseInterfaceFixup &&
+			action.Kind == clabernetesinternaldeviceplan.ActionImportedDeployEndpoints &&
 			action.ImportedDeployEndpoints != nil {
 			return true
 		}
@@ -1640,33 +1828,38 @@ func hasImportedEndpointActions(plan clabernetesdeviceplan.Plan) bool {
 
 func reconcileImportedEndpointLifecycle(
 	ctx context.Context,
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 	namespace EndpointNamespace,
 ) error {
 	if !hasImportedEndpointActions(plan) {
 		return nil
 	}
+
 	if namespace == nil || namespace.TargetPath() == "" {
-		return &clabernetesdeviceplan.Error{
-			Code:  clabernetesdeviceplan.ErrorUnsupported,
+		return &clabernetesinternaldeviceplan.Error{
+			Code:  clabernetesinternaldeviceplan.ErrorUnsupported,
 			Field: "runtime.networkNamespace", Behavior: "host-network-namespace",
 			Message: "imported endpoint lifecycle has no distinct host/target namespace executor",
 		}
 	}
+
 	if options.ArtifactRoot == "" || options.Revision == "" {
-		return fmt.Errorf("imported endpoint lifecycle options are incomplete")
+		return errors.New("imported endpoint lifecycle options are incomplete")
 	}
-	normalized, err := clabernetesdeviceplan.NormalizePlan(plan)
+
+	normalized, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
 		return err
 	}
+
 	for _, action := range normalized.Actions {
-		if action.Phase != clabernetesdeviceplan.PhaseInterfaceFixup ||
-			action.Kind != clabernetesdeviceplan.ActionImportedDeployEndpoints {
+		if action.Phase != clabernetesinternaldeviceplan.PhaseInterfaceFixup ||
+			action.Kind != clabernetesinternaldeviceplan.ActionImportedDeployEndpoints {
 			continue
 		}
+
 		runtime, runtimeErr := NewImportedEndpointRuntime(
 			input,
 			normalized,
@@ -1676,7 +1869,8 @@ func reconcileImportedEndpointLifecycle(
 		if runtimeErr != nil {
 			return fmt.Errorf("constructing imported endpoint runtime: %w", runtimeErr)
 		}
-		if err = (clabernetesdeviceplan.Adapter{
+
+		if err = (clabernetesinternaldeviceplan.Adapter{
 			Revision: options.Revision, EntropyRoot: options.EntropyRoot,
 			PodAddress: options.PodAddress,
 		}).RunDeployEndpoints(
@@ -1699,12 +1893,14 @@ func reconcileImportedEndpointLifecycle(
 
 // ValidatePlanCapabilities proves that every operation in a plan is implemented by the current
 // preparation/connectivity helpers. Rejections are based on generic operation type only.
-func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
-	normalized, err := clabernetesdeviceplan.NormalizePlan(plan)
+func ValidatePlanCapabilities(plan clabernetesinternaldeviceplan.Plan) error {
+	normalized, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
 		return err
 	}
+
 	managementAddresses := map[netip.Addr]string{}
+
 	for _, management := range normalized.Management {
 		if management.InterfaceName != "" && !validLinuxInterfaceName(management.InterfaceName) {
 			return fmt.Errorf(
@@ -1712,11 +1908,15 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 				management.ID,
 			)
 		}
+
 		if management.InterfaceName == "" &&
-			management.InterfaceSelector != clabernetesdeviceplan.ManagementInterfacePodTransport {
-			return fmt.Errorf("planned management interface selector is unsupported")
+			management.InterfaceSelector !=
+				clabernetesinternaldeviceplan.ManagementInterfacePodTransport {
+			return errors.New("planned management interface selector is unsupported")
 		}
+
 		prefixes := map[bool]netip.Prefix{}
+
 		for _, value := range []struct {
 			field string
 			raw   string
@@ -1728,6 +1928,7 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 			if value.raw == "" {
 				continue
 			}
+
 			prefix, parseErr := netip.ParsePrefix(value.raw)
 			if parseErr != nil || prefix.Addr().Is4() != value.ipv4 {
 				return fmt.Errorf(
@@ -1736,7 +1937,9 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 					management.ID,
 				)
 			}
+
 			prefixes[value.ipv4] = prefix
+
 			address := prefix.Addr().Unmap()
 			if existing := managementAddresses[address]; existing != "" {
 				return fmt.Errorf(
@@ -1745,8 +1948,10 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 					management.ID,
 				)
 			}
+
 			managementAddresses[address] = management.ID
 		}
+
 		for _, value := range []struct {
 			field string
 			raw   string
@@ -1758,7 +1963,9 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 			if value.raw == "" {
 				continue
 			}
+
 			gateway, parseErr := netip.ParseAddr(value.raw)
+
 			prefix, hasSource := prefixes[value.ipv4]
 			if parseErr != nil || gateway.Is4() != value.ipv4 || !hasSource ||
 				!prefix.Contains(gateway) {
@@ -1769,6 +1976,7 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 				)
 			}
 		}
+
 		for index, route := range management.Routes {
 			destination, parseErr := netip.ParsePrefix(route.Destination)
 			if parseErr != nil || route.Metric < 0 {
@@ -1778,6 +1986,7 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 					management.ID,
 				)
 			}
+
 			prefix, hasSource := prefixes[destination.Addr().Is4()]
 			if !hasSource {
 				return fmt.Errorf(
@@ -1786,9 +1995,11 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 					management.ID,
 				)
 			}
+
 			if route.Gateway == "" {
 				continue
 			}
+
 			gateway, gatewayErr := netip.ParseAddr(route.Gateway)
 			if gatewayErr != nil || gateway.Is4() != destination.Addr().Is4() ||
 				!prefix.Contains(gateway) {
@@ -1800,7 +2011,9 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 			}
 		}
 	}
+
 	sysctls := map[string]string{}
+
 	for _, container := range normalized.Containers {
 		if container.ImageDigest == "" {
 			return fmt.Errorf(
@@ -1808,38 +2021,48 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 				container.ID,
 			)
 		}
+
 		for _, sysctl := range container.Security.Sysctls {
 			if !validLinuxSysctlName(sysctl.Name) {
-				return fmt.Errorf("planned network-namespace sysctl name is invalid")
+				return errors.New("planned network-namespace sysctl name is invalid")
 			}
+
 			if existing, ok := sysctls[sysctl.Name]; ok && existing != sysctl.Value {
 				return fmt.Errorf(
 					"containers request conflicting network-namespace sysctl %q",
 					sysctl.Name,
 				)
 			}
+
 			sysctls[sysctl.Name] = sysctl.Value
 		}
 	}
-	interfaces := make(map[string]clabernetesdeviceplan.InterfacePlan, len(normalized.Interfaces))
+
+	interfaces := make(map[string]clabernetesinternaldeviceplan.InterfacePlan,
+		len(normalized.Interfaces))
 	interfaceNames := make(map[string]string, len(normalized.Interfaces))
-	links := map[string][]clabernetesdeviceplan.InterfacePlan{}
+	links := map[string][]clabernetesinternaldeviceplan.InterfacePlan{}
 	slurpeethSegments := map[int]string{}
+
 	for _, intf := range normalized.Interfaces {
-		if intf.Connectivity != "same-pod" && intf.Connectivity != "loopback" &&
-			intf.Connectivity != "vxlan" && intf.Connectivity != "slurpeeth" &&
-			intf.Connectivity != "host" {
+		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivitySamePod &&
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityLoopback &&
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityVXLAN &&
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivitySlurpeeth &&
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityHost {
 			return fmt.Errorf(
 				"direct connectivity operation %q is not yet implemented",
 				intf.Connectivity,
 			)
 		}
+
 		if !validLinuxInterfaceName(intf.Name) {
 			return fmt.Errorf(
 				"planned interface %q is not a portable Linux interface name",
 				intf.ID,
 			)
 		}
+
 		if existing := interfaceNames[intf.Name]; existing != "" {
 			return fmt.Errorf(
 				"planned interfaces %q and %q use the same Linux name",
@@ -1847,10 +2070,12 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 				intf.ID,
 			)
 		}
+
 		interfaceNames[intf.Name] = intf.ID
 		interfaces[intf.ID] = intf
+
 		links[intf.LinkID] = append(links[intf.LinkID], intf)
-		if intf.Connectivity == "slurpeeth" {
+		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivitySlurpeeth {
 			if existing := slurpeethSegments[intf.TunnelID]; existing != "" {
 				return fmt.Errorf(
 					"slurpeeth interfaces %q and %q use the same segment ID",
@@ -1858,9 +2083,11 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 					intf.ID,
 				)
 			}
+
 			slurpeethSegments[intf.TunnelID] = intf.ID
 		}
 	}
+
 	for linkID, endpoints := range links {
 		switch endpoints[0].Connectivity {
 		case "same-pod", "loopback":
@@ -1869,13 +2096,14 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 					endpoints[0].MTU != endpoints[1].MTU) {
 				return fmt.Errorf("local Link %q does not form one representable veth pair", linkID)
 			}
+
 			if endpoints[0].Connectivity != endpoints[1].Connectivity ||
 				endpoints[0].PeerNodeID != endpoints[1].NodeID ||
 				endpoints[1].PeerNodeID != endpoints[0].NodeID ||
 				endpoints[0].PeerTransport != "" || endpoints[1].PeerTransport != "" ||
-				(endpoints[0].Connectivity == "loopback" &&
+				(endpoints[0].Connectivity == clabernetesinternaldeviceplan.ConnectivityLoopback &&
 					endpoints[0].NodeID != endpoints[1].NodeID) ||
-				(endpoints[0].Connectivity == "same-pod" &&
+				(endpoints[0].Connectivity == clabernetesinternaldeviceplan.ConnectivitySamePod &&
 					endpoints[0].NodeID == endpoints[1].NodeID) {
 				return fmt.Errorf("local Link %q has inconsistent connectivity semantics", linkID)
 			}
@@ -1890,7 +2118,7 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 			endpoint := endpoints[0]
 			if len(endpoints) != 1 || endpoint.PeerNodeID == "" ||
 				endpoint.PeerInterface == "" || !validPeerTransport(endpoint.PeerTransport) ||
-				endpoint.TunnelID < 1 || endpoint.TunnelID > 1<<16-1 {
+				endpoint.TunnelID < 1 || endpoint.TunnelID >= 1<<16 {
 				return fmt.Errorf(
 					"slurpeeth Link %q has incomplete remote endpoint identity",
 					linkID,
@@ -1905,30 +2133,35 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 			}
 		}
 	}
-	files := make(map[string]clabernetesdeviceplan.FilePlan, len(normalized.Files))
+
+	files := make(map[string]clabernetesinternaldeviceplan.FilePlan, len(normalized.Files))
 	for _, file := range normalized.Files {
-		if file.SourceKind != clabernetesdeviceplan.FileSourceGenerator &&
-			file.SourceKind != clabernetesdeviceplan.FileSourceCertificate &&
-			file.SourceKind != clabernetesdeviceplan.FileSourcePayload {
+		if file.SourceKind != clabernetesinternaldeviceplan.FileSourceGenerator &&
+			file.SourceKind != clabernetesinternaldeviceplan.FileSourceCertificate &&
+			file.SourceKind != clabernetesinternaldeviceplan.FileSourcePayload {
 			return fmt.Errorf("direct file source %q is not yet implemented", file.SourceKind)
 		}
+
 		files[file.ID] = file
 	}
+
 	preparedFiles := map[string]bool{}
 	waitedInterfaces := map[string]bool{}
+
 	for _, action := range normalized.Actions {
 		switch {
-		case action.Phase == clabernetesdeviceplan.PhasePrepare &&
-			action.Kind == clabernetesdeviceplan.ActionFile && action.File != nil:
+		case action.Phase == clabernetesinternaldeviceplan.PhasePrepare &&
+			action.Kind == clabernetesinternaldeviceplan.ActionFile && action.File != nil:
 			if _, exists := files[action.File.FileID]; !exists {
 				return fmt.Errorf(
 					"preparation action %q references an unavailable file source",
 					action.ID,
 				)
 			}
+
 			preparedFiles[action.File.FileID] = true
-		case action.Phase == clabernetesdeviceplan.PhasePreStart &&
-			action.Kind == clabernetesdeviceplan.ActionWaitInterface &&
+		case action.Phase == clabernetesinternaldeviceplan.PhasePreStart &&
+			action.Kind == clabernetesinternaldeviceplan.ActionWaitInterface &&
 			action.WaitInterface != nil:
 			if _, exists := interfaces[action.WaitInterface.InterfaceID]; !exists {
 				return fmt.Errorf(
@@ -1936,45 +2169,47 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 					action.ID,
 				)
 			}
+
 			waitedInterfaces[action.WaitInterface.InterfaceID] = true
-		case action.Phase == clabernetesdeviceplan.PhasePreStart &&
-			action.Kind == clabernetesdeviceplan.ActionMount && action.Mount != nil:
+		case action.Phase == clabernetesinternaldeviceplan.PhasePreStart &&
+			action.Kind == clabernetesinternaldeviceplan.ActionMount && action.Mount != nil:
 			if action.Mount.Filesystem != "tmpfs" || action.Mount.Source != "tmpfs" {
 				return fmt.Errorf(
 					"pre-start action %q requests unsupported filesystem operation",
 					action.ID,
 				)
 			}
-		case action.Phase == clabernetesdeviceplan.PhasePostStart &&
-			action.Kind == clabernetesdeviceplan.ActionImportedPostDeploy &&
+		case action.Phase == clabernetesinternaldeviceplan.PhasePostStart &&
+			action.Kind == clabernetesinternaldeviceplan.ActionImportedPostDeploy &&
 			action.ImportedPostDeploy != nil:
-		case action.Phase == clabernetesdeviceplan.PhaseInterfaceFixup &&
-			action.Kind == clabernetesdeviceplan.ActionImportedDeployEndpoints &&
+		case action.Phase == clabernetesinternaldeviceplan.PhaseInterfaceFixup &&
+			action.Kind == clabernetesinternaldeviceplan.ActionImportedDeployEndpoints &&
 			action.ImportedDeployEndpoints != nil:
-		case action.Phase == clabernetesdeviceplan.PhasePostStart &&
-			action.Kind == clabernetesdeviceplan.ActionExec && action.Exec != nil:
-		case action.Phase == clabernetesdeviceplan.PhasePostStart &&
-			action.Kind == clabernetesdeviceplan.ActionFile && action.File != nil:
+		case action.Phase == clabernetesinternaldeviceplan.PhasePostStart &&
+			action.Kind == clabernetesinternaldeviceplan.ActionExec && action.Exec != nil:
+		case action.Phase == clabernetesinternaldeviceplan.PhasePostStart &&
+			action.Kind == clabernetesinternaldeviceplan.ActionFile && action.File != nil:
 			if _, exists := files[action.File.FileID]; !exists {
 				return fmt.Errorf(
 					"post-start action %q references an unavailable file source",
 					action.ID,
 				)
 			}
-		case action.Phase == clabernetesdeviceplan.PhasePostStart &&
-			action.Kind == clabernetesdeviceplan.ActionWriteStdin && action.WriteStdin != nil:
+		case action.Phase == clabernetesinternaldeviceplan.PhasePostStart &&
+			action.Kind == clabernetesinternaldeviceplan.ActionWriteStdin &&
+			action.WriteStdin != nil:
 			if _, exists := files[action.WriteStdin.FileID]; !exists {
 				return fmt.Errorf(
 					"post-start action %q references unavailable stdin data",
 					action.ID,
 				)
 			}
-		case action.Phase == clabernetesdeviceplan.PhaseReadiness &&
-			action.Kind == clabernetesdeviceplan.ActionImportedReadiness &&
+		case action.Phase == clabernetesinternaldeviceplan.PhaseReadiness &&
+			action.Kind == clabernetesinternaldeviceplan.ActionImportedReadiness &&
 			action.ImportedReadiness != nil:
-		case action.Phase == clabernetesdeviceplan.PhaseSave &&
-			action.Kind == clabernetesdeviceplan.ActionSave && action.Save != nil &&
-			action.Save.Method == clabernetesdeviceplan.SaveMethodImported:
+		case action.Phase == clabernetesinternaldeviceplan.PhaseSave &&
+			action.Kind == clabernetesinternaldeviceplan.ActionSave && action.Save != nil &&
+			action.Save.Method == clabernetesinternaldeviceplan.SaveMethodImported:
 		default:
 			return fmt.Errorf(
 				"lifecycle action %q (%s/%s) is not yet implemented by a direct helper",
@@ -1984,11 +2219,13 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 			)
 		}
 	}
+
 	for fileID := range files {
 		if !preparedFiles[fileID] {
 			return fmt.Errorf("generated file %q has no implemented preparation action", fileID)
 		}
 	}
+
 	for interfaceID := range interfaces {
 		if !waitedInterfaces[interfaceID] {
 			return fmt.Errorf("interface %q has no implemented readiness action", interfaceID)
@@ -1999,19 +2236,22 @@ func ValidatePlanCapabilities(plan clabernetesdeviceplan.Plan) error {
 }
 
 func reconcileManagementAddresses(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	operations LinkOperations,
 	planDigest string,
 	podAddress string,
 ) error {
 	management := slices.Clone(plan.Management)
-	slices.SortFunc(management, func(left, right clabernetesdeviceplan.ManagementPlan) int {
+	slices.SortFunc(management, func(left, right clabernetesinternaldeviceplan.ManagementPlan) int {
 		return strings.Compare(left.ID, right.ID)
 	})
+
 	if err := validateManagementPodTransportOverlap(management, podAddress); err != nil {
 		return err
 	}
+
 	podTransportInterface := ""
+
 	for index, item := range management {
 		if item.IPv4 == "" && item.IPv6 == "" && item.IPv4Gateway == "" &&
 			item.IPv6Gateway == "" && len(item.Routes) == 0 {
@@ -2019,25 +2259,30 @@ func reconcileManagementAddresses(
 			// interface rides the plan; they realize nothing here.
 			continue
 		}
+
 		interfaceName := item.InterfaceName
-		if item.InterfaceSelector == clabernetesdeviceplan.ManagementInterfacePodTransport {
+		if item.InterfaceSelector == clabernetesinternaldeviceplan.ManagementInterfacePodTransport {
 			if podTransportInterface == "" {
 				var err error
+
 				podTransportInterface, err = operations.ResolvePodTransportInterface(podAddress)
 				if err != nil {
 					return fmt.Errorf("resolving Pod transport management interface: %w", err)
 				}
 			}
+
 			interfaceName = podTransportInterface
 		}
+
 		owner := "c9s:" + planDigest + ":" + strings.TrimPrefix(
-			clabernetesdeviceplan.Digest([]byte(item.ID)),
+			clabernetesinternaldeviceplan.Digest([]byte(item.ID)),
 			"sha256:",
 		)[:12]
 		for _, address := range []string{item.IPv4, item.IPv6} {
 			if address == "" {
 				continue
 			}
+
 			if err := operations.EnsureManagementAddress(
 				interfaceName,
 				address,
@@ -2046,6 +2291,7 @@ func reconcileManagementAddresses(
 				return fmt.Errorf("realizing management plan %q: %w", item.ID, err)
 			}
 		}
+
 		if item.IPv4Gateway != "" {
 			if err := operations.EnsureManagementRoute(
 				interfaceName,
@@ -2059,6 +2305,7 @@ func reconcileManagementAddresses(
 				return fmt.Errorf("realizing management plan %q IPv4 gateway: %w", item.ID, err)
 			}
 		}
+
 		if item.IPv6Gateway != "" {
 			if err := operations.EnsureManagementRoute(
 				interfaceName,
@@ -2072,25 +2319,30 @@ func reconcileManagementAddresses(
 				return fmt.Errorf("realizing management plan %q IPv6 gateway: %w", item.ID, err)
 			}
 		}
+
 		routes := slices.Clone(item.Routes)
-		slices.SortFunc(routes, func(left, right clabernetesdeviceplan.Route) int {
+		slices.SortFunc(routes, func(left, right clabernetesinternaldeviceplan.Route) int {
 			if compared := strings.Compare(left.Destination, right.Destination); compared != 0 {
 				return compared
 			}
+
 			if compared := strings.Compare(left.Gateway, right.Gateway); compared != 0 {
 				return compared
 			}
 
 			return left.Metric - right.Metric
 		})
+
 		for _, route := range routes {
 			destination, _ := netip.ParsePrefix(route.Destination)
 			source := item.IPv6
 			table := managementRouteTableBase + index*2 + 1
+
 			if destination.Addr().Is4() {
 				source = item.IPv4
 				table = managementRouteTableBase + index*2
 			}
+
 			if err := operations.EnsureManagementRoute(
 				interfaceName,
 				source,
@@ -2109,14 +2361,16 @@ func reconcileManagementAddresses(
 }
 
 func validateManagementPodTransportOverlap(
-	management []clabernetesdeviceplan.ManagementPlan,
+	management []clabernetesinternaldeviceplan.ManagementPlan,
 	podAddress string,
 ) error {
 	podIP, err := netip.ParseAddr(podAddress)
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // no pod address means no overlap to validate.
 	}
+
 	podIP = podIP.Unmap()
+
 	for index, item := range management {
 		for _, value := range []struct {
 			field string
@@ -2128,13 +2382,15 @@ func validateManagementPodTransportOverlap(
 			if value.raw == "" {
 				continue
 			}
+
 			prefix, parseErr := netip.ParsePrefix(value.raw)
 			if parseErr == nil && prefix.Contains(podIP) {
-				return &clabernetesdeviceplan.Error{
-					Code:     clabernetesdeviceplan.ErrorUnsupported,
+				return &clabernetesinternaldeviceplan.Error{
+					Code:     clabernetesinternaldeviceplan.ErrorUnsupported,
 					Field:    fmt.Sprintf("management[%d].%s", index, value.field),
 					Behavior: "management-preflight",
-					Message:  "management prefix overlaps the kubelet-assigned Pod transport address",
+					Message: "management prefix overlaps the kubelet-assigned Pod " +
+						"transport address",
 				}
 			}
 		}
@@ -2144,7 +2400,7 @@ func validateManagementPodTransportOverlap(
 }
 
 func reconcileLocalInterfaces(
-	plan *clabernetesdeviceplan.Plan,
+	plan *clabernetesinternaldeviceplan.Plan,
 	operations LinkOperations,
 	podUID string,
 ) error {
@@ -2155,16 +2411,20 @@ func reconcileLocalInterfaces(
 
 		return errLocalConnectivityPodIdentity
 	}
+
 	ownerPrefix := localLinkPodOwnerPrefix(podUID)
 	desired := desiredLocalVethPairs(plan, podUID)
+
 	desiredByOwner := make(map[string]desiredVethPair, len(desired))
 	for _, pair := range desired {
 		desiredByOwner[pair.owner] = pair
 	}
+
 	existing, err := operations.ListVethInterfaces(ownerPrefix)
 	if err != nil {
 		return fmt.Errorf("inventorying Pod-owned local Links: %w", err)
 	}
+
 	reconcileErr := removeStaleLocalVethPairs(
 		existing,
 		ownerPrefix,
@@ -2174,6 +2434,7 @@ func reconcileLocalInterfaces(
 	if reconcileErr != nil {
 		return reconcileErr
 	}
+
 	for _, pair := range desired {
 		ensureErr := operations.EnsureVethPair(
 			pair.left,
@@ -2198,32 +2459,41 @@ type desiredVethPair struct {
 }
 
 func desiredLocalVethPairs(
-	plan *clabernetesdeviceplan.Plan,
+	plan *clabernetesinternaldeviceplan.Plan,
 	podUID string,
 ) []desiredVethPair {
-	links := map[string][]clabernetesdeviceplan.InterfacePlan{}
+	links := map[string][]clabernetesinternaldeviceplan.InterfacePlan{}
+
 	for index := range plan.Interfaces {
 		intf := &plan.Interfaces[index]
-		if intf.Connectivity != "same-pod" && intf.Connectivity != "loopback" {
+		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivitySamePod &&
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityLoopback {
 			continue
 		}
+
 		links[intf.LinkID] = append(links[intf.LinkID], *intf)
 	}
+
 	linkIDs := make([]string, 0, len(links))
 	for linkID := range links {
 		linkIDs = append(linkIDs, linkID)
 	}
+
 	slices.Sort(linkIDs)
+
 	desired := make([]desiredVethPair, 0, len(linkIDs))
 	for _, linkID := range linkIDs {
 		endpoints := links[linkID]
-		slices.SortFunc(endpoints, func(left, right clabernetesdeviceplan.InterfacePlan) int {
-			return strings.Compare(left.ID, right.ID)
-		})
+		slices.SortFunc(endpoints,
+			func(left, right clabernetesinternaldeviceplan.InterfacePlan) int {
+				return strings.Compare(left.ID, right.ID)
+			})
+
 		mtu := endpoints[0].MTU
 		if mtu == 0 {
 			mtu = endpoints[1].MTU
 		}
+
 		owner := directLinkOwner(
 			podUID,
 			directVethOwnerType,
@@ -2260,6 +2530,7 @@ func staleLocalVethPairs(
 	desiredByOwner map[string]desiredVethPair,
 ) ([]VethInterface, error) {
 	existingByOwner := map[string][]VethInterface{}
+
 	for _, intf := range existing {
 		if !strings.HasPrefix(intf.Owner, ownerPrefix) {
 			return nil, fmt.Errorf(
@@ -2267,19 +2538,24 @@ func staleLocalVethPairs(
 				errLocalLinkInventory,
 			)
 		}
+
 		existingByOwner[intf.Owner] = append(existingByOwner[intf.Owner], intf)
 	}
+
 	existingOwners := make([]string, 0, len(existingByOwner))
 	for owner := range existingByOwner {
 		existingOwners = append(existingOwners, owner)
 	}
+
 	slices.Sort(existingOwners)
+
 	stale := make([]VethInterface, 0, len(existingOwners))
 	for _, owner := range existingOwners {
 		interfaces := existingByOwner[owner]
 		slices.SortFunc(interfaces, func(left, right VethInterface) int {
 			return strings.Compare(left.Name, right.Name)
 		})
+
 		if len(interfaces) != 2 || interfaces[0].PeerName != interfaces[1].Name ||
 			interfaces[1].PeerName != interfaces[0].Name {
 			return nil, fmt.Errorf(
@@ -2287,12 +2563,14 @@ func staleLocalVethPairs(
 				errLocalLinkInventory,
 			)
 		}
+
 		desired, wanted := desiredByOwner[owner]
 		if wanted && ((interfaces[0].Name == desired.left &&
 			interfaces[1].Name == desired.right) ||
 			(interfaces[0].Name == desired.right && interfaces[1].Name == desired.left)) {
 			continue
 		}
+
 		stale = append(stale, interfaces[0])
 	}
 
@@ -2326,7 +2604,7 @@ func directLinkOwner(podUID, ownerType, linkUID, leftNodeUID, rightNodeUID strin
 }
 
 func identityDigest(identity string) string {
-	return strings.TrimPrefix(clabernetesdeviceplan.Digest([]byte(identity)), "sha256:")
+	return strings.TrimPrefix(clabernetesinternaldeviceplan.Digest([]byte(identity)), "sha256:")
 }
 
 func validLinuxInterfaceName(name string) bool {
@@ -2339,17 +2617,19 @@ func validPeerTransport(value string) bool {
 }
 
 // ConnectivityReady verifies that the running helper published readiness for this exact plan.
-func ConnectivityReady(plan clabernetesdeviceplan.Plan, stateDirectory string) error {
+func ConnectivityReady(plan clabernetesinternaldeviceplan.Plan, stateDirectory string) error {
 	digest, err := plan.Digest()
 	if err != nil {
 		return err
 	}
+
 	raw, err := os.ReadFile(filepath.Join(filepath.Clean(stateDirectory), connectivityReadyFile))
 	if err != nil {
 		return fmt.Errorf("reading connectivity readiness marker: %w", err)
 	}
+
 	if strings.TrimSpace(string(raw)) != digest {
-		return fmt.Errorf("connectivity readiness marker belongs to another plan")
+		return errors.New("connectivity readiness marker belongs to another plan")
 	}
 
 	return nil
@@ -2358,20 +2638,23 @@ func ConnectivityReady(plan clabernetesdeviceplan.Plan, stateDirectory string) e
 // ConnectivityReadyWithRevision additionally verifies that the helper has applied the currently
 // projected planner-authored connectivity revision.
 func ConnectivityReadyWithRevision(
-	plan clabernetesdeviceplan.Plan,
+	plan clabernetesinternaldeviceplan.Plan,
 	stateDirectory,
 	revisionPath string,
 ) error {
 	if err := ConnectivityReady(plan, stateDirectory); err != nil {
 		return err
 	}
+
 	if revisionPath == "" {
 		return nil
 	}
+
 	revision, err := readConnectivityRevisionFile(revisionPath)
 	if err != nil {
 		return err
 	}
+
 	raw, err := os.ReadFile(filepath.Join(
 		filepath.Clean(stateDirectory),
 		connectivityAppliedRevisionFile,
@@ -2379,40 +2662,46 @@ func ConnectivityReadyWithRevision(
 	if err != nil {
 		return fmt.Errorf("reading applied connectivity revision marker: %w", err)
 	}
+
 	if strings.TrimSpace(string(raw)) != revision.DesiredPlanDigest {
-		return fmt.Errorf("projected connectivity revision has not been applied")
+		return errors.New("projected connectivity revision has not been applied")
 	}
 
 	return nil
 }
 
 func validateIdentity(
-	input clabernetesdeviceplan.Input,
-	plan clabernetesdeviceplan.Plan,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
 ) error {
-	normalizedInput, err := clabernetesdeviceplan.NormalizeInput(input)
+	normalizedInput, err := clabernetesinternaldeviceplan.NormalizeInput(input)
 	if err != nil {
 		return err
 	}
-	normalizedPlan, err := clabernetesdeviceplan.NormalizePlan(plan)
+
+	normalizedPlan, err := clabernetesinternaldeviceplan.NormalizePlan(plan)
 	if err != nil {
 		return err
 	}
+
 	digest, err := normalizedInput.Digest()
 	if err != nil {
 		return err
 	}
+
 	if normalizedPlan.InputDigest != digest ||
 		!reflect.DeepEqual(normalizedPlan.Compatibility, normalizedInput.Compatibility) {
-		return fmt.Errorf("connectivity plan and input identities differ")
+		return errors.New("connectivity plan and input identities differ")
 	}
+
 	inputInterfaces := make(
-		map[string]clabernetesdeviceplan.InterfaceInput,
+		map[string]clabernetesinternaldeviceplan.InterfaceInput,
 		len(normalizedInput.Interfaces),
 	)
 	for _, intf := range normalizedInput.Interfaces {
 		inputInterfaces[intf.ID] = intf
 	}
+
 	for _, planned := range normalizedPlan.Interfaces {
 		supplied, exists := inputInterfaces[planned.ID]
 		if !exists || supplied.NodeID != planned.NodeID || supplied.LinkID != planned.LinkID ||
@@ -2420,25 +2709,30 @@ func validateIdentity(
 			supplied.PeerNodeID != planned.PeerNodeID ||
 			supplied.PeerInterface != planned.PeerInterface ||
 			supplied.PeerTransport != planned.PeerTransport ||
-			supplied.Connectivity != planned.Connectivity || supplied.TunnelID != planned.TunnelID ||
+			supplied.Connectivity != planned.Connectivity ||
+			supplied.TunnelID != planned.TunnelID ||
 			supplied.MTU != planned.MTU {
 			return fmt.Errorf(
 				"connectivity plan interface %q differs from accepted input",
 				planned.ID,
 			)
 		}
+
 		delete(inputInterfaces, planned.ID)
 	}
+
 	if len(inputInterfaces) != 0 {
-		return fmt.Errorf("connectivity plan omits accepted interfaces")
+		return errors.New("connectivity plan omits accepted interfaces")
 	}
+
 	inputManagement := make(
-		map[string]clabernetesdeviceplan.ManagementInput,
+		map[string]clabernetesinternaldeviceplan.ManagementInput,
 		len(normalizedInput.Management),
 	)
 	for _, management := range normalizedInput.Management {
 		inputManagement[management.NodeID] = management
 	}
+
 	for _, planned := range normalizedPlan.Management {
 		supplied, exists := inputManagement[planned.NodeID]
 		if !exists {
@@ -2447,7 +2741,7 @@ func validateIdentity(
 			// must carry identity only.
 			if planned.IPv4 != "" || planned.IPv4Gateway != "" || planned.IPv6 != "" ||
 				planned.IPv6Gateway != "" || len(planned.Routes) != 0 ||
-				!reflect.DeepEqual(planned.DNS, clabernetesdeviceplan.DNSConfig{}) {
+				!reflect.DeepEqual(planned.DNS, clabernetesinternaldeviceplan.DNSConfig{}) {
 				return fmt.Errorf(
 					"connectivity management plan %q differs from accepted input",
 					planned.ID,
@@ -2456,6 +2750,7 @@ func validateIdentity(
 
 			continue
 		}
+
 		if supplied.IPv4 != planned.IPv4 ||
 			supplied.IPv4Gateway != planned.IPv4Gateway ||
 			supplied.IPv6 != planned.IPv6 ||
@@ -2467,10 +2762,12 @@ func validateIdentity(
 				planned.ID,
 			)
 		}
+
 		delete(inputManagement, planned.NodeID)
 	}
+
 	if len(inputManagement) != 0 {
-		return fmt.Errorf("connectivity plan omits accepted management intent")
+		return errors.New("connectivity plan omits accepted management intent")
 	}
 
 	return nil

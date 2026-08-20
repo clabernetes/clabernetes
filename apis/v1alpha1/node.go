@@ -69,7 +69,6 @@ type NodeSpec struct {
 	// LauncherProfileRef optionally names the same-namespace LauncherProfile supplying direct
 	// workload policy. When omitted, global Config defaults are used.
 	// +optional
-	//nolint:lll // The qualified type and serialization tags form one declaration.
 	LauncherProfileRef *k8scorev1.LocalObjectReference `json:"launcherProfileRef,omitempty" yaml:"-"`
 	// FilesFromConfigMap holds files staged from ConfigMaps for this Node's application containers.
 	// +listType=atomic

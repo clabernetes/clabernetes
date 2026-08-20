@@ -34,6 +34,7 @@ func CompatibilityForRegistry(
 	if registry == nil {
 		registry = NewContainerlabRegistry()
 	}
+
 	if strings.TrimSpace(moduleVersion) == "" {
 		return Compatibility{}, planningError(
 			ErrorInvalidInput,
@@ -42,8 +43,10 @@ func CompatibilityForRegistry(
 			nil,
 		)
 	}
+
 	names := slices.Clone(registry.GetRegisteredNodeKindNames())
 	slices.Sort(names)
+
 	if len(names) == 0 {
 		return Compatibility{}, planningError(
 			ErrorInvariant,
@@ -52,6 +55,7 @@ func CompatibilityForRegistry(
 			nil,
 		)
 	}
+
 	for index, name := range names {
 		if strings.TrimSpace(name) == "" || index > 0 && name == names[index-1] {
 			return Compatibility{}, planningError(
@@ -62,6 +66,7 @@ func CompatibilityForRegistry(
 			)
 		}
 	}
+
 	canonicalNames, err := json.Marshal(names)
 	if err != nil {
 		return Compatibility{}, planningError(
@@ -90,10 +95,12 @@ func linkedContainerlabVersion() (string, error) {
 			nil,
 		)
 	}
+
 	for _, dependency := range build.Deps {
 		if dependency.Path != ContainerlabModulePath {
 			continue
 		}
+
 		if dependency.Replace != nil {
 			return "", planningError(
 				ErrorInvariant,
@@ -102,6 +109,7 @@ func linkedContainerlabVersion() (string, error) {
 				nil,
 			)
 		}
+
 		if dependency.Version == "" || dependency.Version == "(devel)" {
 			return "", planningError(
 				ErrorInvariant,
@@ -144,10 +152,12 @@ func ValidateCompatibility(
 	if err != nil {
 		return err
 	}
+
 	if actual != expected {
 		return &Error{
 			Code: ErrorInvariant, Field: "compatibility", Behavior: "imported-registry",
-			Message: "planning input does not match the linked containerlab module and live registry",
+			Message: "planning input does not match the linked containerlab module " +
+				"and live registry",
 		}
 	}
 

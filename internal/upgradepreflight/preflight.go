@@ -1,4 +1,6 @@
 // Package upgradepreflight reports fields that cannot survive the direct-runtime API cut.
+//
+//nolint:err113,mnd // structured one-off diagnostics and protocol literals are the design here.
 package upgradepreflight
 
 import (
@@ -8,8 +10,9 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -26,7 +29,7 @@ var (
 	// ErrIncompatible is returned when at least one stored field requires explicit migration.
 	ErrIncompatible = errors.New("stored resources contain fields removed by the direct runtime")
 
-	resourceTargets = []resourceTarget{
+	resourceTargets = []resourceTarget{ //nolint:gochecknoglobals // static inventory of inspected resources.
 		{
 			Kind: "Config",
 			GVR: schema.GroupVersionResource{
@@ -94,10 +97,11 @@ func Scan(ctx context.Context, client dynamic.Interface) ([]Diagnostic, error) {
 
 	for _, target := range resourceTargets {
 		list, err := client.Resource(target.GVR).List(ctx, metav1.ListOptions{})
-		if apierrors.IsNotFound(err) {
+		if apimachineryerrors.IsNotFound(err) {
 			// A missing CRD cannot have stored instances to migrate.
 			continue
 		}
+
 		if err != nil {
 			return nil, fmt.Errorf(
 				"listing %s resources for upgrade preflight: %w",
@@ -111,6 +115,7 @@ func Scan(ctx context.Context, client dynamic.Interface) ([]Diagnostic, error) {
 			if inspectErr != nil {
 				return nil, inspectErr
 			}
+
 			diagnostics = append(diagnostics, objectDiagnostics...)
 		}
 	}
@@ -120,9 +125,11 @@ func Scan(ctx context.Context, client dynamic.Interface) ([]Diagnostic, error) {
 		if left.Kind != right.Kind {
 			return left.Kind < right.Kind
 		}
+
 		if left.Namespace != right.Namespace {
 			return left.Namespace < right.Namespace
 		}
+
 		if left.Name != right.Name {
 			return left.Name < right.Name
 		}
@@ -142,6 +149,7 @@ func Scan(ctx context.Context, client dynamic.Interface) ([]Diagnostic, error) {
 // all require a migration decision.
 func Inspect(kind string, object *unstructured.Unstructured) ([]Diagnostic, error) {
 	diagnostics := make([]Diagnostic, 0)
+
 	rules := rulesForKind(kind)
 	if rules == nil {
 		return nil, fmt.Errorf("unsupported upgrade preflight resource kind %q", kind)
@@ -152,6 +160,7 @@ func Inspect(kind string, object *unstructured.Unstructured) ([]Diagnostic, erro
 		if err != nil {
 			return nil, inspectionError(kind, object, rule.Display)
 		}
+
 		if present {
 			diagnostics = append(diagnostics, newDiagnostic(kind, object, rule))
 		}
@@ -172,9 +181,11 @@ func Inspect(kind string, object *unstructured.Unstructured) ([]Diagnostic, erro
 			[]string{"spec", "definition", "containerlab"},
 		)
 	}
+
 	if !definitionPresent {
 		return diagnostics, nil
 	}
+
 	definition, ok := definitionValue.(string)
 	if !ok {
 		return nil, inspectionError(
@@ -201,6 +212,7 @@ func Inspect(kind string, object *unstructured.Unstructured) ([]Diagnostic, erro
 		if presentErr != nil {
 			return nil, inspectionError(kind, object, rule.Display)
 		}
+
 		if present {
 			diagnostics = append(diagnostics, newDiagnostic(kind, object, rule))
 		}
@@ -216,6 +228,7 @@ func Run(ctx context.Context, client dynamic.Interface, output io.Writer) error 
 	if err != nil {
 		return err
 	}
+
 	if len(diagnostics) == 0 {
 		_, err = fmt.Fprintln(output, "upgrade preflight passed: no removed fields found")
 
@@ -224,6 +237,7 @@ func Run(ctx context.Context, client dynamic.Interface, output io.Writer) error 
 
 	encoder := json.NewEncoder(output)
 	encoder.SetEscapeHTML(false)
+
 	for _, diagnostic := range diagnostics {
 		if err = encoder.Encode(diagnostic); err != nil {
 			return fmt.Errorf("writing upgrade preflight diagnostic: %w", err)
@@ -265,14 +279,16 @@ func rulesForKind(kind string) []fieldRule {
 
 func configImagePullRules() []fieldRule {
 	prefix := []string{"spec", "imagePull"}
+
 	rules := sharedImagePullRules(prefix)
 	for _, field := range []string{"criSockOverride", "criKindOverride", "criHostsDir"} {
 		rules = append(rules, fieldRule{
 			Lookup:      appendPath(prefix, field),
 			Display:     appendPath(prefix, field),
 			Disposition: dispositionNoMap,
-			Guidance: "Configure registry and CRI behavior on eligible cluster nodes; direct device " +
-				"Pods receive no runtime socket or hosts-directory mount.",
+			Guidance: "Configure registry and CRI behavior on eligible cluster " +
+				"nodes; direct device Pods receive no runtime socket or " +
+				"hosts-directory mount.",
 		})
 	}
 
@@ -298,7 +314,8 @@ func sharedImagePullRules(prefix []string) []fieldRule {
 			Lookup:      appendPath(prefix, "pullThroughOverride"),
 			Display:     appendPath(prefix, "pullThroughOverride"),
 			Disposition: dispositionNoMap,
-			Guidance: "Configure mirror or pre-pull behavior on the cluster node runtime; this field " +
+			Guidance: "Configure mirror or pre-pull behavior on the cluster node " +
+				"runtime; this field " +
 				"is not converted to imagePull.policy.",
 		},
 		{
@@ -320,6 +337,7 @@ func sharedImagePullRules(prefix []string) []fieldRule {
 
 func deploymentRules(prefix []string) []fieldRule {
 	rules := make([]fieldRule, 0, 8)
+
 	for _, field := range []string{
 		"privilegedLauncher",
 		"launcherImage",
@@ -330,9 +348,10 @@ func deploymentRules(prefix []string) []fieldRule {
 		guidance := "Manage c9s controller and helper policy through the release; express device " +
 			"requirements only through supported Node input and the imported plan."
 		if field == "privilegedLauncher" {
-			guidance = "Device privilege comes exclusively from the imported plan; launcher privilege " +
-				"is not copied to an application container."
+			guidance = "Device privilege comes exclusively from the imported " +
+				"plan; launcher privilege is not copied to an application container."
 		}
+
 		rules = append(rules, fieldRule{
 			Lookup:      appendPath(prefix, field),
 			Display:     appendPath(prefix, field),
@@ -340,6 +359,7 @@ func deploymentRules(prefix []string) []fieldRule {
 			Guidance:    guidance,
 		})
 	}
+
 	for _, field := range []string{
 		"containerlabDebug",
 		"containerlabTimeout",
@@ -363,7 +383,8 @@ func managementRules(prefix []string) []fieldRule {
 			Lookup:      appendPath(prefix, "network"),
 			Display:     appendPath(prefix, "network"),
 			Disposition: dispositionNoMap,
-			Guidance:    "Use portable direct management allocation; Pods have no Docker network name.",
+			Guidance: "Use portable direct management allocation; Pods have no " +
+				"Docker network name.",
 		},
 		{
 			Lookup:      appendPath(prefix, "mtu"),
@@ -388,8 +409,9 @@ func topologyManagementRules() []fieldRule {
 		guidance string
 	}{
 		{
-			name:     "network",
-			guidance: "Use portable direct management allocation; Pods have no Docker network name.",
+			name: "network",
+			guidance: "Use portable direct management allocation; Pods have no Docker " +
+				"network name.",
 		},
 		{name: "bridge", guidance: "A Docker management bridge has no direct-Pod replacement."},
 		{name: "mtu", guidance: "Use planned management semantics and Link MTU where applicable."},
@@ -406,6 +428,7 @@ func topologyManagementRules() []fieldRule {
 			guidance: "Configure required networking through portable cluster and Link policy.",
 		},
 	}
+
 	rules := make([]fieldRule, 0, len(fields))
 	for _, field := range fields {
 		rules = append(rules, fieldRule{
@@ -457,13 +480,16 @@ func pathValue(object map[string]any, path []string) (any, bool, error) {
 		if !exists {
 			return nil, false, nil
 		}
+
 		if i == len(path)-1 {
 			return value, true, nil
 		}
+
 		next, ok := value.(map[string]any)
 		if !ok {
-			return nil, false, fmt.Errorf("parent is not an object")
+			return nil, false, errors.New("parent is not an object")
 		}
+
 		current = next
 	}
 
@@ -493,13 +519,18 @@ func appendPath(prefix []string, field string) []string {
 
 func jsonPath(segments []string) string {
 	path := "$"
+
+	var pathSb516 strings.Builder
+
 	for _, segment := range segments {
 		if isIdentifier(segment) {
-			path += "." + segment
+			pathSb516.WriteString("." + segment)
 		} else {
-			path += "['" + segment + "']"
+			pathSb516.WriteString("['" + segment + "']")
 		}
 	}
+
+	path += pathSb516.String()
 
 	return path
 }
@@ -508,6 +539,7 @@ func isIdentifier(value string) bool {
 	if value == "" {
 		return false
 	}
+
 	for i, char := range []byte(value) {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || char == '_' ||
 			(i > 0 && char >= '0' && char <= '9') {

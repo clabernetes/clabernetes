@@ -1,4 +1,4 @@
-//nolint:err113,funcorder,gocritic,noinlineerr,perfsprint,wsl_v5 // Explicit RPC diagnostics.
+//nolint:err113,funcorder,funlen,gocognit,noinlineerr,perfsprint,wsl_v5 // Explicit RPC diagnostics.
 package hostendpoint
 
 import (
@@ -230,7 +230,7 @@ func (d *Daemon) expectedManagementForPod(
 		}
 	}
 
-	return nil, nil
+	return nil, nil //nolint:nilnil // no matching endpoint is a valid lookup result.
 }
 
 // expectedFabricForPod returns this Pod's authoritative fabric endpoints with their internal

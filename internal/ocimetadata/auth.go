@@ -1,4 +1,4 @@
-//nolint:nlreturn,noinlineerr,wsl_v5 // Keep authentication guards compact.
+//nolint:mnd,nlreturn,noinlineerr,wsl_v5 // Keep authentication guards compact.
 package ocimetadata
 
 import (
@@ -228,7 +228,6 @@ func secretAuths(secret *k8scorev1.Secret) (map[string]json.RawMessage, error) {
 
 	// Every non-Docker Secret type is rejected by default; enumerating unrelated
 	// Kubernetes Secret types would weaken that fail-closed contract.
-	//nolint:exhaustive
 	switch secret.Type {
 	case k8scorev1.SecretTypeDockerConfigJson:
 		raw = secret.Data[k8scorev1.DockerConfigJsonKey]
@@ -292,7 +291,7 @@ func (a *Authentication) sensitiveValues() []string {
 
 // defaultResolverTransport bounds header waits so an unresponsive registry cannot hold a
 // reconcile worker: the resolver's callers otherwise carry no deadline of their own.
-var defaultResolverTransport = func() http.RoundTripper {
+var defaultResolverTransport = func() http.RoundTripper { //nolint:gochecknoglobals // shared resolver transport.
 	base, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
 		return http.DefaultTransport

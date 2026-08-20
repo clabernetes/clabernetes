@@ -1,3 +1,4 @@
+//nolint:mnd // protocol and platform literals are clearest inline.
 package deviceplan
 
 import (
@@ -43,6 +44,7 @@ func writeRuntimeArtifactDigests(
 
 		return nil
 	}
+
 	payload, err := json.Marshal(runtimeArtifactRecord{Files: digests})
 	if err != nil {
 		return planningError(
@@ -52,6 +54,7 @@ func writeRuntimeArtifactDigests(
 			err,
 		)
 	}
+
 	if err = os.WriteFile(path, payload, 0o644); err != nil { //nolint:gosec // Digest record.
 		return planningError(
 			ErrorSideEffect,
@@ -67,7 +70,7 @@ func writeRuntimeArtifactDigests(
 // LoadRuntimeArtifactDigests returns the preparation-recorded runtime digests for one Node, or
 // an empty map when preparation rendered nothing management-dependent.
 func LoadRuntimeArtifactDigests(artifactRoot, nodeID string) map[string]string {
-	raw, err := os.ReadFile( //nolint:gosec // Plan-scoped artifact record.
+	raw, err := os.ReadFile(
 		filepath.Join(
 			filepath.Clean(artifactRoot),
 			ArtifactNodeDirectory(nodeID),
@@ -77,6 +80,7 @@ func LoadRuntimeArtifactDigests(artifactRoot, nodeID string) map[string]string {
 	if err != nil {
 		return map[string]string{}
 	}
+
 	record := runtimeArtifactRecord{}
 	if json.Unmarshal(raw, &record) != nil || record.Files == nil {
 		return map[string]string{}

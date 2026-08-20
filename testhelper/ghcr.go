@@ -1,3 +1,4 @@
+//nolint:mnd // protocol and platform literals are clearest inline.
 package testhelper
 
 import (

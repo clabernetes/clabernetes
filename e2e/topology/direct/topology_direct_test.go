@@ -56,6 +56,7 @@ func TestNodeLinkDirect(t *testing.T) {
 	}
 
 	initialPods := map[string]devicePodObservation{}
+
 	for _, nodeName := range nodeNames {
 		observation := observeDevicePod(t, namespace, nodeName)
 		if !strings.Contains(observation.image, "srlinux") {
@@ -65,6 +66,7 @@ func TestNodeLinkDirect(t *testing.T) {
 				observation.image,
 			)
 		}
+
 		initialPods[nodeName] = observation
 	}
 
@@ -194,6 +196,7 @@ func waitForDeviceCommand(
 	deadline := time.Now().Add(directNodeReadyTimeout)
 
 	var lastOutput []byte
+
 	for time.Now().Before(deadline) {
 		arguments := append(
 			[]string{
@@ -208,6 +211,7 @@ func waitForDeviceCommand(
 		if err == nil && strings.Contains(string(output), expect) {
 			return
 		}
+
 		lastOutput = output
 
 		time.Sleep(directPollInterval)
@@ -292,12 +296,14 @@ func observeDevicePod(t *testing.T, namespace, nodeName string) devicePodObserva
 
 	image := ""
 	containerName := ""
+
 	for _, container := range pod.Spec.Containers {
 		if strings.HasPrefix(container.Name, "device-") {
 			image = container.Image
 			containerName = container.Name
 		}
 	}
+
 	if image == "" {
 		t.Fatalf("device Pod %q has no device application container", pod.Metadata.Name)
 	}
@@ -317,6 +323,7 @@ func waitForWorkerArtifactCollection(t *testing.T, namespace string) {
 	deadline := time.Now().Add(directNodeReadyTimeout)
 
 	var remaining int
+
 	for time.Now().Before(deadline) {
 		pods := listPods(
 			t,

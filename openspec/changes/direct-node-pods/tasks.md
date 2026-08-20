@@ -113,8 +113,8 @@
 
 - [ ] 12.1 Rewrite architecture, Node, Link, LauncherProfile, management, image, operations, and troubleshooting documentation for direct Pods.
 - [ ] 12.2 Publish generated per-kind compatibility, intentional Kubernetes semantic differences, required cluster capabilities, restricted-image procedures, release notes, and destructive upgrade/rollback guidance.
-- [ ] 12.3 Run focused package tests and renderer/fixture checks throughout implementation, recording any environment-dependent skips.
-- [ ] 12.4 Run `make test`, `make test-race`, `make lint`, `make verify-generated`, `make check-docs`, and all runtime image builds; inspect resulting changes.
+- [x] 12.3 Run focused package tests and renderer/fixture checks throughout implementation, recording any environment-dependent skips.
+- [x] 12.4 Run `make test`, `make test-race`, `make lint`, `make verify-generated`, `make check-docs`, and all runtime image builds; inspect resulting changes.
 - [ ] 12.5 Run the authorized task-scoped multi-worker suite covering every Link flavor, traffic, live changes, Pod deletion/rescheduling, controller/helper restart, partial updates, and recovery; after recording evidence, remove task-scoped completed/failed planning Pods, Jobs, stale workloads, and superseded diagnostics by namespace, release, owner, and labels without touching unrelated resources.
 - [ ] 12.6 Run all available vendor boot/dataplane scenarios and verify current restricted-image evidence; retain diagnostics only when their exact identity and reason are documented, and remove every other task-scoped Pod, Job, workload, namespace, and cluster/lab resource.
 - [ ] 12.7 Audit every acceptance criterion against current files, generated artifacts, images, matrix records, runtime evidence, and live cluster inventory; prove no unreported task-scoped resource remains before archiving the change.

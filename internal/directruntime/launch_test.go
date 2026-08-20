@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 )
 
 type recordingLaunchOperations struct {
@@ -35,6 +35,7 @@ func (r *recordingLaunchOperations) MountFilesystem(
 	r.source = source
 	r.destination = destination
 	r.filesystem = filesystem
+
 	r.options = append([]string(nil), options...)
 
 	return nil
@@ -59,34 +60,36 @@ func TestRunLaunchAppliesGenericMountBeforeImageProcess(t *testing.T) {
 	plan.Containers[0].ImageEntrypoint = []string{"/usr/bin/image-entrypoint"}
 	plan.Containers[0].ImageCommand = []string{"serve", "--foreground"}
 	plan.Containers[0].StartupDelay = 7
-	plan.Volumes = []clabernetesdeviceplan.VolumePlan{{
-		ID: "tmpfs", NodeID: "node-a", Kind: clabernetesdeviceplan.VolumeEmptyDir,
+	plan.Volumes = []clabernetesinternaldeviceplan.VolumePlan{{
+		ID: "tmpfs", NodeID: "node-a", Kind: clabernetesinternaldeviceplan.VolumeEmptyDir,
 		Medium: "Memory", Size: "8000000",
 	}}
-	plan.Mounts = []clabernetesdeviceplan.MountPlan{{
+	plan.Mounts = []clabernetesinternaldeviceplan.MountPlan{{
 		ID: "tmpfs/mount", ContainerID: "container-a", VolumeID: "tmpfs",
 		Destination: "/run/package",
 	}}
 	plan.Containers[0].MountIDs = []string{"tmpfs/mount"}
-	plan.Actions = []clabernetesdeviceplan.Action{{
-		ID: "mount", Phase: clabernetesdeviceplan.PhasePreStart,
-		Target: clabernetesdeviceplan.ActionTarget{
+	plan.Actions = []clabernetesinternaldeviceplan.Action{{
+		ID: "mount", Phase: clabernetesinternaldeviceplan.PhasePreStart,
+		Target: clabernetesinternaldeviceplan.ActionTarget{
 			NodeID: "node-a", ContainerID: "container-a",
 		},
-		Kind: clabernetesdeviceplan.ActionMount,
-		Mount: &clabernetesdeviceplan.MountAction{
+		Kind: clabernetesinternaldeviceplan.ActionMount,
+		Mount: &clabernetesinternaldeviceplan.MountAction{
 			MountID: "tmpfs/mount", Filesystem: "tmpfs", Source: "tmpfs",
 			Options: []string{"rw", "nosuid", "nodev", "noexec", "size=8000000"},
 		},
 	}}
+
 	operations := &recordingLaunchOperations{}
-	if err := clabernetesdirectruntime.RunLaunchWithOperations(
+	if err := clabernetesinternaldirectruntime.RunLaunchWithOperations(
 		plan,
 		"container-a",
 		operations,
 	); err != nil {
 		t.Fatal(err)
 	}
+
 	if operations.source != "tmpfs" || operations.filesystem != "tmpfs" ||
 		operations.destination != "/run/package" ||
 		!reflect.DeepEqual(
@@ -95,9 +98,11 @@ func TestRunLaunchAppliesGenericMountBeforeImageProcess(t *testing.T) {
 		) {
 		t.Fatalf("mount operation = %#v", operations)
 	}
+
 	if !reflect.DeepEqual(operations.delays, []time.Duration{7 * time.Second}) {
 		t.Fatalf("startup delays = %#v", operations.delays)
 	}
+
 	if want := []string{"/usr/bin/image-entrypoint", "serve", "--foreground"}; !reflect.DeepEqual(
 		operations.argv,
 		want,
@@ -111,24 +116,25 @@ func TestRunLaunchRejectsCrossNodeMount(t *testing.T) {
 
 	plan := lifecycleTestPlan()
 	plan.Containers[0].ImageCommand = []string{"run"}
-	plan.Volumes = []clabernetesdeviceplan.VolumePlan{{
-		ID: "tmpfs", NodeID: "node-a", Kind: clabernetesdeviceplan.VolumeEmptyDir,
+	plan.Volumes = []clabernetesinternaldeviceplan.VolumePlan{{
+		ID: "tmpfs", NodeID: "node-a", Kind: clabernetesinternaldeviceplan.VolumeEmptyDir,
 	}}
-	plan.Mounts = []clabernetesdeviceplan.MountPlan{{
+	plan.Mounts = []clabernetesinternaldeviceplan.MountPlan{{
 		ID: "tmpfs/mount", ContainerID: "container-a", VolumeID: "tmpfs", Destination: "/run",
 	}}
 	plan.Containers[0].MountIDs = []string{"tmpfs/mount"}
-	plan.Actions = []clabernetesdeviceplan.Action{{
-		ID: "mount", Phase: clabernetesdeviceplan.PhasePreStart,
-		Target: clabernetesdeviceplan.ActionTarget{
+	plan.Actions = []clabernetesinternaldeviceplan.Action{{
+		ID: "mount", Phase: clabernetesinternaldeviceplan.PhasePreStart,
+		Target: clabernetesinternaldeviceplan.ActionTarget{
 			NodeID: "foreign", ContainerID: "container-a",
 		},
-		Kind: clabernetesdeviceplan.ActionMount,
-		Mount: &clabernetesdeviceplan.MountAction{
+		Kind: clabernetesinternaldeviceplan.ActionMount,
+		Mount: &clabernetesinternaldeviceplan.MountAction{
 			MountID: "tmpfs/mount", Filesystem: "tmpfs", Source: "tmpfs",
 		},
 	}}
-	err := clabernetesdirectruntime.RunLaunchWithOperations(
+
+	err := clabernetesinternaldirectruntime.RunLaunchWithOperations(
 		plan,
 		"container-a",
 		&recordingLaunchOperations{},

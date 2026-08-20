@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
 
 func TestRunOCIHealthcheckUsesDeclaredCommandForms(t *testing.T) {
 	t.Parallel()
 
-	for _, healthcheck := range []*clabernetesdeviceplan.Healthcheck{
+	for _, healthcheck := range []*clabernetesinternaldeviceplan.Healthcheck{
 		{Test: []string{"CMD", "/bin/true"}, Timeout: int64(time.Second)},
 		{Test: []string{"CMD-SHELL", "test", "1", "=", "1"}, Timeout: int64(time.Second)},
 		{Test: []string{"NONE"}},
@@ -25,7 +25,7 @@ func TestRunOCIHealthcheckUsesDeclaredCommandForms(t *testing.T) {
 func TestRunOCIHealthcheckPropagatesFailure(t *testing.T) {
 	t.Parallel()
 
-	err := runOCIHealthcheck(context.Background(), &clabernetesdeviceplan.Healthcheck{
+	err := runOCIHealthcheck(context.Background(), &clabernetesinternaldeviceplan.Healthcheck{
 		Test: []string{"CMD", "/bin/false"}, Timeout: int64(time.Second),
 	})
 	if err == nil {

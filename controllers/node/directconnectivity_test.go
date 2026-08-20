@@ -1,3 +1,4 @@
+//nolint:gocyclo // dense fixture-driven tests exercise one boundary end to end.
 package node //nolint:testpackage // tests exercise the controller's cold-artifact boundary
 
 import (
@@ -6,9 +7,9 @@ import (
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesdirectpod "github.com/clabernetes/clabernetes/internal/directpod"
-	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,17 +21,24 @@ func TestDirectDeploymentConformsToAPIDefaultedWorkload(t *testing.T) {
 
 	node := planInputTestNode("router", "node-uid-a", "package-kind", "example/device:1")
 	_, plan := directConnectivityTestPlan(t, node)
-	rendered, err := clabernetesdirectpod.Render(plan, directConnectivityRenderOptions(node))
+
+	rendered, err := clabernetesinternaldirectpod.Render(
+		plan,
+		directConnectivityRenderOptions(node),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	observed := rendered.DeepCopy()
 	applyDirectDeploymentAPIDefaults(observed)
+
 	if !directDeploymentConforms(observed, rendered) {
 		t.Fatal("API-defaulted direct Deployment was rejected")
 	}
 
 	tampered := observed.DeepCopy()
+
 	tampered.Spec.Template.Spec.Containers[0].Image = "example/other@sha256:def"
 	if directDeploymentConforms(tampered, rendered) {
 		t.Fatal("direct Deployment with a changed application image was accepted")
@@ -45,25 +53,32 @@ func applyDirectDeploymentAPIDefaults(deployment *k8sappsv1.Deployment) {
 	podSpec.SecurityContext = &k8scorev1.PodSecurityContext{}
 	terminationGracePeriodSeconds := int64(30)
 	podSpec.TerminationGracePeriodSeconds = &terminationGracePeriodSeconds
+
 	podSpec.DeprecatedServiceAccount = podSpec.ServiceAccountName
 	for index := range podSpec.InitContainers {
 		applyDirectContainerAPIDefaults(&podSpec.InitContainers[index])
 	}
+
 	for index := range podSpec.Containers {
 		applyDirectContainerAPIDefaults(&podSpec.Containers[index])
 	}
+
 	defaultMode := int32(0o644)
+
 	for index := range podSpec.Volumes {
 		volume := &podSpec.Volumes[index]
 		if volume.ConfigMap != nil && volume.ConfigMap.DefaultMode == nil {
 			volume.ConfigMap.DefaultMode = &defaultMode
 		}
+
 		if volume.Secret != nil && volume.Secret.DefaultMode == nil {
 			volume.Secret.DefaultMode = &defaultMode
 		}
+
 		if volume.Projected != nil && volume.Projected.DefaultMode == nil {
 			volume.Projected.DefaultMode = &defaultMode
 		}
+
 		if volume.DownwardAPI != nil && volume.DownwardAPI.DefaultMode == nil {
 			volume.DownwardAPI.DefaultMode = &defaultMode
 		}
@@ -74,21 +89,27 @@ func applyDirectContainerAPIDefaults(container *k8scorev1.Container) {
 	if container.ImagePullPolicy == "" {
 		container.ImagePullPolicy = k8scorev1.PullIfNotPresent
 	}
+
 	container.TerminationMessagePath = k8scorev1.TerminationMessagePathDefault
+
 	container.TerminationMessagePolicy = k8scorev1.TerminationMessageReadFile
 	for _, probe := range []*k8scorev1.Probe{container.StartupProbe, container.ReadinessProbe} {
 		if probe == nil {
 			continue
 		}
+
 		if probe.TimeoutSeconds == 0 {
 			probe.TimeoutSeconds = 1
 		}
+
 		if probe.PeriodSeconds == 0 {
 			probe.PeriodSeconds = 10
 		}
+
 		if probe.SuccessThreshold == 0 {
 			probe.SuccessThreshold = 1
 		}
+
 		if probe.FailureThreshold == 0 {
 			probe.FailureThreshold = 3
 		}
@@ -106,19 +127,23 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 		t,
 		&desiredInput,
 		&desiredPlan,
-		clabernetesdeviceplan.LinkApplyLive,
+		clabernetesinternaldeviceplan.LinkApplyLive,
 	)
-	basePlan.Containers[0].Environment = []clabernetesdeviceplan.KeyValue{{
+
+	basePlan.Containers[0].Environment = []clabernetesinternaldeviceplan.KeyValue{{
 		Name: "package-created-endpoint-count", Value: "0",
 	}}
-	desiredPlan.Containers[0].Environment = []clabernetesdeviceplan.KeyValue{{
+	desiredPlan.Containers[0].Environment = []clabernetesinternaldeviceplan.KeyValue{{
 		Name: "package-created-endpoint-count", Value: "2",
 	}}
+
 	scheme := planTestScheme(t)
 	if err := k8sappsv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
+
 	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
+
 	planConfigMap, _, err := (&PlanConfigMapReconciler{Client: client}).Ensure(
 		ctx,
 		node,
@@ -130,6 +155,7 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	inputConfigMap, _, err := (&PlannerInputConfigMapReconciler{Client: client}).Ensure(
 		ctx,
 		node,
@@ -138,7 +164,8 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseRevision, err := clabernetesdirectruntime.NewConnectivityRevision(
+
+	baseRevision, err := clabernetesinternaldirectruntime.NewConnectivityRevision(
 		baseInput,
 		basePlan,
 		baseInput,
@@ -147,6 +174,7 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	revisionConfigMap, err := (&ConnectivityRevisionConfigMapReconciler{Client: client}).Ensure(
 		ctx,
 		node,
@@ -155,18 +183,23 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	options := directConnectivityRenderOptions(node)
 	options.PlanConfigMapName = planConfigMap.GetName()
 	options.InputConfigMapName = inputConfigMap.GetName()
 	options.ConnectivityRevisionConfigMapName = revisionConfigMap.GetName()
-	existing, err := clabernetesdirectpod.Render(basePlan, options)
+
+	existing, err := clabernetesinternaldirectpod.Render(basePlan, options)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = client.Create(ctx, existing); err != nil {
 		t.Fatal(err)
 	}
+
 	reconciler := &Reconciler{Client: client}
+
 	decision, err := reconciler.directConnectivityRevision(
 		ctx,
 		node,
@@ -178,12 +211,14 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	appliedDigest, digestErr := decision.AppliedPlan.Digest()
 	if digestErr != nil {
 		t.Fatal(digestErr)
 	}
+
 	if !decision.RetainPod ||
-		decision.LifecycleMode != clabernetesdeviceplan.LinkApplyLive ||
+		decision.LifecycleMode != clabernetesinternaldeviceplan.LinkApplyLive ||
 		decision.Revision.BasePlanDigest == decision.Revision.DesiredPlanDigest ||
 		decision.Revision.DesiredPlanDigest != appliedDigest ||
 		decision.ColdReferences.PlanConfigMapName != planConfigMap.GetName() ||
@@ -194,8 +229,10 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 			appliedDigest,
 		)
 	}
+
 	changedPolicy := directConnectivityRenderOptions(node)
 	changedPolicy.ConnectivityImage = "example/c9s@sha256:" + strings.Repeat("d", 64)
+
 	decision, err = reconciler.directConnectivityRevision(
 		ctx,
 		node,
@@ -207,6 +244,7 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if decision.RetainPod || decision.LifecycleMode != "" {
 		t.Fatal("live transition retained a Deployment after non-connectivity policy changed")
 	}
@@ -215,11 +253,10 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 func TestDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []clabernetesdeviceplan.LinkApplyMode{
-		clabernetesdeviceplan.LinkApplyRestart,
-		clabernetesdeviceplan.LinkApplyRecreate,
+	for _, mode := range []clabernetesinternaldeviceplan.LinkApplyMode{
+		clabernetesinternaldeviceplan.LinkApplyRestart,
+		clabernetesinternaldeviceplan.LinkApplyRecreate,
 	} {
-		mode := mode
 		t.Run(string(mode), func(t *testing.T) {
 			t.Parallel()
 			testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(t, mode)
@@ -229,7 +266,7 @@ func TestDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(t *testing.T)
 
 func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 	t *testing.T,
-	mode clabernetesdeviceplan.LinkApplyMode,
+	mode clabernetesinternaldeviceplan.LinkApplyMode,
 ) {
 	t.Helper()
 
@@ -243,11 +280,14 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 		&desiredPlan,
 		mode,
 	)
+
 	scheme := planTestScheme(t)
 	if err := k8sappsv1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
+
 	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
+
 	planConfigMap, _, err := (&PlanConfigMapReconciler{Client: client}).Ensure(
 		ctx,
 		node,
@@ -259,6 +299,7 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	inputConfigMap, _, err := (&PlannerInputConfigMapReconciler{Client: client}).Ensure(
 		ctx,
 		node,
@@ -267,7 +308,8 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseRevision, err := clabernetesdirectruntime.NewConnectivityRevision(
+
+	baseRevision, err := clabernetesinternaldirectruntime.NewConnectivityRevision(
 		baseInput,
 		basePlan,
 		baseInput,
@@ -276,6 +318,7 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	revisionConfigMap, err := (&ConnectivityRevisionConfigMapReconciler{Client: client}).Ensure(
 		ctx,
 		node,
@@ -284,15 +327,19 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	options := directConnectivityRenderOptions(node)
 	options.PlanConfigMapName = planConfigMap.GetName()
 	options.InputConfigMapName = inputConfigMap.GetName()
 	options.ConnectivityRevisionConfigMapName = revisionConfigMap.GetName()
-	existing, err := clabernetesdirectpod.Render(basePlan, options)
+
+	existing, err := clabernetesinternaldirectpod.Render(basePlan, options)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	reconciler := &Reconciler{Client: client}
+
 	decision, err := reconciler.directConnectivityRevision(
 		ctx,
 		node,
@@ -304,7 +351,8 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantRetain := mode == clabernetesdeviceplan.LinkApplyRestart
+
+	wantRetain := mode == clabernetesinternaldeviceplan.LinkApplyRestart
 	if decision.RetainPod != wantRetain || decision.LifecycleMode != mode ||
 		len(decision.AffectedNodeIDs) != 1 || decision.AffectedNodeIDs[0] != string(node.GetUID()) {
 		t.Fatalf(
@@ -315,6 +363,7 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 			decision.AffectedNodeIDs,
 		)
 	}
+
 	if wantRetain && decision.Revision.MaximumMode != mode {
 		t.Fatalf("Restart revision = %#v", decision.Revision)
 	}
@@ -323,39 +372,45 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 func directConnectivityTestPlan(
 	t *testing.T,
 	node *clabernetesapisv1alpha1.Node,
-) (clabernetesdeviceplan.Input, clabernetesdeviceplan.Plan) {
+) (clabernetesinternaldeviceplan.Input, clabernetesinternaldeviceplan.Plan) {
 	t.Helper()
-	input := clabernetesdeviceplan.Input{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion,
+
+	input := clabernetesinternaldeviceplan.Input{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		TopologyName:  "lab",
 		Compatibility: planInputTestCompatibility(),
-		Nodes: []clabernetesdeviceplan.NodeInput{{
+		Nodes: []clabernetesinternaldeviceplan.NodeInput{{
 			ID: string(node.GetUID()), Name: node.GetName(), Kind: node.Spec.Kind,
 			Definition: []byte(`{"kind":"package-kind","image":"example/device:1"}`),
 		}},
-		Images: []clabernetesdeviceplan.ImageInput{{
+		Images: []clabernetesinternaldeviceplan.ImageInput{{
 			NodeID: string(node.GetUID()), Role: "device", SourceReference: node.Spec.Image,
 			DigestReference: node.Spec.Image + "@sha256:" + strings.Repeat("a", 64),
-			Platform:        clabernetesdeviceplan.Platform{OS: "linux", Architecture: "amd64"},
+			Platform: clabernetesinternaldeviceplan.Platform{
+				OS:           "linux",
+				Architecture: "amd64",
+			},
 		}},
 	}
+
 	inputDigest, err := input.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	containerID := string(node.GetUID()) + "/primary"
-	plan := clabernetesdeviceplan.Plan{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion,
+	plan := clabernetesinternaldeviceplan.Plan{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		Compatibility: input.Compatibility,
 		InputDigest:   inputDigest,
-		Planner: clabernetesdeviceplan.PlannerIdentity{
+		Planner: clabernetesinternaldeviceplan.PlannerIdentity{
 			Name: "clabernetes", Revision: "test",
 		},
-		Nodes: []clabernetesdeviceplan.NodePlan{{
+		Nodes: []clabernetesinternaldeviceplan.NodePlan{{
 			ID: string(node.GetUID()), Name: node.GetName(), Kind: node.Spec.Kind,
 			ContainerIDs: []string{containerID}, ReadinessContainerIDs: []string{containerID},
 		}},
-		Containers: []clabernetesdeviceplan.ContainerPlan{{
+		Containers: []clabernetesinternaldeviceplan.ContainerPlan{{
 			ID: containerID, NodeID: string(node.GetUID()), NamespaceOwnerID: containerID,
 			Image: node.Spec.Image, ImageDigest: "sha256:" + strings.Repeat("a", 64), Required: true,
 		}},
@@ -366,14 +421,15 @@ func directConnectivityTestPlan(
 
 func addDirectConnectivityTestLoopback(
 	t *testing.T,
-	input *clabernetesdeviceplan.Input,
-	plan *clabernetesdeviceplan.Plan,
-	mode clabernetesdeviceplan.LinkApplyMode,
+	input *clabernetesinternaldeviceplan.Input,
+	plan *clabernetesinternaldeviceplan.Plan,
+	mode clabernetesinternaldeviceplan.LinkApplyMode,
 ) {
 	t.Helper()
+
 	nodeID := input.Nodes[0].ID
 	containerID := plan.Containers[0].ID
-	input.Interfaces = []clabernetesdeviceplan.InterfaceInput{
+	input.Interfaces = []clabernetesinternaldeviceplan.InterfaceInput{
 		{
 			ID: "link-a/a", NodeID: nodeID, Name: "eth1", LinkID: "link-uid-a",
 			PeerNodeID: nodeID, PeerInterface: "eth2", Connectivity: "loopback", MTU: 1500,
@@ -383,12 +439,15 @@ func addDirectConnectivityTestLoopback(
 			PeerNodeID: nodeID, PeerInterface: "eth1", Connectivity: "loopback", MTU: 1500,
 		},
 	}
+
 	digest, err := input.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	plan.InputDigest = digest
-	plan.Interfaces = []clabernetesdeviceplan.InterfacePlan{
+
+	plan.Interfaces = []clabernetesinternaldeviceplan.InterfacePlan{
 		{
 			ID: "link-a/a", NodeID: nodeID, NamespaceOwnerID: containerID,
 			Name: "eth1", LinkID: "link-uid-a", PeerNodeID: nodeID,
@@ -403,13 +462,13 @@ func addDirectConnectivityTestLoopback(
 		},
 	}
 	for _, intf := range plan.Interfaces {
-		plan.Actions = append(plan.Actions, clabernetesdeviceplan.Action{
-			ID: "wait/" + intf.ID, Phase: clabernetesdeviceplan.PhasePreStart,
-			Target: clabernetesdeviceplan.ActionTarget{
+		plan.Actions = append(plan.Actions, clabernetesinternaldeviceplan.Action{
+			ID: "wait/" + intf.ID, Phase: clabernetesinternaldeviceplan.PhasePreStart,
+			Target: clabernetesinternaldeviceplan.ActionTarget{
 				NodeID: nodeID, ContainerID: containerID, NamespaceOwnerID: containerID,
 			},
-			Kind: clabernetesdeviceplan.ActionWaitInterface,
-			WaitInterface: &clabernetesdeviceplan.WaitInterfaceAction{
+			Kind: clabernetesinternaldeviceplan.ActionWaitInterface,
+			WaitInterface: &clabernetesinternaldeviceplan.WaitInterfaceAction{
 				InterfaceID: intf.ID, TimeoutSeconds: 30,
 			},
 		})
@@ -418,13 +477,13 @@ func addDirectConnectivityTestLoopback(
 
 func directConnectivityRenderOptions(
 	node *clabernetesapisv1alpha1.Node,
-) clabernetesdirectpod.Options {
+) clabernetesinternaldirectpod.Options {
 	owner := *metav1.NewControllerRef(
 		node,
 		clabernetesapisv1alpha1.SchemeGroupVersion.WithKind("Node"),
 	)
 
-	return clabernetesdirectpod.Options{
+	return clabernetesinternaldirectpod.Options{
 		Name: node.GetName(), Namespace: node.GetNamespace(),
 		PlanConfigMapName: "cold-plan", InputConfigMapName: "cold-input",
 		ConnectivityRevisionConfigMapName: "cold-connectivity-revision",
@@ -434,8 +493,9 @@ func directConnectivityRenderOptions(
 	}
 }
 
-func mustCanonicalPlan(t *testing.T, plan clabernetesdeviceplan.Plan) []byte {
+func mustCanonicalPlan(t *testing.T, plan clabernetesinternaldeviceplan.Plan) []byte {
 	t.Helper()
+
 	raw, err := plan.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)
@@ -444,8 +504,9 @@ func mustCanonicalPlan(t *testing.T, plan clabernetesdeviceplan.Plan) []byte {
 	return raw
 }
 
-func mustCanonicalInput(t *testing.T, input clabernetesdeviceplan.Input) []byte {
+func mustCanonicalInput(t *testing.T, input clabernetesinternaldeviceplan.Input) []byte {
 	t.Helper()
+
 	raw, err := input.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)

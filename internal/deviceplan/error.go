@@ -19,12 +19,15 @@ func (e *Error) Error() string {
 	if e.NodeID != "" {
 		message += " for Node " + e.NodeID
 	}
+
 	if e.Field != "" {
 		message += " at " + e.Field
 	}
+
 	if e.Behavior != "" {
 		message += " (" + e.Behavior + ")"
 	}
+
 	if e.Message != "" {
 		message += ": " + e.Message
 	}

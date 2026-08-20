@@ -203,7 +203,8 @@ func (c *Clabverter) buildInMemoryTopology() (*clabernetesapisv1alpha1.Topology,
 	}
 
 	if len(files) > 0 && topology.Spec.Deployment.FilesFromConfigMap == nil {
-		topology.Spec.Deployment.FilesFromConfigMap = map[string][]clabernetesapisv1alpha1.FileFromConfigMap{} //nolint:lll
+		topology.Spec.Deployment.
+			FilesFromConfigMap = map[string][]clabernetesapisv1alpha1.FileFromConfigMap{}
 	}
 
 	for nodeName, nodeFiles := range files {

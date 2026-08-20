@@ -1,7 +1,9 @@
+//nolint:err113,gocyclo,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package deviceplan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -31,10 +33,12 @@ func (f PayloadFetcher) FetchURLPayloads(
 	if ctx == nil {
 		return planningError(ErrorInvalidInput, "context", "context is nil", nil)
 	}
+
 	normalized, err := NormalizeInput(input)
 	if err != nil {
 		return err
 	}
+
 	payloadRoot = filepath.Clean(payloadRoot)
 	if !filepath.IsAbs(payloadRoot) || payloadRoot == string(filepath.Separator) {
 		return planningError(
@@ -44,6 +48,7 @@ func (f PayloadFetcher) FetchURLPayloads(
 			nil,
 		)
 	}
+
 	if err = os.MkdirAll(payloadRoot, 0o700); err != nil {
 		return planningError(
 			ErrorSideEffect,
@@ -52,32 +57,41 @@ func (f PayloadFetcher) FetchURLPayloads(
 			err,
 		)
 	}
+
 	client := f.HTTPClient
 	if client == nil {
 		client = securePayloadHTTPClient()
 	}
+
 	contentByIdentity := map[string][]byte{}
 	found := false
+
 	for _, payload := range normalized.Payloads {
 		if payload.Kind != PayloadURL {
 			continue
 		}
+
 		found = true
 		identity := payload.Reference + "\x00" + payload.Digest
+
 		content, exists := contentByIdentity[identity]
 		if !exists {
 			content, err = readURLPayload(ctx, client, payload.Reference)
 			if err != nil {
 				return withNodeID(err, payload.NodeID)
 			}
+
 			if Digest(content) != payload.Digest {
 				return &Error{
 					Code: ErrorInvariant, NodeID: payload.NodeID, Field: "payloadFetcher.digest",
-					Behavior: "url-payload", Message: "URL payload bytes differ from the accepted digest",
+					Behavior: "url-payload",
+					Message:  "URL payload bytes differ from the accepted digest",
 				}
 			}
+
 			contentByIdentity[identity] = content
 		}
+
 		if err = stageArtifactContent(
 			content,
 			payloadRoot,
@@ -91,7 +105,8 @@ func (f PayloadFetcher) FetchURLPayloads(
 		); err != nil {
 			return withNodeID(err, payload.NodeID)
 		}
-		if err = os.Chmod(filepath.Join(payloadRoot, ArtifactNodeDirectory(payload.ID)), 0o755); err != nil {
+
+		if err = os.Chmod(filepath.Join(payloadRoot, ArtifactNodeDirectory(payload.ID)), 0o755); err != nil { //nolint:gosec // the mode matches the staged artifact contract.
 			return planningError(
 				ErrorSideEffect,
 				"payloadFetcher.root",
@@ -100,6 +115,7 @@ func (f PayloadFetcher) FetchURLPayloads(
 			)
 		}
 	}
+
 	if !found {
 		return planningError(
 			ErrorMissingInput,
@@ -108,7 +124,8 @@ func (f PayloadFetcher) FetchURLPayloads(
 			nil,
 		)
 	}
-	if err = os.Chmod(payloadRoot, 0o755); err != nil {
+
+	if err = os.Chmod(payloadRoot, 0o755); err != nil { //nolint:gosec // the mode matches the staged artifact contract.
 		return planningError(
 			ErrorSideEffect,
 			"payloadFetcher.root",
@@ -116,10 +133,12 @@ func (f PayloadFetcher) FetchURLPayloads(
 			err,
 		)
 	}
+
 	seal := f.SealNetwork
 	if seal == nil {
 		seal = sealPlannerNetwork
 	}
+
 	if err = seal(); err != nil {
 		return planningError(
 			ErrorSideEffect,
@@ -141,7 +160,8 @@ func readURLPayload(ctx context.Context, client *http.Client, reference string) 
 			Message: "URL payload reference is not an absolute credential-free HTTP(S) URL",
 		}
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, reference, nil)
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, reference, http.NoBody)
 	if err != nil {
 		return nil, planningError(
 			ErrorInvalidInput,
@@ -150,28 +170,35 @@ func readURLPayload(ctx context.Context, client *http.Client, reference string) 
 			err,
 		)
 	}
+
 	request.Header.Set("Accept-Encoding", "identity")
+
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, planningError(ErrorSideEffect, "payloads.url", "URL request failed", err)
 	}
-	defer response.Body.Close()
+
+	defer func() { _ = response.Body.Close() }()
+
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, &Error{
 			Code: ErrorSideEffect, Field: "payloads.url", Behavior: "url-payload",
 			Message: fmt.Sprintf("URL payload returned HTTP status %d", response.StatusCode),
 		}
 	}
+
 	if response.ContentLength > maxPreparedPayloadBytes {
 		return nil, &Error{
 			Code: ErrorUnsupported, Field: "payloads.url", Behavior: "url-payload",
 			Message: "URL payload exceeds the size limit",
 		}
 	}
+
 	content, err := io.ReadAll(io.LimitReader(response.Body, maxPreparedPayloadBytes+1))
 	if err != nil {
 		return nil, planningError(ErrorSideEffect, "payloads.url", "cannot read URL response", err)
 	}
+
 	if len(content) > maxPreparedPayloadBytes {
 		return nil, &Error{
 			Code: ErrorUnsupported, Field: "payloads.url", Behavior: "url-payload",
@@ -189,15 +216,17 @@ func securePayloadHTTPClient() *http.Client {
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			host, port, err := net.SplitHostPort(address)
 			if err != nil {
-				return nil, fmt.Errorf("invalid URL endpoint")
+				return nil, errors.New("invalid URL endpoint")
 			}
+
 			addresses, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 			if err != nil || len(addresses) == 0 {
-				return nil, fmt.Errorf("cannot resolve URL endpoint")
+				return nil, errors.New("cannot resolve URL endpoint")
 			}
+
 			for _, candidate := range addresses {
 				if !publicPayloadAddress(candidate) {
-					return nil, fmt.Errorf("URL endpoint resolves to a non-public address")
+					return nil, errors.New("URL endpoint resolves to a non-public address")
 				}
 			}
 
@@ -215,7 +244,7 @@ func securePayloadHTTPClient() *http.Client {
 		CheckRedirect: func(request *http.Request, via []*http.Request) error {
 			if len(via) >= 10 || request.URL.User != nil ||
 				(request.URL.Scheme != "http" && request.URL.Scheme != "https") {
-				return fmt.Errorf("URL redirect is outside the allowed HTTP(S) boundary")
+				return errors.New("URL redirect is outside the allowed HTTP(S) boundary")
 			}
 
 			return nil
@@ -230,6 +259,7 @@ func publicPayloadAddress(address netip.Addr) bool {
 		address.IsMulticast() || address.IsUnspecified() {
 		return false
 	}
+
 	for _, rawPrefix := range []string{
 		"100.64.0.0/10",
 		"192.0.0.0/24",

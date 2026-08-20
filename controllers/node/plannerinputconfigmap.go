@@ -1,4 +1,4 @@
-//nolint:nlreturn,noinlineerr,wsl_v5 // Input boundary validation uses compact fail-closed guards.
+//nolint:gocyclo,nlreturn,noinlineerr,wsl_v5 // Input boundary validation uses compact fail-closed guards.
 package node
 
 import (
@@ -12,7 +12,7 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,7 +25,8 @@ const plannerInputComponentLabelValue = "device-plan-input"
 var (
 	// ErrInvalidPlannerInput classifies malformed, non-canonical, oversized, or sensitive input.
 	ErrInvalidPlannerInput = errors.New("invalid direct-runtime planner input")
-	// ErrPlannerInputConflict classifies an object at the content-addressed name with other content.
+	// ErrPlannerInputConflict classifies an object at the content-addressed name with other
+	// content.
 	ErrPlannerInputConflict = errors.New(
 		"immutable direct-runtime planner input conflicts with existing ConfigMap",
 	)
@@ -76,7 +77,7 @@ func (r *PlannerInputConfigMapReconciler) Render(
 			)
 		}
 	}
-	decoded, err := clabernetesdeviceplan.DecodeInput(artifact.CanonicalInput)
+	decoded, err := clabernetesinternaldeviceplan.DecodeInput(artifact.CanonicalInput)
 	if err != nil {
 		return nil, "", fmt.Errorf(
 			"%w: input does not satisfy the planner schema",

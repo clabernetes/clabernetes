@@ -1,3 +1,4 @@
+//nolint:testpackage // dense fixture-driven tests exercise one boundary end to end.
 package directruntime
 
 import (
@@ -23,13 +24,16 @@ func (*fakeNetworkDialNamespace) Close() error { return nil }
 func TestNetworkNamespaceDialerCreatesSocketInsideNamespace(t *testing.T) {
 	t.Parallel()
 
+	//nolint:noctx // The fixture listener is closed by the test itself.
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = listener.Close() })
 
 	networkNamespace := &fakeNetworkDialNamespace{}
+
 	connection, err := networkNamespaceDialContext(networkNamespace)(
 		context.Background(),
 		"tcp4",
@@ -38,6 +42,7 @@ func TestNetworkNamespaceDialerCreatesSocketInsideNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_ = connection.Close()
 
 	if networkNamespace.executions != 1 {

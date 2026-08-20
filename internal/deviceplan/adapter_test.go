@@ -1,6 +1,8 @@
+//nolint:err113,gocyclo,nestif // dense fixture-driven tests exercise one boundary end to end.
 package deviceplan_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 	clabcert "github.com/srl-labs/containerlab/cert"
 	clabexec "github.com/srl-labs/containerlab/exec"
 	clablinks "github.com/srl-labs/containerlab/links"
@@ -63,14 +65,17 @@ func (n *syntheticImportedNode) Init(
 	options ...clabnodes.NodeOption,
 ) error {
 	n.DefaultNode = *clabnodes.NewDefaultNode(n)
+
 	n.Cfg = config
 	for _, option := range options {
 		option(n)
 	}
+
 	inspect, err := n.Runtime.InspectImage(context.Background(), config.Image)
 	if err != nil {
 		return err
 	}
+
 	if config.NodeType == "metadata-gated-test" && inspect.Config.Labels["required"] != "true" {
 		return errors.New("synthetic package requires explicit image labels")
 	}
@@ -78,38 +83,44 @@ func (n *syntheticImportedNode) Init(
 	if config.MgmtIntf == "" {
 		config.MgmtIntf = "imported-mgmt"
 	}
+
 	config.RestartPolicy = "imported-default"
 	if config.NodeType == "renderable-test" || config.NodeType == "symlink-artifact-test" {
 		config.RestartPolicy = "always"
 	}
+
 	if config.NodeType == "renderable-test" {
 		config.CapAdd = append(config.CapAdd, "SYS_ADMIN")
 		config.Tmpfs = map[string]string{
 			"/run/future-package": "rw,nosuid,nodev,noexec,size=8M",
 		}
 	}
+
 	if config.NodeType == "certificate-test" {
 		issue := true
 		config.Certificate.Issue = &issue
 		config.Certificate.SANs = append(config.Certificate.SANs, "future-package.example")
 	}
+
 	config.Env["IMPORTED_WORKSPACE"] = filepath.Join(config.LabDir, "generated")
 	config.Binds = append(
 		config.Binds,
 		filepath.Join(config.LabDir, "generated")+":/etc/generated:ro",
 	)
+
 	generatedDir := filepath.Join(config.LabDir, "generated")
 	if err := os.MkdirAll(generatedDir, 0o750); err != nil {
 		return err
 	}
 
-	if err := os.WriteFile(
+	if err := os.WriteFile( //nolint:gosec // test fixture permissions.
 		filepath.Join(generatedDir, "imported.conf"),
 		[]byte("generated\n"),
 		0o640,
 	); err != nil {
 		return err
 	}
+
 	if config.NodeType == "management-render-test" {
 		rendered := "mgmt none\n"
 		if config.MgmtIPv4Address != "" {
@@ -120,7 +131,8 @@ func (n *syntheticImportedNode) Init(
 				config.MgmtIPv4Gateway,
 			)
 		}
-		if err := os.WriteFile(
+
+		if err := os.WriteFile( //nolint:gosec // test fixture permissions.
 			filepath.Join(generatedDir, "mgmt.conf"),
 			[]byte(rendered),
 			0o640,
@@ -128,14 +140,17 @@ func (n *syntheticImportedNode) Init(
 			return err
 		}
 	}
+
 	if config.NodeType != "symlink-artifact-test" {
 		return nil
 	}
+
 	targetDirectory := filepath.Join(generatedDir, "target")
 	if err := os.MkdirAll(targetDirectory, 0o750); err != nil {
 		return err
 	}
-	if err := os.WriteFile(
+
+	if err := os.WriteFile( //nolint:gosec // test fixture permissions.
 		filepath.Join(targetDirectory, "value"),
 		[]byte("package-target\n"),
 		0o640,
@@ -176,22 +191,32 @@ func (n *syntheticImportedNode) Deploy(
 		if err := n.DefaultNode.Deploy(ctx, params); err != nil {
 			return err
 		}
+
 		hostsPath, err := n.Runtime.GetHostsPath(ctx, n.Config().LongName)
 		if err != nil {
 			return err
 		}
-		hostsFile, err := os.OpenFile(hostsPath, os.O_APPEND|os.O_WRONLY, 0o600)
+
+		//nolint:gosec // test-controlled path.
+		hostsFile, err := os.OpenFile(
+			hostsPath,
+			os.O_APPEND|os.O_WRONLY,
+			0o600,
+		) //nolint:gosec // test-controlled path.
 		if err != nil {
 			return err
 		}
+
 		if _, err = hostsFile.WriteString("192.0.2.20 replayed-package-host\n"); err != nil {
 			_ = hostsFile.Close()
 
 			return err
 		}
+
 		if err = hostsFile.Close(); err != nil {
 			return err
 		}
+
 		result, err := n.Runtime.Exec(
 			ctx,
 			n.Config().LongName,
@@ -200,16 +225,19 @@ func (n *syntheticImportedNode) Deploy(
 		if err != nil {
 			return err
 		}
+
 		if result.GetReturnCode() != 0 {
 			return errors.New("deployment operation executed while reconstructing package state")
 		}
 
 		return nil
 	}
+
 	if n.Config().NodeType == "deployment-operations-test" {
 		if err := n.DefaultNode.Deploy(ctx, params); err != nil {
 			return err
 		}
+
 		if err := n.Runtime.CopyToContainer(
 			ctx,
 			n.Config().LongName,
@@ -218,6 +246,7 @@ func (n *syntheticImportedNode) Deploy(
 		); err != nil {
 			return err
 		}
+
 		if err := n.Runtime.WriteToStdinNoWait(
 			ctx,
 			n.Config().LongName,
@@ -232,6 +261,7 @@ func (n *syntheticImportedNode) Deploy(
 			clabexec.NewExecCmdFromSlice([]string{"package-deploy-command", "--apply"}),
 		)
 	}
+
 	if n.Config().NodeType != "multi-container-test" &&
 		n.Config().NodeType != "multi-container-operations-test" &&
 		n.Config().NodeType != "component-exec-target-test" {
@@ -241,10 +271,12 @@ func (n *syntheticImportedNode) Deploy(
 	root := *n.Config()
 	root.LongName += "-root"
 	root.ShortName += "-root"
+
 	rootID, err := n.Runtime.CreateContainer(ctx, &root)
 	if err != nil {
 		return err
 	}
+
 	if _, err = n.Runtime.StartContainer(ctx, rootID, n); err != nil {
 		return err
 	}
@@ -254,13 +286,16 @@ func (n *syntheticImportedNode) Deploy(
 	component.ShortName += "-component"
 	component.Image = "example/future-component:1"
 	component.NetworkMode = "container:" + rootID
+
 	componentID, err := n.Runtime.CreateContainer(ctx, &component)
 	if err != nil {
 		return err
 	}
+
 	if _, err = n.Runtime.StartContainer(ctx, componentID, n); err != nil {
 		return err
 	}
+
 	if n.Config().NodeType == "multi-container-operations-test" {
 		return n.Runtime.ExecNotWait(
 			ctx,
@@ -337,7 +372,7 @@ func (n *syntheticImportedNode) PostDeployEndpoints(ctx context.Context) error {
 			filepath.Join(n.Config().LabDir, "package-deploy-endpoints-ran"),
 		)
 		if err != nil || string(deployed) != "package-owned" {
-			return fmt.Errorf("endpoint deployment did not precede post-deployment fixup")
+			return errors.New("endpoint deployment did not precede post-deployment fixup")
 		}
 
 		return os.WriteFile(
@@ -359,15 +394,18 @@ func (n *syntheticImportedNode) PostDeploy(
 		if err != nil {
 			return err
 		}
+
 		raw, err := io.ReadAll(logs)
 		if closeErr := logs.Close(); err == nil {
 			err = closeErr
 		}
+
 		if err != nil {
 			return err
 		}
+
 		if string(raw) != "package-observed-boot\n" {
-			return fmt.Errorf("package observed unexpected application logs")
+			return errors.New("package observed unexpected application logs")
 		}
 
 		return os.WriteFile(
@@ -376,12 +414,15 @@ func (n *syntheticImportedNode) PostDeploy(
 			0o600,
 		)
 	}
+
 	if n.Config().NodeType == "postdeploy-test" ||
 		n.Config().NodeType == "deployment-replay-test" {
 		if status := n.Runtime.GetContainerStatus(ctx, n.Config().LongName); status != clabruntime.Running {
 			return errors.New("synthetic package did not observe its running application container")
 		}
+
 		marker := filepath.Join(n.Config().LabDir, "package-post-deploy-ran")
+
 		result, err := n.Runtime.Exec(
 			ctx,
 			n.Config().LongName,
@@ -392,35 +433,48 @@ func (n *syntheticImportedNode) PostDeploy(
 		if err != nil {
 			return err
 		}
+
 		if result.GetReturnCode() != 0 {
 			return errors.New("synthetic package post-deploy command failed")
 		}
 
 		return nil
 	}
+
 	runtimeID := n.Config().LongName
 	if n.Config().NodeType == "multi-container-test" {
 		runtimeID += "-root"
 	}
+
 	if n.Config().NodeType == "component-exec-target-test" {
 		runtimeID += "-component"
 	}
+
 	hostsPath, err := n.Runtime.GetHostsPath(ctx, runtimeID)
 	if err != nil {
 		return err
 	}
-	hostsFile, err := os.OpenFile(hostsPath, os.O_APPEND|os.O_WRONLY, 0o600)
+
+	//nolint:gosec // test-controlled path.
+	hostsFile, err := os.OpenFile(
+		hostsPath,
+		os.O_APPEND|os.O_WRONLY,
+		0o600,
+	) //nolint:gosec // test-controlled path.
 	if err != nil {
 		return err
 	}
+
 	if _, err = hostsFile.WriteString("192.0.2.10 package-derived-host\n"); err != nil {
 		_ = hostsFile.Close()
 
 		return err
 	}
+
 	if err = hostsFile.Close(); err != nil {
 		return err
 	}
+
 	if err := n.Runtime.CopyToContainer(
 		ctx,
 		runtimeID,
@@ -429,6 +483,7 @@ func (n *syntheticImportedNode) PostDeploy(
 	); err != nil {
 		return err
 	}
+
 	if err := n.Runtime.WriteToStdinNoWait(
 		ctx,
 		runtimeID,
@@ -450,6 +505,7 @@ func (n *syntheticImportedNode) SaveConfig(
 	if n.Config().NodeType != "save-test" {
 		return n.DefaultNode.SaveConfig(ctx)
 	}
+
 	result, err := n.RunExec(
 		ctx,
 		clabexec.NewExecCmdFromSlice([]string{
@@ -459,9 +515,11 @@ func (n *syntheticImportedNode) SaveConfig(
 	if err != nil {
 		return nil, err
 	}
+
 	if result.GetReturnCode() != 0 {
 		return nil, errors.New("synthetic package save command failed")
 	}
+
 	configPath := filepath.Join(n.Config().LabDir, "saved.conf")
 	if err = os.WriteFile(configPath, result.GetStdOutByteSlice(), 0o600); err != nil {
 		return nil, err
@@ -477,17 +535,20 @@ func (n *syntheticImportedNode) PreDeploy(
 	if err := n.DefaultNode.PreDeploy(ctx, params); err != nil {
 		return err
 	}
+
 	if n.Config().NodeType == "predeploy-panic-test" {
 		var missing *int
 
 		_ = *missing
 	}
+
 	if n.Config().NodeType == "directory-metadata-test" {
 		directory := filepath.Join(n.Config().LabDir, "generated", "metadata")
 		if err := os.MkdirAll(directory, 0o710); err != nil {
 			return err
 		}
-		if err := os.Chmod(directory, 0o710); err != nil {
+
+		if err := os.Chmod(directory, 0o710); err != nil { //nolint:gosec // test fixture permissions.
 			return err
 		}
 
@@ -498,6 +559,7 @@ func (n *syntheticImportedNode) PreDeploy(
 			0,
 		)
 	}
+
 	if n.Config().NodeType == "artifact-ownership-test" {
 		directory := filepath.Join(n.Config().LabDir, "generated", "owned")
 		if err := os.MkdirAll(directory, 0o750); err != nil {
@@ -506,11 +568,13 @@ func (n *syntheticImportedNode) PreDeploy(
 
 		return os.Chown(directory, 1234, 2345)
 	}
+
 	if n.Config().NodeType == "certificate-test" {
 		certificate, err := n.LoadOrGenerateCertificate(params.Cert, params.TopologyName)
 		if err != nil {
 			return err
 		}
+
 		authority, err := params.Cert.LoadCaCert()
 		if err != nil {
 			return err
@@ -524,15 +588,17 @@ func (n *syntheticImportedNode) PreDeploy(
 			0o600,
 		)
 	}
+
 	if n.Config().NodeType != "payload-workspace-test" {
 		return nil
 	}
+
 	content, err := os.ReadFile(n.Config().StartupConfig)
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(
+	return os.WriteFile( //nolint:gosec // the path is test-controlled.
 		filepath.Join(n.Config().LabDir, "generated", "payload-derived.conf"),
 		append([]byte("derived:"), content...),
 		0o600,
@@ -547,64 +613,83 @@ func TestPackageRequestedCertificatesFlowWithoutKindMapping(t *testing.T) {
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": "certificate-test", "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "certificate-discovery-v1",
 	}
+
 	discovery, err := adapter.DiscoverImages(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(discovery.Certificates) != 1 ||
 		!slices.Contains(discovery.Certificates[0].DNSNames, "future-package.example") {
 		t.Fatalf("package certificate requirements = %#v", discovery.Certificates)
 	}
+
 	requirement := discovery.Certificates[0]
 	certificateInputs, root := materializeCertificateRequirements(t, discovery.Certificates)
 	input.Certificates = certificateInputs
-	certificateKey, privateKeyKey := clabernetesdeviceplan.CertificateMaterialKeys(
+	certificateKey, privateKeyKey := clabernetesinternaldeviceplan.CertificateMaterialKeys(
 		requirement.NodeID,
 		requirement.StorageName,
 	)
-	nodeCertificate, err := os.ReadFile(filepath.Join(root, certificateKey))
+
+	//nolint:gosec // test-controlled path.
+	nodeCertificate, err := os.ReadFile(
+		filepath.Join(root, certificateKey),
+	) //nolint:gosec // test-controlled path.
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodePrivateKey, err := os.ReadFile(filepath.Join(root, privateKeyKey))
+
+	//nolint:gosec // test-controlled path.
+	nodePrivateKey, err := os.ReadFile(
+		filepath.Join(root, privateKeyKey),
+	) //nolint:gosec // test-controlled path.
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	adapter.CertificateRoot = root
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !containsFileSource(plan.Files, clabernetesdeviceplan.FileSourceCertificate) {
+
+	if !containsFileSource(plan.Files, clabernetesinternaldeviceplan.FileSourceCertificate) {
 		t.Fatalf("certificate-backed files = %#v", plan.Files)
 	}
+
 	canonical, err := plan.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(canonical), string(nodePrivateKey)) {
+
+	if bytes.Contains(canonical, nodePrivateKey) {
 		t.Fatal("private key bytes leaked into the canonical plan")
 	}
+
 	artifactRoot := filepath.Join(t.TempDir(), "artifacts")
-	if err = (clabernetesdeviceplan.Preparer{
+	if err = (clabernetesinternaldeviceplan.Preparer{
 		Adapter: adapter,
 	}).Prepare(context.Background(), input, *plan, artifactRoot); err != nil {
 		t.Fatal(err)
 	}
-	staged, err := os.ReadFile(filepath.Join(
+
+	staged, err := os.ReadFile(filepath.Join( //nolint:gosec // test-controlled path.
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(requirement.NodeID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(requirement.NodeID),
 		"generated",
 		"tls.pem",
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(staged), string(nodeCertificate)) ||
-		!strings.Contains(string(staged), string(nodePrivateKey)) {
+
+	if !bytes.Contains(staged, nodeCertificate) ||
+		!bytes.Contains(staged, nodePrivateKey) {
 		t.Fatal("prepared certificate-backed artifact does not contain accepted material")
 	}
 }
@@ -612,7 +697,7 @@ func TestPackageRequestedCertificatesFlowWithoutKindMapping(t *testing.T) {
 func TestImageDiscoveryDoesNotInventCertificateRequest(t *testing.T) {
 	t.Parallel()
 
-	discovery, err := (clabernetesdeviceplan.Adapter{
+	discovery, err := (clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "certificate-discovery-v1",
 	}).DiscoverImages(
 		context.Background(),
@@ -621,6 +706,7 @@ func TestImageDiscoveryDoesNotInventCertificateRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(discovery.Certificates) != 0 {
 		t.Fatalf("unrequested package certificates = %#v", discovery.Certificates)
 	}
@@ -634,30 +720,38 @@ func TestPackageGeneratedDirectoryMetadataFlowsWithoutKindMapping(t *testing.T) 
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "directory-metadata-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	attributeName := "user.containerlab-package-test"
 	attributeValue := []byte("opaque-package-metadata")
 	found := false
+
 	for _, file := range plan.Files {
 		if file.ArtifactPath != "generated/metadata" ||
-			file.ArtifactKind != clabernetesdeviceplan.ArtifactDirectory {
+			file.ArtifactKind != clabernetesinternaldeviceplan.ArtifactDirectory {
 			continue
 		}
+
 		found = file.Mode == 0o710 && len(file.ExtendedAttributes) == 1 &&
 			file.ExtendedAttributes[0].Name == attributeName &&
-			file.ExtendedAttributes[0].Digest == clabernetesdeviceplan.Digest(attributeValue)
+			file.ExtendedAttributes[0].Digest == clabernetesinternaldeviceplan.Digest(
+				attributeValue,
+			)
 	}
+
 	if !found {
 		t.Fatalf("package directory metadata is absent from the generic plan: %#v", plan.Files)
 	}
+
 	artifactRoot := t.TempDir()
-	if err = (clabernetesdeviceplan.Preparer{Adapter: adapter}).Prepare(
+	if err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
 		context.Background(),
 		input,
 		*plan,
@@ -665,25 +759,30 @@ func TestPackageGeneratedDirectoryMetadataFlowsWithoutKindMapping(t *testing.T) 
 	); err != nil {
 		t.Fatal(err)
 	}
+
 	directory := filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 		"generated",
 		"metadata",
 	)
+
 	info, err := os.Stat(directory)
 	if err != nil || info.Mode().Perm() != 0o710 {
 		t.Fatalf("prepared directory mode = %v, err=%v", info, err)
 	}
+
 	size, err := unix.Getxattr(directory, attributeName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	value := make([]byte, size)
 	if _, err = unix.Getxattr(directory, attributeName, value); err != nil {
 		t.Fatal(err)
 	}
-	if string(value) != string(attributeValue) {
+
+	if !bytes.Equal(value, attributeValue) {
 		t.Fatalf("prepared directory attribute = %q", value)
 	}
 }
@@ -698,26 +797,31 @@ func TestPackageGeneratedOwnershipFlowsWithoutKindMapping(t *testing.T) {
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "artifact-ownership-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	found := false
+
 	for _, file := range plan.Files {
 		if file.ArtifactPath == "generated/owned" &&
-			file.ArtifactKind == clabernetesdeviceplan.ArtifactDirectory &&
+			file.ArtifactKind == clabernetesinternaldeviceplan.ArtifactDirectory &&
 			file.UID != nil && *file.UID == 1234 && file.GID != nil && *file.GID == 2345 {
 			found = true
 		}
 	}
+
 	if !found {
 		t.Fatalf("package ownership is absent from the generic plan: %#v", plan.Files)
 	}
+
 	artifactRoot := t.TempDir()
-	if err = (clabernetesdeviceplan.Preparer{Adapter: adapter}).Prepare(
+	if err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
 		context.Background(),
 		input,
 		*plan,
@@ -725,15 +829,17 @@ func TestPackageGeneratedOwnershipFlowsWithoutKindMapping(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+
 	info, err := os.Stat(filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 		"generated",
 		"owned",
 	))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || stat.Uid != 1234 || stat.Gid != 2345 {
 		t.Fatalf("prepared package ownership = %#v", info.Sys())
@@ -744,9 +850,11 @@ func (n *syntheticImportedNode) AddEndpoint(endpoint clablinks.Endpoint) error {
 	if endpoint.GetLink() == nil || endpoint.GetLink().GetMTU() <= 0 {
 		return errors.New("synthetic package endpoint is missing accepted topology Link metadata")
 	}
+
 	if endpoint.IsRuntimeDiscovered() && n.Config().NodeType != "pre-realized-endpoint-test" {
 		return errors.New("synthetic package endpoint is unexpectedly runtime-discovered")
 	}
+
 	requestedName := endpoint.GetIfaceName()
 	endpoint.SetIfaceName("mapped-" + requestedName)
 	endpoint.SetIfaceAlias(requestedName)
@@ -758,6 +866,7 @@ func newSyntheticRegistry(t *testing.T) *clabnodes.NodeRegistry {
 	t.Helper()
 
 	registry := clabnodes.NewNodeRegistry()
+
 	err := registry.Register(
 		[]string{syntheticKind},
 		func() clabnodes.Node { return &syntheticImportedNode{} },
@@ -772,15 +881,17 @@ func newSyntheticRegistry(t *testing.T) *clabnodes.NodeRegistry {
 
 func materializeCertificateRequirements(
 	t *testing.T,
-	requirements []clabernetesdeviceplan.CertificateRequirement,
-) ([]clabernetesdeviceplan.CertificateInput, string) {
+	requirements []clabernetesinternaldeviceplan.CertificateRequirement,
+) ([]clabernetesinternaldeviceplan.CertificateInput, string) {
 	t.Helper()
 
 	if len(requirements) == 0 {
 		return nil, ""
 	}
+
 	root := t.TempDir()
 	ca := clabcert.NewCA()
+
 	caCertificate, err := ca.GenerateCACert(&clabcert.CACSRInput{
 		CommonName: "test CA", Country: "US", Organization: "test",
 		Expiry: 24 * time.Hour, KeySize: 2048,
@@ -788,24 +899,29 @@ func materializeCertificateRequirements(
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = ca.SetCACert(caCertificate); err != nil {
 		t.Fatal(err)
 	}
+
 	for name, content := range map[string][]byte{
-		clabernetesdeviceplan.CertificateCACertKey: caCertificate.Cert,
-		clabernetesdeviceplan.CertificateCAKeyKey:  caCertificate.Key,
+		clabernetesinternaldeviceplan.CertificateCACertKey: caCertificate.Cert,
+		clabernetesinternaldeviceplan.CertificateCAKeyKey:  caCertificate.Key,
 	} {
 		if err = os.WriteFile(filepath.Join(root, name), content, 0o400); err != nil {
 			t.Fatal(err)
 		}
 	}
-	inputs := make([]clabernetesdeviceplan.CertificateInput, 0, len(requirements))
+
+	inputs := make([]clabernetesinternaldeviceplan.CertificateInput, 0, len(requirements))
 	for _, requirement := range requirements {
 		hosts := append(slices.Clone(requirement.DNSNames), requirement.IPAddresses...)
+
 		validity := time.Duration(requirement.ValidityNanoseconds)
 		if validity == 0 {
 			validity = 365 * 24 * time.Hour
 		}
+
 		certificate, issueErr := ca.GenerateAndSignNodeCert(&clabcert.NodeCSRInput{
 			Hosts: hosts, CommonName: requirement.CommonName,
 			Country: requirement.Country, Locality: requirement.Locality,
@@ -816,7 +932,8 @@ func materializeCertificateRequirements(
 		if issueErr != nil {
 			t.Fatal(issueErr)
 		}
-		certificateKey, privateKeyKey := clabernetesdeviceplan.CertificateMaterialKeys(
+
+		certificateKey, privateKeyKey := clabernetesinternaldeviceplan.CertificateMaterialKeys(
 			requirement.NodeID,
 			requirement.StorageName,
 		)
@@ -827,12 +944,13 @@ func materializeCertificateRequirements(
 				t.Fatal(err)
 			}
 		}
-		inputs = append(inputs, clabernetesdeviceplan.CertificateInput{
+
+		inputs = append(inputs, clabernetesinternaldeviceplan.CertificateInput{
 			NodeID: requirement.NodeID, StorageName: requirement.StorageName,
-			CertificateDigest:   clabernetesdeviceplan.Digest(certificate.Cert),
-			PrivateKeyDigest:    clabernetesdeviceplan.Digest(certificate.Key),
-			CACertificateDigest: clabernetesdeviceplan.Digest(caCertificate.Cert),
-			CAPrivateKeyDigest:  clabernetesdeviceplan.Digest(caCertificate.Key),
+			CertificateDigest:   clabernetesinternaldeviceplan.Digest(certificate.Cert),
+			PrivateKeyDigest:    clabernetesinternaldeviceplan.Digest(certificate.Key),
+			CACertificateDigest: clabernetesinternaldeviceplan.Digest(caCertificate.Cert),
+			CAPrivateKeyDigest:  clabernetesinternaldeviceplan.Digest(caCertificate.Key),
 		})
 	}
 
@@ -843,29 +961,36 @@ func TestAdapterAutomaticallyEvaluatesNewRegistryKind(t *testing.T) {
 	t.Parallel()
 
 	input := singleNodeInput(syntheticKind, "example/future:1")
-	evaluation, err := (clabernetesdeviceplan.Adapter{
+
+	evaluation, err := (clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t),
 		Revision: "automatic-kind-v1",
 	}).Evaluate(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got, want := len(evaluation.Nodes), 1; got != want {
 		t.Fatalf("evaluated Nodes = %d, want %d", got, want)
 	}
+
 	node := evaluation.Nodes[0]
 	if node.Config.Kind != syntheticKind || node.Config.ShortName != node.Input.Name {
 		t.Fatalf("evaluated config identity = %#v, input = %#v", node.Config, node.Input)
 	}
+
 	if node.Config.RestartPolicy != "imported-default" {
 		t.Fatalf("restart policy = %q, want imported default", node.Config.RestartPolicy)
 	}
+
 	if node.PrivilegedByDefault {
 		t.Fatal("registry privilege metadata was not consumed")
 	}
-	if node.LinkApplyMode != clabernetesdeviceplan.LinkApplyLive {
+
+	if node.LinkApplyMode != clabernetesinternaldeviceplan.LinkApplyLive {
 		t.Fatalf("link apply mode = %q, want Live", node.LinkApplyMode)
 	}
+
 	if got, want := node.RuntimeCalls, []string{
 		"runtime.Mgmt",
 		"runtime.InspectImage",
@@ -877,9 +1002,11 @@ func TestAdapterAutomaticallyEvaluatesNewRegistryKind(t *testing.T) {
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("runtime calls = %#v, want %#v", got, want)
 	}
+
 	if got, want := len(node.Images), 1; got != want || node.Images[0].Role != "image" {
 		t.Fatalf("imported image roles = %#v, want one primary image", node.Images)
 	}
+
 	if got, want := len(node.GeneratedArtifacts), 3; got != want ||
 		!hasGeneratedArtifact(node.GeneratedArtifacts, "generated/imported.conf") {
 		t.Fatalf("generated artifacts = %#v, want imported runtime files", node.GeneratedArtifacts)
@@ -894,17 +1021,19 @@ func TestImportedHookRuntimePanicRetainsGenericCause(t *testing.T) {
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	_, err := (clabernetesdeviceplan.Adapter{
+	_, err := (clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-panic-v1",
 	}).Plan(context.Background(), input)
-	var planningErr *clabernetesdeviceplan.Error
+
+	var planningErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &planningErr) ||
-		planningErr.Code != clabernetesdeviceplan.ErrorUnsupported ||
+		planningErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported ||
 		planningErr.NodeID != input.Nodes[0].ID ||
 		planningErr.Field != "preparation" ||
 		planningErr.Behavior != "imported-pre-deploy" {
 		t.Fatalf("preparation panic error = %#v, %v", planningErr, err)
 	}
+
 	cause := errors.Unwrap(planningErr)
 	if cause == nil || !strings.Contains(cause.Error(), "nil pointer dereference") {
 		t.Fatalf("preparation panic cause = %v", cause)
@@ -919,25 +1048,30 @@ func TestPackageOwnedPostDeployRunsForNewRegistryKindWithoutC9sRegistration(t *t
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": "postdeploy-test", "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-post-deploy-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !containsImportedPostDeployAction(plan.Actions, plan.Containers[0].ID) {
 		t.Fatalf("package post-deploy plan action = %#v", plan.Actions)
 	}
+
 	artifactRoot := t.TempDir()
+
 	nodeRoot := filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	)
 	if err = os.MkdirAll(nodeRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := clabernetesdirectruntime.NewImportedApplicationRuntime(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
 		input,
 		*plan,
 		plan.Containers[0].ID,
@@ -945,6 +1079,7 @@ func TestPackageOwnedPostDeployRunsForNewRegistryKindWithoutC9sRegistration(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = adapter.RunPostDeploy(
 		context.Background(),
 		input,
@@ -957,7 +1092,11 @@ func TestPackageOwnedPostDeployRunsForNewRegistryKindWithoutC9sRegistration(t *t
 	); err != nil {
 		t.Fatal(err)
 	}
-	marker, err := os.ReadFile(filepath.Join(nodeRoot, "package-post-deploy-ran"))
+
+	//nolint:gosec // test-controlled path.
+	marker, err := os.ReadFile(
+		filepath.Join(nodeRoot, "package-post-deploy-ran"),
+	) //nolint:gosec // test-controlled path.
 	if err != nil || string(marker) != "package-owned" {
 		t.Fatalf("package post-deploy marker = %q, %v", marker, err)
 	}
@@ -971,30 +1110,34 @@ func TestPackageDeploymentReplayRejectsOperationDrift(t *testing.T) {
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-deployment-drift-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for index := range plan.Actions {
 		action := &plan.Actions[index]
-		if action.Phase == clabernetesdeviceplan.PhasePostStart &&
-			action.Kind == clabernetesdeviceplan.ActionExec && action.Exec != nil {
+		if action.Phase == clabernetesinternaldeviceplan.PhasePostStart &&
+			action.Kind == clabernetesinternaldeviceplan.ActionExec && action.Exec != nil {
 			action.Exec.Command = []string{"/bin/true"}
 
 			break
 		}
 	}
+
 	artifactRoot := t.TempDir()
 	if err = os.MkdirAll(filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := clabernetesdirectruntime.NewImportedApplicationRuntime(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
 		input,
 		*plan,
 		plan.Containers[0].ID,
@@ -1002,6 +1145,7 @@ func TestPackageDeploymentReplayRejectsOperationDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = adapter.RunPostDeploy(
 		context.Background(),
 		input,
@@ -1012,9 +1156,10 @@ func TestPackageDeploymentReplayRejectsOperationDrift(t *testing.T) {
 		"",
 		runtime,
 	)
-	var replayErr *clabernetesdeviceplan.Error
+
+	var replayErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &replayErr) ||
-		replayErr.Code != clabernetesdeviceplan.ErrorInvariant ||
+		replayErr.Code != clabernetesinternaldeviceplan.ErrorInvariant ||
 		replayErr.NodeID != input.Nodes[0].ID || replayErr.Field != "deployment.replay" ||
 		replayErr.Behavior != "imported-deploy" {
 		t.Fatalf("deployment replay drift error = %#v, %v", replayErr, err)
@@ -1029,36 +1174,41 @@ func TestPackageDeploymentReplayRejectsComponentInventoryDrift(t *testing.T) {
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	input.Images = append(input.Images, clabernetesdeviceplan.ImageInput{
+	input.Images = append(input.Images, clabernetesinternaldeviceplan.ImageInput{
 		NodeID:          input.Nodes[0].ID,
 		ComponentID:     "component-a",
 		SourceReference: "example/future-component:1",
 		DigestReference: "example/future-component@sha256:" + strings.Repeat("b", 64),
-		Platform: clabernetesdeviceplan.Platform{
+		Platform: clabernetesinternaldeviceplan.Platform{
 			OS: "linux", Architecture: "amd64",
 		},
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-component-drift-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	primaryID := plan.Nodes[0].ContainerIDs[0]
 	if len(plan.Nodes[0].ContainerIDs) != 2 {
 		t.Fatalf("component inventory = %#v", plan.Nodes[0].ContainerIDs)
 	}
+
 	componentID := plan.Nodes[0].ContainerIDs[1]
 	plan.Nodes[0].ReadinessContainerIDs = []string{componentID}
+
 	artifactRoot := t.TempDir()
 	if err = os.MkdirAll(filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := clabernetesdirectruntime.NewImportedApplicationRuntime(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
 		input,
 		*plan,
 		primaryID,
@@ -1066,6 +1216,7 @@ func TestPackageDeploymentReplayRejectsComponentInventoryDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = adapter.RunPostDeploy(
 		context.Background(),
 		input,
@@ -1076,9 +1227,10 @@ func TestPackageDeploymentReplayRejectsComponentInventoryDrift(t *testing.T) {
 		"",
 		runtime,
 	)
-	var replayErr *clabernetesdeviceplan.Error
+
+	var replayErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &replayErr) ||
-		replayErr.Code != clabernetesdeviceplan.ErrorInvariant ||
+		replayErr.Code != clabernetesinternaldeviceplan.ErrorInvariant ||
 		replayErr.NodeID != input.Nodes[0].ID || replayErr.Field != "deployment.replay" ||
 		replayErr.Behavior != "imported-deploy" {
 		t.Fatalf("component replay drift error = %#v, %v", replayErr, err)
@@ -1093,32 +1245,39 @@ func TestPackageDeploymentOperationsAreVerifiedWithoutReexecution(t *testing.T) 
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-deployment-replay-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	foundAppend := false
+
 	for _, action := range plan.Actions {
-		if action.Kind == clabernetesdeviceplan.ActionFile && action.File != nil &&
-			action.File.WriteMode == clabernetesdeviceplan.FileWriteAppend {
+		if action.Kind == clabernetesinternaldeviceplan.ActionFile && action.File != nil &&
+			action.File.WriteMode == clabernetesinternaldeviceplan.FileWriteAppend {
 			foundAppend = true
 		}
 	}
+
 	if !foundAppend {
 		t.Fatalf("package hosts operation was not mapped as an append: %#v", plan.Actions)
 	}
+
 	artifactRoot := t.TempDir()
+
 	nodeRoot := filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	)
 	if err = os.MkdirAll(nodeRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := clabernetesdirectruntime.NewImportedApplicationRuntime(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
 		input,
 		*plan,
 		plan.Containers[0].ID,
@@ -1126,6 +1285,7 @@ func TestPackageDeploymentOperationsAreVerifiedWithoutReexecution(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = adapter.RunPostDeploy(
 		context.Background(),
 		input,
@@ -1138,7 +1298,11 @@ func TestPackageDeploymentOperationsAreVerifiedWithoutReexecution(t *testing.T) 
 	); err != nil {
 		t.Fatal(err)
 	}
-	marker, err := os.ReadFile(filepath.Join(nodeRoot, "package-post-deploy-ran"))
+
+	//nolint:gosec // test-controlled path.
+	marker, err := os.ReadFile(
+		filepath.Join(nodeRoot, "package-post-deploy-ran"),
+	) //nolint:gosec // test-controlled path.
 	if err != nil || string(marker) != "package-owned" {
 		t.Fatalf("package post-deploy marker = %q, %v", marker, err)
 	}
@@ -1152,23 +1316,28 @@ func TestPackageOwnedLogStreamRunsForNewRegistryKindWithoutC9sRegistration(t *te
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-log-stream-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	artifactRoot := t.TempDir()
+
 	nodeRoot := filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	)
 	if err = os.MkdirAll(nodeRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
+
 	streamer := &syntheticLogStreamer{}
-	broker, err := clabernetesdirectruntime.StartApplicationLogBroker(
+
+	broker, err := clabernetesinternaldirectruntime.StartApplicationLogBroker(
 		context.Background(),
 		t.TempDir()+"/runtime.sock",
 		map[string]string{plan.Containers[0].RuntimeID: "kubernetes-device-a"},
@@ -1177,8 +1346,10 @@ func TestPackageOwnedLogStreamRunsForNewRegistryKindWithoutC9sRegistration(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	t.Cleanup(func() { _ = broker.Close() })
-	runtime, err := clabernetesdirectruntime.NewImportedApplicationRuntimeWithLogSocket(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntimeWithLogSocket(
 		input,
 		*plan,
 		plan.Containers[0].ID,
@@ -1187,6 +1358,7 @@ func TestPackageOwnedLogStreamRunsForNewRegistryKindWithoutC9sRegistration(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = adapter.RunPostDeploy(
 		context.Background(),
 		input,
@@ -1199,10 +1371,15 @@ func TestPackageOwnedLogStreamRunsForNewRegistryKindWithoutC9sRegistration(t *te
 	); err != nil {
 		t.Fatal(err)
 	}
+
 	if got := streamer.Target(); got != "kubernetes-device-a" {
 		t.Fatalf("package log target = %q", got)
 	}
-	raw, err := os.ReadFile(filepath.Join(nodeRoot, "package-log-stream-ran"))
+
+	//nolint:gosec // test-controlled path.
+	raw, err := os.ReadFile(
+		filepath.Join(nodeRoot, "package-log-stream-ran"),
+	) //nolint:gosec // test-controlled path.
 	if err != nil || string(raw) != "package-observed-boot\n" {
 		t.Fatalf("package log marker = %q, %v", raw, err)
 	}
@@ -1216,22 +1393,26 @@ func TestPackageOwnedDeployEndpointsRunsForNewRegistryKindWithoutC9sRegistration
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-endpoints-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	artifactRoot := t.TempDir()
+
 	nodeRoot := filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	)
 	if err = os.MkdirAll(nodeRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := clabernetesdirectruntime.NewImportedEndpointRuntime(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedEndpointRuntime(
 		input,
 		*plan,
 		plan.Containers[0].ID,
@@ -1240,6 +1421,7 @@ func TestPackageOwnedDeployEndpointsRunsForNewRegistryKindWithoutC9sRegistration
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = adapter.RunDeployEndpoints(
 		context.Background(),
 		input,
@@ -1253,11 +1435,19 @@ func TestPackageOwnedDeployEndpointsRunsForNewRegistryKindWithoutC9sRegistration
 	); err != nil {
 		t.Fatal(err)
 	}
-	marker, err := os.ReadFile(filepath.Join(nodeRoot, "package-deploy-endpoints-ran"))
+
+	//nolint:gosec // test-controlled path.
+	marker, err := os.ReadFile(
+		filepath.Join(nodeRoot, "package-deploy-endpoints-ran"),
+	) //nolint:gosec // test-controlled path.
 	if err != nil || string(marker) != "package-owned" {
 		t.Fatalf("package endpoint marker = %q, %v", marker, err)
 	}
-	marker, err = os.ReadFile(filepath.Join(nodeRoot, "package-post-deploy-endpoints-ran"))
+
+	//nolint:gosec // test-controlled path.
+	marker, err = os.ReadFile(
+		filepath.Join(nodeRoot, "package-post-deploy-endpoints-ran"),
+	) //nolint:gosec // test-controlled path.
 	if err != nil || string(marker) != "package-owned" {
 		t.Fatalf("package post-endpoint marker = %q, %v", marker, err)
 	}
@@ -1271,26 +1461,29 @@ func TestImportedEndpointLifecycleRetainsTopologyMetadataWithoutRedeployingLink(
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	input.Interfaces = []clabernetesdeviceplan.InterfaceInput{{
+	input.Interfaces = []clabernetesinternaldeviceplan.InterfaceInput{{
 		ID: "interface-a", NodeID: input.Nodes[0].ID, Name: "eth1", LinkID: "link-a",
 		PeerNodeID: "peer-a", PeerInterface: "eth1", Connectivity: "vxlan",
 		PeerTransport: "peer-a-vx", TunnelID: 101, MTU: 9000,
 	}}
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-pre-realized-endpoint-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	artifactRoot := t.TempDir()
 	if err = os.MkdirAll(filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := clabernetesdirectruntime.NewImportedEndpointRuntime(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedEndpointRuntime(
 		input,
 		*plan,
 		plan.Containers[0].ID,
@@ -1299,6 +1492,7 @@ func TestImportedEndpointLifecycleRetainsTopologyMetadataWithoutRedeployingLink(
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = adapter.RunDeployEndpoints(
 		context.Background(),
 		input,
@@ -1322,21 +1516,24 @@ func TestImportedEndpointHookFailsByGenericNamespaceCapability(t *testing.T) {
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-endpoint-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	artifactRoot := t.TempDir()
 	if err = os.MkdirAll(filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := clabernetesdirectruntime.NewImportedApplicationRuntime(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
 		input,
 		*plan,
 		plan.Containers[0].ID,
@@ -1344,6 +1541,7 @@ func TestImportedEndpointHookFailsByGenericNamespaceCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = adapter.RunDeployEndpoints(
 		context.Background(),
 		input,
@@ -1355,9 +1553,10 @@ func TestImportedEndpointHookFailsByGenericNamespaceCapability(t *testing.T) {
 		runtime,
 		func(operation func() error) error { return operation() },
 	)
-	var capabilityErr *clabernetesdeviceplan.Error
+
+	var capabilityErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &capabilityErr) ||
-		capabilityErr.Code != clabernetesdeviceplan.ErrorUnsupported ||
+		capabilityErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported ||
 		capabilityErr.NodeID != input.Nodes[0].ID ||
 		capabilityErr.Field != "runtime.networkNamespace" ||
 		capabilityErr.Behavior != "runtime.GetNSPath" {
@@ -1373,21 +1572,24 @@ func TestImportedEndpointHookFailsByGenericApplicationExecCapability(t *testing.
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-endpoint-exec-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	artifactRoot := t.TempDir()
 	if err = os.MkdirAll(filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := clabernetesdirectruntime.NewImportedEndpointRuntime(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedEndpointRuntime(
 		input,
 		*plan,
 		plan.Containers[0].ID,
@@ -1396,6 +1598,7 @@ func TestImportedEndpointHookFailsByGenericApplicationExecCapability(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = adapter.RunDeployEndpoints(
 		context.Background(),
 		input,
@@ -1407,9 +1610,10 @@ func TestImportedEndpointHookFailsByGenericApplicationExecCapability(t *testing.
 		runtime,
 		func(operation func() error) error { return operation() },
 	)
-	var capabilityErr *clabernetesdeviceplan.Error
+
+	var capabilityErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &capabilityErr) ||
-		capabilityErr.Code != clabernetesdeviceplan.ErrorUnsupported ||
+		capabilityErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported ||
 		capabilityErr.NodeID != input.Nodes[0].ID ||
 		capabilityErr.Field != "runtime.applicationExec" ||
 		capabilityErr.Behavior != "runtime.Exec" {
@@ -1425,20 +1629,23 @@ func TestPackageOwnedReadinessRunsForNewRegistryKindWithoutC9sRegistration(t *te
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": "readiness-test", "image": "example/future:1",
 	})
-	input.Interfaces = []clabernetesdeviceplan.InterfaceInput{{
+	input.Interfaces = []clabernetesinternaldeviceplan.InterfaceInput{{
 		ID: "interface-a", NodeID: "node-a", Name: "eth1", LinkID: "link-a",
 		Connectivity: "same-pod",
 	}}
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-readiness-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !containsImportedReadinessAction(plan.Actions, plan.Containers[0].ID) {
 		t.Fatalf("package readiness plan action = %#v", plan.Actions)
 	}
+
 	if err = adapter.CheckReadiness(
 		context.Background(), input, *plan, plan.Containers[0].ID, t.TempDir(),
 	); err != nil {
@@ -1446,10 +1653,12 @@ func TestPackageOwnedReadinessRunsForNewRegistryKindWithoutC9sRegistration(t *te
 	}
 
 	input.Interfaces = nil
+
 	plan, err = adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = adapter.CheckReadiness(
 		context.Background(), input, *plan, plan.Containers[0].ID, t.TempDir(),
 	); err == nil || !strings.Contains(err.Error(), "imported readiness hook is not healthy") {
@@ -1465,25 +1674,30 @@ func TestPackageOwnedSaveRunsForNewRegistryKindWithoutC9sRegistration(t *testing
 	input.Nodes[0].Definition = mustJSON(t, map[string]string{
 		"kind": syntheticKind, "type": "save-test", "image": "example/future:1",
 	})
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-save-v1",
 	}
+
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !containsImportedSaveAction(plan.Actions, plan.Containers[0].ID) {
 		t.Fatalf("package save plan action = %#v", plan.Actions)
 	}
+
 	artifactRoot := t.TempDir()
+
 	nodeRoot := filepath.Join(
 		artifactRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	)
 	if err = os.MkdirAll(nodeRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := clabernetesdirectruntime.NewImportedApplicationRuntime(
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
 		input,
 		*plan,
 		plan.Containers[0].ID,
@@ -1491,6 +1705,7 @@ func TestPackageOwnedSaveRunsForNewRegistryKindWithoutC9sRegistration(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = adapter.RunSave(
 		context.Background(),
 		input,
@@ -1501,19 +1716,23 @@ func TestPackageOwnedSaveRunsForNewRegistryKindWithoutC9sRegistration(t *testing
 	); err != nil {
 		t.Fatal(err)
 	}
-	saved, err := os.ReadFile(filepath.Join(nodeRoot, "saved.conf"))
+
+	//nolint:gosec // test-controlled path.
+	saved, err := os.ReadFile(
+		filepath.Join(nodeRoot, "saved.conf"),
+	) //nolint:gosec // test-controlled path.
 	if err != nil || string(saved) != "package-owned-save" {
 		t.Fatalf("package save output = %q, %v", saved, err)
 	}
 }
 
 func containsImportedReadinessAction(
-	actions []clabernetesdeviceplan.Action,
+	actions []clabernetesinternaldeviceplan.Action,
 	containerID string,
 ) bool {
 	for _, action := range actions {
-		if action.Kind == clabernetesdeviceplan.ActionImportedReadiness &&
-			action.Phase == clabernetesdeviceplan.PhaseReadiness &&
+		if action.Kind == clabernetesinternaldeviceplan.ActionImportedReadiness &&
+			action.Phase == clabernetesinternaldeviceplan.PhaseReadiness &&
 			action.ImportedReadiness != nil && action.Target.ContainerID == containerID {
 			return true
 		}
@@ -1523,12 +1742,12 @@ func containsImportedReadinessAction(
 }
 
 func containsImportedPostDeployAction(
-	actions []clabernetesdeviceplan.Action,
+	actions []clabernetesinternaldeviceplan.Action,
 	containerID string,
 ) bool {
 	for _, action := range actions {
-		if action.Kind == clabernetesdeviceplan.ActionImportedPostDeploy &&
-			action.Phase == clabernetesdeviceplan.PhasePostStart &&
+		if action.Kind == clabernetesinternaldeviceplan.ActionImportedPostDeploy &&
+			action.Phase == clabernetesinternaldeviceplan.PhasePostStart &&
 			action.ImportedPostDeploy != nil && action.Target.ContainerID == containerID {
 			return true
 		}
@@ -1538,13 +1757,13 @@ func containsImportedPostDeployAction(
 }
 
 func containsImportedSaveAction(
-	actions []clabernetesdeviceplan.Action,
+	actions []clabernetesinternaldeviceplan.Action,
 	containerID string,
 ) bool {
 	for _, action := range actions {
-		if action.Kind == clabernetesdeviceplan.ActionSave &&
-			action.Phase == clabernetesdeviceplan.PhaseSave && action.Save != nil &&
-			action.Save.Method == clabernetesdeviceplan.SaveMethodImported &&
+		if action.Kind == clabernetesinternaldeviceplan.ActionSave &&
+			action.Phase == clabernetesinternaldeviceplan.PhaseSave && action.Save != nil &&
+			action.Save.Method == clabernetesinternaldeviceplan.SaveMethodImported &&
 			action.Target.ContainerID == containerID {
 			return true
 		}
@@ -1554,7 +1773,7 @@ func containsImportedSaveAction(
 }
 
 func hasGeneratedArtifact(
-	artifacts []clabernetesdeviceplan.GeneratedArtifact,
+	artifacts []clabernetesinternaldeviceplan.GeneratedArtifact,
 	path string,
 ) bool {
 	for _, artifact := range artifacts {
@@ -1569,13 +1788,14 @@ func hasGeneratedArtifact(
 func TestAdapterConfinesAndNormalizesImportedInitializerWorkspace(t *testing.T) {
 	t.Parallel()
 
-	evaluation, err := (clabernetesdeviceplan.Adapter{
+	evaluation, err := (clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t),
 		Revision: "workspace-v1",
 	}).Evaluate(context.Background(), singleNodeInput(syntheticKind, "example/future:1"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	node := evaluation.Nodes[0]
 	for _, value := range append(node.Config.Binds, node.Config.Env["IMPORTED_WORKSPACE"]) {
 		if strings.Contains(value, "clabernetes-device-plan-") ||
@@ -1590,13 +1810,14 @@ func TestAdapterRequiresExplicitImageMetadata(t *testing.T) {
 
 	input := singleNodeInput(syntheticKind, "example/future:1")
 	input.Images = nil
-	_, err := (clabernetesdeviceplan.Adapter{
+	_, err := (clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t),
 		Revision: "test-adapter",
 	}).Evaluate(context.Background(), input)
-	var planningErr *clabernetesdeviceplan.Error
+
+	var planningErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &planningErr) ||
-		planningErr.Code != clabernetesdeviceplan.ErrorMissingInput ||
+		planningErr.Code != clabernetesinternaldeviceplan.ErrorMissingInput ||
 		planningErr.Behavior != "runtime.InspectImage" {
 		t.Fatalf("Evaluate() error = %#v, want missing image metadata diagnostic", err)
 	}
@@ -1612,30 +1833,33 @@ func TestAdapterSuppliesDigestVerifiedPayloadPathToImportedHooks(t *testing.T) {
 		"kind": syntheticKind, "type": "payload-workspace-test",
 		"image": "example/future:1", "startup-config": "/inputs/startup.cfg",
 	})
-	input.Payloads = []clabernetesdeviceplan.PayloadInput{{
-		ID: "startup-input", NodeID: "node-a", Kind: clabernetesdeviceplan.PayloadConfigMap,
-		Reference: "lab/device-config:startup.cfg", Digest: clabernetesdeviceplan.Digest(content),
+	input.Payloads = []clabernetesinternaldeviceplan.PayloadInput{{
+		ID: "startup-input", NodeID: "node-a", Kind: clabernetesinternaldeviceplan.PayloadConfigMap,
+		Reference: "lab/device-config:startup.cfg", Digest: clabernetesinternaldeviceplan.Digest(content),
 		Destination: "/inputs/startup.cfg", Mode: 0o444,
 	}}
 	payloadRoot := t.TempDir()
+
 	sourceRoot := filepath.Join(
 		payloadRoot,
-		clabernetesdeviceplan.ArtifactNodeDirectory(input.Payloads[0].ID),
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Payloads[0].ID),
 	)
 	if err := os.MkdirAll(sourceRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(sourceRoot, "source"), content, 0o444); err != nil {
+
+	if err := os.WriteFile(filepath.Join(sourceRoot, "source"), content, 0o444); err != nil { //nolint:gosec // test fixture permissions.
 		t.Fatal(err)
 	}
 
-	evaluation, err := (clabernetesdeviceplan.Adapter{
+	evaluation, err := (clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "payload-workspace-v1",
 		PayloadRoot: payloadRoot,
 	}).Evaluate(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	artifact := "generated/payload-derived.conf"
 	if !hasGeneratedArtifact(evaluation.Nodes[0].GeneratedArtifacts, artifact) {
 		t.Fatalf(
@@ -1644,13 +1868,15 @@ func TestAdapterSuppliesDigestVerifiedPayloadPathToImportedHooks(t *testing.T) {
 		)
 	}
 
-	input.Payloads[0].Digest = clabernetesdeviceplan.Digest([]byte("different"))
-	_, err = (clabernetesdeviceplan.Adapter{
+	input.Payloads[0].Digest = clabernetesinternaldeviceplan.Digest([]byte("different"))
+	_, err = (clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "payload-workspace-v1",
 		PayloadRoot: payloadRoot,
 	}).Evaluate(context.Background(), input)
-	var planningErr *clabernetesdeviceplan.Error
-	if !errors.As(err, &planningErr) || planningErr.Code != clabernetesdeviceplan.ErrorInvariant ||
+
+	var planningErr *clabernetesinternaldeviceplan.Error
+	if !errors.As(err, &planningErr) ||
+		planningErr.Code != clabernetesinternaldeviceplan.ErrorInvariant ||
 		planningErr.Behavior != "payload-workspace" {
 		t.Fatalf("payload digest drift error = %#v", err)
 	}
@@ -1661,13 +1887,15 @@ func TestImageDiscoverySurfacesPackageImageWhenInitInspectsMissingMetadata(t *te
 
 	input := singleNodeInput(syntheticKind, "example/future:1")
 	input.Images = nil
-	discovery, err := (clabernetesdeviceplan.Adapter{
+
+	discovery, err := (clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t),
 		Revision: "two-phase-image-discovery",
 	}).DiscoverImages(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(discovery.Images) != 1 || discovery.Images[0].NodeID != "node-a" ||
 		discovery.Images[0].SourceReference != "example/future:1" {
 		t.Fatalf("two-phase image discovery = %#v", discovery.Images)
@@ -1683,47 +1911,57 @@ func TestImageDiscoveryRetriesMetadataGatedImportedInitializationWithoutKindDisp
 		"kind": syntheticKind, "type": "metadata-gated-test", "image": "example/future:1",
 	})
 	input.Images = nil
-	adapter := clabernetesdeviceplan.Adapter{
+	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "metadata-gated-discovery",
 	}
+
 	discovery, err := adapter.DiscoverImages(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(discovery.Images) != 1 || discovery.Images[0].SourceReference != "example/future:1" {
 		t.Fatalf("missing metadata requirements = %#v", discovery.Images)
 	}
-	input.Images = []clabernetesdeviceplan.ImageInput{{
+
+	input.Images = []clabernetesinternaldeviceplan.ImageInput{{
 		NodeID: "node-a", Role: discovery.Images[0].Role,
 		SourceReference: "example/future:1",
 		DigestReference: "example/future@sha256:" + strings.Repeat("a", 64),
-		Platform:        clabernetesdeviceplan.Platform{OS: "linux", Architecture: "amd64"},
-		Config: clabernetesdeviceplan.ImageConfig{Labels: []clabernetesdeviceplan.KeyValue{{
-			Name: "required", Value: "true",
-		}}},
+		Platform:        clabernetesinternaldeviceplan.Platform{OS: "linux", Architecture: "amd64"},
+		Config: clabernetesinternaldeviceplan.ImageConfig{
+			Labels: []clabernetesinternaldeviceplan.KeyValue{{
+				Name: "required", Value: "true",
+			}},
+		},
 	}}
+
 	discovery, err = adapter.DiscoverImages(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(discovery.Images) != 1 || discovery.Images[0].Role != "image" {
 		t.Fatalf("package-owned image roles after metadata = %#v", discovery.Images)
 	}
 }
 
-func singleNodeInput(kind, image string) clabernetesdeviceplan.Input {
-	return clabernetesdeviceplan.Input{
-		SchemaVersion: clabernetesdeviceplan.SchemaVersion,
+func singleNodeInput(kind, image string) clabernetesinternaldeviceplan.Input {
+	return clabernetesinternaldeviceplan.Input{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		TopologyName:  "test-topology",
 		Compatibility: testCompatibility(),
-		Nodes: []clabernetesdeviceplan.NodeInput{{
+		Nodes: []clabernetesinternaldeviceplan.NodeInput{{
 			ID: "node-a", Name: "router", Kind: kind,
 			Definition: []byte(`{"kind":"` + kind + `","image":"` + image + `"}`),
 		}},
-		Images: []clabernetesdeviceplan.ImageInput{{
+		Images: []clabernetesinternaldeviceplan.ImageInput{{
 			NodeID: "node-a", SourceReference: image,
 			DigestReference: image + "@sha256:" + strings.Repeat("a", 64),
-			Platform:        clabernetesdeviceplan.Platform{OS: "linux", Architecture: "amd64"},
+			Platform: clabernetesinternaldeviceplan.Platform{
+				OS:           "linux",
+				Architecture: "amd64",
+			},
 		}},
 	}
 }
