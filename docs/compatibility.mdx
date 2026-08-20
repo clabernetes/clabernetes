@@ -47,7 +47,7 @@ The current-realization column describes how each behavior is implemented:
 | `link` | `link-slurpeeth` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu`, `Link.spec.connectivity`, `Link.status.tunnelID`, `Pod peer` | `connectivity` | `link-slurpeeth` | `direct` |
 | `link` | `link-vxlan` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu`, `Link.spec.connectivity`, `Link.status.tunnelID`, `Pod peer` | `connectivity` | `link-vxlan` | `direct` |
 | `node-intent` | `node-components` | `Node.spec.components` | `components`, `kind-plan`, `readiness` | `node-components` | `direct` |
-| `node-intent` | `node-grouping` | `Node.spec.network-mode` | `components` | `node-grouping` | `direct` |
+| `node-intent` | `node-grouping` | `Node.spec.network-mode`, `Node.spec.group` | `components` | `node-grouping` | `direct` |
 | `node-intent` | `node-image-process` | `Node.spec.kind`, `Node.spec.type`, `Node.spec.image`, `Node.spec.entrypoint`, `Node.spec.cmd`, `Node.spec.user`, `Node.spec.env`, `Node.spec.env-files` | `kind-plan`, `process` | `node-image-process` | `direct` |
 | `node-intent` | `node-imported-extras` | `Node.spec.extras` | `configuration`, `kind-plan` | `node-imported-extras` | `direct` |
 | `node-intent` | `node-management` | `Node.spec.mgmt-ipv4`, `Node.spec.mgmt-ipv6`, `Node.spec.dns`, `Node.spec.certificate`, `LauncherProfile.spec.mgmt` | `management` | `node-management` | `direct` |

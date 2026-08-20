@@ -23,6 +23,9 @@ const (
 
 	// LabelTopologyNode is the label indicating the node the deployment represents in a topology.
 	LabelTopologyNode = LabelPrefix + "/topologyNode"
+	// LabelTopologyGroup carries the containerlab group name of a node, when the topology
+	// declares one, purely as selectable metadata.
+	LabelTopologyGroup = LabelPrefix + "/topologyGroup"
 
 	// LabelDirectWorkload identifies the primary Node name of a direct device Pod.
 	LabelDirectWorkload = LabelPrefix + "/direct-workload"

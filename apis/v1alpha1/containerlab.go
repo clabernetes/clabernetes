@@ -132,6 +132,11 @@ type NodeDefinition struct {
 	// Sysctls holds sysctl settings for the node.
 	// +optional
 	Sysctls map[string]string `json:"sysctls,omitempty" yaml:"sysctls,omitempty"`
+	// Group names the containerlab group a node belongs to. Group-scoped configuration from
+	// the topology's groups section participates in the imported inheritance rules, and the
+	// name itself is carried onto the compiled Node as a label.
+	// +optional
+	Group string `json:"group,omitempty" yaml:"group,omitempty"`
 	// Labels are containerlab node labels, and exist only so a Topology definition can carry
 	// them: the compiler copies them onto the emitted Node's metadata.labels, from where they
 	// reach the launcher deployment and its pods. There is deliberately no spec.labels on a Node

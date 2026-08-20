@@ -98,6 +98,10 @@ func compileContainerlabDefinition(
 		return nil, err
 	}
 
+	for _, warning := range diagnostics.warnings() {
+		logger.Warnf("topology compile: %s", formatCompilerDiagnostic(warning))
+	}
+
 	diagnosticErr := diagnostics.err()
 	if diagnosticErr != nil {
 		return nil, diagnosticErr
@@ -118,32 +122,33 @@ func validateManagementPolicy(
 		{
 			name:    "network",
 			path:    "mgmt.network",
-			message: "container runtime management network names have no direct-Pod semantic",
+			message: "container runtime management network names are accepted and ignored",
 		},
 		{
 			name:    "bridge",
 			path:    "mgmt.bridge",
-			message: "container runtime management bridges have no direct-Pod semantic",
+			message: "container runtime management bridges are accepted and ignored",
 		},
 		{
 			name:    "mtu",
 			path:    "mgmt.mtu",
-			message: "Docker management-network MTU is not direct management policy",
+			message: "Docker management-network MTU is accepted and ignored",
 		},
 		{
-			name:    "external-access",
-			path:    "mgmt.external-access",
-			message: "Docker management-network external access is replaced by Kubernetes Services",
+			name: "external-access",
+			path: "mgmt.external-access",
+			message: "Docker management-network external access is accepted and ignored; " +
+				"exposure is governed by Kubernetes Services",
 		},
 		{
 			name:    "skip-when-unused",
 			path:    "mgmt.skip-when-unused",
-			message: "conditional container runtime network creation has no direct-Pod semantic",
+			message: "conditional container runtime network creation is accepted and ignored",
 		},
 		{
 			name:    "driver-opts",
 			path:    "mgmt.driver-opts",
-			message: "container runtime network driver options have no direct-Pod semantic",
+			message: "container runtime network driver options are accepted and ignored",
 		},
 	}
 	for _, field := range fields {
@@ -153,10 +158,11 @@ func validateManagementPolicy(
 		}
 
 		diagnostics.add(CompilerDiagnostic{
-			Code:    "unsupported-management-field",
+			Code:    "ignored-management-field",
 			Path:    field.path,
 			Line:    line,
 			Message: field.message,
+			Warning: true,
 		})
 	}
 }
@@ -295,9 +301,10 @@ func diagnosticFromUnknownField(message string) CompilerDiagnostic {
 	return diagnostic
 }
 
-// normalizeNodePorts records Docker-style host pinning that direct Node resources cannot preserve.
-// The temporary normalization lets validation continue and gather all diagnostics, but the compile
-// fails and returns no resources when any such entry is present.
+// normalizeNodePorts strips Docker-style host pinning that direct Node resources cannot
+// preserve: the Pod-side port is kept, and a warning tells the author the host half was
+// dropped. Host port pinning only ever described the local Docker host, so its loss cannot
+// change lab behavior inside the cluster.
 func normalizeNodePorts(
 	diagnostics *compileDiagnostics,
 	nodeName string,
@@ -313,10 +320,12 @@ func normalizeNodePorts(
 			Code: "host-port-pinning",
 			Path: fmt.Sprintf("topology.nodes.%s.ports[%d]", nodeName, idx),
 			Message: fmt.Sprintf(
-				"node %q port %q pins a host-side port, but c9s allocates Pod-side ports",
+				"node %q port %q host pinning was dropped; the Pod-side port %q is kept",
 				nodeName,
 				portDefinition,
+				normalized,
 			),
+			Warning: true,
 		})
 
 		nodeDefinition.Ports[idx] = normalized
@@ -504,6 +513,7 @@ func flattenNodeDefinition(
 ) (*clabernetesutilcontainerlab.NodeDefinition, error) {
 	flattened := &clabernetesutilcontainerlab.NodeDefinition{
 		Kind:          topology.GetNodeKind(nodeName),
+		Group:         topology.GetNodeGroup(nodeName),
 		Type:          topology.GetNodeType(nodeName),
 		Image:         topology.GetNodeImage(nodeName),
 		License:       topology.GetNodeLicense(nodeName),

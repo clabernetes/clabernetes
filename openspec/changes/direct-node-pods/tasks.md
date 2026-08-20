@@ -109,6 +109,13 @@
 - [x] 11.4 Remove obsolete constants, utilities, tests, dependencies, generated fields, examples, and documentation made unreachable by nested-runtime deletion.
 - [x] 11.5 Add repository-wide negative verification that shipped device workloads and images contain no nested runtime path or obsolete compatibility field.
 
+## 13. Lab Compatibility Hardening
+
+- [x] 13.1 Downgrade cosmetic containerlab constructs (Docker-only management fields, host-pinned ports) from compile errors to accepted-and-ignored warnings with exact diagnostics.
+- [x] 13.2 Accept `group` and `topology.groups` with imported inheritance semantics and carry the group name as a Node label.
+- [ ] 13.3 Wire the remaining schema vocabulary (healthcheck, stages, aliases, credentials, startup-delay, restart-policy, cpu/memory, image-pull-policy, hostname, link-apply-mode) through the vocabulary gate into the existing device-plan support, keeping `runtime`/`auto-remove`/`pid-mode` as documented rejections.
+- [x] 13.4 Validate the reference telemetry lab end to end: fabric, traffic through telemetry, gNMI collection, and by-name syslog into Loki.
+
 ## 12. Documentation and Full Acceptance
 
 - [ ] 12.1 Rewrite architecture, Node, Link, LauncherProfile, management, image, operations, and troubleshooting documentation for direct Pods.

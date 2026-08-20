@@ -35,6 +35,10 @@ type CompilerDiagnostic struct {
 	Path    string
 	Line    int
 	Message string
+	// Warning marks a construct that is accepted with an adjusted or ignored meaning instead
+	// of failing the compile: the source stays valid, and the diagnostic tells the author what
+	// changed. Only constructs whose loss cannot silently change lab behavior may be warnings.
+	Warning bool
 }
 
 // UnsupportedFeaturesError reports all unsupported source constructs found in one compile pass.
@@ -81,12 +85,31 @@ func (d *compileDiagnostics) add(diagnostic CompilerDiagnostic) {
 	d.diagnostics = append(d.diagnostics, diagnostic)
 }
 
+func (d *compileDiagnostics) warnings() []CompilerDiagnostic {
+	warnings := []CompilerDiagnostic(nil)
+
+	for _, diagnostic := range d.diagnostics {
+		if diagnostic.Warning {
+			warnings = append(warnings, diagnostic)
+		}
+	}
+
+	return warnings
+}
+
 func (d *compileDiagnostics) err() error {
-	if len(d.diagnostics) == 0 {
+	diagnostics := []CompilerDiagnostic(nil)
+
+	for _, diagnostic := range d.diagnostics {
+		if !diagnostic.Warning {
+			diagnostics = append(diagnostics, diagnostic)
+		}
+	}
+
+	if len(diagnostics) == 0 {
 		return nil
 	}
 
-	diagnostics := append([]CompilerDiagnostic(nil), d.diagnostics...)
 	sort.SliceStable(diagnostics, func(i, j int) bool {
 		if diagnostics[i].Path != diagnostics[j].Path {
 			return diagnostics[i].Path < diagnostics[j].Path

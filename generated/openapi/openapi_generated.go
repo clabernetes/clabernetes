@@ -2300,6 +2300,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 							},
 						},
 					},
+					"group": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Group names the containerlab group a node belongs to. Group-scoped configuration from the topology's groups section participates in the imported inheritance rules, and the name itself is carried onto the compiled Node as a label.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"dns": {
 						SchemaProps: spec.SchemaProps{
 							Description: "DNS holds the DNS configuration for the node.",
@@ -2948,6 +2955,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 									},
 								},
 							},
+						},
+					},
+					"group": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Group names the containerlab group a node belongs to. Group-scoped configuration from the topology's groups section participates in the imported inheritance rules, and the name itself is carried onto the compiled Node as a label.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 					"dns": {

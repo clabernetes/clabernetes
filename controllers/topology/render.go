@@ -108,6 +108,12 @@ func RenderNodes(
 		// Retain this label for human selection and compatibility; profile attachment is explicit.
 		node.Labels[clabernetesconstants.LabelTopologyNode] = nodeName
 
+		// The containerlab group name is organizational metadata; it rides along as a label so
+		// operators can select by it, exactly as they would filter by group in containerlab.
+		if nodeDefinition.Group != "" {
+			node.Labels[clabernetesconstants.LabelTopologyGroup] = nodeDefinition.Group
+		}
+
 		// containerlab node labels are kubernetes labels here rather than docker labels on the
 		// node container. The compiler has already dropped any that kubernetes would reject or
 		// that sit in c9s' own namespace, so nothing here can shadow the labels above.

@@ -64,7 +64,7 @@ value -- dropping that would quietly change your lab.
 | `runtime` | Nothing -- devices run as regular Kubernetes containers |
 | `auto-remove` | Nothing -- the pod owns node lifecycle, and a removed container leaves a ready pod with no node |
 | `labels` | `metadata.labels` on the Node -- in a Topology `definition:` this is automatic, see below |
-| `group`, `position` | Nothing -- these feed containerlab graphs and inventories, which c9s does not produce |
+| `position` | Nothing -- it feeds containerlab graphs, which c9s does not produce |
 | `startup-delay` | Nothing -- it staggers boots on one host; pods start independently |
 | `aliases` | Nothing -- docker network aliases only resolve inside a single pod |
 | `extras.mysocket-proxy` | Nothing -- mysocketctl is gone, along with the `publish` field that fed it |

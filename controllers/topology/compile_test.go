@@ -653,7 +653,6 @@ topology:
 	}
 
 	for _, expected := range []string{
-		"host-port-pinning",
 		"unsupported-field",
 		"unsupported-link-labels",
 		"unsupported-link-vars",
@@ -662,55 +661,76 @@ topology:
 			t.Errorf("expected diagnostic %q, got %v", expected, codes)
 		}
 	}
+
+	// Host port pinning is lossless to drop inside the cluster, so it warns instead of failing.
+	if slices.Contains(codes, "host-port-pinning") {
+		t.Errorf("host port pinning should be a warning, got fatal diagnostics %v", codes)
+	}
 }
 
-//nolint:wsl_v5 // Assertions intentionally stay adjacent to the diagnostic collection they check.
-func TestCompileTopologyRejectsDockerOnlyManagementFields(t *testing.T) {
+func TestCompileTopologyIgnoresDockerOnlyManagementFields(t *testing.T) {
 	t.Parallel()
 
-	_, err := compileDefinition(t, `
+	compiled, err := compileDefinition(t, `
 name: docker-management
 mgmt:
-  network: ""
-  bridge: ""
-  mtu: 0
+  network: st
+  bridge: br-st
+  mtu: 1500
   external-access: false
   skip-when-unused: false
-  driver-opts: {}
+  driver-opts: {a: b}
   ipv4-subnet: 172.30.30.0/24
 topology:
   nodes:
     n1: {kind: linux, image: alpine}
 `)
-	if err == nil {
-		t.Fatal("compiler accepted Docker-only management fields")
+	if err != nil {
+		t.Fatalf("Docker-only management fields must be accepted and ignored, got: %s", err)
 	}
 
-	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
-	if !errors.As(err, &unsupported) {
-		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	if compiled.Mgmt == nil || compiled.Mgmt.IPv4Subnet != "172.30.30.0/24" {
+		t.Fatalf("management policy was not preserved: %+v", compiled.Mgmt)
+	}
+}
+
+func TestCompileTopologyNormalizesHostPinnedPortsAndGroups(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: lossy-but-portable
+topology:
+  groups:
+    telemetry:
+      env:
+        ROLE: telemetry
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      group: telemetry
+      ports: ["9090:9090", "127.0.0.1:3000:3000/tcp"]
+`)
+	if err != nil {
+		t.Fatalf("host-pinned ports and groups must compile, got: %s", err)
 	}
 
-	paths := make([]string, 0, len(unsupported.Diagnostics))
-	for _, diagnostic := range unsupported.Diagnostics {
-		if diagnostic.Code != "unsupported-management-field" {
-			t.Fatalf("unexpected diagnostic: %+v", diagnostic)
-		}
-		if diagnostic.Line == 0 {
-			t.Fatalf("management diagnostic has no source line: %+v", diagnostic)
-		}
-		paths = append(paths, diagnostic.Path)
+	node := compiled.Nodes["n1"]
+	if node == nil {
+		t.Fatal("compiled topology has no node n1")
 	}
-	want := []string{
-		"mgmt.bridge",
-		"mgmt.driver-opts",
-		"mgmt.external-access",
-		"mgmt.mtu",
-		"mgmt.network",
-		"mgmt.skip-when-unused",
+
+	if node.Group != "telemetry" {
+		t.Fatalf("group was not preserved: %+v", node)
 	}
-	if !reflect.DeepEqual(paths, want) {
-		t.Fatalf("management diagnostic paths = %q, want %q", paths, want)
+
+	if node.Env["ROLE"] != "telemetry" {
+		t.Fatalf("group-scoped configuration was not inherited: %+v", node.Env)
+	}
+
+	wantPorts := []string{"9090", "3000/tcp"}
+	if !reflect.DeepEqual(node.Ports, wantPorts) {
+		t.Fatalf("ports = %q, want normalized Pod-side %q", node.Ports, wantPorts)
 	}
 }
 

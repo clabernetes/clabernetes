@@ -402,7 +402,8 @@
       "id": "node-grouping",
       "category": "node-intent",
       "inputs": [
-        "Node.spec.network-mode"
+        "Node.spec.network-mode",
+        "Node.spec.group"
       ],
       "requiredCapabilities": [
         "components"

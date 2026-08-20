@@ -381,6 +381,12 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
+              group:
+                description: |-
+                  Group names the containerlab group a node belongs to. Group-scoped configuration from
+                  the topology's groups section participates in the imported inheritance rules, and the
+                  name itself is carried onto the compiled Node as a label.
+                type: string
               image:
                 description: Image is the container image for the node.
                 type: string

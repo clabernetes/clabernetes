@@ -61,8 +61,11 @@ type Config struct {
 type Topology struct {
 	Defaults *NodeDefinition            `yaml:"defaults"`
 	Kinds    map[string]*NodeDefinition `yaml:"kinds,omitempty"`
-	Nodes    map[string]*NodeDefinition `yaml:"nodes,omitempty"`
-	Links    []*LinkDefinition          `yaml:"links,omitempty"`
+	// Groups carries group-scoped configuration that participates in the imported
+	// node-inheritance rules exactly as kinds do.
+	Groups map[string]*NodeDefinition `yaml:"groups,omitempty"`
+	Nodes  map[string]*NodeDefinition `yaml:"nodes,omitempty"`
+	Links  []*LinkDefinition          `yaml:"links,omitempty"`
 }
 
 // GetNodeKindType returns the kind and type of the given node name -- it cannot fail, it can only
