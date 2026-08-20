@@ -113,15 +113,15 @@
 
 - [x] 13.1 Downgrade cosmetic containerlab constructs (Docker-only management fields, host-pinned ports) from compile errors to accepted-and-ignored warnings with exact diagnostics.
 - [x] 13.2 Accept `group` and `topology.groups` with imported inheritance semantics and carry the group name as a Node label.
-- [ ] 13.3 Wire the remaining schema vocabulary (healthcheck, stages, aliases, credentials, startup-delay, restart-policy, cpu/memory, image-pull-policy, hostname, link-apply-mode) through the vocabulary gate into the existing device-plan support, keeping `runtime`/`auto-remove`/`pid-mode` as documented rejections.
+- [x] 13.3 Wire the remaining schema vocabulary (healthcheck, stages, aliases, credentials, startup-delay, restart-policy, cpu/memory, image-pull-policy, hostname, link-apply-mode) through the vocabulary gate into the existing device-plan support, keeping `runtime`/`auto-remove`/`pid-mode` as documented rejections.
 - [x] 13.4 Validate the reference telemetry lab end to end: fabric, traffic through telemetry, gNMI collection, and by-name syslog into Loki.
 
 ## 12. Documentation and Full Acceptance
 
-- [ ] 12.1 Rewrite architecture, Node, Link, LauncherProfile, management, image, operations, and troubleshooting documentation for direct Pods.
-- [ ] 12.2 Publish generated per-kind compatibility, intentional Kubernetes semantic differences, required cluster capabilities, restricted-image procedures, release notes, and destructive upgrade/rollback guidance.
+- [x] 12.1 Rewrite architecture, Node, Link, LauncherProfile, management, image, operations, and troubleshooting documentation for direct Pods.
+- [x] 12.2 Publish generated per-kind compatibility, intentional Kubernetes semantic differences, required cluster capabilities, restricted-image procedures, release notes, and destructive upgrade/rollback guidance.
 - [x] 12.3 Run focused package tests and renderer/fixture checks throughout implementation, recording any environment-dependent skips.
 - [x] 12.4 Run `make test`, `make test-race`, `make lint`, `make verify-generated`, `make check-docs`, and all runtime image builds; inspect resulting changes.
-- [ ] 12.5 Run the authorized task-scoped multi-worker suite covering every Link flavor, traffic, live changes, Pod deletion/rescheduling, controller/helper restart, partial updates, and recovery; after recording evidence, remove task-scoped completed/failed planning Pods, Jobs, stale workloads, and superseded diagnostics by namespace, release, owner, and labels without touching unrelated resources.
-- [ ] 12.6 Run all available vendor boot/dataplane scenarios and verify current restricted-image evidence; retain diagnostics only when their exact identity and reason are documented, and remove every other task-scoped Pod, Job, workload, namespace, and cluster/lab resource.
-- [ ] 12.7 Audit every acceptance criterion against current files, generated artifacts, images, matrix records, runtime evidence, and live cluster inventory; prove no unreported task-scoped resource remains before archiving the change.
+- [x] 12.5 Run the authorized task-scoped multi-worker suite covering every Link flavor, traffic, live changes, Pod deletion/rescheduling, controller/helper restart, partial updates, and recovery; after recording evidence, remove task-scoped completed/failed planning Pods, Jobs, stale workloads, and superseded diagnostics by namespace, release, owner, and labels without touching unrelated resources.
+- [x] 12.6 Run all available vendor boot/dataplane scenarios and verify current restricted-image evidence; retain diagnostics only when their exact identity and reason are documented, and remove every other task-scoped Pod, Job, workload, namespace, and cluster/lab resource.
+- [x] 12.7 Audit every acceptance criterion against current files, generated artifacts, images, matrix records, runtime evidence, and live cluster inventory; prove no unreported task-scoped resource remains before archiving the change.

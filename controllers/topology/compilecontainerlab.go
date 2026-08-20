@@ -398,21 +398,33 @@ func validateNodeAliases(
 	}
 }
 
-// rejectedContainerlabFields documents baseline vocabulary the direct runtime deliberately does
-// not accept: the strict parser already fails on them, and these messages replace the raw parse
-// error so the diagnostic states why the field is rejected rather than implying it is unknown.
-var rejectedContainerlabFields = map[string]string{
-	"runtime": "container runtime selection is Docker-only; " +
-		"direct device Pods always use the cluster's container runtime",
-	"auto-remove": "Docker auto-remove has no direct-Pod equivalent; " +
-		"Kubernetes owns container lifecycle",
-	"pid-mode":      "Docker PID-namespace sharing has no direct-Pod mapping",
-	"cgroupns-mode": "Docker cgroup-namespace selection has no direct-Pod mapping",
-	"cpu-set":       "CPU pinning has no portable Pod mapping",
-	"stages": "containerlab deployment stages coordinate multi-node boot ordering " +
-		"the direct runtime does not implement",
-	"credentials": "node credentials are not represented; " +
-		"imported kind default credentials still apply",
+// rejectedContainerlabFieldReason documents baseline vocabulary the direct runtime deliberately
+// does not accept: the strict parser already fails on these fields, and the returned message
+// replaces the raw parse error so the diagnostic states why the field is rejected rather than
+// implying it is unknown.
+func rejectedContainerlabFieldReason(field string) (string, bool) {
+	switch field {
+	case "runtime":
+		return "container runtime selection is Docker-only; " +
+			"direct device Pods always use the cluster's container runtime", true
+	case "auto-remove":
+		return "Docker auto-remove has no direct-Pod equivalent; " +
+			"Kubernetes owns container lifecycle", true
+	case "pid-mode":
+		return "Docker PID-namespace sharing has no direct-Pod mapping", true
+	case "cgroupns-mode":
+		return "Docker cgroup-namespace selection has no direct-Pod mapping", true
+	case "cpu-set":
+		return "CPU pinning has no portable Pod mapping", true
+	case "stages":
+		return "containerlab deployment stages coordinate multi-node boot ordering " +
+			"the direct runtime does not implement", true
+	case "credentials":
+		return "node credentials are not represented; " +
+			"imported kind default credentials still apply", true
+	default:
+		return "", false
+	}
 }
 
 var unknownFieldPattern = regexp.MustCompile(`^line (\d+): field ([^ ]+)`)
@@ -431,7 +443,7 @@ func diagnosticFromUnknownField(message string) CompilerDiagnostic {
 	diagnostic.Line, _ = strconv.Atoi(matches[1])
 	diagnostic.Path = matches[2]
 
-	if reason, rejected := rejectedContainerlabFields[diagnostic.Path]; rejected {
+	if reason, rejected := rejectedContainerlabFieldReason(diagnostic.Path); rejected {
 		diagnostic.Message = fmt.Sprintf(
 			"field %q is rejected: %s",
 			diagnostic.Path,
@@ -767,6 +779,30 @@ func flattenNodeDefinition(
 		}
 	}
 
+	err = flattenNodeContracts(topology, layers, nodeName, flattened)
+	if err != nil {
+		return nil, err
+	}
+
+	components := topology.GetComponents(nodeName)
+	if components != nil {
+		transcodeErr := transcodeImportedField(components, &flattened.Components)
+		if transcodeErr != nil {
+			return nil, transcodeErr
+		}
+	}
+
+	return flattened, nil
+}
+
+// flattenNodeContracts resolves the pointer-valued health and certificate contracts through the
+// imported inheritance rules onto the flattened node.
+func flattenNodeContracts(
+	topology *clabtypes.Topology,
+	layers []*clabtypes.NodeDefinition,
+	nodeName string,
+	flattened *clabernetesutilcontainerlab.NodeDefinition,
+) error {
 	if firstImportedPointer(
 		layers,
 		func(definition *clabtypes.NodeDefinition) *clabtypes.HealthcheckConfig {
@@ -780,7 +816,7 @@ func flattenNodeDefinition(
 			flattened.Healthcheck,
 		)
 		if transcodeErr != nil {
-			return nil, transcodeErr
+			return transcodeErr
 		}
 	}
 
@@ -802,15 +838,7 @@ func flattenNodeDefinition(
 		}
 	}
 
-	components := topology.GetComponents(nodeName)
-	if components != nil {
-		transcodeErr := transcodeImportedField(components, &flattened.Components)
-		if transcodeErr != nil {
-			return nil, transcodeErr
-		}
-	}
-
-	return flattened, nil
+	return nil
 }
 
 func importedNodeLayers(

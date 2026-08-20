@@ -821,6 +821,7 @@ topology:
 	}
 
 	rejected := map[string]bool{}
+
 	for _, diagnostic := range unsupported.Diagnostics {
 		if diagnostic.Code == "unsupported-field" &&
 			strings.Contains(diagnostic.Message, "is rejected:") {

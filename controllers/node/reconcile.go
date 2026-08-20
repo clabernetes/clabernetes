@@ -484,15 +484,17 @@ func (r *Reconciler) pruneDirectAliasServices(
 	desired map[string]bool,
 ) error {
 	owned := &k8scorev1.ServiceList{}
+	aliasServiceLabels := ctrlruntimeclient.MatchingLabels{
+		clabernetesconstants.LabelTopologyNode: node.GetName(),
+		clabernetesconstants.LabelTopologyServiceType: clabernetesconstants.
+			TopologyServiceTypeAlias,
+	}
 
 	err := r.Client.List(
 		ctx,
 		owned,
 		ctrlruntimeclient.InNamespace(node.GetNamespace()),
-		ctrlruntimeclient.MatchingLabels{
-			clabernetesconstants.LabelTopologyNode:        node.GetName(),
-			clabernetesconstants.LabelTopologyServiceType: clabernetesconstants.TopologyServiceTypeAlias,
-		},
+		aliasServiceLabels,
 	)
 	if err != nil {
 		return err
