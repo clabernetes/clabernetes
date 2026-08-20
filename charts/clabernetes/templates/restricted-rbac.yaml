@@ -136,7 +136,7 @@ metadata:
     heritage: {{ $.Release.Service }}
     revision: "{{ $.Release.Revision }}"
     c9s.run/app: {{ $.Values.appName }}
-    c9s.run/name: "{{ $.Values.appName }}-launcher-namespace"
+    c9s.run/name: "{{ $.Values.appName }}-topology-namespace"
     c9s.run/component: namespace
     pod-security.kubernetes.io/enforce: privileged
     {{- if $.Values.globalLabels }}

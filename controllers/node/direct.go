@@ -827,22 +827,6 @@ func validateDirectProfile(profile *ResolvedProfile) error {
 			"resolved profile is nil",
 		)
 	}
-	unsupported := []struct {
-		present bool
-		field   string
-	}{
-		{len(profile.ExtraEnv) != 0, "deployment.extraEnv"},
-	}
-	for _, item := range unsupported {
-		if item.present {
-			return planInputError(
-				clabernetesdeviceplan.ErrorUnsupported,
-				"launcherProfile."+item.field,
-				"profile policy has no direct-Pod mapping",
-			)
-		}
-	}
-
 	return nil
 }
 

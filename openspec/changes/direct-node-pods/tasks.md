@@ -104,10 +104,10 @@
 ## 11. Remove the Nested Runtime
 
 - [x] 11.1 Make direct mode the default after the complete compatibility gate passes and run an upgrade soak with no fallback.
-- [ ] 11.2 Remove the temporary mode switch and all nested launcher topology materialization, Docker startup/discovery/health, containerlab invocation/download, image import, proxy, and nested SR Linux repair code.
-- [ ] 11.3 Remove the launcher binary/image target, Docker/containerlab/nerdctl layers, launcher RBAC/service account, chart values, Make targets, release artifacts, and CI publication.
-- [ ] 11.4 Remove obsolete constants, utilities, tests, dependencies, generated fields, examples, and documentation made unreachable by nested-runtime deletion.
-- [ ] 11.5 Add repository-wide negative verification that shipped device workloads and images contain no nested runtime path or obsolete compatibility field.
+- [x] 11.2 Remove the temporary mode switch and all nested launcher topology materialization, Docker startup/discovery/health, containerlab invocation/download, image import, proxy, and nested SR Linux repair code.
+- [x] 11.3 Remove the launcher binary/image target, Docker/containerlab/nerdctl layers, launcher RBAC/service account, chart values, Make targets, release artifacts, and CI publication.
+- [x] 11.4 Remove obsolete constants, utilities, tests, dependencies, generated fields, examples, and documentation made unreachable by nested-runtime deletion.
+- [x] 11.5 Add repository-wide negative verification that shipped device workloads and images contain no nested runtime path or obsolete compatibility field.
 
 ## 12. Documentation and Full Acceptance
 

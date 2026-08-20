@@ -1,6 +1,8 @@
 apiVersion: c9s.run/v1alpha1
 kind: Link
 metadata:
+  finalizers:
+    - c9s.run/host-endpoint
   labels:
     c9s.run/app: clabernetes
     c9s.run/name: srl1-e1-3-host-eth13

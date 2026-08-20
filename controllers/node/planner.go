@@ -389,10 +389,6 @@ func normalizePlannerPodSchedulingState(spec *k8scorev1.PodSpec) {
 	}
 }
 
-func plannerPodName(nodeName string, input PlannerPodInput) (string, error) {
-	return contentAddressedPlannerObjectName(nodeName, "-planner-", input)
-}
-
 // contentAddressedPlannerObjectName covers the complete immutable Pod and NetworkPolicy policy,
 // not only the normalized planning input. Runtime image, planner revision, pull-secret, deadline,
 // and worker-policy changes must select a fresh object name instead of conflicting with a prior

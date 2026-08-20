@@ -4,16 +4,14 @@ description: Breaking changes and upgrade steps for c9s releases.
 icon: ArrowUpCircle
 ---
 
-## Device runtime modes and the upgrade preflight
+## The direct device runtime and the upgrade preflight
 
-The manager now selects its device runtime through the Helm value `manager.deviceRuntimeMode`.
-The default `nested` keeps the launcher-pod runtime; `direct` runs every network-device image as
-a regular application container in a c9s-managed Pod, with planning executed in short-lived
-isolated worker Pods. Direct mode never falls back to nested: a Node the direct planner cannot
-realize stays failed with a structured diagnostic. The nested runtime no longer receives image
-pull secrets, insecure-registry configuration, or proxy environment -- private registries and
-registry trust are Kubernetes concerns (`imagePullSecrets`, cluster runtime configuration, and
-the controller-only `Config.spec.imagePull.registryMetadataTrust`).
+The nested launcher-pod runtime is removed. The manager always runs every network-device image
+as a regular application container in a c9s-managed Pod, with planning executed in short-lived
+isolated worker Pods. There is no runtime selector and no fallback: a Node the direct planner
+cannot realize stays failed with a structured diagnostic. Private registries and registry trust
+are Kubernetes concerns (`imagePullSecrets`, cluster runtime configuration, and the
+controller-only `Config.spec.imagePull.registryMetadataTrust`).
 
 Before upgrading across the breaking API cut, run the read-only preflight against the live
 cluster. It lists every stored `Config`, `LauncherProfile`, and `Topology` that still uses a
@@ -62,8 +60,8 @@ value -- dropping that would quietly change your lab.
 | `publish`, `sandbox`, `kernel`, `wait-for`, top-level `SANs` | Nothing -- containerlab itself removed these, so they made the launcher fail to parse the topology. `SANs` moved to `certificate.sans` |
 | `cpu`, `cpu-set`, `memory` | `LauncherProfile.resources` -- the pod's requests/limits are what actually bound a node |
 | `image-pull-policy` | `LauncherProfile.imagePull` |
-| `healthcheck` | `LauncherProfile.statusProbes` -- c9s bridges nested Docker state and image-defined healthchecks into Kubernetes readiness |
-| `runtime` | Nothing -- the launcher runs exactly one runtime (docker) |
+| `healthcheck` | `LauncherProfile.statusProbes` -- c9s bridges image-defined healthchecks into Kubernetes readiness |
+| `runtime` | Nothing -- devices run as regular Kubernetes containers |
 | `auto-remove` | Nothing -- the pod owns node lifecycle, and a removed container leaves a ready pod with no node |
 | `labels` | `metadata.labels` on the Node -- in a Topology `definition:` this is automatic, see below |
 | `group`, `position` | Nothing -- these feed containerlab graphs and inventories, which c9s does not produce |

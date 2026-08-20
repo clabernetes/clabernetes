@@ -41,9 +41,6 @@ jobs:
           - name: clabernetes-manager
             file: build/manager.Dockerfile
             context: "."
-          - name: clabernetes-launcher
-            file: build/launcher.Dockerfile
-            context: "."
           - name: clabverter
             file: build/clabverter.Dockerfile
             context: "."
@@ -85,11 +82,7 @@ jobs:
           build-args: |
             VERSION=${{ inputs.build-version }}
           provenance: false
-          # Manager and launcher share an identical Go dependency prefix. Import both scopes so
-          # either image can reuse that layer even though their builds remain separate.
-          cache-from: |
-            type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
-            ${{ matrix.image.name == 'clabernetes-manager' && format('type=gha,scope=clabernetes-launcher-{0}', matrix.platform.arch) || matrix.image.name == 'clabernetes-launcher' && format('type=gha,scope=clabernetes-manager-{0}', matrix.platform.arch) || '' }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
           outputs: ${{ inputs.push && format('type=image,name=ghcr.io/clabernetes/clabernetes/{0},push-by-digest=true,name-canonical=true,push=true', matrix.image.name) || 'type=cacheonly' }}
 
@@ -118,7 +111,6 @@ jobs:
       matrix:
         image:
           - clabernetes-manager
-          - clabernetes-launcher
           - clabverter
     steps:
       - name: download digests

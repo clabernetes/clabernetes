@@ -12,7 +12,6 @@ import (
 	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 	claberneteshostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
 	clabernetesupgradepreflight "github.com/clabernetes/clabernetes/internal/upgradepreflight"
-	claberneteslauncher "github.com/clabernetes/clabernetes/launcher"
 	clabernetesmanager "github.com/clabernetes/clabernetes/manager"
 	"github.com/urfave/cli/v2"
 	"k8s.io/client-go/dynamic"
@@ -108,16 +107,6 @@ func Entrypoint() *cli.App {
 					clabernetesmanager.StartClabernetes(
 						c.Bool(cliInitializer),
 					)
-
-					return nil
-				},
-			},
-			{
-				Name:  "launch",
-				Usage: "run the launcher",
-				Flags: []cli.Flag{},
-				Action: func(_ *cli.Context) error {
-					claberneteslauncher.StartClabernetes()
 
 					return nil
 				},

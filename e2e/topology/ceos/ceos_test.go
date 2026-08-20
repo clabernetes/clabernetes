@@ -33,8 +33,6 @@ func TestMain(m *testing.M) {
 func TestCEOSBootsAndReachesLinux(t *testing.T) {
 	t.Parallel()
 
-	clabernetestesthelper.SkipUnlessDeviceRuntimeMode(t, "direct")
-
 	if os.Getenv("CEOS_E2E") == "" {
 		t.Skip("CEOS_E2E is not set")
 	}

@@ -10,7 +10,6 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
 	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	k8scorev1 "k8s.io/api/core/v1"
@@ -297,26 +296,15 @@ topology:
 		t.Fatalf("expected one rendered node, got %d", len(nodes))
 	}
 
-	exposedPorts, err := clabernetescontrollersnode.ResolveExposedPorts(
-		nodes[0],
-		&clabernetescontrollersnode.ResolvedProfile{DisableAutoExpose: true},
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("unexpected error resolving exposed ports: %s", err)
-	}
-
-	if exposedPorts == nil {
-		t.Fatal("expected the directive port to produce an exposed-port list")
-	}
-
-	for _, port := range exposedPorts.Ports {
-		if port.DestinationPort == 9273 && port.Protocol == clabernetesconstants.TCP {
+	// The direct runtime resolves exposure from the rendered Node spec, so the directive must
+	// land there.
+	for _, port := range nodes[0].Spec.Ports {
+		if strings.HasPrefix(port, "9273/") {
 			return
 		}
 	}
 
-	t.Fatalf("expected 9273/TCP in exposed ports, got %+v", exposedPorts.Ports)
+	t.Fatalf("expected a 9273 entry in rendered Node ports, got %+v", nodes[0].Spec.Ports)
 }
 
 // TestRenderNodesCarriesContainerlabLabels pins where containerlab node labels end up: the Node's

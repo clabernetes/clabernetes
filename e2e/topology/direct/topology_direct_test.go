@@ -30,8 +30,6 @@ func TestMain(m *testing.M) {
 func TestNodeLinkDirect(t *testing.T) {
 	t.Parallel()
 
-	clabernetestesthelper.SkipUnlessDeviceRuntimeMode(t, "direct")
-
 	testName := "topology-direct"
 
 	namespace := clabernetestesthelper.NewTestNamespace(testName)
@@ -145,8 +143,6 @@ type devicePodObservation struct {
 // across the tunnel from inside the actual device containers.
 func TestLinuxDataplaneDirect(t *testing.T) {
 	t.Parallel()
-
-	clabernetestesthelper.SkipUnlessDeviceRuntimeMode(t, "direct")
 
 	testName := "topology-direct-linux"
 

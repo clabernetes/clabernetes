@@ -2,7 +2,6 @@ package config
 
 import (
 	"maps"
-	"os"
 	"slices"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -83,24 +82,6 @@ func (m *manager) GetNodeSelectorsByImage(
 	return GetNodeSelectorsByImage(imageName, m.config.Deployment.NodeSelectorsByImage)
 }
 
-func (m *manager) GetPrivilegedLauncher() bool {
-	return true
-}
-
-func (m *manager) GetContainerlabDebug() bool {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return false
-}
-
-func (m *manager) GetContainerlabTimeout() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return ""
-}
-
 func (m *manager) GetInClusterDNSSuffix() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
@@ -115,44 +96,9 @@ func (m *manager) GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryM
 	return slices.Clone(m.config.ImagePull.RegistryMetadataTrust)
 }
 
-func (m *manager) GetLauncherImage() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return os.Getenv(clabernetesconstants.LauncherImageEnv)
-}
-
-func (m *manager) GetLauncherImagePullPolicy() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return clabernetesconstants.KubernetesImagePullIfNotPresent
-}
-
-func (m *manager) GetLauncherLogLevel() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return clabernetesconstants.Info
-}
-
-func (m *manager) GetExtraEnv() []k8scorev1.EnvVar {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return nil
-}
-
 func (m *manager) GetRemoveTopologyPrefix() bool {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
 	return m.config.Naming != clabernetesconstants.NamingModePrefixed
-}
-
-func (m *manager) GetContainerlabVersion() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return ""
 }

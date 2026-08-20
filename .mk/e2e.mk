@@ -8,7 +8,7 @@
 ## OS/ARCH detection (OS/ARCH), the CURL wrapper, and the download-bin /
 ## download-bin-from-archive helpers come from .mk/tools.makefile. Tool versions
 ## and the *_SRC download URLs are reused from .mk/try-c9s.makefile so there is a
-## single set of pins for both flows. IMAGE_BASE / MANAGER_IMAGE / LAUNCHER_IMAGE and the
+## single set of pins for both flows. IMAGE_BASE / MANAGER_IMAGE and the
 ## build-* targets come from the root Makefile.
 
 E2E_CLUSTER_NAME ?= c9s-e2e
@@ -20,9 +20,6 @@ E2E_INSTALL_NAMESPACE ?= c9s-e2e
 E2E_INSTALL_RELEASE ?= c9s-e2e
 CLUSTER ?= kind
 E2E_LOCAL_REBUILD ?= $(if $(filter undefined,$(origin C9S_LOCAL_REBUILD)),1,$(C9S_LOCAL_REBUILD))
-# Selects the manager runtime for the deployed chart and gates the mode-specific test suites.
-E2E_DEVICE_RUNTIME_MODE ?= nested
-
 E2E_BUILD_DIR := build/e2e
 E2E_TOOLS_DIR := $(E2E_BUILD_DIR)/bin
 E2E_KIND_CONFIG := $(E2E_BUILD_DIR)/kind.yaml
@@ -77,11 +74,10 @@ e2e-cluster: e2e-tools ## Create the local e2e KinD cluster (idempotent)
 
 .PHONY: e2e-images
 e2e-images: e2e-cluster ## Build clabernetes images locally and load them into the e2e cluster
-	@echo "--> E2E: building manager and launcher images tagged $(E2E_IMAGE_TAG)"
-	@$(MAKE) --no-print-directory build-manager build-launcher IMAGE_TAG=$(E2E_IMAGE_TAG) C9S_LOCAL_BUILD_ID=$(C9S_LOCAL_BUILD_ID)
+	@echo "--> E2E: building manager image tagged $(E2E_IMAGE_TAG)"
+	@$(MAKE) --no-print-directory build-manager IMAGE_TAG=$(E2E_IMAGE_TAG) C9S_LOCAL_BUILD_ID=$(C9S_LOCAL_BUILD_ID)
 	@echo "--> E2E: loading images into KinD cluster $(E2E_CLUSTER_NAME)"
 	@$(E2E_KIND) load docker-image "$(MANAGER_IMAGE):$(E2E_IMAGE_TAG)" --name $(E2E_CLUSTER_NAME)
-	@$(E2E_KIND) load docker-image "$(LAUNCHER_IMAGE):$(E2E_IMAGE_TAG)" --name $(E2E_CLUSTER_NAME)
 
 .PHONY: e2e-deploy
 e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally built images
@@ -93,15 +89,12 @@ e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally 
 		--set manager.imagePullPolicy=IfNotPresent \
 		--set manager.replicaCount=1 \
 		--set manager.managerLogLevel=debug \
-		--set manager.controllerLogLevel=debug \
-		--set manager.deviceRuntimeMode=$(E2E_DEVICE_RUNTIME_MODE) \
-		--set manager.launcherImage=$(LAUNCHER_IMAGE):$(E2E_IMAGE_TAG)
+		--set manager.controllerLogLevel=debug
 	@$(E2E_KUBECTL) $(E2E_KUBECTL_CONTEXT_ARGS) -n $(E2E_NAMESPACE) rollout status deploy/clabernetes-manager --timeout=$(E2E_TIMEOUT)
 
 .PHONY: e2e-run
 e2e-run: ## Run the e2e Go tests against the caller-selected kube context
-	C9S_E2E_DEVICE_RUNTIME_MODE=$(E2E_DEVICE_RUNTIME_MODE) \
-		gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
+	gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
 
 .PHONY: e2e-test
 e2e-test: e2e-tools install-test-tools ## Run e2e tests using the existing KinD setup

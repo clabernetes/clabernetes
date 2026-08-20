@@ -249,19 +249,6 @@ func (netlinkOperations) DeleteVethPair(name, owner string) error {
 	return nil
 }
 
-func zeroHardwareAddress(address net.HardwareAddr) bool {
-	if len(address) != 6 {
-		return false
-	}
-	for _, value := range address {
-		if value != 0 {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (netlinkOperations) ResolvePodTransportInterface(podAddress string) (string, error) {
 	target := net.ParseIP(podAddress)
 	if target == nil {

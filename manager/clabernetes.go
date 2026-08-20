@@ -10,7 +10,6 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
 	claberneteshttp "github.com/clabernetes/clabernetes/http"
-	clabernetesinternaldeviceruntime "github.com/clabernetes/clabernetes/internal/deviceruntime"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
@@ -58,12 +57,6 @@ func StartClabernetes(initializer bool) {
 	ctrlruntimelog.SetLogger(klog.NewKlogr())
 
 	ctx, cancel := clabernetesutil.SignalHandledContext(clabernetesLogger.Criticalf)
-	runtimeMode, err := clabernetesinternaldeviceruntime.ParseMode(
-		os.Getenv(clabernetesconstants.DeviceRuntimeModeEnv),
-	)
-	if err != nil {
-		clabernetesLogger.Fatalf("invalid device runtime configuration: %s", err)
-	}
 
 	clabernetesInstance = &clabernetes{
 		baseCtx:       ctx,
@@ -74,7 +67,6 @@ func StartClabernetes(initializer bool) {
 		),
 		initializer:        initializer,
 		logger:             clabernetesLogger,
-		runtimeMode:        runtimeMode,
 		deviceRuntimeImage: os.Getenv(clabernetesconstants.DeviceRuntimeImageEnv),
 	}
 
@@ -100,7 +92,6 @@ type clabernetes struct {
 	kubeClient            *kubernetes.Clientset
 	kubeClabernetesClient *clabernetesgeneratedclientset.Clientset
 
-	runtimeMode        clabernetesinternaldeviceruntime.Mode
 	deviceRuntimeImage string
 
 	scheme *apimachineryruntime.Scheme
@@ -130,10 +121,6 @@ func (c *clabernetes) GetBaseLogger() claberneteslogging.Instance {
 
 func (c *clabernetes) GetNamespace() string {
 	return c.namespace
-}
-
-func (c *clabernetes) GetDeviceRuntimeMode() clabernetesinternaldeviceruntime.Mode {
-	return c.runtimeMode
 }
 
 func (c *clabernetes) GetDeviceRuntimeImage() string {

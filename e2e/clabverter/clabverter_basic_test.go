@@ -18,11 +18,6 @@ func TestMain(m *testing.M) {
 func TestClabverterBasic(t *testing.T) {
 	t.Parallel()
 
-	// The golden fixtures assert nested-runtime shapes (launcher publication target ports);
-	// direct mode intentionally targets destination ports on the device Pod, and its coverage
-	// lives in e2e/topology/direct.
-	clabernetestesthelper.SkipUnlessDeviceRuntimeMode(t, "nested")
-
 	testName := "clabverter-basic"
 
 	namespace := clabernetestesthelper.NewTestNamespace(testName)

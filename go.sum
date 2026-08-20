@@ -38,8 +38,6 @@ github.com/brunoga/deep v1.3.1/go.mod h1:GDV6dnXqn80ezsLSZ5Wlv1PdKAWAO4L5PnKYtv2
 github.com/carlmontanari/difflibgo v0.0.0-20210718194309-31b9e131c298/go.mod h1:+3MuSIeC3qmdSesR12cTLeb47R/Vvo+bHdB6hC5HShk=
 github.com/carlmontanari/difflibgo v0.0.0-20240227210139-93685b1c22ae h1:h4sxL/AXg3FRPf+sT2Y4daEQQE/UAkNAM3U0t4Cgha8=
 github.com/carlmontanari/difflibgo v0.0.0-20240227210139-93685b1c22ae/go.mod h1:+3MuSIeC3qmdSesR12cTLeb47R/Vvo+bHdB6hC5HShk=
-github.com/carlmontanari/slurpeeth v0.0.0-20240209224827-246fa87e31f3 h1:+XFqJFGVs1EVP5GajTTDB91tTKG+mF0jlN1U1jT90tI=
-github.com/carlmontanari/slurpeeth v0.0.0-20240209224827-246fa87e31f3/go.mod h1:Qd8tERCTEs3R6Smq0Kjy0aPONCZ/yYXzjiq3bwg3oqk=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

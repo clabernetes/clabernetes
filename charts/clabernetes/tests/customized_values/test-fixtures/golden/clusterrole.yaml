@@ -130,30 +130,6 @@ metadata:
     heritage: Helm
     revision: "1"
     c9s.run/app: clabernetes
-    c9s.run/name: "clabernetes-launcher-role"
-    c9s.run/component: launcher-role
-  name: "clabernetes-launcher-role"
-rules:
-  - apiGroups:
-      - c9s.run
-    resources:
-      - nodes
-      - links
-    verbs:
-      - get
-      - list
-      - watch
----
-# Source: clabernetes/templates/clusterrole.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    chart: "clabernetes-0.0.0"
-    release: release-name
-    heritage: Helm
-    revision: "1"
-    c9s.run/app: clabernetes
     c9s.run/name: "clabernetes-direct-runtime-role"
     c9s.run/component: direct-runtime-role
   name: "clabernetes-direct-runtime-role"

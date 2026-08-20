@@ -59,7 +59,6 @@ func NewController(
 		clabernetes.GetCtrlRuntimeMgr().GetAPIReader(),
 		clabernetes.GetAppName(),
 		clabernetes.GetNamespace(),
-		clabernetes.GetDeviceRuntimeMode(),
 		clabernetesconfig.GetManager,
 	)
 	reconciler.DirectRuntimeImage = clabernetes.GetDeviceRuntimeImage()

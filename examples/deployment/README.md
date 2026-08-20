@@ -120,10 +120,10 @@ spec:
 
 `containerlabDebug`, `containerlabTimeout`, `containerlabVersion`, `launcherImage`,
 `launcherImagePullPolicy`, `launcherLogLevel`, `privilegedLauncher`, and `extraEnv` are no
-longer part of the API. Containerlab behavior comes from the pinned Go module baseline, the
-launcher/runtime image is release deployment policy (`manager.launcherImage` Helm value), and
-device privilege comes exclusively from the imported kind plan. Run `clabernetes
-upgrade-preflight` to list stored objects still using these fields.
+longer part of the API, and the nested launcher runtime itself is removed. Containerlab
+behavior comes from the pinned Go module baseline, and device privilege comes exclusively from
+the imported kind plan. Run `clabernetes upgrade-preflight` to list stored objects still using
+these fields.
 
 ## Combining Options
 

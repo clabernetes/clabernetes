@@ -10,7 +10,6 @@ import (
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesinternaldeviceruntime "github.com/clabernetes/clabernetes/internal/deviceruntime"
 	clabernetesdirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	k8sappsv1 "k8s.io/api/apps/v1"
@@ -87,7 +86,6 @@ func TestUpdateDirectStatusesUsesCurrentPlanPodAndKubernetesContainerState(t *te
 		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node, pod).Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	eventRecorder := clientgoevents.NewFakeRecorder(16)
@@ -277,7 +275,6 @@ func TestUpdateDirectStatusesReportsExactPlannerDeclaredLinkLifecycleMode(t *tes
 				WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).Build()
 			reconciler := NewReconciler(
 				&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-				clabernetesinternaldeviceruntime.ModeDirect,
 				clabernetesconfig.GetFakeManager,
 			)
 			eventRecorder := clientgoevents.NewFakeRecorder(16)

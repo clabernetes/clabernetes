@@ -18,14 +18,6 @@ import (
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func launcherServiceAccountName() string {
-	return fmt.Sprintf("%s-launcher-service-account", clabernetesconstants.Clabernetes)
-}
-
-func launcherRoleBindingName() string {
-	return fmt.Sprintf("%s-launcher-role-binding", clabernetesconstants.Clabernetes)
-}
-
 func directRuntimeServiceAccountName() string {
 	return fmt.Sprintf("%s-direct-runtime-service-account", clabernetesconstants.Clabernetes)
 }
@@ -64,16 +56,6 @@ func NewNamespaceResourcesReconciler(
 		appName:             appName,
 		configManagerGetter: configManagerGetter,
 	}
-}
-
-// Reconcile ensures the legacy launcher identity exists for nested runtime Pods.
-func (r *NamespaceResourcesReconciler) Reconcile(ctx context.Context, namespace string) error {
-	return r.reconcileIdentity(ctx, namespace, namespaceRuntimeIdentity{
-		serviceAccountName: launcherServiceAccountName(),
-		roleBindingName:    launcherRoleBindingName(),
-		clusterRoleName:    fmt.Sprintf("%s-launcher-role", r.appName),
-		description:        "launcher",
-	})
 }
 
 // ReconcileDirect ensures the read-only direct connectivity identity exists without granting

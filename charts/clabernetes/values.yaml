@@ -31,10 +31,6 @@ manager:
   image: "" # ghcr.io/clabernetes/clabernetes/clabernetes-manager:{{ .Chart.Version }}
   imagePullPolicy: IfNotPresent
 
-  # Temporary nested-runtime image override. This is release deployment policy rather than part
-  # of the Config CR and will be removed together with nested mode.
-  launcherImage: ""
-
   replicaCount: 3
   resources:
     requests:
@@ -45,11 +41,6 @@ manager:
   clientOperationTimeoutMultiplier: 1
   managerLogLevel: info
   controllerLogLevel: info
-
-  # Temporary migration gate. Direct mode fails closed until the complete direct renderer is
-  # available; it never falls back to the nested launcher. This setting will be removed with the
-  # nested runtime after compatibility conformance is complete.
-  deviceRuntimeMode: direct
 
   # pod affinity settings, directly inserted into manager deployment spec; if not provided basic
   # common-sense anti-affinity is applied.

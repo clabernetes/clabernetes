@@ -160,36 +160,6 @@ metadata:
     heritage: {{ .Release.Service }}
     revision: "{{ .Release.Revision }}"
     c9s.run/app: {{ .Values.appName }}
-    c9s.run/name: "{{ .Values.appName }}-launcher-role"
-    c9s.run/component: launcher-role
-    {{- if .Values.globalLabels }}
-{{ .Values.globalLabels | toYaml | indent 4 }}
-    {{- end }}
-  {{- if .Values.globalAnnotations }}
-  annotations:
-{{ .Values.globalAnnotations | toYaml | indent 4 }}
-  {{- end }}
-  name: "{{ .Values.appName }}-launcher-role"
-rules:
-  - apiGroups:
-      - c9s.run
-    resources:
-      - nodes
-      - links
-    verbs:
-      - get
-      - list
-      - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
-    revision: "{{ .Release.Revision }}"
-    c9s.run/app: {{ .Values.appName }}
     c9s.run/name: "{{ .Values.appName }}-direct-runtime-role"
     c9s.run/component: direct-runtime-role
     {{- if .Values.globalLabels }}

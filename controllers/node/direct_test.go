@@ -13,7 +13,6 @@ import (
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesinternaldeviceruntime "github.com/clabernetes/clabernetes/internal/deviceruntime"
 	clabernetesdirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 	clabernetesdirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 	clabernetesocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
@@ -47,7 +46,6 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	reconciler.DirectRuntimeImage = "example/c9s-manager@sha256:cccccccc"
@@ -109,7 +107,8 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 			}
 			legacy := &k8scorev1.ServiceAccount{}
 			if legacyErr := client.Get(ctx, ctrlruntimeclient.ObjectKey{
-				Namespace: node.GetNamespace(), Name: launcherServiceAccountName(),
+				Namespace: node.GetNamespace(),
+				Name:      "clabernetes-launcher-service-account",
 			}, legacy); !apierrors.IsNotFound(legacyErr) {
 				t.Fatalf("direct reconcile created legacy launcher identity: %v", legacyErr)
 			}
@@ -179,7 +178,6 @@ func TestDirectReconcileCarriesRemotePeerDiscoveryIntoBothPodPlans(t *testing.T)
 			).Build()
 			reconciler := NewReconciler(
 				&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-				clabernetesinternaldeviceruntime.ModeDirect,
 				clabernetesconfig.GetFakeManager,
 			)
 			reconciler.DirectRuntimeImage = "example/c9s-manager@sha256:cccccccc"
@@ -288,7 +286,6 @@ func TestDirectLiveLinkChangeUpdatesRevisionWithoutPodTemplateRollout(t *testing
 		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	reconciler.DirectRuntimeImage = "example/c9s-manager@sha256:cccccccc"
@@ -443,7 +440,6 @@ func TestDirectNonLiveLinkChangePerformsDeclaredLifecycleMode(t *testing.T) {
 				WithObjects(node).Build()
 			reconciler := NewReconciler(
 				&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-				clabernetesinternaldeviceruntime.ModeDirect,
 				clabernetesconfig.GetFakeManager,
 			)
 			reconciler.DirectRuntimeImage = "example/c9s-manager@sha256:cccccccc"
@@ -703,7 +699,6 @@ func TestDirectPlanningFailureDoesNotMutateLastAppliedWorkload(t *testing.T) {
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	reconciler.DirectRuntimeImage = "example/c9s-manager@sha256:cccccccc"
@@ -784,7 +779,6 @@ func TestResolveDirectPayloadsUsesObjectAndDigestIdentity(t *testing.T) {
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	payloads, err := reconciler.resolveDirectPayloads(
@@ -826,7 +820,6 @@ func TestResolveDirectPayloadsUsesSecretIdentityWithoutSerializingBytes(t *testi
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	payloads, err := reconciler.resolveDirectPayloads(
@@ -870,7 +863,6 @@ func TestResolveDirectPayloadsRejectsMutableURL(t *testing.T) {
 	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	_, err := reconciler.resolveDirectPayloads(
@@ -1041,7 +1033,6 @@ func TestReconcileDirectPersistenceUsesOneClaimPerLogicalNode(t *testing.T) {
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	claims, err := reconciler.reconcileDirectPersistentVolumeClaims(
@@ -1112,7 +1103,6 @@ func TestReconcileDirectPersistenceAdoptsEachLogicalNodesLegacyClaim(t *testing.
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	claims, err := reconciler.reconcileDirectPersistentVolumeClaims(
@@ -1181,7 +1171,6 @@ func TestDirectSecondaryPrunesOnlyItsObsoleteStandaloneWorkload(t *testing.T) {
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	reconciler.DirectRuntimeImage = "example/c9s-manager:1"
@@ -1225,7 +1214,6 @@ func TestDirectProfileFailureReportsConditionWithoutMutatingWorkload(t *testing.
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	reconciler.DirectRuntimeImage = "example/c9s-manager:1"
@@ -1299,7 +1287,6 @@ func TestDirectInvalidStaticManagementReportsDiagnosticWithoutMutatingWorkload(t
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes", "manager",
-		clabernetesinternaldeviceruntime.ModeDirect,
 		clabernetesconfig.GetFakeManager,
 	)
 	reconciler.DirectRuntimeImage = "example/c9s-manager:1"

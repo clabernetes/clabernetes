@@ -33,16 +33,8 @@ type ResolvedProfile struct {
 	NodeSelector map[string]string
 	Tolerations  []k8scorev1.Toleration
 
-	// launcher deployment settings
-	PrivilegedLauncher      bool
-	Persistence             clabernetesapisv1alpha1.Persistence
-	ContainerlabDebug       bool
-	ContainerlabTimeout     string
-	ContainerlabVersion     string
-	LauncherImage           string
-	LauncherImagePullPolicy string
-	LauncherLogLevel        string
-	ExtraEnv                []k8scorev1.EnvVar
+	// direct workload persistence settings
+	Persistence clabernetesapisv1alpha1.Persistence
 
 	// status probes
 	StatusProbes clabernetesapisv1alpha1.StatusProbes
@@ -60,17 +52,9 @@ func ResolveProfile(
 	configManager := configManagerGetter()
 
 	resolved := &ResolvedProfile{
-		ExposeType:              "LoadBalancer",
-		ImagePullPolicy:         configManager.GetApplicationImagePullPolicy(),
-		PullSecrets:             configManager.GetImagePullSecrets(),
-		PrivilegedLauncher:      configManager.GetPrivilegedLauncher(),
-		ContainerlabDebug:       configManager.GetContainerlabDebug(),
-		ContainerlabTimeout:     configManager.GetContainerlabTimeout(),
-		ContainerlabVersion:     configManager.GetContainerlabVersion(),
-		LauncherImage:           configManager.GetLauncherImage(),
-		LauncherImagePullPolicy: configManager.GetLauncherImagePullPolicy(),
-		LauncherLogLevel:        configManager.GetLauncherLogLevel(),
-		ExtraEnv:                configManager.GetExtraEnv(),
+		ExposeType:      "LoadBalancer",
+		ImagePullPolicy: configManager.GetApplicationImagePullPolicy(),
+		PullSecrets:     configManager.GetImagePullSecrets(),
 	}
 
 	if profile == nil {

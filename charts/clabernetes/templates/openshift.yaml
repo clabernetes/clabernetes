@@ -26,7 +26,7 @@ roleRef:
   name: system:openshift:scc:privileged
 subjects:
 - kind: ServiceAccount
-  name: clabernetes-launcher-service-account
+  name: clabernetes-direct-runtime-service-account
   namespace: {{ . }}
 ---
 {{- end -}}

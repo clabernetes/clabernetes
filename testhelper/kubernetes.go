@@ -184,6 +184,12 @@ func NormalizeNode(t *testing.T, objectData []byte) []byte {
 	objectData = YQCommand(t, objectData, "del(.status.probeStatuses)")
 	objectData = YQCommand(t, objectData, "del(.status.appliedLauncherProfile.uid)")
 	objectData = YQCommand(t, objectData, "del(.status.appliedLauncherProfile.generation)")
+	// Direct runtime observations carry run-specific container identities, boot-timing state,
+	// and a digest over the run-specific plan; only their absence or presence is asserted
+	// elsewhere, never their values.
+	objectData = YQCommand(t, objectData, "del(.status.directContainers)")
+	objectData = YQCommand(t, objectData, "del(.status.directManagement)")
+	objectData = YQCommand(t, objectData, "del(.status.planDigest)")
 
 	return objectData
 }
@@ -195,6 +201,19 @@ func NormalizeLink(t *testing.T, objectData []byte) []byte {
 
 	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointA.uid)")
 	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointB.uid)")
+	// Host-terminated transports annotate the Link with the worker and daemon Pod that own the
+	// endpoint; both follow scheduling, so only stable identity may reach a golden file.
+	objectData = YQCommand(
+		t,
+		objectData,
+		`del(.metadata.annotations."c9s.run/host-endpoint-node")`,
+	)
+	objectData = YQCommand(
+		t,
+		objectData,
+		`del(.metadata.annotations."c9s.run/host-endpoint-pod-uid")`,
+	)
+	objectData = YQCommand(t, objectData, "del(.metadata.annotations | select(length == 0))")
 
 	return objectData
 }

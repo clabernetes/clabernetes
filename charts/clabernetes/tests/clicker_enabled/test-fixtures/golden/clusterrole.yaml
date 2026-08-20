@@ -135,35 +135,6 @@ metadata:
     heritage: Helm
     revision: "1"
     c9s.run/app: clabernetes-plus-clicker
-    c9s.run/name: "clabernetes-plus-clicker-launcher-role"
-    c9s.run/component: launcher-role
-    anotherlabel: anotherlabelvalue
-    somelabel: somelabelvalue
-  annotations:
-    annotherannotation: anotherannotationvalue
-    someannotation: someannotationvalue
-  name: "clabernetes-plus-clicker-launcher-role"
-rules:
-  - apiGroups:
-      - c9s.run
-    resources:
-      - nodes
-      - links
-    verbs:
-      - get
-      - list
-      - watch
----
-# Source: clabernetes/templates/clusterrole.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    chart: "clabernetes-0.0.0"
-    release: release-name
-    heritage: Helm
-    revision: "1"
-    c9s.run/app: clabernetes-plus-clicker
     c9s.run/name: "clabernetes-plus-clicker-direct-runtime-role"
     c9s.run/component: direct-runtime-role
     anotherlabel: anotherlabelvalue

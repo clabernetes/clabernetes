@@ -116,29 +116,13 @@ type Manager interface { //nolint: interfacebloat
 	GetNodeSelectorsByImage(
 		imageName string,
 	) map[string]string
-	// GetPrivilegedLauncher returns the global config value for the privileged launcher mode.
-	GetPrivilegedLauncher() bool
-	// GetContainerlabDebug returns the global config value for containerlabDebug.
-	GetContainerlabDebug() bool
-	// GetContainerlabTimeout returns the global config containerlab timeout value.
-	GetContainerlabTimeout() string
 	// GetInClusterDNSSuffix returns the in cluster dns suffix as set by the global config.
 	GetInClusterDNSSuffix() string
 	// GetRegistryMetadataTrust returns exact controller-only OCI registry trust exceptions.
 	GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
-	// GetLauncherImage returns the global default launcher image.
-	GetLauncherImage() string
-	// GetLauncherImagePullPolicy returns the global default launcher image pull policy.
-	GetLauncherImagePullPolicy() string
-	// GetLauncherLogLevel returns the default launcher log level.
-	GetLauncherLogLevel() string
-	// GetExtraEnv returns the default extra env vars for setting on launcher containers.
-	GetExtraEnv() []k8scorev1.EnvVar
 	// GetRemoveTopologyPrefix returns true if the topology prefix should be removed from Topology
 	// resources, otherwise false.
 	GetRemoveTopologyPrefix() bool
-	// GetContainerlabVersion returns the global config containerlab version.
-	GetContainerlabVersion() string
 }
 
 type manager struct {

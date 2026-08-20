@@ -95,16 +95,14 @@ jobs:
           helm registry login -u "$GITHUB_ACTOR" -p "$GITHUB_TOKEN" ghcr.io
 
           MANAGER_IMAGE="ghcr.io/clabernetes/clabernetes/clabernetes-manager:${IMAGE_VERSION}"
-          LAUNCHER_IMAGE="ghcr.io/clabernetes/clabernetes/clabernetes-launcher:${IMAGE_VERSION}"
-          export MANAGER_IMAGE LAUNCHER_IMAGE SOURCE_SHA
+          export MANAGER_IMAGE SOURCE_SHA
 
           if [[ "$CHANNEL" == "unpublished" ]]; then
             make set-chart-versions "$RELEASE_VERSION"
           fi
 
           yq -i eval \
-            '.manager.image = strenv(MANAGER_IMAGE) |
-             .globalConfig.deployment.launcherImage = strenv(LAUNCHER_IMAGE)' \
+            '.manager.image = strenv(MANAGER_IMAGE)' \
             charts/clabernetes/values.yaml
           yq -i eval '.annotations."org.opencontainers.image.revision" = strenv(SOURCE_SHA)' \
             charts/clabernetes/Chart.yaml
@@ -130,7 +128,6 @@ jobs:
               echo "- Source SHA: \`${SOURCE_SHA}\`"
               echo "- Mutable chart: \`oci://ghcr.io/clabernetes/clabernetes/clabernetes:0.0.0\`"
               echo "- Manager image: \`${MANAGER_IMAGE}\`"
-              echo "- Launcher image: \`${LAUNCHER_IMAGE}\`"
               echo
               echo '```bash'
               echo "make install VERSION=main"
@@ -143,7 +140,6 @@ jobs:
               echo "- Source SHA: \`${SOURCE_SHA}\`"
               echo "- Version: \`${RELEASE_VERSION}\`"
               echo "- Manager image: \`${MANAGER_IMAGE}\`"
-              echo "- Launcher image: \`${LAUNCHER_IMAGE}\`"
               echo
               echo '```bash'
               echo "make install VERSION=${RELEASE_VERSION}"
@@ -199,7 +195,7 @@ jobs:
           else
             CHART="oci://ghcr.io/clabernetes/clabernetes/clabernetes"
             helm show chart "$CHART" --version "$RELEASE_VERSION"
-            for image in clabernetes-manager clabernetes-launcher; do
+            for image in clabernetes-manager; do
               docker buildx imagetools inspect \
                 "ghcr.io/clabernetes/clabernetes/${image}:${RELEASE_VERSION}" \
                 | tee "${image}.txt"
@@ -211,7 +207,7 @@ jobs:
               echo
               echo "- Chart: \`$CHART:$RELEASE_VERSION\`"
               echo "- Source SHA: \`${SOURCE_SHA}\`"
-              echo "- Manager and launcher manifests include linux/amd64 and linux/arm64."
+              echo "- Manager manifests include linux/amd64 and linux/arm64."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 

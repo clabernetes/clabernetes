@@ -133,46 +133,14 @@ func (f fakeManager) GetNodeSelectorsByImage(
 	return GetNodeSelectorsByImage(imageName, f.nodeSelectorsByImage)
 }
 
-func (f fakeManager) GetPrivilegedLauncher() bool {
-	return true
-}
-
-func (f fakeManager) GetContainerlabDebug() bool {
-	return false
-}
-
-func (f fakeManager) GetContainerlabTimeout() string {
-	return ""
-}
-
 func (f fakeManager) GetInClusterDNSSuffix() string {
 	return "svc.cluster.local"
-}
-
-func (f fakeManager) GetLauncherImage() string {
-	return "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:latest"
 }
 
 func (f fakeManager) GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryMetadataTrustEntry {
 	return slices.Clone(f.registryMetadataTrust)
 }
 
-func (f fakeManager) GetLauncherImagePullPolicy() string {
-	return clabernetesconstants.KubernetesImagePullIfNotPresent
-}
-
-func (f fakeManager) GetLauncherLogLevel() string {
-	return clabernetesconstants.Info
-}
-
-func (f fakeManager) GetExtraEnv() []k8scorev1.EnvVar {
-	return nil
-}
-
 func (f fakeManager) GetRemoveTopologyPrefix() bool {
 	return false
-}
-
-func (f fakeManager) GetContainerlabVersion() string {
-	return ""
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	clabernetesgeneratedclientset "github.com/clabernetes/clabernetes/generated/clientset"
-	clabernetesinternaldeviceruntime "github.com/clabernetes/clabernetes/internal/deviceruntime"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -29,9 +28,6 @@ type Clabernetes interface { //nolint: interfacebloat
 
 	// GetNamespace returns the namespace the clabernetes instance is running in.
 	GetNamespace() string
-
-	// GetDeviceRuntimeMode returns the explicitly selected temporary migration runtime.
-	GetDeviceRuntimeMode() clabernetesinternaldeviceruntime.Mode
 
 	// GetDeviceRuntimeImage returns the c9s manager image used by direct-runtime workers/helpers.
 	GetDeviceRuntimeImage() string

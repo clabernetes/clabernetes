@@ -1,0 +1,78 @@
+---
+# Source: clabernetes/templates/host-endpoint-rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "clabernetes-host-endpoint"
+  namespace: clabernetes
+  labels:
+    chart: "clabernetes-0.0.0"
+    release: release-name
+    heritage: Helm
+    revision: "1"
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-host-endpoint"
+    c9s.run/component: host-endpoint
+---
+# Source: clabernetes/templates/host-endpoint-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "clabernetes-host-endpoint"
+  labels:
+    chart: "clabernetes-0.0.0"
+    release: release-name
+    heritage: Helm
+    revision: "1"
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-host-endpoint"
+    c9s.run/component: host-endpoint
+rules:
+  - apiGroups:
+      - c9s.run
+    resources:
+      - links
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  - apiGroups:
+      - c9s.run
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+---
+# Source: clabernetes/templates/host-endpoint-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "clabernetes-host-endpoint"
+  labels:
+    chart: "clabernetes-0.0.0"
+    release: release-name
+    heritage: Helm
+    revision: "1"
+    c9s.run/app: clabernetes
+    c9s.run/name: "clabernetes-host-endpoint"
+    c9s.run/component: host-endpoint
+subjects:
+  - kind: ServiceAccount
+    name: "clabernetes-host-endpoint"
+    namespace: clabernetes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: "clabernetes-host-endpoint"
