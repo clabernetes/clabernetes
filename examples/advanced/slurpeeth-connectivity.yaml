@@ -1,5 +1,6 @@
 # Topology using slurpeeth connectivity mode (experimental)
-# Uses TCP tunnels instead of VXLAN for inter-node connectivity
+# Declares slurpeeth connectivity intent; the controller selects the actual transport
+# (same-worker patch or cross-worker VXLAN in the worker host namespace)
 # Avoids VXLAN MTU and fragmentation issues
 apiVersion: c9s.run/v1alpha1
 kind: Topology

@@ -78,23 +78,18 @@ kubectl create secret docker-registry my-registry-secret \
 
 ### slurpeeth-connectivity.yaml
 
-Experimental TCP tunnel mode instead of VXLAN.
+Declares `slurpeeth` connectivity on the Topology.
 
-**Features:**
-- TCP-based tunneling
-- Avoids VXLAN MTU issues
-- Better performance in some CNI environments
-
-**When to use:**
-- VXLAN is blocked or unreliable
-- MTU/fragmentation issues with VXLAN
-- CNIs that don't handle VXLAN well
+Both accepted values map onto the controller-selected realization: the device always sees a
+plain veth, same-worker endpoint pairs are patched directly in the worker host namespace, and
+cross-worker pairs use a VXLAN tunnel keyed by the Link's allocated tunnel id. Wire semantics
+(L2 point-to-point, MTU intent, live rewires, cleanup) are identical for both values.
 
 **Connectivity options:**
 | Mode | Description |
 |------|-------------|
-| `vxlan` | VXLAN tunnels (default) |
-| `slurpeeth` | TCP tunnels (experimental) |
+| `vxlan` | Accepted intent (default) |
+| `slurpeeth` | Accepted intent; same realization |
 
 ## Combining Advanced Features
 

@@ -29,7 +29,7 @@ spec:
 
 ### with-resources.yaml
 
-Set resource requests and limits for launcher pods.
+Set resource requests and limits for the device application containers.
 
 ```yaml
 spec:
