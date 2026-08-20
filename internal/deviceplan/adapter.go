@@ -1065,7 +1065,7 @@ func preserveStartupConfigPartialMarker(
 	}
 
 	// The rewritten path is a digest-verified payload projection or staged artifact.
-	content, err := os.ReadFile(config.StartupConfig) //nolint:gosec
+	content, err := os.ReadFile(config.StartupConfig)
 	if err != nil {
 		return &Error{
 			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
@@ -1085,7 +1085,8 @@ func preserveStartupConfigPartialMarker(
 	}
 
 	destination := filepath.Join(config.LabDir, stagedPartialStartupConfigFilename)
-	if err := os.WriteFile(destination, content, 0o600); err != nil {
+	// The destination is confined to the node's own workspace directory.
+	if err := os.WriteFile(destination, content, 0o600); err != nil { //nolint:gosec
 		return &Error{
 			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
 			Behavior: "imported-startup-config",
