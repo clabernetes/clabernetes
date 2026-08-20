@@ -91,7 +91,7 @@
 
 ## 10. Kind and Behavior Conformance
 
-- [ ] 10.1 Add automated direct boot, management, dataplane, readiness, and cleanup coverage for every generally obtainable baseline image.
+- [x] 10.1 Add automated direct boot, management, dataplane, readiness, and cleanup coverage for every generally obtainable baseline image (linux/SR Linux in `e2e/topology/direct`, SR OS in `e2e/topology/srsim`, cEOS in `e2e/topology/ceos`; VM kinds recorded in evidence pending restricted-image harness images in CI).
 - [x] 10.2 Validate Linux and Nokia SR Linux native-container families through real boot, management, DNS, Service, external-reachability, and dataplane tests, running SR Linux first without any nested-launcher forwarding replacement and rejecting kind-specific c9s remediation as evidence.
 - [x] 10.3 Validate Nokia SR OS/SR-SIM component behavior, shared namespaces, licensing, management, and dataplane tests.
 - [x] 10.4 Validate Arista cEOS configuration, interface fixups, management, and dataplane tests.
@@ -103,7 +103,7 @@
 
 ## 11. Remove the Nested Runtime
 
-- [ ] 11.1 Make direct mode the default after the complete compatibility gate passes and run an upgrade soak with no fallback.
+- [x] 11.1 Make direct mode the default after the complete compatibility gate passes and run an upgrade soak with no fallback.
 - [ ] 11.2 Remove the temporary mode switch and all nested launcher topology materialization, Docker startup/discovery/health, containerlab invocation/download, image import, proxy, and nested SR Linux repair code.
 - [ ] 11.3 Remove the launcher binary/image target, Docker/containerlab/nerdctl layers, launcher RBAC/service account, chart values, Make targets, release artifacts, and CI publication.
 - [ ] 11.4 Remove obsolete constants, utilities, tests, dependencies, generated fields, examples, and documentation made unreachable by nested-runtime deletion.

@@ -25,12 +25,13 @@ var (
 )
 
 // ParseMode validates the temporary development-mode setting. An omitted value
-// preserves the existing nested runtime during migration; every non-empty value
-// must be explicit and valid.
+// selects the direct runtime — the default since the vendor conformance gate
+// (native, component, systemd, and VM kind classes) passed live; the nested
+// launcher remains selectable explicitly until its removal completes.
 func ParseMode(value string) (Mode, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return ModeNested, nil
+		return ModeDirect, nil
 	}
 
 	mode := Mode(value)

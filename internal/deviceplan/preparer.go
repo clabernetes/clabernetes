@@ -260,7 +260,11 @@ func (p Preparer) renderRuntimeManagementArtifacts(
 	// the verified render, so the only permitted divergence source is the completed management
 	// identity.
 	restartEntropy()
-	finishEntropy, err := beginImportedEntropy(inputDigest, input.EntropyDigest, p.Adapter.EntropyRoot)
+	finishEntropy, err := beginImportedEntropy(
+		inputDigest,
+		input.EntropyDigest,
+		p.Adapter.EntropyRoot,
+	)
 	if err != nil {
 		return nil, nil, cleanup, err
 	}

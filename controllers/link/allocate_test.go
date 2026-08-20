@@ -336,7 +336,11 @@ func TestResolveDesiredTunnelIDIsClusterWide(t *testing.T) {
 
 	// Retention still works when this Link already holds a cluster-unique ID.
 	local.Status.TunnelID = 5
-	got, err = clabernetescontrollerslink.ResolveDesiredTunnelID(&local, []clabernetesapisv1alpha1.Link{foreign}, nil)
+	got, err = clabernetescontrollerslink.ResolveDesiredTunnelID(
+		&local,
+		[]clabernetesapisv1alpha1.Link{foreign},
+		nil,
+	)
 	if err != nil || got != 5 {
 		t.Fatalf("retention across namespaces = %d err=%v, want 5", got, err)
 	}

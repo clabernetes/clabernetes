@@ -15,7 +15,7 @@ func TestParseMode(t *testing.T) {
 		value string
 		want  Mode
 	}{
-		{name: "omitted defaults nested", want: ModeNested},
+		{name: "omitted defaults direct", want: ModeDirect},
 		{name: "nested", value: "nested", want: ModeNested},
 		{name: "direct", value: "direct", want: ModeDirect},
 		{name: "surrounding whitespace", value: " direct ", want: ModeDirect},
