@@ -369,6 +369,7 @@ func evaluateNode(
 	if err != nil {
 		return nil, err
 	}
+	declaredStartupConfig := definition.StartupConfig
 	if err = rewriteExplicitPayloadPaths(
 		nodeInput.ID,
 		definition,
@@ -389,6 +390,13 @@ func evaluateNode(
 	)
 	config.LabDir = scratchLabDir
 	if err = materializeEmbeddedStartupConfig(nodeInput.ID, config); err != nil {
+		return nil, err
+	}
+	if err = preserveStartupConfigPartialMarker(
+		nodeInput.ID,
+		declaredStartupConfig,
+		config,
+	); err != nil {
 		return nil, err
 	}
 	management := managementForNode(input.Management, nodeInput.ID)
@@ -1030,6 +1038,62 @@ func materializeEmbeddedStartupConfig(nodeID string, config *clabtypes.NodeConfi
 			cause:    err,
 		}
 	}
+	config.StartupConfig = destination
+
+	return nil
+}
+
+// stagedPartialStartupConfigFilename carries a rewritten partial startup-configuration inside
+// the node workspace under a name the imported partial detection recognizes.
+const stagedPartialStartupConfigFilename = "staged-startup-config.partial.cfg"
+
+// preserveStartupConfigPartialMarker keeps containerlab's partial-configuration semantics
+// across payload path rewriting. Imported kinds decide merge-versus-replace by sniffing
+// ".partial" in the startup-config *path*, while payload projection and staging rename files
+// to identity-derived paths -- without this step a declared partial configuration silently
+// becomes a full configuration replacement.
+func preserveStartupConfigPartialMarker(
+	nodeID,
+	declaredStartupConfig string,
+	config *clabtypes.NodeConfig,
+) error {
+	if config.StartupConfig == "" || declaredStartupConfig == "" ||
+		strings.Contains(declaredStartupConfig, "\n") ||
+		!strings.Contains(strings.ToUpper(declaredStartupConfig), ".PARTIAL") ||
+		strings.Contains(strings.ToUpper(config.StartupConfig), ".PARTIAL") {
+		return nil
+	}
+
+	// The rewritten path is a digest-verified payload projection or staged artifact.
+	content, err := os.ReadFile(config.StartupConfig) //nolint:gosec
+	if err != nil {
+		return &Error{
+			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
+			Behavior: "imported-startup-config",
+			Message:  "cannot read rewritten partial startup configuration",
+			cause:    err,
+		}
+	}
+
+	if err := os.MkdirAll(config.LabDir, 0o700); err != nil {
+		return &Error{
+			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
+			Behavior: "imported-startup-config",
+			Message:  "cannot prepare the workspace for partial startup configuration",
+			cause:    err,
+		}
+	}
+
+	destination := filepath.Join(config.LabDir, stagedPartialStartupConfigFilename)
+	if err := os.WriteFile(destination, content, 0o600); err != nil {
+		return &Error{
+			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
+			Behavior: "imported-startup-config",
+			Message:  "cannot materialize partial startup configuration",
+			cause:    err,
+		}
+	}
+
 	config.StartupConfig = destination
 
 	return nil

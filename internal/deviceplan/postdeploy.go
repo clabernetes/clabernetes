@@ -309,6 +309,7 @@ func (a Adapter) rehydrateImportedDeployment(
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
+		declaredStartupConfig := definition.StartupConfig
 		// Payload destinations exist only inside device containers; re-run hooks read the
 		// preparer-staged, digest-verified bytes from the shared artifact tree instead.
 		if rewriteErr := rewriteStagedPayloadPaths(
@@ -337,6 +338,13 @@ func (a Adapter) rehydrateImportedDeployment(
 			config,
 		); embeddedErr != nil {
 			return nil, embeddedErr
+		}
+		if partialErr := preserveStartupConfigPartialMarker(
+			nodeInput.ID,
+			declaredStartupConfig,
+			config,
+		); partialErr != nil {
+			return nil, partialErr
 		}
 		management := managementForNode(normalizedInput.Management, nodeInput.ID)
 		applyManagementInput(config, management)
