@@ -45,6 +45,7 @@ func (a Adapter) RunSave(
 		normalizedPlan.Management,
 		a.PodAddress,
 		a.PodGateway,
+		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {

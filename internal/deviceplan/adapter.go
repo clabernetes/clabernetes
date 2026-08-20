@@ -50,6 +50,10 @@ type Adapter struct {
 	// PodGateway is the Pod's own default gateway, completing the runtime management identity
 	// for packages that consume a management gateway.
 	PodGateway string
+	// PodDNSServers are the Pod's own resolver addresses, completing the runtime management
+	// identity the same way containerlab fills every node's DNS configuration from the host
+	// resolv.conf when the topology declares none.
+	PodDNSServers []string
 	// CheckDeploymentConditions runs the imported package's generic preflight hook. It is enabled
 	// only by the preparation worker after Kubernetes has scheduled the direct Pod onto its target
 	// node, so host CPU, kernel, memory, and device observations describe the actual worker.
@@ -1430,6 +1434,7 @@ func completeRuntimeManagement(
 	plans []ManagementPlan,
 	podAddress string,
 	podGateway string,
+	podDNSServers []string,
 ) []ManagementInput {
 	interfaces := map[string]string{}
 	for _, plan := range plans {
@@ -1446,6 +1451,11 @@ func completeRuntimeManagement(
 		if result[index].InterfaceName == "" {
 			result[index].InterfaceName = interfaces[result[index].NodeID]
 		}
+		// The Pod resolver completes entries whose controller allocation declared no resolver,
+		// exactly as containerlab fills node DNS from the host resolv.conf.
+		if len(result[index].DNS.Servers) == 0 {
+			result[index].DNS.Servers = slices.Clone(podDNSServers)
+		}
 	}
 	address := strings.TrimSpace(podAddress)
 	if address == "" {
@@ -1459,6 +1469,7 @@ func completeRuntimeManagement(
 			NodeID:        node.ID,
 			InterfaceName: interfaces[node.ID],
 			IPv4Gateway:   podGateway,
+			DNS:           DNSConfig{Servers: slices.Clone(podDNSServers)},
 		}
 		if strings.Contains(address, ":") {
 			entry.IPv6 = address
@@ -1496,6 +1507,34 @@ func applyManagementInput(config *clabtypes.NodeConfig, input *ManagementInput) 
 	config.MgmtIPv4Gateway = input.IPv4Gateway
 	config.MgmtIPv6Address, config.MgmtIPv6PrefixLength = splitManagementAddress(input.IPv6)
 	config.MgmtIPv6Gateway = input.IPv6Gateway
+	applyManagementDNS(config, input.DNS)
+}
+
+// applyManagementDNS realizes the runtime resolver identity with containerlab's own precedence:
+// topology-declared DNS always wins, container-network-mode members inherit their owner's
+// resolver, and only fields the topology left unset are completed. The merge never mutates the
+// shared definition struct because both preparation renders read it.
+func applyManagementDNS(config *clabtypes.NodeConfig, dns DNSConfig) {
+	if strings.HasPrefix(config.NetworkMode, "container") {
+		return
+	}
+	if len(dns.Servers) == 0 && len(dns.Search) == 0 && len(dns.Options) == 0 {
+		return
+	}
+	merged := clabtypes.DNSConfig{}
+	if config.DNS != nil {
+		merged = *config.DNS
+	}
+	if merged.Servers == nil {
+		merged.Servers = slices.Clone(dns.Servers)
+	}
+	if merged.Search == nil {
+		merged.Search = slices.Clone(dns.Search)
+	}
+	if merged.Options == nil {
+		merged.Options = slices.Clone(dns.Options)
+	}
+	config.DNS = &merged
 }
 
 func splitManagementAddress(value string) (string, int) {

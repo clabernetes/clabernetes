@@ -300,6 +300,7 @@ func runLifecycle(
 			if err = (clabernetesdeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
 				PodAddress: podAddress, PodGateway: podGateway,
+				PodDNSServers: RuntimePodDNSServers(),
 			}).RunPostDeploy(
 				ctx,
 				input,
@@ -340,6 +341,7 @@ func runLifecycle(
 			if err = (clabernetesdeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
 				PodAddress: podAddress, PodGateway: podGateway,
+				PodDNSServers: RuntimePodDNSServers(),
 			}).RunSave(
 				ctx,
 				input,

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	clabutils "github.com/srl-labs/containerlab/utils"
 )
 
 // PodAddressEnvironmentVariable carries the Pod's own cluster address into every direct
@@ -104,6 +106,23 @@ func runtimePodAddressWithRecord(artifactRoot string) (string, string) {
 	}
 
 	return address, gateway
+}
+
+// RuntimePodDNSServers returns the resolver addresses of the executing Pod exactly as the
+// imported deployment path would discover them on a containerlab host: the direct runtime
+// realizes the containerlab management network as the Pod network, so the Pod's resolv.conf is
+// the host resolver identity every imported kind package expects to receive. The file is fixed
+// for the Pod's lifetime, so every lifecycle boundary observes the same completion.
+func RuntimePodDNSServers() []string {
+	servers, err := clabutils.ExtractDNSServersFromResolvConf(
+		os.DirFS("/"),
+		[]string{"etc/resolv.conf", "run/systemd/resolve/resolv.conf"},
+	)
+	if err != nil {
+		return nil
+	}
+
+	return servers
 }
 
 // runtimePodGateway returns the Pod's IPv4 default gateway while the routing table still

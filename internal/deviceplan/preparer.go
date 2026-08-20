@@ -240,6 +240,7 @@ func (p Preparer) renderRuntimeManagementArtifacts(
 		plan.Management,
 		p.Adapter.PodAddress,
 		p.Adapter.PodGateway,
+		p.Adapter.PodDNSServers,
 	)
 	if reflect.DeepEqual(completed, input.Management) {
 		return nil, nil, cleanup, nil

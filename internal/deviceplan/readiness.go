@@ -41,6 +41,7 @@ func (a Adapter) CheckReadiness(
 		normalizedPlan.Management,
 		a.PodAddress,
 		a.PodGateway,
+		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {

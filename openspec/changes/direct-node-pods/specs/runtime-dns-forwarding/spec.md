@@ -33,6 +33,11 @@ When direct evidence proves that c9s must realize additional management behavior
 - **WHEN** a containerlab module update adds a kind whose imported behavior emits only already-supported generic management operations
 - **THEN** updating the module and dependency lock data is sufficient for c9s to plan and realize those operations
 
+#### Scenario: Pod resolver identity completes unspecified node DNS
+
+- **WHEN** a logical Node reaches an in-Pod lifecycle boundary without topology- or controller-declared DNS servers
+- **THEN** runtime management completion fills the node's DNS configuration from the executing Pod's own resolv.conf exactly as containerlab fills node DNS from the host resolver, topology-declared DNS always wins, container-network-mode members are skipped, and every kind receives the identical completion
+
 ## MODIFIED Requirements
 
 ### Requirement: Preserve standalone containerlab behavior

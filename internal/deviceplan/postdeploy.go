@@ -51,6 +51,7 @@ func (a Adapter) RunPostDeploy(
 		normalizedPlan.Management,
 		a.PodAddress,
 		a.PodGateway,
+		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
@@ -151,6 +152,7 @@ func (a Adapter) RunDeployEndpoints(
 		normalizedPlan.Management,
 		a.PodAddress,
 		a.PodGateway,
+		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {

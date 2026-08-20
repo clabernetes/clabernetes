@@ -72,7 +72,7 @@ func RunReadiness(
 
 	if err = (clabernetesdeviceplan.Adapter{
 		Revision: revision, EntropyRoot: entropyRoot,
-		PodAddress: runtimePodAddress(),
+		PodAddress: runtimePodAddress(), PodDNSServers: RuntimePodDNSServers(),
 	}).CheckReadiness(
 		ctx,
 		input,

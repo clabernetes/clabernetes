@@ -363,6 +363,7 @@ func deviceRuntimeCommand() *cli.Command {
 							EntropyRoot:     c.String(devicePlanEntropy),
 							PodAddress:      podAddress,
 							PodGateway:      podGateway,
+							PodDNSServers:   clabernetesdirectruntime.RuntimePodDNSServers(),
 						},
 						PayloadRoot: c.String(deviceRuntimePayloads),
 					}).Prepare(ctx, input, plan, c.String(deviceRuntimeArtifacts))
