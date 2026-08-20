@@ -323,6 +323,10 @@ func (netlinkOperations) ResolvePodTransportInterface(podAddress string) (string
 
 	slices.Sort(matches)
 
+	if len(matches) == 0 {
+		return "", ErrPodTransportAddressAbsent
+	}
+
 	if len(matches) != 1 {
 		return "", fmt.Errorf(
 			"Pod transport address belongs to %d interfaces, want exactly one",

@@ -2251,6 +2251,7 @@ func reconcileManagementAddresses(
 	}
 
 	podTransportInterface := ""
+	transportConsumed := false
 
 	for index, item := range management {
 		if item.IPv4 == "" && item.IPv6 == "" && item.IPv4Gateway == "" &&
@@ -2262,13 +2263,20 @@ func reconcileManagementAddresses(
 
 		interfaceName := item.InterfaceName
 		if item.InterfaceSelector == clabernetesinternaldeviceplan.ManagementInterfacePodTransport {
-			if podTransportInterface == "" {
-				var err error
+			var err error
 
-				podTransportInterface, err = operations.ResolvePodTransportInterface(podAddress)
-				if err != nil {
-					return fmt.Errorf("resolving Pod transport management interface: %w", err)
-				}
+			podTransportInterface, transportConsumed, err = resolveTransportManagementInterface(
+				operations,
+				podAddress,
+				podTransportInterface,
+				transportConsumed,
+			)
+			if err != nil {
+				return err
+			}
+
+			if transportConsumed {
+				continue
 			}
 
 			interfaceName = podTransportInterface
@@ -2359,6 +2367,38 @@ func reconcileManagementAddresses(
 
 	return nil
 }
+
+// resolveTransportManagementInterface resolves the Pod transport interface once per pass and
+// treats a consumed transport address as already-realized state: a device implementation that
+// took ownership of the Pod address after the first realization pass must not fail a helper
+// restart.
+func resolveTransportManagementInterface(
+	operations LinkOperations,
+	podAddress string,
+	resolved string,
+	consumed bool,
+) (string, bool, error) {
+	if consumed || resolved != "" {
+		return resolved, consumed, nil
+	}
+
+	name, err := operations.ResolvePodTransportInterface(podAddress)
+	if errors.Is(err, ErrPodTransportAddressAbsent) {
+		return "", true, nil
+	}
+
+	if err != nil {
+		return "", false, fmt.Errorf("resolving Pod transport management interface: %w", err)
+	}
+
+	return name, false, nil
+}
+
+// ErrPodTransportAddressAbsent classifies a Pod transport address that no interface holds any
+// longer: a device implementation consumed it after the first realization pass.
+var ErrPodTransportAddressAbsent = errors.New(
+	"Pod transport address belongs to no interface",
+)
 
 func validateManagementPodTransportOverlap(
 	management []clabernetesinternaldeviceplan.ManagementPlan,

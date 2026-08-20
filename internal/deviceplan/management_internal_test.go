@@ -102,3 +102,57 @@ func TestApplyManagementDNSKeepsTopologyPrecedence(t *testing.T) {
 		t.Fatalf("container-network-mode member received DNS config: %#v", member.DNS)
 	}
 }
+
+func TestDefinitionManagementAddressMatches(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		definition string
+		allocated  string
+		want       bool
+	}{
+		{name: "empty definition accepts anything", definition: "", allocated: "", want: true},
+		{
+			name:       "bare definition matches prefixed allocation",
+			definition: "172.80.80.45",
+			allocated:  "172.80.80.45/24",
+			want:       true,
+		},
+		{
+			name:       "bare definition rejects a different address",
+			definition: "172.80.80.45",
+			allocated:  "172.80.80.46/24",
+			want:       false,
+		},
+		{
+			name:       "prefixed definition must match exactly",
+			definition: "172.80.80.45/24",
+			allocated:  "172.80.80.45/24",
+			want:       true,
+		},
+		{
+			name:       "prefixed definition rejects a different prefix",
+			definition: "172.80.80.45/25",
+			allocated:  "172.80.80.45/24",
+			want:       false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := definitionManagementAddressMatches(test.definition, test.allocated)
+			if got != test.want {
+				t.Fatalf(
+					"definitionManagementAddressMatches(%q, %q) = %v, want %v",
+					test.definition,
+					test.allocated,
+					got,
+					test.want,
+				)
+			}
+		})
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
 	"slices"
 	"strings"
 
@@ -559,6 +560,11 @@ func (linuxOperations) EnsureFabric(
 		return status, fmt.Errorf("opening Pod netlink handle: %w", err)
 	}
 	defer podHandle.Close()
+	legMTU, err := clampFabricMTU(hostHandle, endpoint.MTU, nodeAddress)
+	if err != nil {
+		return status, err
+	}
+	endpoint.MTU = legMTU
 	legLink, _, err := ensureOwnedVethPair(hostHandle, podHandle, vethPairIntent{
 		hostName:  fabricLegName(endpoint.Link.UID, endpoint.Node.UID),
 		podName:   endpoint.PodInterface,
@@ -571,6 +577,51 @@ func (linuxOperations) EnsureFabric(
 	}
 
 	return reconcileFabricTransport(hostHandle, endpoint, ownership, legLink, nodeAddress)
+}
+
+// fabricEncapsulationOverhead is the VXLAN-over-IPv4 headroom the fabric underlay consumes for
+// one encapsulated frame (outer IPv4 + UDP + VXLAN headers).
+const fabricEncapsulationOverhead = 50
+
+// clampFabricMTU bounds one fabric endpoint's MTU by what the worker underlay can actually
+// encapsulate: a container bridge carries any frame locally, but a node-addressed VTEP path
+// silently discards frames that exceed the underlay MTU minus the encapsulation overhead.
+// Clamping the endpoint keeps path behavior observable — senders see the real MTU and
+// negotiate instead of blackholing.
+func clampFabricMTU(handle *netlink.Handle, requested int, nodeAddress string) (int, error) {
+	underlay := 0
+	nodeIP := net.ParseIP(nodeAddress)
+	if nodeIP == nil {
+		return 0, fmt.Errorf("fabric node address is invalid")
+	}
+	links, err := handle.LinkList()
+	if err != nil {
+		return 0, fmt.Errorf("listing host interfaces: %w", err)
+	}
+	for _, link := range links {
+		addresses, addressErr := handle.AddrList(link, unix.AF_INET)
+		if addressErr != nil {
+			continue
+		}
+		for _, address := range addresses {
+			if address.IP.Equal(nodeIP) {
+				underlay = link.Attrs().MTU
+			}
+		}
+	}
+	if underlay == 0 {
+		// The node address is not local (or not observable); leave the requested MTU alone.
+		return requested, nil
+	}
+	transport := underlay - fabricEncapsulationOverhead
+	if transport < 68 {
+		return 0, fmt.Errorf("fabric underlay MTU %d cannot carry encapsulation", underlay)
+	}
+	if requested == 0 || requested > transport {
+		return transport, nil
+	}
+
+	return requested, nil
 }
 
 // ReconcileFabricTransports re-realizes the host-side transports for every desired fabric
@@ -669,6 +720,13 @@ func reconcileFabricTransport(
 	legLink netlink.Link,
 	nodeAddress string,
 ) (FabricStatus, error) {
+	clampedMTU, clampErr := clampFabricMTU(handle, endpoint.MTU, nodeAddress)
+	if clampErr != nil {
+		return FabricStatus{}, clampErr
+	}
+
+	endpoint.MTU = clampedMTU
+
 	status := FabricStatus{LinkUID: endpoint.Link.UID}
 	peer := endpointFabricPeer(endpoint)
 	vtepName := fabricVTEPName(endpoint.Link.UID, endpoint.Node.UID)
@@ -853,9 +911,10 @@ func ensureFabricRedirect(handle *netlink.Handle, from, to netlink.Link) error {
 			continue
 		}
 		matchAll, isMatchAll := candidate.(*netlink.MatchAll)
-		if isMatchAll && len(matchAll.Actions) == 1 {
-			if mirred, isMirred := matchAll.Actions[0].(*netlink.MirredAction); isMirred &&
-				mirred.Ifindex == to.Attrs().Index {
+		if isMatchAll && len(matchAll.Actions) == 2 {
+			_, isCsum := matchAll.Actions[0].(*netlink.CsumAction)
+			mirred, isMirred := matchAll.Actions[1].(*netlink.MirredAction)
+			if isCsum && isMirred && mirred.Ifindex == to.Attrs().Index {
 				return nil
 			}
 		}
@@ -867,6 +926,15 @@ func ensureFabricRedirect(handle *netlink.Handle, from, to netlink.Link) error {
 			)
 		}
 	}
+	// Checksums are materialized before the redirect: frames from an application kernel carry
+	// offloaded (partial) checksums that no later device resolves once tc-mirred moves them
+	// onto the transport, which silently corrupts TCP and UDP while software-checksummed
+	// traffic keeps passing.
+	checksum := netlink.NewCsumAction()
+	checksum.UpdateFlags = netlink.TCA_CSUM_UPDATE_FLAG_IPV4HDR |
+		netlink.TCA_CSUM_UPDATE_FLAG_ICMP |
+		netlink.TCA_CSUM_UPDATE_FLAG_TCP |
+		netlink.TCA_CSUM_UPDATE_FLAG_UDP
 	filter := &netlink.MatchAll{
 		FilterAttrs: netlink.FilterAttrs{
 			LinkIndex: from.Attrs().Index,
@@ -874,7 +942,7 @@ func ensureFabricRedirect(handle *netlink.Handle, from, to netlink.Link) error {
 			Priority:  fabricFilterPriority,
 			Protocol:  unix.ETH_P_ALL,
 		},
-		Actions: []netlink.Action{netlink.NewMirredAction(to.Attrs().Index)},
+		Actions: []netlink.Action{checksum, netlink.NewMirredAction(to.Attrs().Index)},
 	}
 	if err = handle.FilterAdd(filter); err != nil {
 		return fmt.Errorf("installing fabric redirect filter on %q: %w", from.Attrs().Name, err)
@@ -998,9 +1066,76 @@ func (linuxOperations) EnsureManagement(
 	}); err != nil {
 		return status, fmt.Errorf("installing management hairpin route: %w", err)
 	}
+	if err = ensureTransportProxyARP(hostHandle, podHandle, podAddress); err != nil {
+		return status, err
+	}
 	status.Ready = true
 
 	return status, nil
+}
+
+// ensureTransportProxyARP restores the container-bridge neighbor semantic on the worker side of
+// the Pod's transport veth: a device that configures its management address with the Pod
+// prefix treats the prefix as on-link and ARPs peers directly, exactly as on a container
+// bridge, but routed-veth CNIs answer no peer ARP. Proxy ARP on the host leg lets the worker
+// answer and route, keeping the device's bridge-model management plane reachable. The setting
+// dies with the veth, so no ownership cleanup is required.
+func ensureTransportProxyARP(
+	hostHandle *netlink.Handle,
+	podHandle *netlink.Handle,
+	podAddress net.IP,
+) error {
+	links, err := podHandle.LinkList()
+	if err != nil {
+		return fmt.Errorf("listing Pod interfaces: %w", err)
+	}
+	for _, link := range links {
+		if link.Type() != hostEndpointLinkType {
+			continue
+		}
+		addresses, addressErr := podHandle.AddrList(link, unix.AF_INET)
+		if addressErr != nil {
+			continue
+		}
+		holds := false
+		for _, address := range addresses {
+			if address.IP.Equal(podAddress) {
+				holds = true
+
+				break
+			}
+		}
+		if !holds {
+			continue
+		}
+		peerIndex := link.Attrs().ParentIndex
+		if peerIndex == 0 {
+			return nil
+		}
+		peer, peerErr := hostHandle.LinkByIndex(peerIndex)
+		if peerErr != nil {
+			// The transport peer is not in the worker host namespace; nothing to restore.
+			return nil //nolint:nilerr // a foreign transport topology needs no proxy ARP.
+		}
+		name := peer.Attrs().Name
+		if strings.ContainsAny(name, "/.") {
+			return fmt.Errorf("transport peer name %q is not sysctl-addressable", name)
+		}
+		//nolint:gosec // The path is the validated worker interface sysctl.
+		if err = os.WriteFile(
+			"/proc/sys/net/ipv4/conf/"+name+"/proxy_arp",
+			[]byte("1"),
+			0o644,
+		); err != nil {
+			return fmt.Errorf("enabling transport proxy ARP on %q: %w", name, err)
+		}
+
+		return nil
+	}
+
+	// The transport interface no longer holds the address (a device took ownership after the
+	// first realization); the setting from the initial pass persists on the peer.
+	return nil
 }
 
 // DeleteManagement removes one owned management loop after re-verifying its ownership alias.

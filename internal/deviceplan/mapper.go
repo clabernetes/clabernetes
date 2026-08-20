@@ -153,7 +153,7 @@ func appendEvaluatedNode(
 		}
 		plan.Containers = append(plan.Containers, container)
 		if err = appendStoragePlans(plan, node, recorded.Config,
-			containerID, index == 0); err != nil {
+			containerID, index == 0, input.Payloads); err != nil {
 			return err
 		}
 	}
@@ -595,8 +595,8 @@ func validateDefinitionManagement(node *EvaluatedNode, management *ManagementInp
 		return nil
 	}
 	if management == nil ||
-		(definition.MgmtIPv4 != "" && definition.MgmtIPv4 != management.IPv4) ||
-		(definition.MgmtIPv6 != "" && definition.MgmtIPv6 != management.IPv6) {
+		!definitionManagementAddressMatches(definition.MgmtIPv4, management.IPv4) ||
+		!definitionManagementAddressMatches(definition.MgmtIPv6, management.IPv6) {
 		return &Error{
 			Code: ErrorMissingInput, NodeID: node.Input.ID, Field: "definition.management",
 			Behavior: "management-allocation",
@@ -605,6 +605,24 @@ func validateDefinitionManagement(node *EvaluatedNode, management *ManagementInp
 	}
 
 	return nil
+}
+
+// definitionManagementAddressMatches accepts a controller allocation for one definition
+// management address: containerlab definitions declare bare addresses while allocations carry
+// the policy prefix, so a bare definition matches on the address part alone and a prefixed
+// definition must match the allocation exactly.
+func definitionManagementAddressMatches(definitionValue, allocated string) bool {
+	if definitionValue == "" {
+		return true
+	}
+
+	if strings.Contains(definitionValue, "/") {
+		return definitionValue == allocated
+	}
+
+	allocatedAddress, _ := splitManagementAddress(allocated)
+
+	return definitionValue == allocatedAddress
 }
 
 func validateDefinitionNetworkMode(node *EvaluatedNode, nodes []NodeInput) error {
@@ -818,6 +836,7 @@ func appendStoragePlans(
 	config *clabtypes.NodeConfig,
 	containerID string,
 	includeDefinitionBinds bool,
+	payloads []PayloadInput,
 ) error {
 	definitionBinds := []string(nil)
 	if includeDefinitionBinds {
@@ -830,12 +849,10 @@ func appendStoragePlans(
 			Behavior: "imported-init", Message: "kind initializer rewrote user bind intent",
 		}
 	}
-	if len(definitionBinds) > 0 {
-		return nodeMappingError(
-			node.Input.ID,
-			"definition.binds",
-			"user bind mapping requires an explicit c9s volume or payload",
-		)
+	for index, raw := range definitionBinds {
+		if err := appendUserBindPlan(plan, node, payloads, containerID, index, raw); err != nil {
+			return err
+		}
 	}
 	for index, raw := range config.Binds[len(definitionBinds):] {
 		if err := appendImportedBindPlan(plan, node, config, containerID, index, raw); err != nil {
@@ -893,6 +910,87 @@ func appendStoragePlans(
 			ID: mountID, ContainerID: containerID, VolumeID: volumeID, Destination: "/dev/shm",
 		})
 		appendContainerMountID(plan, containerID, mountID)
+	}
+
+	return nil
+}
+
+// appendUserBindPlan realizes one user-declared definition bind from its explicit payload
+// backing: the bind source must be covered by declared payload files (exactly, or as a
+// directory prefix), and each backing file is mounted read-only at the bind target. This keeps
+// containerlab bind semantics portable — file content comes from explicit c9s inputs, never
+// from a host filesystem.
+func appendUserBindPlan(
+	plan *Plan,
+	node *EvaluatedNode,
+	payloads []PayloadInput,
+	containerID string,
+	index int,
+	raw string,
+) error {
+	parts := strings.Split(raw, ":")
+	if len(parts) < 2 || len(parts) > 3 || parts[0] == "" || parts[1] == "" ||
+		!path.IsAbs(parts[1]) {
+		return nodeMappingError(
+			node.Input.ID,
+			"definition.binds",
+			"user bind is not representable",
+		)
+	}
+	if len(parts) == 3 {
+		for option := range strings.SplitSeq(parts[2], ",") {
+			switch option {
+			case "", "ro", "rw":
+			default:
+				return nodeMappingError(
+					node.Input.ID,
+					"definition.binds",
+					"user bind option is not representable",
+				)
+			}
+		}
+	}
+	source := path.Clean(parts[0])
+	if !path.IsAbs(source) {
+		// Containerlab resolves relative bind sources against the topology directory; payload
+		// destinations carry the same topology-relative identity rooted at "/".
+		source = "/" + source
+	}
+	target := path.Clean(parts[1])
+	volumeID := ensureArtifactsVolume(plan, node.Input.ID)
+	matched := false
+	for _, payload := range payloads {
+		if payload.NodeID != node.Input.ID {
+			continue
+		}
+		var destination string
+
+		switch {
+		case payload.Destination == source:
+			destination = target
+		case strings.HasPrefix(payload.Destination, source+"/"):
+			destination = target + strings.TrimPrefix(payload.Destination, source)
+		default:
+			continue
+		}
+		matched = true
+		mountID := fmt.Sprintf("mount/bind/%d/%s", index, payload.ID)
+		plan.Mounts = append(plan.Mounts, MountPlan{
+			ID:          mountID,
+			ContainerID: containerID,
+			VolumeID:    volumeID,
+			SourcePath:  "payloads/" + payload.ID,
+			Destination: destination,
+			ReadOnly:    true,
+		})
+		appendContainerMountID(plan, containerID, mountID)
+	}
+	if !matched {
+		return nodeMappingError(
+			node.Input.ID,
+			"definition.binds",
+			"user bind mapping requires an explicit c9s volume or payload",
+		)
 	}
 
 	return nil
