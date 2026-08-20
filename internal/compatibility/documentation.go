@@ -48,11 +48,11 @@ require a c9s row, switch, fixture, or adapter for a new kind name.
 	output.WriteString(`
 ## Behavior inventory
 
-The current-realization column describes the implementation available during migration:
+The current-realization column describes how each behavior is implemented:
 
-- ` + "`controller-native`" + `: already owned by a Kubernetes controller or compiler.
-- ` + "`nested-only`" + `: implemented only through the nested containerlab/Docker launcher.
-- ` + "`partial`" + `: some paths exist, but required behavior is incomplete.
+- ` + "`controller-native`" + `: owned by a Kubernetes controller, compiler, or the platform itself.
+- ` + "`direct`" + `: realized by the direct device runtime from imported containerlab behavior and generic plan operations.
+- ` + "`partial`" + `: implementation paths exist, but conformance evidence is incomplete.
 - ` + "`missing`" + `: no current implementation exists.
 
 | Category | Behavior | Inputs | Required capabilities | Required scenarios | Current realization |

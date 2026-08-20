@@ -24,11 +24,11 @@ require a c9s row, switch, fixture, or adapter for a new kind name.
 
 ## Behavior inventory
 
-The current-realization column describes the implementation available during migration:
+The current-realization column describes how each behavior is implemented:
 
-- `controller-native`: already owned by a Kubernetes controller or compiler.
-- `nested-only`: implemented only through the nested containerlab/Docker launcher.
-- `partial`: some paths exist, but required behavior is incomplete.
+- `controller-native`: owned by a Kubernetes controller, compiler, or the platform itself.
+- `direct`: realized by the direct device runtime from imported containerlab behavior and generic plan operations.
+- `partial`: implementation paths exist, but conformance evidence is incomplete.
 - `missing`: no current implementation exists.
 
 | Category | Behavior | Inputs | Required capabilities | Required scenarios | Current realization |
@@ -36,36 +36,34 @@ The current-realization column describes the implementation available during mig
 | `entry-path` | `entry-clabverter` | `containerlab topology`, `clabverter options` | `entry-path` | `entry-clabverter` | `controller-native` |
 | `entry-path` | `entry-direct-resources` | `Node`, `Link`, `LauncherProfile` | `entry-path` | `entry-direct-resources` | `controller-native` |
 | `entry-path` | `entry-topology` | `Topology` | `entry-path` | `entry-topology` | `controller-native` |
-| `kubernetes-policy` | `global-config-policy` | `Config.spec.metadata`, `Config.spec.inClusterDNSSuffix`, `Config.spec.imagePull`, `Config.spec.deployment`, `Config.spec.naming` | `image-pull`, `management`, `resource-policy` | `global-config-policy` | `partial` |
-| `kubernetes-policy` | `node-exposure` | `Node.spec.ports`, `LauncherProfile.spec.expose`, `Node.status.exposedPorts` | `management`, `process` | `node-exposure` | `partial` |
-| `kubernetes-policy` | `node-persistence` | `LauncherProfile.spec.deployment` | `filesystem` | `node-persistence` | `partial` |
-| `kubernetes-policy` | `node-profile-policy` | `Node.spec.launcherProfileRef`, `LauncherProfile.spec.resources`, `LauncherProfile.spec.scheduling`, `LauncherProfile.spec.expose`, `LauncherProfile.spec.statusProbes` | `resource-policy`, `readiness` | `node-profile-policy` | `partial` |
-| `link` | `link-host` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu` | `connectivity` | `link-host` | `nested-only` |
-| `link` | `link-live-reconcile` | `Link create`, `Link update`, `Link delete`, `Pod recreation`, `Pod rescheduling`, `controller restart` | `connectivity`, `lifecycle` | `link-live-reconcile` | `partial` |
-| `link` | `link-loopback` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu` | `connectivity` | `link-loopback` | `partial` |
-| `link` | `link-same-pod` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu` | `connectivity` | `link-same-pod` | `partial` |
-| `link` | `link-slurpeeth` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu`, `Link.spec.connectivity`, `Link.status.tunnelID`, `Pod peer` | `connectivity` | `link-slurpeeth` | `partial` |
-| `link` | `link-vxlan` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu`, `Link.spec.connectivity`, `Link.status.tunnelID`, `Pod peer` | `connectivity` | `link-vxlan` | `partial` |
-| `node-intent` | `node-components` | `Node.spec.components` | `components`, `kind-plan`, `readiness` | `node-components` | `nested-only` |
-| `node-intent` | `node-grouping` | `Node.spec.network-mode` | `components` | `node-grouping` | `nested-only` |
-| `node-intent` | `node-image-process` | `Node.spec.kind`, `Node.spec.type`, `Node.spec.image`, `Node.spec.entrypoint`, `Node.spec.cmd`, `Node.spec.user`, `Node.spec.env`, `Node.spec.env-files` | `kind-plan`, `process` | `node-image-process` | `nested-only` |
-| `node-intent` | `node-imported-extras` | `Node.spec.extras` | `configuration`, `kind-plan` | `node-imported-extras` | `nested-only` |
-| `node-intent` | `node-management` | `Node.spec.mgmt-ipv4`, `Node.spec.mgmt-ipv6`, `Node.spec.dns`, `Node.spec.certificate`, `LauncherProfile.spec.mgmt` | `management` | `node-management` | `nested-only` |
-| `node-intent` | `node-memory-filesystems` | `Node.spec.tmpfs`, `Node.spec.shm-size` | `filesystem` | `node-memory-filesystems` | `nested-only` |
-| `node-intent` | `node-payloads-binds` | `Node.spec.binds`, `Node.spec.env-files`, `Node.spec.filesFromConfigMap`, `Node.spec.filesFromSecret`, `Node.spec.filesFromURL` | `configuration`, `filesystem` | `node-payloads-binds` | `partial` |
-| `node-intent` | `node-post-start-exec` | `Node.spec.exec` | `lifecycle` | `node-post-start-exec` | `nested-only` |
-| `node-intent` | `node-security` | `Node.spec.devices`, `Node.spec.cap-add`, `Node.spec.privileged`, `Node.spec.security-opts`, `Node.spec.sysctls` | `security` | `node-security` | `nested-only` |
-| `node-intent` | `node-startup-configuration` | `Node.spec.startup-config`, `Node.spec.enforce-startup-config`, `Node.spec.suppress-startup-config`, `Node.spec.config`, `Node.spec.license`, `Node.spec.certificate` | `configuration` | `node-startup-configuration` | `nested-only` |
-| `operation` | `operation-events` | `Node identity`, `container lifecycle`, `connectivity lifecycle` | `operations` | `operation-events` | `partial` |
-| `operation` | `operation-exec` | `Node identity`, `component identity`, `command` | `operations` | `operation-exec` | `nested-only` |
-| `operation` | `operation-logs` | `Node identity`, `container identity` | `operations` | `operation-logs` | `nested-only` |
-| `operation` | `operation-packet-capture` | `Node identity`, `interface identity`, `capture options` | `operations` | `operation-packet-capture` | `missing` |
-| `operation` | `operation-save` | `Node identity`, `kind save behavior`, `persistence destination` | `lifecycle`, `operations` | `operation-save` | `missing` |
-| `runtime` | `launcher-host-preparation` | `launcher /proc and /sys mounts`, `cgroup version`, `kernel modules`, `mount propagation` | `filesystem`, `security` | `launcher-host-preparation` | `nested-only` |
-| `runtime` | `node-bootstrap` | `resolved Node group`, `accepted Links`, `launcher environment` | `configuration`, `kind-plan`, `process` | `node-bootstrap` | `partial` |
-| `runtime` | `node-image-pull` | `Node.spec.image`, `LauncherProfile.spec.imagePull`, `Config.spec.imagePull` | `image-pull` | `node-image-pull` | `partial` |
-| `runtime` | `node-readiness` | `Docker container status`, `Docker healthcheck`, `component status`, `TCP probe`, `SSH probe` | `readiness` | `node-readiness` | `nested-only` |
-| `runtime` | `runtime-selection` | `manager.deviceRuntimeMode`, `DEVICE_RUNTIME_MODE` | `lifecycle` | `runtime-selection` | `partial` |
+| `kubernetes-policy` | `global-config-policy` | `Config.spec.metadata`, `Config.spec.inClusterDNSSuffix`, `Config.spec.imagePull`, `Config.spec.deployment`, `Config.spec.naming` | `image-pull`, `management`, `resource-policy` | `global-config-policy` | `controller-native` |
+| `kubernetes-policy` | `node-exposure` | `Node.spec.ports`, `LauncherProfile.spec.expose`, `Node.status.exposedPorts` | `management`, `process` | `node-exposure` | `direct` |
+| `kubernetes-policy` | `node-persistence` | `LauncherProfile.spec.deployment` | `filesystem` | `node-persistence` | `direct` |
+| `kubernetes-policy` | `node-profile-policy` | `Node.spec.launcherProfileRef`, `LauncherProfile.spec.resources`, `LauncherProfile.spec.scheduling`, `LauncherProfile.spec.expose`, `LauncherProfile.spec.statusProbes` | `resource-policy`, `readiness` | `node-profile-policy` | `controller-native` |
+| `link` | `link-host` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu` | `connectivity` | `link-host` | `direct` |
+| `link` | `link-live-reconcile` | `Link create`, `Link update`, `Link delete`, `Pod recreation`, `Pod rescheduling`, `controller restart` | `connectivity`, `lifecycle` | `link-live-reconcile` | `direct` |
+| `link` | `link-loopback` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu` | `connectivity` | `link-loopback` | `direct` |
+| `link` | `link-same-pod` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu` | `connectivity` | `link-same-pod` | `direct` |
+| `link` | `link-slurpeeth` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu`, `Link.spec.connectivity`, `Link.status.tunnelID`, `Pod peer` | `connectivity` | `link-slurpeeth` | `direct` |
+| `link` | `link-vxlan` | `Link.spec.endpointA`, `Link.spec.endpointB`, `Link.spec.mtu`, `Link.spec.connectivity`, `Link.status.tunnelID`, `Pod peer` | `connectivity` | `link-vxlan` | `direct` |
+| `node-intent` | `node-components` | `Node.spec.components` | `components`, `kind-plan`, `readiness` | `node-components` | `direct` |
+| `node-intent` | `node-grouping` | `Node.spec.network-mode` | `components` | `node-grouping` | `direct` |
+| `node-intent` | `node-image-process` | `Node.spec.kind`, `Node.spec.type`, `Node.spec.image`, `Node.spec.entrypoint`, `Node.spec.cmd`, `Node.spec.user`, `Node.spec.env`, `Node.spec.env-files` | `kind-plan`, `process` | `node-image-process` | `direct` |
+| `node-intent` | `node-imported-extras` | `Node.spec.extras` | `configuration`, `kind-plan` | `node-imported-extras` | `direct` |
+| `node-intent` | `node-management` | `Node.spec.mgmt-ipv4`, `Node.spec.mgmt-ipv6`, `Node.spec.dns`, `Node.spec.certificate`, `LauncherProfile.spec.mgmt` | `management` | `node-management` | `direct` |
+| `node-intent` | `node-memory-filesystems` | `Node.spec.tmpfs`, `Node.spec.shm-size` | `filesystem` | `node-memory-filesystems` | `direct` |
+| `node-intent` | `node-payloads-binds` | `Node.spec.binds`, `Node.spec.env-files`, `Node.spec.filesFromConfigMap`, `Node.spec.filesFromSecret`, `Node.spec.filesFromURL` | `configuration`, `filesystem` | `node-payloads-binds` | `direct` |
+| `node-intent` | `node-post-start-exec` | `Node.spec.exec` | `lifecycle` | `node-post-start-exec` | `direct` |
+| `node-intent` | `node-security` | `Node.spec.devices`, `Node.spec.cap-add`, `Node.spec.privileged`, `Node.spec.security-opts`, `Node.spec.sysctls` | `security` | `node-security` | `direct` |
+| `node-intent` | `node-startup-configuration` | `Node.spec.startup-config`, `Node.spec.enforce-startup-config`, `Node.spec.suppress-startup-config`, `Node.spec.config`, `Node.spec.license`, `Node.spec.certificate` | `configuration` | `node-startup-configuration` | `direct` |
+| `operation` | `operation-events` | `Node identity`, `container lifecycle`, `connectivity lifecycle` | `operations` | `operation-events` | `controller-native` |
+| `operation` | `operation-exec` | `Node identity`, `component identity`, `command` | `operations` | `operation-exec` | `direct` |
+| `operation` | `operation-logs` | `Node identity`, `container identity` | `operations` | `operation-logs` | `controller-native` |
+| `operation` | `operation-packet-capture` | `Node identity`, `interface identity`, `capture options` | `operations` | `operation-packet-capture` | `partial` |
+| `operation` | `operation-save` | `Node identity`, `kind save behavior`, `persistence destination` | `lifecycle`, `operations` | `operation-save` | `partial` |
+| `runtime` | `node-bootstrap` | `resolved Node group`, `accepted Links`, `device plan` | `configuration`, `kind-plan`, `process` | `node-bootstrap` | `direct` |
+| `runtime` | `node-image-pull` | `Node.spec.image`, `LauncherProfile.spec.imagePull`, `Config.spec.imagePull` | `image-pull` | `node-image-pull` | `direct` |
+| `runtime` | `node-readiness` | `container status`, `OCI healthcheck`, `component status`, `imported readiness`, `LauncherProfile.spec.statusProbes` | `readiness` | `node-readiness` | `direct` |
 
 ## Capability contract
 

@@ -260,7 +260,7 @@ func (b *Baseline) Validate() error {
 	}
 	allowedBehaviorState := map[string]bool{
 		"controller-native": true,
-		"nested-only":       true,
+		"direct":            true,
 		"partial":           true,
 		"missing":           true,
 	}
