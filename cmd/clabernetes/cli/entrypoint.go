@@ -355,11 +355,14 @@ func deviceRuntimeCommand() *cli.Command {
 						ctx = context.Background()
 					}
 
+					podAddress, podGateway := clabernetesdirectruntime.RuntimePodManagementIdentity()
 					err = (clabernetesdeviceplan.Preparer{
 						Adapter: clabernetesdeviceplan.Adapter{
 							Revision:        c.String(devicePlanRevision),
 							CertificateRoot: c.String(devicePlanCertificates),
 							EntropyRoot:     c.String(devicePlanEntropy),
+							PodAddress:      podAddress,
+							PodGateway:      podGateway,
 						},
 						PayloadRoot: c.String(deviceRuntimePayloads),
 					}).Prepare(ctx, input, plan, c.String(deviceRuntimeArtifacts))

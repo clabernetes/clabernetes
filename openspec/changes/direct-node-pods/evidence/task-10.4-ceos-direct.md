@@ -12,12 +12,14 @@ package), the dataplane ping from the linux peer crosses the fabric (~0.15 ms), 
 post-deploy hook opens a CLI session, strips and re-applies the management addressing
 (`Management0 <podIP>/24`), and saves the configuration — all through generic machinery.
 
-Off-subnet management reachability (a Pod on another worker dialing the cEOS Pod IP) requires
-routing configuration inside EOS itself (`ip routing` / a default route), which upstream
-containerlab also does not configure — nested deployments have the same property and reach
-management through same-L2 clients or published ports. c9s delivers the full runtime management
-identity (address, prefix, gateway) to the package; consuming the gateway is kind-owned
-behavior a user startup-config can add.
+Off-subnet management works with zero user configuration: the two-render preparation protocol
+re-renders the kind's own default startup-config template with the runtime management identity,
+so `ip address <podIP>/24` and `ip route 0.0.0.0/0 <podGW>` land in flash exactly as they do in
+nested containerlab (verified live with the vanilla srl+ceos example lab: SSH to the cEOS Pod IP
+open from the hosting worker and from the other worker; only the one management-parameterized
+artifact diverges from the plan and its runtime digest is recorded beside it). A user-supplied
+startup-config replaces that template — then, as in nested containerlab, the user carries the
+management/routing lines themselves.
 
 ## Defects found and fixed on the way (all kind-opaque)
 

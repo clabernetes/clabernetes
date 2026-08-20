@@ -163,6 +163,11 @@ transport readiness back to the connectivity helper, which holds cold-start read
 every fabric transport converges. Peer moves (rescheduling) converge through the daemon's
 periodic sweep without waiting for the owning helper's next request.
 
+Tunnel IDs are VXLAN VNIs terminating in the shared worker host namespaces, so the controller
+allocates them from one cluster-wide space: two Links in different namespaces holding one VNI
+would collide on any worker hosting endpoints of both (the kernel rejects a second VTEP with
+the same VNI and port).
+
 `Link.spec.connectivity` values `vxlan` and `slurpeeth` are retained as accepted input and both
 map onto this controller-selected realization; the slurpeeth userspace TCP transport and the
 in-Pod VXLAN termination are removed from the direct runtime. This is an intentional
@@ -208,6 +213,19 @@ recorder reports the prefix through its network settings (packages refresh their
 them); and the preparation container records the Pod's address, prefix, and default gateway
 while the primary interface is still pristine, because interface-owning devices strip it before
 the PostStart boundary runs.
+
+Generated configuration itself is management-parameterized through a two-render protocol at the
+preparation boundary. Planning renders with no management identity, which pins every artifact.
+Preparation first re-renders with those exact inputs and verifies every planned path, mode, and
+digest — the unchanged determinism proof — then re-renders once more under a restarted entropy
+session with the runtime-completed management identity and stages that content for regular
+artifacts whose bytes diverge, recording their digests beside the staged files. Certificate
+material never diverges (both renders load it from the same mounted planning infrastructure
+under identical entropy), and any topology or metadata difference fails closed. Later
+boundaries accept a prepared artifact's plan digest or its recorded runtime digest, nothing
+else. The effect is that a package's own configuration templates render the real Pod address,
+prefix, and gateway — the vanilla srl+ceos example lab reaches full management with zero
+c9s-specific or user-supplied configuration.
 
 ### 5c. Revision: systemd images and runtime-CLI sessions
 

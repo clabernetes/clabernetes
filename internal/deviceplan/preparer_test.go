@@ -388,3 +388,69 @@ func TestPreparerReadsIdenticalGroupedPayloadSourceOnce(t *testing.T) {
 		t.Fatalf("identical grouped payload source reads = %d, want 1", got)
 	}
 }
+
+func TestPreparerRendersGeneratorContentWithRuntimeManagementIdentity(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Type = "management-render-test"
+	input.Nodes[0].Definition = mustJSON(t, map[string]any{
+		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
+	})
+	planning := clabernetesdeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "runtime-render-v1",
+	}
+	plan, err := planning.Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	runtime := planning
+	runtime.PodAddress = "10.244.9.9/24"
+	runtime.PodGateway = "10.244.9.1"
+	if err = (clabernetesdeviceplan.Preparer{Adapter: runtime}).Prepare(
+		context.Background(),
+		input,
+		*plan,
+		root,
+	); err != nil {
+		t.Fatal(err)
+	}
+	nodeDirectory := clabernetesdeviceplan.ArtifactNodeDirectory("node-a")
+	content, err := os.ReadFile(filepath.Join(root, nodeDirectory, "generated", "mgmt.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(content), "mgmt 10.244.9.9/24 gw 10.244.9.1\n"; got != want {
+		t.Fatalf("runtime-rendered content = %q, want %q", got, want)
+	}
+	// Files the identity does not influence keep their plan-verified bytes and no runtime
+	// digest record.
+	digests := clabernetesdeviceplan.LoadRuntimeArtifactDigests(root, "node-a")
+	if len(digests) != 1 || digests["generated/mgmt.conf"] == "" {
+		t.Fatalf("runtime artifact record = %#v", digests)
+	}
+	untouched, err := os.ReadFile(filepath.Join(root, nodeDirectory, "generated", "imported.conf"))
+	if err != nil || string(untouched) != "generated\n" {
+		t.Fatalf("identity-independent content changed: %q err=%v", untouched, err)
+	}
+
+	// Without a runtime identity the plan-verified bytes stage unchanged and the record clears.
+	if err = (clabernetesdeviceplan.Preparer{Adapter: planning}).Prepare(
+		context.Background(),
+		input,
+		*plan,
+		root,
+	); err != nil {
+		t.Fatal(err)
+	}
+	content, err = os.ReadFile(filepath.Join(root, nodeDirectory, "generated", "mgmt.conf"))
+	if err != nil || string(content) != "mgmt none\n" {
+		t.Fatalf("planning-identical content = %q err=%v", content, err)
+	}
+	if remaining := clabernetesdeviceplan.LoadRuntimeArtifactDigests(root, "node-a"); len(
+		remaining,
+	) != 0 {
+		t.Fatalf("stale runtime artifact record = %#v", remaining)
+	}
+}

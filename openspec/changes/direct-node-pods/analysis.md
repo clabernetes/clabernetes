@@ -379,6 +379,10 @@ Step 0 and Step 1 of §7 are done; the work now lives in reviewable commits on `
   loop restores in-Pod reachability to the Pod's own address for interface-owning kinds; and
   `applyManagementInput` splits CIDR allocations into the bare-address + prefix-length fields
   imported packages consume. Evidence: `evidence/task-10.3-srsim-direct.md`.
+- Parallel-namespace regression found and fixed: tunnel IDs were allocated per namespace while
+  VNIs share one wire space per worker, so concurrent labs with cross-node Links collided on
+  VTEP creation ("file exists") and crash-looped their connectivity helpers. Allocation is now
+  cluster-wide with namespaced-name tie-breaks; retention semantics unchanged.
 - Arista cEOS (task 10.4) passes (Ready ~40s: startup-config, interface fixups, hook-applied
   management addressing, fabric dataplane ping) after three more generic fixes: systemd-based
   NOS images mount a fresh tmpfs over `/run`, shadowing every c9s mount under

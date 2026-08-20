@@ -110,6 +110,24 @@ func (n *syntheticImportedNode) Init(
 	); err != nil {
 		return err
 	}
+	if config.NodeType == "management-render-test" {
+		rendered := "mgmt none\n"
+		if config.MgmtIPv4Address != "" {
+			rendered = fmt.Sprintf(
+				"mgmt %s/%d gw %s\n",
+				config.MgmtIPv4Address,
+				config.MgmtIPv4PrefixLength,
+				config.MgmtIPv4Gateway,
+			)
+		}
+		if err := os.WriteFile(
+			filepath.Join(generatedDir, "mgmt.conf"),
+			[]byte(rendered),
+			0o640,
+		); err != nil {
+			return err
+		}
+	}
 	if config.NodeType != "symlink-artifact-test" {
 		return nil
 	}

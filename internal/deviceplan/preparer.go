@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	clabnodes "github.com/srl-labs/containerlab/nodes"
 )
 
 const (
@@ -59,7 +61,14 @@ func (p Preparer) Prepare(
 	if err != nil {
 		return err
 	}
-	defer finishEntropy()
+	entropyFinished := false
+	finishOnce := func() {
+		if !entropyFinished {
+			entropyFinished = true
+			finishEntropy()
+		}
+	}
+	defer finishOnce()
 	artifactRoot = filepath.Clean(artifactRoot)
 	if !filepath.IsAbs(artifactRoot) || artifactRoot == string(filepath.Separator) {
 		return &Error{
@@ -141,17 +150,37 @@ func (p Preparer) Prepare(
 			Message: "planned preparation artifact was not regenerated",
 		}
 	}
+	// The verified render above used the exact planning inputs and is the determinism proof. A
+	// second render with the Pod's runtime management identity supplies the bytes packages
+	// actually boot from; it may change only regular generator-file content, never artifact
+	// topology or metadata.
+	divergent, runtimeLabDirs, cleanupRuntime, err := p.renderRuntimeManagementArtifacts(
+		ctx,
+		normalizedInput,
+		normalizedPlan,
+		inputDigest,
+		registry,
+		finishOnce,
+	)
+	if err != nil {
+		return err
+	}
+	defer cleanupRuntime()
 	// Leave parent directories preparation-writable while publishing leaves. Apply package
 	// directory modes, ownership, and extended attributes deepest-first after every leaf exists.
 	for _, item := range accepted {
 		if item.artifact.Kind == ArtifactDirectory {
 			continue
 		}
+		source, artifact := item.node.scratchLabDir, item.artifact
+		if replacement, exists := divergent[item.node.Input.ID+"\x00"+item.artifact.Path]; exists {
+			source, artifact = runtimeLabDirs[item.node.Input.ID], replacement
+		}
 		if err = stagePreparedArtifact(
-			item.node.scratchLabDir,
+			source,
 			artifactRoot,
 			item.node.Input.ID,
-			item.artifact,
+			artifact,
 		); err != nil {
 			return withNodeID(err, item.node.Input.ID)
 		}
@@ -170,11 +199,142 @@ func (p Preparer) Prepare(
 			return withNodeID(err, item.node.Input.ID)
 		}
 	}
+	for _, node := range normalizedInput.Nodes {
+		digests := map[string]string{}
+		for key, artifact := range divergent {
+			if strings.HasPrefix(key, node.ID+"\x00") {
+				digests[artifact.Path] = artifact.Digest
+			}
+		}
+		if err = writeRuntimeArtifactDigests(artifactRoot, node.ID, digests); err != nil {
+			return withNodeID(err, node.ID)
+		}
+	}
 	if err = p.stagePayloads(ctx, normalizedInput, normalizedPlan, artifactRoot); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// renderRuntimeManagementArtifacts reruns imported generation with the Pod's runtime management
+// identity and returns the regular artifacts whose content diverged from the plan, keyed by
+// nodeID and path, together with each node's runtime workspace. Certificate material stays
+// byte-identical because both renders load it from the same mounted planning infrastructure
+// under the same entropy; every non-content difference fails closed, because management
+// completion must not change artifact topology or metadata.
+//
+//nolint:gocognit,gocyclo // Each branch rejects one divergence class explicitly.
+func (p Preparer) renderRuntimeManagementArtifacts(
+	ctx context.Context,
+	input Input,
+	plan Plan,
+	inputDigest string,
+	registry *clabnodes.NodeRegistry,
+	restartEntropy func(),
+) (map[string]GeneratedArtifact, map[string]string, func(), error) {
+	cleanup := func() {}
+	completed := completeRuntimeManagement(
+		input.Management,
+		input.Nodes,
+		plan.Management,
+		p.Adapter.PodAddress,
+		p.Adapter.PodGateway,
+	)
+	if reflect.DeepEqual(completed, input.Management) {
+		return nil, nil, cleanup, nil
+	}
+	runtimeInput := input
+	runtimeInput.Management = completed
+	scratchRoot, err := os.MkdirTemp("", "clabernetes-device-prepare-runtime-")
+	if err != nil {
+		return nil, nil, cleanup, planningError(
+			ErrorSideEffect,
+			"preparation.runtimeWorkspace",
+			"cannot create runtime workspace",
+			err,
+		)
+	}
+	cleanup = func() { _ = os.RemoveAll(scratchRoot) }
+	// A fresh entropy session over the original input digest replays the exact randomness of
+	// the verified render, so the only permitted divergence source is the completed management
+	// identity.
+	restartEntropy()
+	finishEntropy, err := beginImportedEntropy(inputDigest, input.EntropyDigest, p.Adapter.EntropyRoot)
+	if err != nil {
+		return nil, nil, cleanup, err
+	}
+	defer finishEntropy()
+	evaluation, err := evaluateInWorkspace(
+		ctx,
+		runtimeInput,
+		inputDigest,
+		registry,
+		scratchRoot,
+		p.PayloadRoot,
+		p.Adapter.CertificateRoot,
+		false,
+	)
+	if err != nil {
+		return nil, nil, cleanup, err
+	}
+	planned := map[string]FilePlan{}
+	for _, file := range plan.Files {
+		if file.SourceKind != FileSourceGenerator && file.SourceKind != FileSourceCertificate {
+			continue
+		}
+		planned[file.NodeID+"\x00"+file.ArtifactPath] = file
+	}
+	divergent := map[string]GeneratedArtifact{}
+	labDirs := map[string]string{}
+	for index := range evaluation.Nodes {
+		node := &evaluation.Nodes[index]
+		labDirs[node.Input.ID] = node.scratchLabDir
+		for _, artifact := range node.GeneratedArtifacts {
+			key := node.Input.ID + "\x00" + artifact.Path
+			file, exists := planned[key]
+			if !exists {
+				return nil, nil, cleanup, &Error{
+					Code: ErrorInvariant, NodeID: node.Input.ID,
+					Field: "preparation.runtimeArtifacts", Behavior: "artifact-generation",
+					Message: "management completion added an artifact absent from the plan",
+				}
+			}
+			delete(planned, key)
+			if file.Digest == artifact.Digest {
+				if mismatch := preparedArtifactMismatch(file, artifact, true); mismatch != "" {
+					return nil, nil, cleanup, &Error{
+						Code: ErrorInvariant, NodeID: node.Input.ID,
+						Field: "preparation.runtimeArtifacts", Behavior: "artifact-generation",
+						Message: "management completion changed " + mismatch +
+							" of artifact " + artifact.Path,
+					}
+				}
+
+				continue
+			}
+			metadataOnly := artifact
+			metadataOnly.Digest = file.Digest
+			if artifact.Kind != ArtifactRegular ||
+				preparedArtifactMismatch(file, metadataOnly, true) != "" {
+				return nil, nil, cleanup, &Error{
+					Code: ErrorInvariant, NodeID: node.Input.ID,
+					Field: "preparation.runtimeArtifacts", Behavior: "artifact-generation",
+					Message: "management completion may change only regular generator content" +
+						"; artifact " + artifact.Path,
+				}
+			}
+			divergent[key] = artifact
+		}
+	}
+	if len(planned) != 0 {
+		return nil, nil, cleanup, &Error{
+			Code: ErrorInvariant, Field: "preparation.runtimeArtifacts",
+			Behavior: "artifact-generation",
+			Message:  "management completion removed a planned artifact",
+		}
+	}
+	return divergent, labDirs, cleanup, nil
 }
 
 func preparedArtifactMismatch(file FilePlan, artifact GeneratedArtifact, exists bool) string {

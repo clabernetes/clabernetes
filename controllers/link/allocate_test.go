@@ -311,3 +311,33 @@ func TestResolveDesiredTunnelID(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveDesiredTunnelIDIsClusterWide(t *testing.T) {
+	t.Parallel()
+
+	// A same-named Link in another namespace holding tunnel ID 1 must block reuse: tunnel IDs
+	// are VXLAN VNIs in the shared worker host namespaces.
+	foreign := testLink("a-link", "srl1", "e1-1", "srl2", "e1-1", 1)
+	foreign.Namespace = "other-namespace"
+	local := testLink("a-link", "srl1", "e1-1", "srl2", "e1-1", 0)
+	local.Namespace = "lab-a"
+
+	got, err := clabernetescontrollerslink.ResolveDesiredTunnelID(
+		&local,
+		[]clabernetesapisv1alpha1.Link{foreign},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 2 {
+		t.Fatalf("cross-namespace tunnel allocation = %d, want 2", got)
+	}
+
+	// Retention still works when this Link already holds a cluster-unique ID.
+	local.Status.TunnelID = 5
+	got, err = clabernetescontrollerslink.ResolveDesiredTunnelID(&local, []clabernetesapisv1alpha1.Link{foreign}, nil)
+	if err != nil || got != 5 {
+		t.Fatalf("retention across namespaces = %d err=%v, want 5", got, err)
+	}
+}

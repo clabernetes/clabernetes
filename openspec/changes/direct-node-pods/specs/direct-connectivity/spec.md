@@ -114,6 +114,11 @@ The direct runtime SHALL realize containerlab's always-addressed management mode
 - **WHEN** the operator allocates explicit management addresses through a management policy
 - **THEN** the controller-allocated addresses are used unchanged and runtime completion adds nothing
 
+#### Scenario: Package templates render the runtime management identity
+
+- **WHEN** an imported kind generates configuration from its own management-parameterized templates and the controller allocated no management addresses
+- **THEN** preparation re-renders that configuration with the Pod's runtime address, prefix, and gateway after the plan-identical render verified determinism, so a topology with no startup-config reaches full management without kind-specific handling
+
 #### Scenario: Management loop cleanup
 
 - **WHEN** a direct Pod is deleted or replaced

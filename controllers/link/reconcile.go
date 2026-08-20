@@ -133,9 +133,18 @@ func (c *Controller) Reconcile(
 		return ctrlruntime.Result{}, nil
 	}
 
+	// Tunnel IDs are VXLAN VNIs terminating in the shared worker host namespaces, so the
+	// allocation space is cluster-wide: two Links in different namespaces with one VNI would
+	// collide on any worker hosting endpoints of both.
+	clusterLinks := &clabernetesapisv1alpha1.LinkList{}
+	if err = c.apiReader.List(ctx, clusterLinks); err != nil {
+		c.BaseController.Log.Criticalf("failed listing cluster Links, err: %s", err)
+
+		return ctrlruntime.Result{}, err
+	}
 	desiredTunnelID, err := ResolveDesiredTunnelID(
 		link,
-		namespaceLinks.Items,
+		clusterLinks.Items,
 		namespaceNodes.Items,
 	)
 	if err != nil {

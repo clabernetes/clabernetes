@@ -563,11 +563,31 @@ func readLifecycleFile(
 			"cannot read bounded lifecycle source",
 		)
 	}
-	if clabernetesdeviceplan.Digest(content) != file.Digest {
+	digest := clabernetesdeviceplan.Digest(content)
+	if digest != file.Digest && !runtimeGeneratorContent(file, digest, artifactRoot) {
 		return clabernetesdeviceplan.FilePlan{}, nil, fmt.Errorf(
 			"lifecycle source digest differs from plan",
 		)
 	}
 
 	return file, content, nil
+}
+
+// runtimeGeneratorContent reports whether content is the preparation-recorded runtime render of
+// a generator file: preparation re-renders generator files with the Pod's runtime management
+// identity and records their digests beside the staged artifacts.
+func runtimeGeneratorContent(
+	file clabernetesdeviceplan.FilePlan,
+	digest,
+	artifactRoot string,
+) bool {
+	if file.SourceKind != clabernetesdeviceplan.FileSourceGenerator &&
+		file.SourceKind != clabernetesdeviceplan.FileSourceCertificate {
+		return false
+	}
+
+	return clabernetesdeviceplan.LoadRuntimeArtifactDigests(
+		artifactRoot,
+		file.NodeID,
+	)[file.ArtifactPath] == digest
 }

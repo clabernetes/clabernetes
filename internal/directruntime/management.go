@@ -21,6 +21,14 @@ const PodAddressEnvironmentVariable = "C9S_POD_ADDRESS"
 // strips the interface.
 const podAddressRecordName = "pod-address"
 
+// RuntimePodManagementIdentity returns the executing Pod's own management identity — its
+// prefixed cluster address and default gateway — as observable right now. It is complete only
+// while the Pod's primary interface is pristine, which is guaranteed at the preparation
+// boundary.
+func RuntimePodManagementIdentity() (string, string) {
+	return runtimePodAddress(), runtimePodGateway()
+}
+
 // RecordPodAddress persists the Pod's prefixed management identity into every plan-owned node
 // artifact directory (the only writable mounts under the artifacts root). The preparation
 // boundary calls it before any device container starts, which is the only moment the Pod's
