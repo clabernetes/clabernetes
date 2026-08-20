@@ -1,20 +1,25 @@
 ---
 title: Launcher profiles
-description: Reusable Kubernetes and launcher policy referenced explicitly by network Nodes.
+description: Reusable direct-workload Kubernetes policy referenced explicitly by network Nodes.
 icon: Settings2
 ---
 
-A `LauncherProfile` contains policy for the launcher workload that realizes one or more Nodes. It
-keeps Kubernetes deployment concerns separate from the containerlab-shaped Node payload.
+A `LauncherProfile` contains reusable Kubernetes policy for the direct device workload that
+realizes one or more Nodes; the CRD name is retained from the earlier runtime. It keeps Kubernetes
+deployment concerns separate from the containerlab-shaped Node payload.
 
 Typical profile settings include:
 
-- launcher CPU and memory
+- CPU and memory for a Node's primary application container
 - scheduling and tolerations
 - service exposure
-- image pulling
+- Kubernetes image pull policy and pull Secrets
 - status probes
-- persistence and launcher privileges
+- persistence
+- management overlay address allocation
+
+Device privilege, capabilities, and devices are never profile policy: they come from the imported
+containerlab package's plan.
 
 ## Explicit references
 
@@ -48,15 +53,18 @@ Profiles are not selected by labels and are not merged into inheritance chains. 
 referenced profile take precedence over global `Config` defaults; fields it omits continue through
 global resolution.
 
-When `statusProbes.enabled` is true, c9s considers a Node ready only after its nested Docker
-container is running and is not paused, restarting, or dead. If the container image defines a
-Docker healthcheck, that healthcheck must also report healthy. Optional TCP or SSH probe
-configuration adds an application-level requirement; c9s does not infer ports, credentials, or
-behavior from a containerlab kind or image name.
+c9s considers a Node ready only when every device application container representing it is running
+and passes its Kubernetes probes: readiness behavior declared by the imported containerlab plan,
+and any image-defined OCI healthcheck or Node `healthcheck` contract merged over it, translate
+into container startup and readiness probes. When `statusProbes.enabled` is true, optional TCP or
+SSH probe configuration adds an application-level requirement executed inside the device
+container; c9s does not infer ports, credentials, or behavior from a containerlab kind or image
+name.
 
-For an image without a Docker healthcheck, this generic signal is intentionally process-level: a
-running network OS may still be booting services or converging protocols. Define a healthcheck in
-the image, or configure an explicit TCP or SSH probe, when application-level readiness is required.
+For a kind whose imported plan declares no readiness behavior and an image without a healthcheck,
+this generic signal is intentionally process-level: a running network OS may still be booting
+services or converging protocols. Declare a `healthcheck`, define one in the image, or configure
+an explicit TCP or SSH probe when application-level readiness is required.
 
 If a Node names a profile that does not exist, c9s does not silently fall back to global defaults.
 The Node remains unrealized until that explicit reference resolves.

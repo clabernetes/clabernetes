@@ -36,47 +36,51 @@ userspace TCP transport is retired.
 ## Node spec is a curated containerlab subset
 
 **Breaking change:** The Node spec no longer mirrors the whole containerlab node definition. It now
-carries only the vocabulary a launcher pod can actually realize, and unknown fields are **rejected**
-at apply time instead of being silently ignored.
+carries only the vocabulary the direct runtime can actually realize, and unknown fields are
+**rejected** at apply time instead of being silently ignored.
 
 Re-apply any Node that uses a removed field. `kubectl apply` names the offending field, i.e.
 `unknown field "spec.runtime"`.
 
-A Topology `definition:` needs no edit. It is a native containerlab topology, so it is still
-accepted as-is: fields clabernetes cannot realize are dropped and each one is logged with its line,
+A Topology `definition:` compiles fail-closed: a field the direct runtime cannot realize fails
+compilation before any resource is created, with a sorted diagnostic naming the field and its
+location. Deliberately rejected vocabulary gets a diagnostic stating why, i.e.
 
 ```text
-line 19: field restart-policy is not supported by clabernetes and was omitted from the topology
+unsupported-field topology.nodes.n1.runtime (line 19): field "runtime" is rejected: container
+runtime selection is Docker-only; direct device Pods always use the cluster's container runtime
 ```
 
-`clabverter` prints the same warnings while converting, before anything reaches the cluster. What
-still fails is a definition that is malformed, or one where a *supported* field holds an unusable
-value -- dropping that would quietly change your lab.
+`clabverter` prints the same diagnostics while converting, before anything reaches the cluster.
+Only constructs whose loss cannot change lab behavior inside the cluster warn instead of
+failing: Docker-only management-network fields and the host half of Docker-style port pinning.
 
 ### Removed fields
 
 | Removed | Use instead |
 | --------- | ------------- |
-| `publish`, `sandbox`, `kernel`, `wait-for`, top-level `SANs` | Nothing -- containerlab itself removed these, so they made the launcher fail to parse the topology. `SANs` moved to `certificate.sans` |
-| `cpu`, `cpu-set`, `memory` | `LauncherProfile.resources` -- the pod's requests/limits are what actually bound a node |
-| `image-pull-policy` | `LauncherProfile.imagePull` |
-| `healthcheck` | `LauncherProfile.statusProbes` -- c9s bridges image-defined healthchecks into Kubernetes readiness |
+| `publish`, `sandbox`, `kernel`, `wait-for`, top-level `SANs` | Nothing -- containerlab itself removed these. `SANs` moved to `certificate.sans` |
 | `runtime` | Nothing -- devices run as regular Kubernetes containers |
-| `auto-remove` | Nothing -- the pod owns node lifecycle, and a removed container leaves a ready pod with no node |
+| `auto-remove` | Nothing -- Kubernetes owns container lifecycle |
+| `pid-mode`, `cgroupns-mode` | Nothing -- Docker namespace-sharing modes have no direct-Pod mapping |
+| `cpu-set` | Nothing -- CPU pinning has no portable Pod mapping; use `cpu`/`memory` limits |
+| `credentials` | Nothing -- credential bytes belong in referenced Secrets; imported kind default credentials still apply |
+| `stages` | Nothing -- stage ordering gates the nodes of one lab against each other, which assumes the whole lab on one host |
 | `labels` | `metadata.labels` on the Node -- in a Topology `definition:` this is automatic, see below |
 | `position` | Nothing -- it feeds containerlab graphs, which c9s does not produce |
-| `startup-delay` | Nothing -- it staggers boots on one host; pods start independently |
-| `aliases` | Nothing -- docker network aliases only resolve inside a single pod |
 | `extras.mysocket-proxy` | Nothing -- mysocketctl is gone, along with the `publish` field that fed it |
-
-`stages` is likewise unsupported: stage ordering gates the nodes of one lab against each other,
-which assumes the whole lab on one host.
 
 ### Added fields
 
-`devices`, `cap-add`, `privileged`, `tmpfs`, `security-opts`, `shm-size`, and
-`suppress-startup-config` are now available, and `certificate` gained `key-size`,
-`validity-duration`, and `sans`.
+The full portable containerlab node vocabulary is accepted: `devices`, `cap-add`, `privileged`,
+`tmpfs`, `security-opts`, `shm-size`, `suppress-startup-config`, `group`, `startup-delay`,
+`restart-policy` (`always`/`unless-stopped` -- Docker's `no` and `on-failure` cannot exist in a
+shared Pod), `image-pull-policy`, `cpu` and `memory` (they become the device container's
+Kubernetes limits), `healthcheck` (merged over the image-defined OCI healthcheck into container
+startup/readiness behavior), `aliases` (each alias becomes an extra same-namespace headless
+Service selecting the node's Pod), and `link-apply-mode`. `certificate` gained `key-size`,
+`validity-duration`, and `sans`, and `topology.groups` participates in inheritance exactly like
+kinds.
 
 The direct planner imports containerlab 0.78.0 as its package baseline. There is no per-workload
 version override: updating supported kinds and package behavior is an intentional Go module bump.

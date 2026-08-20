@@ -11,22 +11,23 @@ By default, Clabernetes creates LoadBalancer services for each node in your topo
 
 ## How exposure works
 
-A node container does not run in its launcher pod's network namespace -- it sits on a containerlab
-managed docker bridge *inside* the pod. A node port is therefore only reachable from outside when
-docker publishes it, which makes the exposed port set an explicit list rather than "everything the
-node listens on":
+A direct device runs in its Pod's own network namespace, so every port the node listens on is
+already bound at the Pod address. A Kubernetes Service still carries an explicit port list,
+which keeps the exposed port set a declared list rather than "everything the node listens on":
 
 1. The default management port list (see the table below) is exposed unless
    `disableAutoExpose: true`.
 2. Anything outside that list -- a custom app on 8080, iperf3 on 5201 -- has to be named in the
-   node's `ports`.
-3. For each destination port, c9s allocates a pod-side port and records the pair in the Node's
-   `status.exposedPorts`. That status is the source of truth for both the node's Service and the
-   topology the launcher hands to containerlab.
+   node's `ports` (ports the imported kind plan itself declares on the container are carried
+   automatically unless auto-expose is disabled).
+3. Each destination port is recorded in the Node's `status.exposedPorts`. That status is the
+   source of truth the node's expose Service -- named after the node itself -- is programmed
+   from.
 
-Clients always connect to the node's natural port: the Service listens on the destination port and
-targets the allocated pod-side port. That allocation is c9s's to make, which is why `ports` entries
-declare a destination port only.
+Clients always connect to the node's natural port: the Service listens on the destination port
+and targets that same port on the device Pod directly, with no Docker port publication in
+between -- which is why `ports` entries declare a destination port only. Declared `aliases`
+each add an extra headless Service selecting the node's Pod under the alias name.
 
 ### Portable containerlab topologies
 
@@ -78,8 +79,9 @@ spec:
 
 **Effects:**
 
-- No services are created for any node
-- Nodes can still communicate with each other via VXLAN tunnels
+- No expose services are created for any node
+- Nodes still communicate with each other over their Links -- fabric connectivity does not
+  depend on expose Services
 - No external access to nodes
 
 **Use cases:**
@@ -114,8 +116,9 @@ spec:
 ```
 
 Each entry is the destination port -- the port the node itself listens on -- with an optional
-protocol. clabernetes allocates the pod-side port that carries it and records both in the Node
-status, so docker style `host:container` bindings are not used here.
+protocol. The Service listens on that port and targets it directly on the device Pod; docker
+style `host:container` bindings are rejected on Nodes, and a Topology `definition:` normalizes
+two-sided entries to their destination port.
 
 **Effects:**
 
@@ -172,7 +175,7 @@ spec:
 **Characteristics:**
 
 - No external IP provisioned
-- Access via service name: `<topology>-<node>.<namespace>.svc.cluster.local`
+- Access via service name: `<node>.<namespace>.svc.cluster.local`
 - Suitable for in-cluster automation and testing
 
 ### Headless
@@ -282,7 +285,7 @@ spec:
 
 ```bash
 # Get service IPs
-kubectl get svc -l c9s.run/topologyOwner=my-topology
+kubectl get svc -l c9s.run/topologyServiceType=expose
 
 # SSH to node
 ssh admin@<EXTERNAL-IP>
@@ -297,7 +300,7 @@ gnmic -a <EXTERNAL-IP>:57400 -u admin -p NokiaSrl1! capabilities
 # From within the cluster (e.g., from a debug pod)
 kubectl run debug --rm -it --image=alpine -- sh
 apk add openssh-client
-ssh admin@my-topology-srl1.default.svc.cluster.local
+ssh admin@srl1.default.svc.cluster.local
 ```
 
 ### With Headless
@@ -308,17 +311,18 @@ kubectl run debug --rm -it --image=alpine -- sh
 apk add openssh-client bind-tools
 
 # DNS lookup returns pod IP(s) instead of a virtual service IP
-nslookup my-topology-srl1.default.svc.cluster.local
+nslookup srl1.default.svc.cluster.local
 
 # Connect directly to the pod
-ssh admin@my-topology-srl1.default.svc.cluster.local
+ssh admin@srl1.default.svc.cluster.local
 ```
 
 ### With No Services
 
 ```bash
-# Access via pod directly (not recommended for production)
-kubectl exec -it deploy/my-topology-srl1 -- sr_cli
+# Access via pod directly (not recommended for production) -- the deployment is named after
+# the node, and unqualified exec targets the device application container
+kubectl exec -it deploy/srl1 -- sr_cli
 ```
 
 ## Best Practices

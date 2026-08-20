@@ -1,0 +1,82 @@
+---
+title: "0.8"
+---
+
+Unreleased · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.7.0...main)
+
+<Callout type='warn'>
+
+This release replaces the nested launcher runtime with the direct device runtime and removes
+launcher-era API fields. Upgrading is destructive: run the read-only upgrade preflight first,
+back up your resources, and plan a reinstall. There is no in-place `helm upgrade` path and no
+nested-runtime fallback in this release.
+
+</Callout>
+
+## The direct device runtime
+
+Every network device now runs as a regular application container in a c9s-managed Pod. The
+launcher image, the Docker daemon inside the Pod, the containerlab executable, image import,
+and nested container discovery are gone. What this changes in practice:
+
+- `kubectl logs`, `kubectl exec`, resource limits, and Pod status address the *actual* device
+  container. Chassis cards and grouped nodes are visible application containers of one Pod.
+- The kubelet performs the only image pull, with native `imagePullPolicy` and
+  `imagePullSecrets`. c9s resolves only registry metadata (manifests and config blobs) and
+  fails readiness if the running image diverges from the planned digest.
+- Kind behavior comes exclusively from the pinned containerlab 0.78.0 Go module, executed in
+  short-lived locked-down planning Pods that record a deterministic device plan. A containerlab
+  module bump admits newly registered kinds without c9s code changes.
+- Each device Pod boots through a preparation init container (stages and digest-verifies every
+  generated and payload artifact) and a restartable privileged connectivity init-sidecar that
+  gates device start on the accepted cold-start interface set and reconciles live Link changes.
+
+## Connectivity realization
+
+Cross-Pod wires are realized by a node-local host-endpoint DaemonSet: the device always sees a
+plain veth interface, same-worker endpoints are patched together without encapsulation, and
+cross-worker endpoints use VXLAN tunnels in the worker host namespace keyed by the Link's
+cluster-wide tunnel id. `Link.spec.connectivity: vxlan | slurpeeth` remains accepted input;
+both map onto this controller-selected realization and the slurpeeth userspace TCP transport is
+retired. Wire semantics -- L2 point-to-point, MTU intent, live rewires, cleanup, rescheduling --
+are unchanged.
+
+## Expanded node vocabulary
+
+The Node spec and Topology compiler accept more of the native containerlab vocabulary:
+`startup-delay`, `restart-policy` (`always`/`unless-stopped`), `image-pull-policy`, `cpu` and
+`memory` (device-container limits), `healthcheck` (merged over the image OCI healthcheck),
+`aliases` (extra same-namespace Service names for the node's Pod), `link-apply-mode`, `group`,
+and `topology.groups` inheritance. Compilation is fail-closed: vocabulary the direct runtime
+deliberately rejects (`runtime`, `auto-remove`, `pid-mode`, `cgroupns-mode`, `cpu-set`,
+`stages`, `credentials`) fails with a diagnostic stating why, and only cosmetic Docker-only
+constructs are accepted with warnings.
+
+## Breaking API changes
+
+Launcher-era fields are removed from `Config`, `LauncherProfile`, and `Topology`: launcher
+image/log/env settings, `privilegedLauncher`, containerlab debug/timeout/version, Docker
+config and daemon config, insecure registries, pull-through, CRI overrides, by-kind resource
+defaults, and Docker management-network fields. `LauncherProfile` keeps its name and carries
+reusable direct-workload policy (expose, scheduling, resources, persistence, probes, image
+pull); device privilege and kind-owned container requirements come from the imported package
+plan. See [Upgrading](/docs/upgrading) for the complete field disposition table.
+
+Before upgrading, run the read-only preflight against the live cluster; it names every stored
+object still using a removed field and the replacement per path:
+
+```bash
+clabernetes upgrade-preflight
+```
+
+Rollback after the CRD replacement means reinstalling the prior release with its matching CRDs
+and restoring backed-up resources; the direct runtime deliberately contains no nested emergency
+path.
+
+## Compatibility
+
+Per-kind compatibility is generated from the live imported registry and the recorded
+conformance evidence -- see [Compatibility](/docs/compatibility). A kind is reported compatible
+only while its planning, boot, management, dataplane, lifecycle, and cleanup evidence is
+current; evidence is invalidated automatically when the baseline, planner, renderer,
+preparation, or connectivity implementation changes.

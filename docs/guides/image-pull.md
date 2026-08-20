@@ -114,7 +114,7 @@ created. Kubelet pull failures appear on the device Pod as normal events such as
 Inspect the Node, Pod, events, and resolved profile:
 
 ```bash
-kubectl -n lab describe node router
+kubectl -n lab describe nodes.c9s.run router
 kubectl -n lab get pods -l c9s.run/direct-workload=router
 kubectl -n lab describe pod -l c9s.run/direct-workload=router
 kubectl -n lab get launcherprofile private-images -o yaml

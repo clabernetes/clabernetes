@@ -1,6 +1,6 @@
 ---
 title: Resources and scheduling
-description: Configure launcher resources, node selection, tolerations, and privileges.
+description: Configure device Pod resources, node selection, tolerations, and privileges.
 ---
 
 This guide explains how to configure resource limits, requests, node scheduling, and tolerations for Clabernetes topologies.
@@ -9,7 +9,7 @@ This guide explains how to configure resource limits, requests, node scheduling,
 
 Clabernetes allows fine-grained control over:
 
-- **Resource requests/limits**: CPU and memory for launcher pods
+- **Resource requests/limits**: CPU and memory for device Pods
 - **Node selectors**: Control which Kubernetes nodes run your topology
 - **Tolerations**: Run on tainted nodes
 
@@ -69,8 +69,9 @@ Node receives an explicit `launcherProfileRef`; profiles do not inherit from one
 
 ### Direct Node and LauncherProfile Resources
 
-When authoring the primary API directly, put launcher resources on a LauncherProfile and reference
-it explicitly from each intended Node:
+When authoring the primary API directly, put resource policy on a LauncherProfile and reference
+it explicitly from each intended Node. Profile resources apply to each logical Node's primary
+application container; component containers keep the requirements their imported plan declares:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -131,6 +132,26 @@ spec:
       requests:
         memory: "512Mi"
         cpu: "250m"
+```
+
+### Containerlab `cpu` and `memory`
+
+A node definition may size its own container with containerlab vocabulary: `cpu` (vcpus) and
+`memory` (i.e. `1Gb`) become the device container's Kubernetes CPU and memory limits. `cpu-set`
+is rejected -- CPU pinning has no portable Pod mapping. For a resource name that a
+LauncherProfile (or the global default) also sets, the profile value wins on the logical Node's
+primary application container:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+spec:
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+  cpu: 2
+  memory: 4Gb
 ```
 
 ### Resource Priority
@@ -350,9 +371,10 @@ kubectl describe node <node-name> | grep -A5 "Allocated"
 
 ## Privileged Mode
 
-Device privilege is not user configuration. Nested launcher pods are privileged by design, and
-in the direct runtime each device container receives exactly the privilege, capabilities, and
-devices its imported containerlab kind plan declares -- there is no `privilegedLauncher` knob.
+There is no privileged wrapper pod and no `privilegedLauncher` knob. Each device container
+receives exactly the privilege, capabilities, and devices its imported containerlab kind plan
+declares -- including any `privileged`, `cap-add`, or `devices` vocabulary in the node
+definition itself. Privilege is per-container plan output, never profile or Config policy.
 
 ## Related
 

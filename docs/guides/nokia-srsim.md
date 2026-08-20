@@ -104,7 +104,8 @@ spec:
 Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single chassis using
 multiple containers—one for each card slot (CPM-A, CPM-B, IOMs). In the explicit-card form,
 secondary containers share a network namespace via `network-mode: container:<name>`; in the
-component form, Containerlab creates and wires the component containers.
+component form, the imported containerlab package expands the node into card containers during
+planning.
 
 | Platform Type | Description |
 | --------------- | ------------- |
@@ -122,11 +123,12 @@ component form, Containerlab creates and wires the component containers.
 **How it works:**
 
 Containerlab supports two ways to describe the cards. A single logical node can use a `components`
-block, in which case Containerlab expands it into card containers and constructs the internal
-fabric. Alternatively, each card can be an explicit node and secondary cards can use
-`network-mode: container:<primary-card>`. Clabernetes keeps every card of either form in one
-launcher Pod and one network namespace as required by distributed SR-SIM; Containerlab remains
-responsible for the SR-SIM expansion and fabric setup.
+block, in which case the imported containerlab package expands it into card containers and
+constructs the internal fabric. Alternatively, each card can be an explicit node and secondary
+cards can use `network-mode: container:<primary-card>`. Clabernetes keeps every card of either
+form in one device Pod and one shared network namespace as required by distributed SR-SIM; the
+imported containerlab package remains responsible for the SR-SIM expansion and fabric setup, and
+each card runs as a directly visible application container of that Pod.
 
 The component form is the closest match to a normal containerlab topology:
 
@@ -182,18 +184,17 @@ spec:
 ```
 
 The structured `veth` endpoints above compile to the same c9s Link as brief endpoints such as
-`["srsim:1/1/c1/1", "client:eth1"]`. Clabernetes still creates one Node and one launcher Pod for
-`srsim`; nested containerlab creates component containers such as `srsim-a` and `srsim-1`.
-An empty `components: []` declaration is also accepted for SR-SIM images that use Containerlab's
-default component expansion, including the issue-269 topology shape. In every component form,
-Clabernetes requires one namespace owner and verifies that every dependent component resolves into
-that namespace; invalid ownership prevents launcher startup rather than selecting a card
-arbitrarily.
+`["srsim:1/1/c1/1", "client:eth1"]`. Clabernetes still creates one Node and one device Pod for
+`srsim`; the planned card containers are directly visible application containers of that Pod, so
+`kubectl logs` and `kubectl exec` reach a specific card with `-c`. An empty `components: []`
+declaration is also accepted for SR-SIM images that use Containerlab's default component
+expansion, including the issue-269 topology shape. In every component form, Clabernetes requires
+one namespace owner and verifies that every dependent component resolves into that namespace;
+invalid ownership fails planning rather than selecting a card arbitrarily.
 
-The same Containerlab definition can be converted with `clabverter --emit-crs` or used through
-`containerlab --runtime clabernetes`. Containerlab remains responsible for component expansion and
-fabric construction, while Clabernetes owns the Kubernetes Node, launcher Pod, readiness, and
-shared payload lifecycle.
+The same Containerlab definition can be converted with `clabverter --emit-crs`. The imported
+containerlab package remains responsible for component expansion and fabric construction, while
+Clabernetes owns the Kubernetes Node, device Pod, readiness, and shared payload lifecycle.
 
 **Example distributed topology:**
 
@@ -257,19 +258,19 @@ spec:
             env:
               NOKIA_SROS_SLOT: "1"
         links:
-          # Links to other chassis or external devices use VXLAN tunnels
+          # Links to other chassis or external devices cross the cluster fabric
           - endpoints: ["srsim-iom1:1/1/c1/1", "external-router:e1-1"]
 ```
 
 **Key points for distributed mode:**
 
-1. **Primary card**: The card without `network-mode` (typically CPM-A) is the primary. Resources, services, and tunnels are associated with this card's name.
+1. **Primary card**: The card without `network-mode` (typically CPM-A) is the primary. The Deployment/Pod and its resource policy are associated with this card's name.
 
 2. **Secondary cards**: Cards with `network-mode: container:<primary>` (CPM-B, IOMs) are grouped with their primary and deployed in the same pod.
 
-3. **Links**: Links between cards in the same chassis remain as local containerlab links. Links to other chassis or external nodes use VXLAN tunnels.
+3. **Links**: Links between cards in the same chassis stay inside the Pod's shared network namespace. Links to other chassis or external nodes cross the cluster fabric: veth legs plumbed by the node-local host-endpoint daemon, patched directly on one worker or tunneled over VXLAN between workers.
 
-4. **Service names**: Services are created for the primary card only. Use the primary card name when connecting from other pods.
+4. **Service names**: Every card Node receives its own services, all selecting the shared chassis pod; the primary card name always works when connecting from other pods.
 
 5. **Multiple chassis**: If you deploy multiple distributed chassis (e.g., two SR-7 routers), each chassis gets its own pod. Different chassis can be scheduled on different Kubernetes worker nodes.
 
@@ -361,7 +362,7 @@ spec:
             type: sr-1
 ```
 
-For distributed chassis, specify resources for the primary card (the pod runs all cards in the chassis):
+For distributed chassis, specify resources for the primary card (the policy applies to each card's application container in the chassis pod):
 
 ```yaml
 spec:
@@ -414,7 +415,8 @@ spec:
             type: sr-1
 ```
 
-All components of one logical node see the same license because they share the launcher filesystem.
+All components of one logical node see the same license because the preparation container stages
+and verifies the node's payload once, and every card container mounts it at the planned path.
 For the explicit-card form, attach the license to the primary Node when authoring primitive resources
 directly. If converted group members repeat the same shared destination, Clabernetes renders one Pod
 mount at that normalized path only when the ConfigMap, key, and mode agree. A conflicting repeated
@@ -440,7 +442,7 @@ While cards within a chassis must be co-located, different chassis (routers) in 
 
 ### Port Publishing
 
-Secondary cards (those with `network-mode: container:<primary>`) cannot have their own port mappings. All exposed ports are configured on the primary card and shared across the chassis via the common network namespace.
+All cards of one chassis share a single network namespace, so exposed ports are chassis-wide rather than per-card: every card Node's expose service targets that shared namespace, and the default auto-exposed port set is allocated once across the group.
 
 ## Related Resources
 

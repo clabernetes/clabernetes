@@ -4,7 +4,8 @@ description: Link custom resource schema.
 icon: Cable
 ---
 
-The `Link` CRD represents a single point-to-point wire between two containerlab nodes. Launchers
-select links with field selectors on endpoint node names (Kubernetes 1.31+).
+The `Link` CRD represents a single point-to-point wire between two containerlab nodes. Each device
+Pod's connectivity helper selects the links terminating on its own Nodes with field selectors on
+endpoint node names (Kubernetes 1.31+).
 
 <CrdViewer name="link" />

@@ -13,5 +13,5 @@ LauncherProfile, Link, and Node objects.
 - [Topology](/docs/crd/topology) — optional whole-lab compiler input
 - [Node](/docs/crd/node) — primary API: one containerlab node per object
 - [Link](/docs/crd/link) — primary API: one wire between two nodes
-- [LauncherProfile](/docs/crd/launcher-profile) — reusable launcher policy
+- [LauncherProfile](/docs/crd/launcher-profile) — reusable direct-workload policy
 - [Config](/docs/crd/config) — cluster-wide defaults

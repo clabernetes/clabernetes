@@ -33,7 +33,7 @@ defaults apply. An explicit reference that does not exist prevents the Node from
 
 ## Link
 
-A Link declares exactly two endpoints and the connectivity mechanism used to join them.
+A Link declares exactly two endpoints and a connectivity flavor (`vxlan` or `slurpeeth`).
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -51,8 +51,10 @@ spec:
 ```
 
 Wiring belongs only to Link objects; interfaces are not embedded into Node specifications. The
-link controller validates endpoints and records tunnel allocation in status, while each launcher
-watches only the Links terminating on its Nodes.
+link controller validates endpoints and records a cluster-wide tunnel allocation in status, while
+each device Pod's connectivity helper watches only the Links terminating on its own Nodes. The
+transport realizing a wire is controller-selected: same-worker endpoint pairs are patched
+directly, and cross-worker pairs use a VXLAN tunnel carrying the Link's allocated tunnel id.
 
 ## Why direct resources?
 
