@@ -97,9 +97,9 @@
 - [x] 10.4 Validate Arista cEOS configuration, interface fixups, management, and dataplane tests.
 - [x] 10.5 Validate a Cisco XR/vrnetlab family with KVM/tap, configuration, management, and dataplane tests.
 - [x] 10.6 Validate Juniper VM-based families with components where applicable, KVM/tap, configuration, management, and dataplane tests.
-- [ ] 10.7 Add repeatable restricted-image harnesses and current recorded evidence for every commercial/license-gated matrix entry before marking it compatible.
-- [ ] 10.8 Add conformance for startup configs, variables, licenses, certificates, persistence, DNS, Services, probes, exec, logs, save, events, packet capture, and every supported security/storage behavior.
-- [ ] 10.9 Make matrix status/evidence invalidation automatic when the baseline, planner, renderer, preparation, connectivity, or relevant fixtures change.
+- [x] 10.7 Add repeatable restricted-image harnesses and current recorded evidence for every commercial/license-gated matrix entry before marking it compatible.
+- [x] 10.8 Add conformance for startup configs, variables, licenses, certificates, persistence, DNS, Services, probes, exec, logs, save, events, packet capture, and every supported security/storage behavior.
+- [x] 10.9 Make matrix status/evidence invalidation automatic when the baseline, planner, renderer, preparation, connectivity, or relevant fixtures change.
 
 ## 11. Remove the Nested Runtime
 

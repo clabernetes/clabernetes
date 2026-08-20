@@ -1,11 +1,9 @@
 package ceos_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -53,7 +51,7 @@ func TestCEOSBootsAndReachesLinux(t *testing.T) {
 		}
 	}()
 
-	createRegistrySecret(t, namespace)
+	clabernetestesthelper.CreateGHCRPullSecret(t, namespace, ceosRegistrySecret)
 	applyTopology(t, namespace, ceosImage)
 
 	clabernetestesthelper.KubectlWaitForCreate(t, "deployment", namespace, "ceos1")
@@ -156,7 +154,7 @@ func assertRenderedManagement(t *testing.T, namespace string) {
 		namespace,
 		"deployment/ceos1",
 		"-c",
-		deviceContainerName(t, namespace, "ceos1"),
+		clabernetestesthelper.DirectDeviceContainerName(t, namespace, "ceos1"),
 		"--",
 		"Cli",
 		"-c",
@@ -184,7 +182,7 @@ func waitForDatapath(t *testing.T, namespace string) {
 			namespace,
 			"deployment/l1",
 			"-c",
-			deviceContainerName(t, namespace, "l1"),
+			clabernetestesthelper.DirectDeviceContainerName(t, namespace, "l1"),
 			"--",
 			"ping",
 			"-c",
@@ -212,103 +210,6 @@ func waitForDatapath(t *testing.T, namespace string) {
 		case <-time.After(datapathPollPeriod):
 		}
 	}
-}
-
-func deviceContainerName(t *testing.T, namespace, workload string) string {
-	t.Helper()
-
-	output := runKubectl(
-		t,
-		"get",
-		"pods",
-		"--namespace",
-		namespace,
-		"--selector",
-		"c9s.run/direct-workload="+workload,
-		"-o",
-		`jsonpath={range .items[0].spec.containers[*]}{.name}{"\n"}{end}`,
-	)
-	for _, name := range strings.Split(string(output), "\n") {
-		if strings.HasPrefix(name, "device-") {
-			return name
-		}
-	}
-
-	t.Fatalf("workload %q has no direct device container: %s", workload, output)
-
-	return ""
-}
-
-func createRegistrySecret(t *testing.T, namespace string) {
-	t.Helper()
-
-	configPath := dockerConfigPath(t)
-
-	configData, err := os.ReadFile(configPath) //nolint:gosec // path is the runner Docker config.
-	if err != nil {
-		t.Fatalf("read Docker config %q: %v", configPath, err)
-	}
-
-	var config struct {
-		Auths map[string]json.RawMessage `json:"auths"`
-	}
-
-	err = json.Unmarshal(configData, &config)
-	if err != nil {
-		t.Fatalf("decode Docker config %q: %v", configPath, err)
-	}
-
-	ghcrAuth, ok := config.Auths["ghcr.io"]
-	if !ok {
-		t.Fatalf("Docker config %q has no ghcr.io credentials", configPath)
-	}
-
-	minimalConfig, err := json.Marshal(struct {
-		Auths map[string]json.RawMessage `json:"auths"`
-	}{
-		Auths: map[string]json.RawMessage{"ghcr.io": ghcrAuth},
-	})
-	if err != nil {
-		t.Fatalf("encode GHCR Docker config: %v", err)
-	}
-
-	minimalConfigPath := filepath.Join(t.TempDir(), "config.json")
-
-	err = os.WriteFile(
-		minimalConfigPath,
-		minimalConfig,
-		0o600,
-	)
-	if err != nil {
-		t.Fatalf("write GHCR Docker config: %v", err)
-	}
-
-	runKubectl(
-		t,
-		"create",
-		"secret",
-		"generic",
-		ceosRegistrySecret,
-		"--namespace",
-		namespace,
-		"--type=kubernetes.io/dockerconfigjson",
-		"--from-file=.dockerconfigjson="+minimalConfigPath,
-	)
-}
-
-func dockerConfigPath(t *testing.T) string {
-	t.Helper()
-
-	if dockerConfigDir := os.Getenv("DOCKER_CONFIG"); dockerConfigDir != "" {
-		return filepath.Join(dockerConfigDir, "config.json")
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("resolve home directory for Docker config: %v", err)
-	}
-
-	return filepath.Join(homeDir, ".docker", "config.json")
 }
 
 func runKubectl(t *testing.T, args ...string) []byte {

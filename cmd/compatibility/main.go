@@ -21,7 +21,11 @@ var (
 )
 
 func main() {
-	mode := flag.String("mode", "verify", "operation: verify, extract-registry, or render-doc")
+	mode := flag.String(
+		"mode",
+		"verify",
+		"operation: verify, extract-registry, render-doc, or refresh-invalidation",
+	)
 	baselinePath := flag.String(
 		"baseline",
 		clabernetesinternalcompatibility.DefaultBaselinePath,
@@ -66,6 +70,25 @@ func main() {
 		documentation := clabernetesinternalcompatibility.RenderDocumentation(baseline)
 		if _, err = os.Stdout.Write(documentation); err != nil {
 			fatal(fmt.Errorf("writing compatibility documentation: %w", err))
+		}
+	case "refresh-invalidation":
+		baseline, err := clabernetesinternalcompatibility.LoadBaseline(*baselinePath)
+		if err != nil {
+			fatal(err)
+		}
+		current, err := clabernetesinternalcompatibility.ComputeInvalidation(".")
+		if err != nil {
+			fatal(err)
+		}
+		baseline.Invalidation = current
+		if err = clabernetesinternalcompatibility.SaveBaseline(*baselinePath, baseline); err != nil {
+			fatal(err)
+		}
+		if _, err = fmt.Fprintln(
+			os.Stdout,
+			"refreshed compatibility invalidation digests",
+		); err != nil {
+			fatal(fmt.Errorf("writing refresh result: %w", err))
 		}
 	case "verify":
 		baseline, err := clabernetesinternalcompatibility.LoadBaseline(*baselinePath)

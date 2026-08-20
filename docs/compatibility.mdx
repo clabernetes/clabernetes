@@ -59,8 +59,8 @@ The current-realization column describes how each behavior is implemented:
 | `operation` | `operation-events` | `Node identity`, `container lifecycle`, `connectivity lifecycle` | `operations` | `operation-events` | `controller-native` |
 | `operation` | `operation-exec` | `Node identity`, `component identity`, `command` | `operations` | `operation-exec` | `direct` |
 | `operation` | `operation-logs` | `Node identity`, `container identity` | `operations` | `operation-logs` | `controller-native` |
-| `operation` | `operation-packet-capture` | `Node identity`, `interface identity`, `capture options` | `operations` | `operation-packet-capture` | `partial` |
-| `operation` | `operation-save` | `Node identity`, `kind save behavior`, `persistence destination` | `lifecycle`, `operations` | `operation-save` | `partial` |
+| `operation` | `operation-packet-capture` | `Node identity`, `interface identity`, `capture options` | `operations` | `operation-packet-capture` | `direct` |
+| `operation` | `operation-save` | `Node identity`, `kind save behavior`, `persistence destination` | `lifecycle`, `operations` | `operation-save` | `direct` |
 | `runtime` | `node-bootstrap` | `resolved Node group`, `accepted Links`, `device plan` | `configuration`, `kind-plan`, `process` | `node-bootstrap` | `direct` |
 | `runtime` | `node-image-pull` | `Node.spec.image`, `LauncherProfile.spec.imagePull`, `Config.spec.imagePull` | `image-pull` | `node-image-pull` | `direct` |
 | `runtime` | `node-readiness` | `container status`, `OCI healthcheck`, `component status`, `imported readiness`, `LauncherProfile.spec.statusProbes` | `readiness` | `node-readiness` | `direct` |

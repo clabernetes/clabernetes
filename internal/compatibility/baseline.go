@@ -395,6 +395,34 @@ func (b *Baseline) VerifyRepository(root string) error {
 		}
 	}
 
+	currentInvalidation, err := ComputeInvalidation(root)
+	if err != nil {
+		problems = append(problems, fmt.Sprintf("computing invalidation digests: %v", err))
+	} else {
+		for component, pair := range map[string][2]string{
+			"planner":      {b.Invalidation.Planner, currentInvalidation.Planner},
+			"renderer":     {b.Invalidation.Renderer, currentInvalidation.Renderer},
+			"preparation":  {b.Invalidation.Preparation, currentInvalidation.Preparation},
+			"connectivity": {b.Invalidation.Connectivity, currentInvalidation.Connectivity},
+		} {
+			if pair[0] != pair[1] {
+				problems = append(
+					problems,
+					fmt.Sprintf(
+						"invalidation.%s is stale (recorded %s, current %s): the %s "+
+							"implementation changed, so recorded conformance evidence is "+
+							"retired; re-run the affected conformance and refresh with "+
+							"go run ./cmd/compatibility -mode refresh-invalidation",
+						component,
+						pair[0],
+						pair[1],
+						component,
+					),
+				)
+			}
+		}
+	}
+
 	documentationPath := filepath.Join(root, DefaultDocumentationPath)
 	// The supplied root intentionally scopes this repository read.
 	//nolint:gosec
@@ -683,4 +711,17 @@ func registrationOwners(registrations []Registration) map[string]registrationOwn
 		}
 	}
 	return result
+}
+
+// SaveBaseline writes a validated baseline back to path with the canonical encoding used by
+// the committed manifest.
+func SaveBaseline(path string, baseline *Baseline) error {
+	encoded, err := json.MarshalIndent(baseline, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding baseline: %w", err)
+	}
+	encoded = append(encoded, '\n')
+
+	//nolint:gosec // The manifest is repository content, not a secret.
+	return os.WriteFile(path, encoded, 0o644)
 }

@@ -799,7 +799,7 @@
         "internal/deviceplan/save.go",
         "internal/directruntime/lifecycle.go"
       ],
-      "state": "partial"
+      "state": "direct"
     },
     {
       "id": "operation-events",
@@ -839,7 +839,7 @@
         "internal/directruntime/capture.go",
         "internal/directpod/renderer.go"
       ],
-      "state": "partial"
+      "state": "direct"
     },
     {
       "id": "entry-direct-resources",
@@ -901,9 +901,9 @@
     }
   ],
   "invalidation": {
-    "planner": "device-plan-schema-v1alpha1",
-    "renderer": "direct-pod-renderer",
-    "preparation": "direct-two-render-preparation",
-    "connectivity": "direct-connectivity-helper-revision"
+    "planner": "sha256:58a53bce842caad8",
+    "renderer": "sha256:d4c7b2e7013f2e94",
+    "preparation": "sha256:e3b60c91a21cdd99",
+    "connectivity": "sha256:c024a8bcad951e8d"
   }
 }
