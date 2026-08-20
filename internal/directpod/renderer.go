@@ -1195,18 +1195,19 @@ func renderApplicationLifecycle(
 		slices.SortFunc(container.VolumeMounts, func(left, right k8scorev1.VolumeMount) int {
 			return strings.Compare(left.MountPath, right.MountPath)
 		})
-		if preStartTargets[containerID] {
-			container.Command = []string{
-				lifecycleBinaryPath,
-				"device-runtime",
-				"launch",
-				"--plan",
-				lifecyclePlanRoot + "/plan.json",
-				"--containerID",
-				containerID,
-			}
-			container.Args = nil
+		// Every application container starts through the launch boundary: it applies pre-start
+		// operations and restores the container-runtime-conventional process limits imported
+		// packages assume before exec-ing the image's real process.
+		container.Command = []string{
+			lifecycleBinaryPath,
+			"device-runtime",
+			"launch",
+			"--plan",
+			lifecyclePlanRoot + "/plan.json",
+			"--containerID",
+			containerID,
 		}
+		container.Args = nil
 		if postStartTargets[containerID] {
 			if container.Lifecycle == nil {
 				container.Lifecycle = &k8scorev1.Lifecycle{}

@@ -383,6 +383,12 @@ Step 0 and Step 1 of §7 are done; the work now lives in reviewable commits on `
   VNIs share one wire space per worker, so concurrent labs with cross-node Links collided on
   VTEP creation ("file exists") and crash-looped their connectivity helpers. Allocation is now
   cluster-wide with namespaced-name tie-breaks; retention semantics unchanged.
+- VM/vrnetlab kinds pass (tasks 10.5/10.6): cisco_xrv boots under qemu/KVM in the direct Pod
+  and forwards across the cross-worker fabric through the vrnetlab tap/tc chain; juniper_vqfx
+  likewise. One generic gap fixed: Kubernetes runtimes may grant RLIMIT_NOFILE = kernel max,
+  which turns qemu'"'"'s pre-exec fd sweep into an hours-long spin — every direct application
+  container now starts through the launch boundary, which restores the container-runtime-
+  conventional bound before exec. Evidence: `evidence/task-10.5-10.6-vm-kinds-direct.md`.
 - Arista cEOS (task 10.4) passes (Ready ~40s: startup-config, interface fixups, hook-applied
   management addressing, fabric dataplane ping) after three more generic fixes: systemd-based
   NOS images mount a fresh tmpfs over `/run`, shadowing every c9s mount under

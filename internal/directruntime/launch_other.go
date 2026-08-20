@@ -23,6 +23,10 @@ func (unsupportedLaunchOperations) MountFilesystem(_, _, filesystem string, _ []
 	return fmt.Errorf("filesystem operation %q requires Linux", filesystem)
 }
 
+func (unsupportedLaunchOperations) LimitOpenFiles(uint64) error {
+	return fmt.Errorf("open-file limits require Linux")
+}
+
 func (unsupportedLaunchOperations) Exec(_ []string) error {
 	return fmt.Errorf("direct application process replacement requires Linux")
 }

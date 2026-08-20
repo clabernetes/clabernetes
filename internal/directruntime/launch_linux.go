@@ -92,6 +92,18 @@ func (linuxLaunchOperations) MountFilesystem(
 	return nil
 }
 
+func (linuxLaunchOperations) LimitOpenFiles(limit uint64) error {
+	current := unix.Rlimit{}
+	if err := unix.Getrlimit(unix.RLIMIT_NOFILE, &current); err != nil {
+		return fmt.Errorf("reading open-file limit: %w", err)
+	}
+	if current.Max <= limit {
+		return nil
+	}
+
+	return unix.Setrlimit(unix.RLIMIT_NOFILE, &unix.Rlimit{Cur: limit, Max: limit})
+}
+
 func (linuxLaunchOperations) Exec(argv []string) error {
 	executable, err := exec.LookPath(argv[0])
 	if err != nil {

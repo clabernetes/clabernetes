@@ -17,6 +17,7 @@ type recordingLaunchOperations struct {
 	options     []string
 	delays      []time.Duration
 	argv        []string
+	fileLimits  []uint64
 }
 
 func (r *recordingLaunchOperations) Delay(duration time.Duration) error {
@@ -35,6 +36,12 @@ func (r *recordingLaunchOperations) MountFilesystem(
 	r.destination = destination
 	r.filesystem = filesystem
 	r.options = append([]string(nil), options...)
+
+	return nil
+}
+
+func (r *recordingLaunchOperations) LimitOpenFiles(limit uint64) error {
+	r.fileLimits = append(r.fileLimits, limit)
 
 	return nil
 }

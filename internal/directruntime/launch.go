@@ -9,12 +9,19 @@ import (
 	clabernetesdeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
 
+// conventionalNoFileLimit is the open-file bound containerlab's supported container runtime
+// gives every kind. Kubernetes container runtimes may grant the kernel maximum instead, which
+// breaks imported processes whose fork/exec helpers iterate the whole descriptor range, so the
+// launch boundary restores the conventional bound before handing over to the image's process.
+const conventionalNoFileLimit = 1_048_576
+
 // LaunchOperations is the narrow application-container boundary used before replacing the c9s
 // helper with the image's real process. It deliberately describes generic filesystem and process
 // operations and contains no containerlab kind vocabulary.
 type LaunchOperations interface {
 	Delay(duration time.Duration) error
 	MountFilesystem(source, destination, filesystem string, options []string) error
+	LimitOpenFiles(limit uint64) error
 	Exec(argv []string) error
 }
 
@@ -94,6 +101,9 @@ func RunLaunchWithOperations(
 	argv := append(entrypoint, command...)
 	if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
 		return fmt.Errorf("application image and plan provide no executable command")
+	}
+	if err = operations.LimitOpenFiles(conventionalNoFileLimit); err != nil {
+		return fmt.Errorf("bounding application open files: %w", err)
 	}
 	if err = operations.Exec(argv); err != nil {
 		return fmt.Errorf("starting application process: %w", err)

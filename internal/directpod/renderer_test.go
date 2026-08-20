@@ -317,9 +317,12 @@ func TestRenderCreatesDirectApplicationContainersFromGenericPlan(t *testing.T) {
 	if root == nil || component == nil {
 		t.Fatalf("device application containers = %#v", pod.Containers)
 	}
-	if got, want := root.Command, []string{"/usr/bin/device"}; len(got) != 1 || got[0] != want[0] ||
-		len(root.Args) != 1 || root.Args[0] != "serve" {
-		t.Fatalf("OCI command mapping = command %#v args %#v", root.Command, root.Args)
+	// Every application container starts through the launch boundary, which resolves the OCI
+	// entrypoint/command from the plan and restores conventional process limits before exec.
+	if len(root.Command) == 0 ||
+		root.Command[0] != "/var/lib/clabernetes/lifecycle-bin/manager" ||
+		!slices.Contains(root.Command, "launch") || root.Args != nil {
+		t.Fatalf("launch boundary mapping = command %#v args %#v", root.Command, root.Args)
 	}
 	if root.SecurityContext == nil || root.SecurityContext.Privileged == nil ||
 		!*root.SecurityContext.Privileged || root.SecurityContext.RunAsUser == nil ||
