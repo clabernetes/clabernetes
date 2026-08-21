@@ -841,8 +841,102 @@ func TestPlanPreservesImportedManagementInterfaceDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(plan.Management) != 1 || plan.Management[0].InterfaceName != "imported-mgmt" {
-		t.Fatalf("management plan = %#v, want imported interface default", plan.Management)
+	// An allocated identity is realized by interposition; the imported interface default flows
+	// into the derived device-leg contract instead of the direct interface selection.
+	if len(plan.Management) != 1 ||
+		plan.Management[0].InterfaceSelector !=
+			clabernetesinternaldeviceplan.ManagementInterfaceInterposed ||
+		plan.Management[0].Interposition == nil ||
+		plan.Management[0].Interposition.DeviceInterface != "imported-mgmt" {
+		t.Fatalf("management plan = %#v, want imported interface contract", plan.Management)
+	}
+
+	// Without an allocation the package-declared interface identity still rides the plan.
+	unallocated := singleNodeInput(syntheticKind, "example/future:1")
+
+	unallocatedPlan, err := (clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "generic-management-v1",
+	}).Plan(context.Background(), unallocated)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(unallocatedPlan.Management) != 1 ||
+		unallocatedPlan.Management[0].InterfaceName != "imported-mgmt" ||
+		unallocatedPlan.Management[0].Interposition != nil {
+		t.Fatalf(
+			"unallocated management plan = %#v, want imported interface default",
+			unallocatedPlan.Management,
+		)
+	}
+}
+
+func TestPlanMergesManagementInboundPortsIntoInterposition(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Definition = mustJSON(t, map[string]any{
+		"kind": syntheticKind, "image": "example/future:1", "ports": []string{"9000/tcp"},
+	})
+	input.Management = []clabernetesinternaldeviceplan.ManagementInput{{
+		NodeID: "node-a", IPv4: "192.0.2.10/24", IPv4Gateway: "192.0.2.1",
+		InboundPorts: []clabernetesinternaldeviceplan.Port{
+			// A declared container port is authoritative -- the matching controller port must
+			// not duplicate its translation.
+			{Number: 9000, Protocol: "TCP"},
+			{Number: 22, Protocol: "TCP"},
+			{Number: 161, Protocol: "UDP"},
+		},
+	}}
+
+	plan, err := (clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "management-inbound-ports-v1",
+	}).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(plan.Management) != 1 || plan.Management[0].Interposition == nil {
+		t.Fatalf("management plan = %#v, want interposition contract", plan.Management)
+	}
+
+	ports := slices.Clone(plan.Management[0].Interposition.InboundPorts)
+	slices.SortFunc(ports, func(left, right clabernetesinternaldeviceplan.ManagementPortMap) int {
+		if compared := strings.Compare(left.Protocol, right.Protocol); compared != 0 {
+			return compared
+		}
+
+		return int(left.PodPort) - int(right.PodPort)
+	})
+
+	want := []clabernetesinternaldeviceplan.ManagementPortMap{
+		{Protocol: "tcp", PodPort: 22, DevicePort: 22},
+		{Protocol: "tcp", PodPort: 9000, DevicePort: 9000},
+		{Protocol: "udp", PodPort: 161, DevicePort: 161},
+	}
+	if !reflect.DeepEqual(ports, want) {
+		t.Fatalf("interposition inbound ports = %#v, want %#v", ports, want)
+	}
+}
+
+func TestPlanRejectsInvalidManagementInboundPort(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Management = []clabernetesinternaldeviceplan.ManagementInput{{
+		NodeID: "node-a", IPv4: "192.0.2.10/24", IPv4Gateway: "192.0.2.1",
+		InboundPorts: []clabernetesinternaldeviceplan.Port{{Number: 0, Protocol: "TCP"}},
+	}}
+
+	_, err := (clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "management-inbound-ports-v1",
+	}).Plan(context.Background(), input)
+
+	var planErr *clabernetesinternaldeviceplan.Error
+	if !errors.As(err, &planErr) ||
+		planErr.Code != clabernetesinternaldeviceplan.ErrorInvalidInput ||
+		planErr.Field != "management[0].inboundPorts[0]" {
+		t.Fatalf("Plan() error = %#v, %v", planErr, err)
 	}
 }
 

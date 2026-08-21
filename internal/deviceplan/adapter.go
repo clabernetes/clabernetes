@@ -46,10 +46,8 @@ type Adapter struct {
 	// unaddressed carries the Pod address — matching containerlab's always-addressed management
 	// model — after the immutable input identity was validated. Planning leaves it empty because
 	// the address exists only at runtime.
-	PodAddress string
 	// PodGateway is the Pod's own default gateway, completing the runtime management identity
 	// for packages that consume a management gateway.
-	PodGateway string
 	// PodDNSServers are the Pod's own resolver addresses, completing the runtime management
 	// identity the same way containerlab fills every node's DNS configuration from the host
 	// resolv.conf when the topology declares none.
@@ -1494,17 +1492,13 @@ func nodeConfigFromDefinition(
 	return config, nil
 }
 
-// completeRuntimeManagement fills the management entry of every logical Node the controller
-// left unaddressed with the executing Pod's own address: a plan input group is exactly one Pod,
-// so the Pod address is the management identity of every member. Callers apply it only after
-// validating the immutable input identity — the completion is a runtime realization, never an
-// input change.
+// completeRuntimeManagement rehydrates runtime-only management facts: the package-declared
+// interface identity recorded at planning and the Pod resolver's DNS servers. Management
+// addresses and gateways are controller-allocated and complete at plan time; runtime completion
+// MUST NOT synthesize an identity.
 func completeRuntimeManagement(
 	values []ManagementInput,
-	nodes []NodeInput,
 	plans []ManagementPlan,
-	podAddress string,
-	podGateway string,
 	podDNSServers []string,
 ) []ManagementInput {
 	interfaces := map[string]string{}
@@ -1514,9 +1508,7 @@ func completeRuntimeManagement(
 		}
 	}
 	result := slices.Clone(values)
-	covered := map[string]bool{}
 	for index := range result {
-		covered[result[index].NodeID] = true
 		// The package-declared management interface recorded at planning survives rehydration
 		// even when the controller allocation omitted it.
 		if result[index].InterfaceName == "" {
@@ -1527,27 +1519,6 @@ func completeRuntimeManagement(
 		if len(result[index].DNS.Servers) == 0 {
 			result[index].DNS.Servers = slices.Clone(podDNSServers)
 		}
-	}
-	address := strings.TrimSpace(podAddress)
-	if address == "" {
-		return result
-	}
-	for _, node := range nodes {
-		if covered[node.ID] {
-			continue
-		}
-		entry := ManagementInput{
-			NodeID:        node.ID,
-			InterfaceName: interfaces[node.ID],
-			IPv4Gateway:   podGateway,
-			DNS:           DNSConfig{Servers: slices.Clone(podDNSServers)},
-		}
-		if strings.Contains(address, ":") {
-			entry.IPv6 = address
-		} else {
-			entry.IPv4 = address
-		}
-		result = append(result, entry)
 	}
 
 	return result

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"reflect"
 	"slices"
@@ -999,6 +1000,7 @@ func TestCompileDirectManagementAllocatesStableUniqueDualStackAddresses(t *testi
 		[]string{secondary.GetName(), primary.GetName()},
 		nodes,
 		policy,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1010,6 +1012,7 @@ func TestCompileDirectManagementAllocatesStableUniqueDualStackAddresses(t *testi
 			secondary.GetName(): secondary, primary.GetName(): primary, remote.GetName(): remote,
 		},
 		policy,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1019,7 +1022,9 @@ func TestCompileDirectManagementAllocatesStableUniqueDualStackAddresses(t *testi
 		t.Fatalf("management allocation is not deterministic: first=%#v second=%#v", first, second)
 	}
 
-	if len(first) != 2 || first[1].IPv4 != "192.0.2.6/29" {
+	// The container-network-mode secondary shares the namespace owner's identity and gets no
+	// allocation of its own, matching containerlab semantics.
+	if len(first) != 1 || first[0].IPv4 != "192.0.2.6/29" {
 		t.Fatalf("management allocations = %#v", first)
 	}
 
@@ -1041,6 +1046,128 @@ func TestCompileDirectManagementAllocatesStableUniqueDualStackAddresses(t *testi
 	}
 }
 
+func TestCompileDirectManagementDefaultsToContainerlabSubnet(t *testing.T) {
+	t.Parallel()
+
+	primary := planInputTestNode("primary", "uid-primary", "opaque-a", "example/a:1")
+	secondary := planInputTestNode("secondary", "uid-secondary", "opaque-b", "example/b:1")
+	nodes := map[string]*clabernetesapisv1alpha1.Node{
+		primary.GetName(): primary, secondary.GetName(): secondary,
+	}
+
+	for name, policy := range map[string]*clabernetesapisv1alpha1.ManagementPolicy{
+		"nil policy":             nil,
+		"empty policy":           {},
+		"subnet without gateway": {IPv4Subnet: "192.0.2.0/29"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			allocations, err := compileDirectManagement(
+				[]string{primary.GetName(), secondary.GetName()},
+				nodes,
+				policy,
+				nil,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(allocations) != 2 {
+				t.Fatalf("expected an allocation for every node, got %#v", allocations)
+			}
+
+			expectedSubnet, expectedGateway := "172.20.20.", "172.20.20.1"
+			if policy != nil && policy.IPv4Subnet != "" {
+				expectedSubnet, expectedGateway = "192.0.2.", "192.0.2.1"
+			}
+
+			for _, allocation := range allocations {
+				if allocation.IPv4 == "" ||
+					!strings.HasPrefix(allocation.IPv4, expectedSubnet) {
+					t.Fatalf("allocation outside expected subnet: %#v", allocation)
+				}
+
+				if allocation.IPv4Gateway != expectedGateway {
+					t.Fatalf(
+						"gateway does not follow the containerlab first-address convention: %#v",
+						allocation,
+					)
+				}
+
+				if strings.HasPrefix(allocation.IPv4, expectedGateway+"/") {
+					t.Fatalf("allocation collides with the derived gateway: %#v", allocation)
+				}
+			}
+		})
+	}
+
+	// An operator-declared gateway is never overridden by the convention.
+	explicit, err := compileDirectManagement(
+		[]string{primary.GetName()},
+		nodes,
+		&clabernetesapisv1alpha1.ManagementPolicy{IPv4Subnet: "192.0.2.0/29", IPv4Gw: "192.0.2.6"},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(explicit) != 1 || explicit[0].IPv4Gateway != "192.0.2.6" {
+		t.Fatalf("explicit gateway was not preserved: %#v", explicit)
+	}
+}
+
+func TestCompileDirectManagementCarriesInboundPorts(t *testing.T) {
+	t.Parallel()
+
+	node := planInputTestNode("router", "uid-router", "opaque-a", "example/a:1")
+	inbound := []clabernetesinternaldeviceplan.Port{
+		{Number: 22, Protocol: "TCP"},
+		{Number: 161, Protocol: "UDP"},
+	}
+
+	management, err := compileDirectManagement(
+		[]string{node.GetName()},
+		map[string]*clabernetesapisv1alpha1.Node{node.GetName(): node},
+		nil,
+		inbound,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(management) != 1 || !reflect.DeepEqual(management[0].InboundPorts, inbound) {
+		t.Fatalf("management = %#v, want carried inbound ports", management)
+	}
+}
+
+func TestDirectManagementInboundPortsFollowAutoExpose(t *testing.T) {
+	t.Parallel()
+
+	if ports := directManagementInboundPorts(
+		&ResolvedProfile{DisableAutoExpose: true},
+	); ports != nil {
+		t.Fatalf("directManagementInboundPorts() = %#v, want nil with auto expose disabled", ports)
+	}
+
+	ports := directManagementInboundPorts(&ResolvedProfile{})
+	if len(ports) == 0 {
+		t.Fatal("directManagementInboundPorts() empty, want the default expose set")
+	}
+
+	byKey := map[string]bool{}
+	for _, port := range ports {
+		byKey[fmt.Sprintf("%d/%s", port.Number, port.Protocol)] = true
+	}
+
+	for _, want := range []string{"22/TCP", "57400/TCP", "161/UDP"} {
+		if !byKey[want] {
+			t.Fatalf("directManagementInboundPorts() = %#v, missing %s", ports, want)
+		}
+	}
+}
+
 func TestCompileDirectManagementRejectsDuplicateExplicitAddress(t *testing.T) {
 	t.Parallel()
 
@@ -1054,6 +1181,7 @@ func TestCompileDirectManagementRejectsDuplicateExplicitAddress(t *testing.T) {
 			left.GetName(): left, right.GetName(): right,
 		},
 		&clabernetesapisv1alpha1.ManagementPolicy{IPv4Subnet: "192.0.2.0/29"},
+		nil,
 	)
 
 	var planningErr *clabernetesinternaldeviceplan.Error
@@ -1077,6 +1205,7 @@ func TestCompileDirectManagementRejectsNamespaceDuplicateOutsideCurrentGroup(t *
 			left.GetName(): left, right.GetName(): right,
 		},
 		nil,
+		nil,
 	)
 
 	var planningErr *clabernetesinternaldeviceplan.Error
@@ -1097,6 +1226,7 @@ func TestCompileDirectManagementRequiresPrefixOrDeclaredSubnet(t *testing.T) {
 		[]string{node.GetName()},
 		map[string]*clabernetesapisv1alpha1.Node{node.GetName(): node},
 		nil,
+		nil,
 	)
 
 	var planningErr *clabernetesinternaldeviceplan.Error
@@ -1116,6 +1246,7 @@ func TestCompileDirectManagementRejectsReservedStaticAddress(t *testing.T) {
 		[]string{node.GetName()},
 		map[string]*clabernetesapisv1alpha1.Node{node.GetName(): node},
 		&clabernetesapisv1alpha1.ManagementPolicy{IPv4Subnet: "192.0.2.0/29"},
+		nil,
 	)
 
 	var planningErr *clabernetesinternaldeviceplan.Error
@@ -1786,6 +1917,25 @@ func directTestWorkerLogsWithMode(
 		}
 
 		containerID := input.Nodes[0].ID + "/primary"
+
+		management := make(
+			[]clabernetesinternaldeviceplan.ManagementPlan,
+			0,
+			len(input.Management),
+		)
+		for _, item := range input.Management {
+			management = append(management, clabernetesinternaldeviceplan.ManagementPlan{
+				ID:                "management/" + item.NodeID,
+				NodeID:            item.NodeID,
+				InterfaceSelector: clabernetesinternaldeviceplan.ManagementInterfacePodTransport,
+				IPv4:              item.IPv4,
+				IPv4Gateway:       item.IPv4Gateway,
+				IPv6:              item.IPv6,
+				IPv6Gateway:       item.IPv6Gateway,
+				DNS:               item.DNS,
+			})
+		}
+
 		interfaces := make([]clabernetesinternaldeviceplan.InterfacePlan, 0, len(input.Interfaces))
 
 		actions := []clabernetesinternaldeviceplan.Action{{
@@ -1851,6 +2001,7 @@ func directTestWorkerLogsWithMode(
 				NodeID: input.Nodes[0].ID,
 				Kind:   clabernetesinternaldeviceplan.VolumeArtifacts,
 			}},
+			Management: management,
 			Interfaces: interfaces,
 			Actions:    actions,
 		})

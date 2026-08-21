@@ -48,10 +48,7 @@ func (a Adapter) RunPostDeploy(
 	}
 	normalizedInput.Management = completeRuntimeManagement(
 		normalizedInput.Management,
-		normalizedInput.Nodes,
 		normalizedPlan.Management,
-		a.PodAddress,
-		a.PodGateway,
 		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
@@ -149,10 +146,7 @@ func (a Adapter) RunDeployEndpoints(
 	}
 	normalizedInput.Management = completeRuntimeManagement(
 		normalizedInput.Management,
-		normalizedInput.Nodes,
 		normalizedPlan.Management,
-		a.PodAddress,
-		a.PodGateway,
 		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)

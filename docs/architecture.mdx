@@ -148,34 +148,38 @@ launch the VM itself.
 
 ### Inter-Node Connectivity
 
-The device always sees a plain veth interface -- every kind tolerates that, including kinds
-that take ownership of the Pod's primary interface. Cross-pod wires are realized by a small
-privileged node-local **host-endpoint DaemonSet** that plumbs a veth leg into each Pod and owns
-the transport in the worker host namespace: endpoints on one worker are patched together
-directly (tc mirred, no encapsulation), endpoints on different workers get a VXLAN tunnel per
-endpoint whose VNI is the Link's allocated tunnel id. `Link.spec.connectivity: vxlan |
-slurpeeth` remains accepted input; both map onto this controller-selected realization.
+The device always sees a plain interface leg -- every kind tolerates that, including kinds
+that adopt the interfaces presented to them. All connectivity is realized by the Pod's own
+privileged **connectivity sidecar**; no node-resident agent exists. Before any device container
+starts, the sidecar preserves the CNI interface under a sidecar-owned name (`c9s0`), so the
+Kubernetes underlay survives whatever a device does to the interfaces it is shown.
 
-Peer discovery uses the per-node headless fabric service (`<remote node>-vx.<namespace>...`),
-which publishes the current Pod address even before readiness. Moving a wire's far end
-("rewiring") re-targets the transport live; Pod rescheduling converges through the daemon's
-periodic sweep. Same-Pod, loopback, and local veth state stays inside the Pod sandbox and is
-removed automatically with it. Host Links (`host:<interface>` endpoints) create UID-labeled
-host-namespace objects owned by the daemon, which also sweeps orphans after crashes or force
-deletions.
-
-The daemon additionally gives each device Pod a **management loop**: a hairpin path for the
-Pod's own address through the worker namespace, so imported lifecycle hooks that dial the
-node's management address keep working even after a device strips the Pod's primary interface.
+Cross-pod wires terminate inside the Pod on that preserved underlay: each endpoint is a veth
+leg stitched (tc mirred, checksums materialized) to an in-Pod VXLAN VTEP whose VNI is the
+Link's allocated tunnel id. `Link.spec.connectivity: vxlan | slurpeeth` remains accepted
+input; both map onto this Pod-local realization. Peer discovery uses the per-node headless
+fabric service (`<remote node>-vx.<namespace>...`), which publishes the current Pod address
+even before readiness; rewiring and Pod rescheduling converge on the sidecar's reconcile tick.
+Same-Pod, loopback, and local veth state stays inside the Pod sandbox and is removed
+automatically with it. Host Links (`host:<interface>` endpoints) are veth pairs whose
+worker-side end the sidecar places through a read-only worker network-namespace handle
+(mounted only when the topology declares host Links); because a veth pair dies with either
+end, forced Pod deletion leaves no worker residue and nothing needs sweeping.
 
 ### Management and DNS
 
-Management identity is always addressed: the Pod address is the real management plane, and
-every in-Pod lifecycle boundary completes the management entry of any Node the controller left
-unaddressed with that address. Operator-declared management policies (profile `mgmt` subnets,
-static `mgmt-ipv4`/`mgmt-ipv6`) keep precedence and are realized on the planned management
-overlay without replacing the Kubernetes Pod transport address. Lab members resolve each other
-by node name through namespace-local Services; declared `aliases` add extra headless Services
+Management identity is always addressed with containerlab semantics: every node's management
+address is controller-allocated -- from the operator's management policy (profile `mgmt`
+subnets, static `mgmt-ipv4`/`mgmt-ipv6`), or from containerlab's default management subnet
+(`172.20.20.0/24`, gateway at the first usable address) when no policy is declared. The
+sidecar interposes a synthetic management interface carrying that address before the device
+starts: the device adopts it exactly as it would a physical management port, a sidecar-owned
+policy routing table keeps Kubernetes transport immune to device rewrites of the main table,
+and an nftables translation table (hooked ahead of anything a device programs) SNATs outbound
+management traffic to the Pod address and DNATs declared ports from it, so Service exposure
+keeps working. Management configuration renders at plan time through each kind's own imported
+templates using the allocated address, prefix, and gateway. Lab members resolve each other by
+node name through namespace-local Services; declared `aliases` add extra headless Services
 bound to the same Pod.
 
 ### Exposing Nodes

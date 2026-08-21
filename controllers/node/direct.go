@@ -154,7 +154,12 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return fmt.Errorf("deriving imported containerlab compatibility: %w", err)
 	}
-	management, err := compileDirectManagement(groupMembers, nodesByName, profile.Mgmt)
+	management, err := compileDirectManagement(
+		groupMembers,
+		nodesByName,
+		profile.Mgmt,
+		directManagementInboundPorts(profile),
+	)
 	if err != nil {
 		return err
 	}
@@ -1110,7 +1115,7 @@ func configMapPayloadKeys(configMap *k8scorev1.ConfigMap) []string {
 
 func configMapPayloadContent(configMap *k8scorev1.ConfigMap, key string) ([]byte, error) {
 	text, hasText := configMap.Data[key]
-	binary, hasBinary := configMap.BinaryData[key]
+	binaryData, hasBinary := configMap.BinaryData[key]
 	if hasText && hasBinary {
 		return nil, fmt.Errorf("ConfigMap key %q is ambiguous", key)
 	}
@@ -1118,7 +1123,7 @@ func configMapPayloadContent(configMap *k8scorev1.ConfigMap, key string) ([]byte
 		return []byte(text), nil
 	}
 	if hasBinary {
-		return slices.Clone(binary), nil
+		return slices.Clone(binaryData), nil
 	}
 
 	return nil, fmt.Errorf("ConfigMap key %q does not exist", key)
@@ -1217,17 +1222,45 @@ func appendDirectPayload(
 	return nil
 }
 
+// directManagementInboundPorts returns the auto-expose default port set as management inbound
+// translations; with auto expose disabled, inbound translation covers declared container ports
+// only.
+func directManagementInboundPorts(
+	profile *ResolvedProfile,
+) []clabernetesinternaldeviceplan.Port {
+	if profile.DisableAutoExpose {
+		return nil
+	}
+
+	defaults := defaultExposePorts()
+
+	ports := make([]clabernetesinternaldeviceplan.Port, 0, len(defaults))
+
+	for _, port := range defaults {
+		ports = append(ports, clabernetesinternaldeviceplan.Port{
+			Number:   port.DestinationPort,
+			Protocol: port.Protocol,
+		})
+	}
+
+	return ports
+}
+
 func compileDirectManagement(
 	groupMembers []string,
 	nodesByName map[string]*clabernetesapisv1alpha1.Node,
 	mgmt *clabernetesapisv1alpha1.ManagementPolicy,
+	inboundPorts []clabernetesinternaldeviceplan.Port,
 ) ([]clabernetesinternaldeviceplan.ManagementInput, error) {
 	if err := validateUniqueExplicitManagementAddresses(nodesByName); err != nil {
 		return nil, directManagementError("addresses", err.Error())
 	}
-	settings := &clabernetesapisv1alpha1.ManagementPolicy{}
+	settings := clabernetesapisv1alpha1.ManagementPolicy{}
 	if mgmt != nil {
-		settings = mgmt
+		settings = *mgmt
+	}
+	if err := applyDefaultManagementPolicy(&settings); err != nil {
+		return nil, err
 	}
 	ipv4Pool, err := newDirectManagementPool(
 		settings.IPv4Subnet,
@@ -1268,6 +1301,11 @@ func compileDirectManagement(
 	for _, name := range groupMembers {
 		node := nodesByName[name]
 		if node == nil {
+			continue
+		}
+		// Containerlab gives container-network-mode members no management identity of their
+		// own: they share the namespace owner's interposed identity.
+		if strings.HasPrefix(node.Spec.NetworkMode, "container:") {
 			continue
 		}
 		ipv4, normalizeErr := normalizeDirectManagementAddress(node.Spec.MgmtIPv4, ipv4Pool)
@@ -1311,6 +1349,7 @@ func compileDirectManagement(
 		}
 		value := clabernetesinternaldeviceplan.ManagementInput{
 			NodeID: string(node.GetUID()), IPv4: ipv4, IPv6: ipv6,
+			InboundPorts: slices.Clone(inboundPorts),
 		}
 		value.IPv4Gateway = settings.IPv4Gw
 		value.IPv6Gateway = settings.IPv6Gw

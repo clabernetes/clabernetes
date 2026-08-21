@@ -201,18 +201,6 @@ func NormalizeLink(t *testing.T, objectData []byte) []byte {
 
 	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointA.uid)")
 	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointB.uid)")
-	// Host-terminated transports annotate the Link with the worker and daemon Pod that own the
-	// endpoint; both follow scheduling, so only stable identity may reach a golden file.
-	objectData = YQCommand(
-		t,
-		objectData,
-		`del(.metadata.annotations."c9s.run/host-endpoint-node")`,
-	)
-	objectData = YQCommand(
-		t,
-		objectData,
-		`del(.metadata.annotations."c9s.run/host-endpoint-pod-uid")`,
-	)
 	objectData = YQCommand(t, objectData, "del(.metadata.annotations | select(length == 0))")
 
 	return objectData

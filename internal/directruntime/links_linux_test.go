@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"unsafe"
 
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -350,5 +351,114 @@ func configureTestLink(t *testing.T, name, address string) {
 
 	if err = netlink.LinkSetUp(link); err != nil {
 		t.Fatal(err)
+	}
+}
+
+const ethtoolNetlinkChild = "C9S_ETHTOOL_NETLINK_TEST_CHILD"
+
+func TestDisableTxChecksumOffloadRejectsInvalidName(t *testing.T) {
+	t.Parallel()
+
+	operations := netlinkOperations{}
+
+	if err := operations.DisableTxChecksumOffload(""); err == nil {
+		t.Fatal("expected an empty interface name to be rejected")
+	}
+
+	if err := operations.DisableTxChecksumOffload("interface-name-far-too-long"); err == nil {
+		t.Fatal("expected an over-long interface name to be rejected")
+	}
+}
+
+func TestDisableTxChecksumOffloadInIsolatedNamespace(t *testing.T) {
+	if os.Getenv(ethtoolNetlinkChild) == "1" {
+		testDisableTxChecksumOffload(t)
+
+		return
+	}
+
+	unshare, err := exec.LookPath("unshare")
+	if err != nil {
+		t.Skip("unshare is unavailable")
+	}
+
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	unshareArguments := []string{
+		"-Urn",
+		executable,
+		"-test.run=^TestDisableTxChecksumOffloadInIsolatedNamespace$",
+	}
+	if os.Geteuid() == 0 {
+		unshareArguments[0] = "-n"
+	}
+
+	command := exec.CommandContext( //nolint:gosec // The current test binary is executed in a new namespace.
+		t.Context(),
+		unshare,
+		unshareArguments...,
+	)
+
+	command.Env = append(os.Environ(), ethtoolNetlinkChild+"=1")
+
+	output, err := command.CombinedOutput()
+	if err != nil {
+		if strings.Contains(strings.ToLower(string(output)), "operation not permitted") {
+			t.Skip(
+				"the kernel restricts required netlink operations in an unprivileged user namespace",
+			)
+		}
+
+		t.Fatalf("isolated ethtool test failed: %v\n%s", err, output)
+	}
+}
+
+func testDisableTxChecksumOffload(t *testing.T) {
+	t.Helper()
+	runtime.LockOSThread()
+
+	defer runtime.UnlockOSThread()
+
+	err := netlink.LinkAdd(&netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{Name: "c9stxa"},
+		PeerName:  "c9stxb",
+	})
+	if err != nil {
+		t.Fatalf("creating veth pair: %v", err)
+	}
+
+	operations := netlinkOperations{}
+
+	if err := operations.DisableTxChecksumOffload("c9stxa"); err != nil {
+		t.Fatalf("disabling checksum offload: %v", err)
+	}
+
+	socket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
+	if err != nil {
+		t.Fatalf("opening ethtool socket: %v", err)
+	}
+
+	defer func() { _ = syscall.Close(socket) }()
+
+	value := ethtoolValue{command: ethtoolGetTxChecksum}
+
+	request := ethtoolInterfaceRequest{
+		data: uintptr(unsafe.Pointer(&value)), //nolint:gosec // fixed-layout kernel ABI struct.
+	}
+	copy(request.name[:], "c9stxa")
+
+	if err := ioctlEthtool(socket, uintptr(unsafe.Pointer(&request))); err != nil { //nolint:gosec // fixed-layout kernel ABI struct.
+		t.Fatalf("reading checksum offload state: %v", err)
+	}
+
+	if value.data != 0 {
+		t.Fatal("tx checksum offload is still enabled after disable")
+	}
+
+	if err := operations.DisableTxChecksumOffload("c9stxa"); err != nil {
+		t.Fatalf("second disable is not idempotent: %v", err)
 	}
 }

@@ -19,7 +19,6 @@ import (
 	"time"
 
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
-	clabernetesinternalhostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -52,8 +51,11 @@ var (
 	ErrConnectivityRevision = errors.New("invalid direct connectivity revision")
 )
 
-// LinkOperations is the narrow namespace-mutation boundary used by the direct connectivity
-// helper. It contains no node-kind behavior.
+// LinkOperations is the namespace-mutation boundary used by the direct connectivity helper. It
+// contains no node-kind behavior; it is one seam so tests fake every namespace mutation family
+// together.
+//
+//nolint:interfacebloat // one deliberate seam over all Pod-namespace mutation families.
 type LinkOperations interface {
 	// EnsureSysctl applies one package-requested setting in the shared Pod network namespace.
 	EnsureSysctl(name, value string) error
@@ -77,6 +79,23 @@ type LinkOperations interface {
 		table int,
 		owner string,
 	) error
+	// DisableTxChecksumOffload turns transmit checksum offload off on one interface so
+	// userspace device dataplanes reading raw frames observe complete checksums.
+	DisableTxChecksumOffload(interfaceName string) error
+	// EnsureInterposition converges the Pod namespace to one interposed management identity:
+	// preserved CNI transport, synthetic device pair, hardening baseline, and the sidecar-owned
+	// transport policy table. It is idempotent and never mutates device-owned state.
+	EnsureInterposition(spec InterpositionSpec) error
+	// EnsureFabricEndpoint realizes one cross-Pod endpoint inside the Pod namespace on the
+	// preserved underlay: device leg, sidecar leg, VTEP, and stitch. An unresolved peer is
+	// unready, not an error.
+	EnsureFabricEndpoint(spec FabricEndpointSpec) (FabricEndpointResult, error)
+	// EnsureHostInterface realizes one host Link by placing the worker-side veth end into the
+	// worker namespace through the read-only namespace handle.
+	EnsureHostInterface(spec HostInterfaceSpec) error
+	// SweepTransportState removes sidecar-owned transport links whose owners are no longer
+	// desired, tolerating already-absent state.
+	SweepTransportState(ownerPrefix string, keepOwners []string) error
 }
 
 // VethInterface is the ownership inventory needed to reconcile one Pod network namespace. The
@@ -851,7 +870,9 @@ type ConnectivityOptions struct {
 	PodAddress               string
 	ConnectivityRevisionPath string
 	RevisionPollInterval     time.Duration
-	HostEndpointReconciler   HostEndpointReconciler
+	// NATOperations is the packet-translation seam; production wiring installs the nftables
+	// backend and tests inject fakes.
+	NATOperations NATOperations
 
 	// hostEndpointPacer rate-limits steady-state host endpoint re-assertion; the daemon owns
 	// drift correction, so unchanged ticks do not need a per-second RPC fan-out.
@@ -919,26 +940,13 @@ func (p *hostEndpointPacer) lastKnownReady() bool {
 	return p.lastSucceeded && p.lastReady
 }
 
-// HostEndpointReconciler is the narrow node-local RPC boundary used for generic host Links,
-// cross-Pod fabric endpoints, and the Pod's management loop. The request contains only immutable
-// Kubernetes identities and interface intent; the response reports per-Link fabric transport and
-// management loop readiness.
-type HostEndpointReconciler interface {
-	Reconcile(
-		ctx context.Context,
-		request clabernetesinternalhostendpoint.ReconcileRequest,
-		networkNamespacePath string,
-	) (
-		[]clabernetesinternalhostendpoint.FabricStatus,
-		*clabernetesinternalhostendpoint.ManagementStatus,
-		error,
-	)
-}
-
 // EndpointNamespace keeps a target Pod namespace handle open while one imported endpoint hook
 // executes from the distinct worker-host network namespace.
 type EndpointNamespace interface {
 	TargetPath() string
+	// WorkerPath is an open-fd path to the worker network namespace, usable as a setns/move
+	// destination from the Pod namespace.
+	WorkerPath() string
 	Execute(operation func() error) error
 	Close() error
 }
@@ -970,15 +978,10 @@ func RunConnectivityWithOptions(
 	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 ) error {
-	if options.HostEndpointReconciler == nil {
-		options.HostEndpointReconciler = clabernetesinternalhostendpoint.Client{
-			SocketPath: clabernetesinternalhostendpoint.DefaultSocketPath,
-		}
-	}
-
 	var namespace EndpointNamespace
 
-	if hasImportedEndpointActions(plan) || options.ApplicationRuntimeSocket != "" {
+	if hasImportedEndpointActions(plan) || hasHostInterfacePlans(plan) ||
+		options.ApplicationRuntimeSocket != "" {
 		opened, err := openEndpointNamespace(options.HostNetworkNamespacePath)
 		if err != nil {
 			return err
@@ -1052,6 +1055,10 @@ func runConnectivity(
 
 	options.hostEndpointPacer = &hostEndpointPacer{}
 
+	if options.NATOperations == nil {
+		options.NATOperations = newNATOperations()
+	}
+
 	if err := validateIdentity(input, plan); err != nil {
 		return err
 	}
@@ -1112,6 +1119,10 @@ func runConnectivity(
 		return err
 	}
 
+	if err = reconcileInterposition(effectivePlan, options, operations); err != nil {
+		return err
+	}
+
 	if err = reconcileManagementAddresses(
 		effectivePlan,
 		operations,
@@ -1125,11 +1136,12 @@ func runConnectivity(
 		return err
 	}
 
-	connectivityReady, err := reconcileDaemonEndpoints(
+	connectivityReady, err := reconcileEndpointTransports(
 		ctx,
 		effectiveInput,
 		effectivePlan,
 		options,
+		operations,
 		hasDaemonInterfaces(plan),
 		false,
 	)
@@ -1403,6 +1415,13 @@ func waitForConnectivityRevisions(
 
 			return fmt.Errorf("application log broker failed: %w", brokerErr)
 		case <-revisionTicks:
+			// Interposition state is sidecar-owned: a device rewrite of shared namespace state
+			// is converged back on the next tick, and an unrecoverable divergence restarts the
+			// sidecar into a full fail-closed cold pass.
+			if err := reconcileInterposition(basePlan, options, operations); err != nil {
+				return err
+			}
+
 			nextRevision, nextReady, err := applyProjectedConnectivityRevision(
 				ctx,
 				baseInput,
@@ -1470,13 +1489,23 @@ func hasDaemonInterfaces(plan clabernetesinternaldeviceplan.Plan) bool {
 // endpoint is a plain veth leg, so a device that takes over the Pod's primary interface cannot
 // disturb the transport. The returned readiness covers every fabric endpoint's transport.
 //
-//nolint:funlen,gocyclo // One request carries both endpoint families with shared identity.
-func reconcileDaemonEndpoints(
-	ctx context.Context,
+// directTransportOwnerType marks sidecar-owned fabric and host-Link transport state, distinct
+// from the local veth owner family so the local-interface sweep never touches it.
+const directTransportOwnerType = "transport"
+
+// reconcileEndpointTransports realizes every host Link and cross-Pod fabric endpoint inside the
+// Pod: host Links place their worker leg through the read-only namespace handle, and fabric
+// endpoints terminate as stitched VTEPs on the preserved underlay. The returned readiness covers
+// every fabric endpoint's transport; an unresolved peer keeps the endpoint prepared but unready.
+//
+//nolint:funlen,gocyclo // One pass carries both endpoint families with shared identity.
+func reconcileEndpointTransports(
+	_ context.Context,
 	input clabernetesinternaldeviceplan.Input,
 	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
-	reconcileEmpty bool,
+	operations LinkOperations,
+	_ bool,
 	steadyState bool,
 ) (bool, error) {
 	if steadyState && !options.hostEndpointPacer.due(time.Now()) {
@@ -1488,8 +1517,10 @@ func reconcileDaemonEndpoints(
 		nodes[node.ID] = node
 	}
 
-	endpoints := []clabernetesinternalhostendpoint.Endpoint{}
-	fabric := []clabernetesinternalhostendpoint.FabricEndpoint{}
+	ready := true
+	desiredOwners := []string{}
+
+	var reconcileErr error
 
 	for _, intf := range plan.Interfaces {
 		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityHost &&
@@ -1506,123 +1537,69 @@ func reconcileDaemonEndpoints(
 			)
 		}
 
-		link := clabernetesinternalhostendpoint.ObjectIdentity{
-			Namespace: options.PodNamespace,
-			Name:      intf.LinkName,
-			UID:       intf.LinkID,
-		}
+		owner := directLinkOwner(
+			options.PodUID,
+			directTransportOwnerType,
+			intf.LinkID,
+			intf.NodeID,
+			intf.PeerNodeID,
+		)
+		desiredOwners = append(desiredOwners, owner)
 
-		owner := clabernetesinternalhostendpoint.ObjectIdentity{
-			Namespace: options.PodNamespace,
-			Name:      node.Name,
-			UID:       intf.NodeID,
-		}
 		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityHost {
-			endpoints = append(endpoints, clabernetesinternalhostendpoint.Endpoint{
-				Link:          link,
-				Node:          owner,
+			if err := operations.EnsureHostInterface(HostInterfaceSpec{
+				InterfaceID:   intf.ID,
+				InterfaceName: intf.Name,
 				HostInterface: intf.PeerInterface,
-				PodInterface:  intf.Name,
+				Owner:         owner,
 				MTU:           intf.MTU,
-			})
+			}); err != nil {
+				reconcileErr = fmt.Errorf("realizing host Link %q: %w", intf.LinkID, err)
+
+				break
+			}
 
 			continue
 		}
 
-		fabric = append(fabric, clabernetesinternalhostendpoint.FabricEndpoint{
-			Link:         link,
-			Node:         owner,
-			PodInterface: intf.Name,
-			TunnelID:     intf.TunnelID,
-			MTU:          intf.MTU,
+		result, err := operations.EnsureFabricEndpoint(FabricEndpointSpec{
+			InterfaceID:   intf.ID,
+			InterfaceName: intf.Name,
+			Owner:         owner,
+			TunnelID:      intf.TunnelID,
+			MTU:           intf.MTU,
+			PeerTransport: intf.PeerTransport,
+			PodAddress:    options.PodAddress,
 		})
-	}
+		if err != nil {
+			reconcileErr = fmt.Errorf("realizing fabric Link %q: %w", intf.LinkID, err)
 
-	management := desiredManagementEndpoint(input, options)
-	if len(endpoints) == 0 && len(fabric) == 0 && management == nil && !reconcileEmpty {
-		return true, nil
-	}
-
-	if options.HostEndpointReconciler == nil {
-		return false, errors.New("host-endpoint daemon reconciliation is unavailable")
-	}
-
-	request := clabernetesinternalhostendpoint.ReconcileRequest{
-		SchemaVersion: clabernetesinternalhostendpoint.SchemaVersion,
-		Pod: clabernetesinternalhostendpoint.ObjectIdentity{
-			Namespace: options.PodNamespace,
-			Name:      options.PodName,
-			UID:       options.PodUID,
-		},
-		Endpoints:  endpoints,
-		Fabric:     fabric,
-		Management: management,
-	}
-	statuses, managementStatus, err := options.HostEndpointReconciler.Reconcile(
-		ctx,
-		request,
-		podNetworkNamespacePath,
-	)
-
-	ready := err == nil
-	if ready {
-		readyByLink := make(map[string]bool, len(statuses))
-		for _, status := range statuses {
-			readyByLink[status.LinkUID] = status.Ready
+			break
 		}
 
-		for _, endpoint := range fabric {
-			if !readyByLink[endpoint.Link.UID] {
-				ready = false
-
-				break
-			}
-		}
-
-		if management != nil && (managementStatus == nil || !managementStatus.Ready) {
+		if !result.Ready {
 			ready = false
 		}
 	}
 
-	options.hostEndpointPacer.record(time.Now(), err == nil, ready)
+	if reconcileErr == nil {
+		reconcileErr = operations.SweepTransportState(
+			directLinkPodOwnerPrefix(options.PodUID, directTransportOwnerType),
+			desiredOwners,
+		)
+	}
 
-	if err != nil {
-		return false, fmt.Errorf("reconciling daemon-owned Links: %w", err)
+	if reconcileErr != nil {
+		ready = false
+	}
+
+	options.hostEndpointPacer.record(time.Now(), reconcileErr == nil, ready)
+
+	if reconcileErr != nil {
+		return false, reconcileErr
 	}
 
 	return ready, nil
-}
-
-// desiredManagementEndpoint is the Pod's management loop intent: it keys on the workload's
-// primary logical Node and carries the Pod's own IPv4 cluster address, which is the management
-// identity the direct runtime realizes when the operator declared no management policy. IPv6
-// Pod addresses are not requested yet.
-func desiredManagementEndpoint(
-	input clabernetesinternaldeviceplan.Input,
-	options ConnectivityOptions,
-) *clabernetesinternalhostendpoint.ManagementEndpoint {
-	address, err := netip.ParseAddr(options.PodAddress)
-	if err != nil || !address.Is4() {
-		return nil
-	}
-
-	for _, node := range input.Nodes {
-		if node.GroupOwner != "" || node.Name == "" || node.ID == "" {
-			continue
-		}
-
-		return &clabernetesinternalhostendpoint.ManagementEndpoint{
-			Node: clabernetesinternalhostendpoint.ObjectIdentity{
-				Namespace: options.PodNamespace,
-				Name:      node.Name,
-				UID:       node.ID,
-			},
-			PodInterface: clabernetesinternalhostendpoint.ManagementPodInterface,
-			PodAddress:   address.String(),
-		}
-	}
-
-	return nil
 }
 
 func applyProjectedConnectivityRevision(
@@ -1644,11 +1621,12 @@ func applyProjectedConnectivityRevision(
 	}
 
 	if desiredDigest == appliedRevision {
-		ready, reconcileErr := reconcileDaemonEndpoints(
+		ready, reconcileErr := reconcileEndpointTransports(
 			ctx,
 			revisedInput,
 			revisedPlan,
 			options,
+			operations,
 			hasDaemonInterfaces(basePlan),
 			true,
 		)
@@ -1667,11 +1645,12 @@ func applyProjectedConnectivityRevision(
 		return appliedRevision, false, err
 	}
 
-	ready, err := reconcileDaemonEndpoints(
+	ready, err := reconcileEndpointTransports(
 		ctx,
 		revisedInput,
 		revisedPlan,
 		options,
+		operations,
 		hasDaemonInterfaces(basePlan),
 		false,
 	)
@@ -1814,6 +1793,16 @@ func applicationLogTargets(
 	return targets, nil
 }
 
+func hasHostInterfacePlans(plan clabernetesinternaldeviceplan.Plan) bool {
+	for _, intf := range plan.Interfaces {
+		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityHost {
+			return true
+		}
+	}
+
+	return false
+}
+
 func hasImportedEndpointActions(plan clabernetesinternaldeviceplan.Plan) bool {
 	for _, action := range plan.Actions {
 		if action.Phase == clabernetesinternaldeviceplan.PhaseInterfaceFixup &&
@@ -1872,7 +1861,6 @@ func reconcileImportedEndpointLifecycle(
 
 		if err = (clabernetesinternaldeviceplan.Adapter{
 			Revision: options.Revision, EntropyRoot: options.EntropyRoot,
-			PodAddress: options.PodAddress,
 		}).RunDeployEndpoints(
 			ctx,
 			input,
@@ -1911,8 +1899,17 @@ func ValidatePlanCapabilities(plan clabernetesinternaldeviceplan.Plan) error {
 
 		if management.InterfaceName == "" &&
 			management.InterfaceSelector !=
-				clabernetesinternaldeviceplan.ManagementInterfacePodTransport {
+				clabernetesinternaldeviceplan.ManagementInterfacePodTransport &&
+			management.InterfaceSelector !=
+				clabernetesinternaldeviceplan.ManagementInterfaceInterposed {
 			return errors.New("planned management interface selector is unsupported")
+		}
+
+		if management.InterfaceSelector ==
+			clabernetesinternaldeviceplan.ManagementInterfaceInterposed &&
+			(management.Interposition == nil ||
+				!validLinuxInterfaceName(management.Interposition.DeviceInterface)) {
+			return errors.New("planned interposed management contract is incomplete")
 		}
 
 		prefixes := map[bool]netip.Prefix{}
@@ -2254,6 +2251,12 @@ func reconcileManagementAddresses(
 	transportConsumed := false
 
 	for index, item := range management {
+		if item.InterfaceSelector == clabernetesinternaldeviceplan.ManagementInterfaceInterposed {
+			// Interposed identities are realized by the interposition stage on the synthetic
+			// device leg; nothing may double-realize them on the Pod transport.
+			continue
+		}
+
 		if item.IPv4 == "" && item.IPv6 == "" && item.IPv4Gateway == "" &&
 			item.IPv6Gateway == "" && len(item.Routes) == 0 {
 			// Interface-identity-only entries exist so the package-declared management
@@ -2665,6 +2668,17 @@ func ConnectivityReady(plan clabernetesinternaldeviceplan.Plan, stateDirectory s
 
 	raw, err := os.ReadFile(filepath.Join(filepath.Clean(stateDirectory), connectivityReadyFile))
 	if err != nil {
+		conditions, conditionsErr := os.ReadFile(
+			filepath.Join(filepath.Clean(stateDirectory), InterpositionConditionsFile),
+		)
+		if conditionsErr == nil && len(conditions) != 0 {
+			return fmt.Errorf(
+				"reading connectivity readiness marker: %w; interposition conditions: %s",
+				err,
+				strings.TrimSpace(string(conditions)),
+			)
+		}
+
 		return fmt.Errorf("reading connectivity readiness marker: %w", err)
 	}
 

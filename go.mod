@@ -22,6 +22,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.21.9
+	github.com/google/nftables v0.3.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/srl-labs/containerlab v0.78.0
 	github.com/vishvananda/netlink v1.3.1
@@ -124,7 +125,6 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-intervals v0.0.2 // indirect
-	github.com/google/nftables v0.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/schema v1.4.1 // indirect

@@ -298,10 +298,8 @@ func runLifecycle(
 			if runtimeErr != nil {
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, runtimeErr)
 			}
-			podAddress, podGateway := runtimePodAddressWithRecord(root)
 			if err = (clabernetesinternaldeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
-				PodAddress: podAddress, PodGateway: podGateway,
 				PodDNSServers: RuntimePodDNSServers(),
 			}).RunPostDeploy(
 				ctx,
@@ -339,10 +337,8 @@ func runLifecycle(
 			if runtimeErr != nil {
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, runtimeErr)
 			}
-			podAddress, podGateway := runtimePodAddressWithRecord(root)
 			if err = (clabernetesinternaldeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
-				PodAddress: podAddress, PodGateway: podGateway,
 				PodDNSServers: RuntimePodDNSServers(),
 			}).RunSave(
 				ctx,

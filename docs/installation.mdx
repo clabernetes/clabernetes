@@ -14,13 +14,18 @@ A typical installation method uses the [c9s Helm chart](https://github.com/clabe
 
 - **Kubernetes 1.31 or newer.** The direct runtime relies on restartable init containers
   (native sidecars) and server-side field selectors for Link watches.
-- **Privileged workloads must be admitted** in lab namespaces and for the chart's DaemonSet:
-  every device Pod runs a privileged connectivity init-sidecar, and the node-local
-  host-endpoint DaemonSet manages veth legs and fabric transports in the worker host network
-  namespaces. Device containers themselves receive only the privilege their imported kind plan
-  declares.
-- **VXLAN support in the worker kernel** for cross-worker wires (standard in distribution
-  kernels; the transport terminates in the worker host namespace, not inside Pods).
+- **Privileged workloads must be admitted** in lab namespaces: every device Pod runs a
+  privileged connectivity init-sidecar that owns interposition, fabric, and host-Link wiring
+  pod-locally. No node-resident agent is installed. Device containers themselves receive only
+  the privilege their imported kind plan declares.
+- **VXLAN and nftables support in the worker kernel** (standard in distribution kernels):
+  cross-worker wires terminate as VTEPs inside the Pods on the CNI network, and management
+  translation uses an nftables table inside each Pod's namespace.
+- **Upgrading from a daemon-era release**: the chart no longer ships the host-endpoint
+  DaemonSet. Device Pods recreate under sidecar ownership on upgrade; stale fabric VTEP
+  interfaces a previous daemon left in worker namespaces (`ip -d link show type vxlan`, names
+  prefixed `c9s`) can be removed once with `ip link del` or a worker reboot. Nothing recreates
+  them.
 - **`/dev/kvm` on workers** only when running VM-backed (vrnetlab) kinds; the plan requests the
   device through ordinary Kubernetes device semantics.
 - **Registry access is cluster administration**: private device images use ordinary

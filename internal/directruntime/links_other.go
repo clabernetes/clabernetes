@@ -44,3 +44,25 @@ func (unsupportedLinkOperations) EnsureManagementRoute(
 ) error {
 	return fmt.Errorf("direct management routing requires Linux")
 }
+
+func (unsupportedLinkOperations) DisableTxChecksumOffload(_ string) error {
+	return fmt.Errorf("checksum offload control requires Linux")
+}
+
+func (unsupportedLinkOperations) EnsureInterposition(InterpositionSpec) error {
+	return fmt.Errorf("management interposition requires Linux")
+}
+
+func (unsupportedLinkOperations) EnsureFabricEndpoint(
+	FabricEndpointSpec,
+) (FabricEndpointResult, error) {
+	return FabricEndpointResult{}, fmt.Errorf("fabric realization requires Linux")
+}
+
+func (unsupportedLinkOperations) EnsureHostInterface(HostInterfaceSpec) error {
+	return fmt.Errorf("host Link realization requires Linux")
+}
+
+func (unsupportedLinkOperations) SweepTransportState(string, []string) error {
+	return fmt.Errorf("transport sweep requires Linux")
+}

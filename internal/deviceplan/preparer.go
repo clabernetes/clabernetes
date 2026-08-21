@@ -237,10 +237,7 @@ func (p Preparer) renderRuntimeManagementArtifacts(
 	cleanup := func() {}
 	completed := completeRuntimeManagement(
 		input.Management,
-		input.Nodes,
 		plan.Management,
-		p.Adapter.PodAddress,
-		p.Adapter.PodGateway,
 		p.Adapter.PodDNSServers,
 	)
 	if reflect.DeepEqual(completed, input.Management) {

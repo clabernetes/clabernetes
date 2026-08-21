@@ -13,7 +13,6 @@ import (
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
-	clabernetesinternalhostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
 	k8scorev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -275,29 +274,13 @@ func TestRenderCreatesDirectApplicationContainersFromGenericPlan(t *testing.T) {
 		t.Fatalf("connectivity revision readiness probes = %#v", connectivity)
 	}
 
-	hostSocketVolume := ""
-
+	// The daemonless Pod grants no daemon socket to any container: no hostPath volume exists
+	// unless the plan requires the worker namespace handle for host Links.
 	for _, volume := range pod.Volumes {
-		if volume.HostPath == nil ||
-			volume.HostPath.Path != clabernetesinternalhostendpoint.SocketDirectory {
-			continue
+		if volume.HostPath != nil &&
+			strings.Contains(volume.HostPath.Path, "host-endpoint") {
+			t.Fatalf("direct Pod mounts a daemon socket volume: %#v", volume)
 		}
-
-		if volume.HostPath.Type == nil || *volume.HostPath.Type != k8scorev1.HostPathDirectory {
-			t.Fatalf("host-endpoint socket uses an unsafe hostPath type: %#v", volume.HostPath)
-		}
-
-		hostSocketVolume = volume.Name
-	}
-
-	if hostSocketVolume == "" || !slices.ContainsFunc(
-		connectivity.VolumeMounts,
-		func(mount k8scorev1.VolumeMount) bool {
-			return mount.Name == hostSocketVolume &&
-				mount.MountPath == clabernetesinternalhostendpoint.SocketDirectory
-		},
-	) {
-		t.Fatalf("connectivity helper has no host-endpoint RPC socket: %#v", connectivity)
 	}
 
 	for _, container := range append(
@@ -306,12 +289,6 @@ func TestRenderCreatesDirectApplicationContainersFromGenericPlan(t *testing.T) {
 	) {
 		if hasReadOnlyMount(container, "/var/run/clabernetes/connectivity-revision") {
 			t.Fatalf("non-connectivity container %q received mutable revision", container.Name)
-		}
-
-		if slices.ContainsFunc(container.VolumeMounts, func(mount k8scorev1.VolumeMount) bool {
-			return mount.Name == hostSocketVolume
-		}) {
-			t.Fatalf("non-connectivity container %q received host-endpoint RPC", container.Name)
 		}
 	}
 

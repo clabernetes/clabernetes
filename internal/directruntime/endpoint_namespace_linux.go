@@ -61,6 +61,10 @@ func (n *linuxEndpointNamespace) TargetPath() string {
 	return fmt.Sprintf("/proc/self/fd/%d", n.target.Fd())
 }
 
+func (n *linuxEndpointNamespace) WorkerPath() string {
+	return fmt.Sprintf("/proc/self/fd/%d", n.host.Fd())
+}
+
 func (n *linuxEndpointNamespace) Execute(operation func() error) error {
 	if operation == nil {
 		return errors.New("endpoint namespace operation is nil")

@@ -70,6 +70,7 @@ func directPreflightDiagnostic(err error) (reason, message string, report bool) 
 	return "", "", false
 }
 
+//nolint:gocognit // one status-projection pass over every plan family.
 func (r *Reconciler) updateDirectStatuses(
 	ctx context.Context,
 	primary *clabernetesapisv1alpha1.Node,
@@ -109,10 +110,15 @@ func (r *Reconciler) updateDirectStatuses(
 	}
 
 	containerStatuses := map[string]k8scorev1.ContainerStatus{}
+	containerSpecImages := map[string]string{}
 
 	if pod != nil {
 		for _, status := range pod.Status.ContainerStatuses {
 			containerStatuses[status.Name] = status
+		}
+
+		for _, container := range pod.Spec.Containers {
+			containerSpecImages[container.Name] = container.Image
 		}
 	}
 
@@ -148,6 +154,7 @@ func (r *Reconciler) updateDirectStatuses(
 			logicalNode,
 			containerPlans,
 			containerStatuses,
+			containerSpecImages,
 			pod != nil,
 		)
 		if observeErr != nil {
@@ -386,6 +393,7 @@ func observeDirectContainers(
 	node clabernetesinternaldeviceplan.NodePlan,
 	containerPlans map[string]clabernetesinternaldeviceplan.ContainerPlan,
 	statuses map[string]k8scorev1.ContainerStatus,
+	specImages map[string]string,
 	podExists bool,
 ) ([]clabernetesapisv1alpha1.NodeDirectContainerStatus, bool, string, error) {
 	observations := make(
@@ -430,9 +438,13 @@ func observeDirectContainers(
 				message = directContainerFailureMessage(planned, name, "is not ready")
 			}
 
+			specPinned := planned.ImageDigest != "" &&
+				strings.Contains(specImages[name], planned.ImageDigest)
 			if known, matches := directImageDigestMatches(planned.ImageDigest,
-				status.ImageID); known &&
-				!matches {
+				status.ImageID); !specPinned && known && !matches {
+				// The runtime-reported identity only decides when the Pod spec itself is not
+				// digest-pinned: a pinned reference is content-addressed by the runtime, and
+				// containerd may report the OCI index digest for content cached via a tag pull.
 				ready = false
 				message = directContainerFailureMessage(
 					planned,

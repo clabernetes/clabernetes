@@ -48,10 +48,7 @@ func (a Adapter) RunSave(
 
 	normalizedInput.Management = completeRuntimeManagement(
 		normalizedInput.Management,
-		normalizedInput.Nodes,
 		normalizedPlan.Management,
-		a.PodAddress,
-		a.PodGateway,
 		a.PodDNSServers,
 	)
 

@@ -13,6 +13,8 @@ type fakeNetworkDialNamespace struct {
 
 func (*fakeNetworkDialNamespace) TargetPath() string { return "/target/netns" }
 
+func (*fakeNetworkDialNamespace) WorkerPath() string { return "/worker/netns" }
+
 func (f *fakeNetworkDialNamespace) Execute(operation func() error) error {
 	f.executions++
 

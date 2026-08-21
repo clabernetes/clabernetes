@@ -18,7 +18,7 @@ var invalidationComponents = map[string][]string{ //nolint:gochecknoglobals // S
 	"planner":      {"internal/deviceplan"},
 	"renderer":     {"internal/directpod"},
 	"preparation":  {"internal/directruntime"},
-	"connectivity": {"internal/hostendpoint", "controllers/link"},
+	"connectivity": {"internal/directruntime", "controllers/link"},
 }
 
 // ComputeInvalidation digests the current implementation of every invalidation boundary so a

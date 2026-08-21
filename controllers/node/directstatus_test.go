@@ -414,6 +414,7 @@ func TestDirectContainerObservationsSelectOnlyRequestedLogicalNodeContainers(t *
 		primary,
 		plans,
 		statuses,
+		nil,
 		true,
 	)
 	if err != nil {
@@ -435,6 +436,7 @@ func TestDirectContainerObservationsSelectOnlyRequestedLogicalNodeContainers(t *
 		secondary,
 		plans,
 		statuses,
+		nil,
 		true,
 	)
 	if err != nil {
@@ -480,5 +482,62 @@ func drainDirectStatusEvents(recorder *clientgoevents.FakeRecorder) []string {
 		default:
 			return result
 		}
+	}
+}
+
+func TestObserveDirectContainersAcceptsIndexDigestWhenSpecIsPinned(t *testing.T) {
+	t.Parallel()
+
+	planned := clabernetesinternaldeviceplan.ContainerPlan{
+		ID: "node-a/primary", NodeID: "node-a",
+		Image:       "example/device:1",
+		ImageDigest: "sha256:" + strings.Repeat("a", 64),
+	}
+	logical := clabernetesinternaldeviceplan.NodePlan{
+		ID: "node-a", Name: "router",
+		ContainerIDs:          []string{"node-a/primary"},
+		ReadinessContainerIDs: []string{"node-a/primary"},
+	}
+	name := clabernetesinternaldirectpod.ApplicationContainerName("node-a/primary")
+	statuses := map[string]k8scorev1.ContainerStatus{
+		name: {
+			Name: name, Ready: true,
+			State: k8scorev1.ContainerState{Running: &k8scorev1.ContainerStateRunning{}},
+			// containerd reports the OCI index digest when its cache was populated via a tag
+			// pull; the digest-pinned spec reference remains the authoritative identity.
+			ImageID: "example/device@sha256:" + strings.Repeat("b", 64),
+		},
+	}
+	plans := map[string]clabernetesinternaldeviceplan.ContainerPlan{planned.ID: planned}
+
+	_, ready, _, err := observeDirectContainers(
+		logical,
+		plans,
+		statuses,
+		map[string]string{name: "example/device@sha256:" + strings.Repeat("a", 64)},
+		true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !ready {
+		t.Fatal("digest-pinned spec was overruled by the runtime-reported index digest")
+	}
+
+	// Without the pinned spec reference, a mismatched runtime identity still fails closed.
+	_, unpinnedReady, _, err := observeDirectContainers(
+		logical,
+		plans,
+		statuses,
+		map[string]string{name: "example/device:1"},
+		true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if unpinnedReady {
+		t.Fatal("mismatched runtime identity was accepted without a pinned spec reference")
 	}
 }

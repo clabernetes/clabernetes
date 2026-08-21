@@ -462,7 +462,7 @@ func TestPreparerReadsIdenticalGroupedPayloadSourceOnce(t *testing.T) {
 	}
 }
 
-func TestPreparerRendersGeneratorContentWithRuntimeManagementIdentity(t *testing.T) {
+func TestPreparerStagesPlanRenderedManagementIdentity(t *testing.T) {
 	t.Parallel()
 
 	input := singleNodeInput(syntheticKind, "example/future:1")
@@ -470,6 +470,11 @@ func TestPreparerRendersGeneratorContentWithRuntimeManagementIdentity(t *testing
 	input.Nodes[0].Definition = mustJSON(t, map[string]any{
 		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
 	})
+	// The controller-allocated identity is complete at plan time; the generator renders it
+	// during planning and preparation stages those exact bytes.
+	input.Management = []clabernetesinternaldeviceplan.ManagementInput{{
+		NodeID: "node-a", IPv4: "10.244.9.9/24", IPv4Gateway: "10.244.9.1",
+	}}
 	planning := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "runtime-render-v1",
 	}
@@ -480,10 +485,10 @@ func TestPreparerRendersGeneratorContentWithRuntimeManagementIdentity(t *testing
 	}
 
 	root := t.TempDir()
-	runtime := planning
-	runtime.PodAddress = "10.244.9.9/24"
 
-	runtime.PodGateway = "10.244.9.1"
+	runtime := planning
+	runtime.PodDNSServers = []string{"10.96.0.10"}
+
 	if err = (clabernetesinternaldeviceplan.Preparer{Adapter: runtime}).Prepare(
 		context.Background(),
 		input,
@@ -504,13 +509,14 @@ func TestPreparerRendersGeneratorContentWithRuntimeManagementIdentity(t *testing
 	}
 
 	if got, want := string(content), "mgmt 10.244.9.9/24 gw 10.244.9.1\n"; got != want {
-		t.Fatalf("runtime-rendered content = %q, want %q", got, want)
+		t.Fatalf("plan-rendered content = %q, want %q", got, want)
 	}
-	// Files the identity does not influence keep their plan-verified bytes and no runtime
-	// digest record.
+
+	// A runtime Pod identity no longer exists, so no management divergence is recorded: the
+	// DNS completion did not influence this generator and the staged bytes are the plan bytes.
 	digests := clabernetesinternaldeviceplan.LoadRuntimeArtifactDigests(root, "node-a")
-	if len(digests) != 1 || digests["generated/mgmt.conf"] == "" {
-		t.Fatalf("runtime artifact record = %#v", digests)
+	if len(digests) != 0 {
+		t.Fatalf("unexpected runtime artifact divergence: %#v", digests)
 	}
 
 	//nolint:gosec // test-controlled path.
@@ -519,29 +525,5 @@ func TestPreparerRendersGeneratorContentWithRuntimeManagementIdentity(t *testing
 	) //nolint:gosec // test-controlled path.
 	if err != nil || string(untouched) != "generated\n" {
 		t.Fatalf("identity-independent content changed: %q err=%v", untouched, err)
-	}
-
-	// Without a runtime identity the plan-verified bytes stage unchanged and the record clears.
-	if err = (clabernetesinternaldeviceplan.Preparer{Adapter: planning}).Prepare(
-		context.Background(),
-		input,
-		*plan,
-		root,
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	//nolint:gosec // test-controlled path.
-	content, err = os.ReadFile(
-		filepath.Join(root, nodeDirectory, "generated", "mgmt.conf"),
-	) //nolint:gosec // test-controlled path.
-	if err != nil || string(content) != "mgmt none\n" {
-		t.Fatalf("planning-identical content = %q err=%v", content, err)
-	}
-
-	if remaining := clabernetesinternaldeviceplan.LoadRuntimeArtifactDigests(root, "node-a"); len(
-		remaining,
-	) != 0 {
-		t.Fatalf("stale runtime artifact record = %#v", remaining)
 	}
 }

@@ -131,6 +131,10 @@ type ManagementInput struct {
 	IPv6Gateway   string `json:"ipv6Gateway,omitempty"`
 	//nolint:modernize // the accepted schema freezes this tag and its serialization.
 	DNS DNSConfig `json:"dns,omitempty"`
+	// InboundPorts are additional controller-declared inbound destination ports (i.e. the
+	// auto-expose default set) translated to the Node's interposed management address when the
+	// port is not already claimed by a planned container port in the Pod.
+	InboundPorts []Port `json:"inboundPorts,omitempty"`
 }
 
 // Connectivity vocabulary for accepted Link endpoints. The values are containerlab's own link
@@ -544,6 +548,36 @@ type ManagementPlan struct {
 	Routes            []Route                     `json:"routes,omitempty"`
 	//nolint:modernize // the accepted schema freezes this tag and its serialization.
 	DNS DNSConfig `json:"dns,omitempty"`
+	// Interposition is the sidecar interposition contract; it is present exactly when
+	// InterfaceSelector is Interposed.
+	Interposition *ManagementInterposition `json:"interposition,omitempty"`
+}
+
+// ManagementInterposition is the vendor-neutral sidecar interposition contract for one
+// management identity: the synthetic device-leg interface presented to the device and the
+// translation surface at the Pod boundary. Its values are derived from the pinned containerlab
+// dependency, never from kind-conditional code.
+type ManagementInterposition struct {
+	// DeviceInterface is the interface name the device expects for its management port.
+	DeviceInterface string `json:"deviceInterface"`
+	// DeviceMAC optionally pins the device-leg MAC address.
+	DeviceMAC string `json:"deviceMAC,omitempty"`
+	// TransportCIDRs are cluster destinations whose routing the sidecar keeps on the preserved
+	// Kubernetes underlay.
+	TransportCIDRs []string `json:"transportCIDRs,omitempty"`
+	// InboundPorts are declared management ports translated from the Pod address to the device
+	// management address.
+	InboundPorts []ManagementPortMap `json:"inboundPorts,omitempty"`
+}
+
+// ManagementPortMap is one declared inbound management port translation.
+type ManagementPortMap struct {
+	// Protocol is "tcp" or "udp".
+	Protocol string `json:"protocol"`
+	// PodPort is the port clients dial on the Pod address.
+	PodPort uint16 `json:"podPort"`
+	// DevicePort is the port the device binds on its management address.
+	DevicePort uint16 `json:"devicePort"`
 }
 
 // ManagementInterfaceSelector identifies a generic runtime-owned interface when the imported
@@ -553,6 +587,9 @@ type ManagementInterfaceSelector string
 // Supported management interface selectors.
 const (
 	ManagementInterfacePodTransport ManagementInterfaceSelector = "PodTransport"
+	// ManagementInterfaceInterposed selects the sidecar-interposed synthetic management
+	// interface described by the entry's Interposition contract.
+	ManagementInterfaceInterposed ManagementInterfaceSelector = "Interposed"
 )
 
 // Route is one explicit management route.

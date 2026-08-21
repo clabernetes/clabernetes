@@ -1,4 +1,3 @@
-//nolint:gocyclo // dense fixture-driven tests exercise one boundary end to end.
 package default_values_test
 
 import (
@@ -13,8 +12,6 @@ import (
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
-	k8sappsv1 "k8s.io/api/apps/v1"
-	k8scorev1 "k8s.io/api/core/v1"
 	k8srbacv1 "k8s.io/api/rbac/v1"
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -234,7 +231,7 @@ func TestRestrictedClusterRoleDoesNotGrantClusterWideExecLogsOrEvents(t *testing
 	}
 }
 
-func TestDirectHostEndpointDaemonHasMinimalHostAndAPIAuthority(t *testing.T) {
+func TestDirectChartShipsNoNodeResidentConnectivityAgent(t *testing.T) {
 	t.Parallel()
 
 	chartsDir, err := filepath.Abs("../../..")
@@ -242,7 +239,7 @@ func TestDirectHostEndpointDaemonHasMinimalHostAndAPIAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	daemonRaw := clabernetestesthelper.HelmCommand(
+	rendered := clabernetestesthelper.HelmCommand(
 		t,
 		chartsDir,
 		"template",
@@ -251,83 +248,12 @@ func TestDirectHostEndpointDaemonHasMinimalHostAndAPIAuthority(t *testing.T) {
 		"c9s-system",
 		"--set",
 		"manager.deviceRuntimeMode=direct",
-		"--show-only",
-		"templates/host-endpoint-daemonset.yaml",
 	)
-	daemonRaw = renderedHelmYAML(t, daemonRaw)
 
-	daemon := &k8sappsv1.DaemonSet{}
-	if err = k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(daemonRaw), 4096).Decode(daemon); err != nil {
-		t.Fatal(err)
+	if bytes.Contains(rendered, []byte("kind: DaemonSet")) ||
+		bytes.Contains(rendered, []byte("host-endpoint")) {
+		t.Fatal("direct chart renders a node-resident connectivity agent")
 	}
-
-	pod := daemon.Spec.Template.Spec
-	if !pod.HostNetwork || pod.HostPID || pod.ServiceAccountName != "clabernetes-host-endpoint" ||
-		pod.NodeSelector[k8scorev1.LabelOSStable] != "linux" || len(pod.Containers) != 1 ||
-		pod.Containers[0].SecurityContext == nil ||
-		pod.Containers[0].SecurityContext.Privileged == nil ||
-		!*pod.Containers[0].SecurityContext.Privileged {
-		t.Fatalf("host endpoint DaemonSet has an unexpected privilege boundary: %#v", pod)
-	}
-
-	if len(pod.Volumes) != 1 || pod.Volumes[0].HostPath == nil ||
-		pod.Volumes[0].HostPath.Path != "/var/run/clabernetes/host-endpoint" ||
-		pod.Volumes[0].HostPath.Type == nil ||
-		*pod.Volumes[0].HostPath.Type != k8scorev1.HostPathDirectoryOrCreate {
-		t.Fatalf("host endpoint DaemonSet has an unexpected hostPath: %#v", pod.Volumes)
-	}
-
-	rbacRaw := clabernetestesthelper.HelmCommand(
-		t,
-		chartsDir,
-		"template",
-		"./clabernetes",
-		"--namespace",
-		"c9s-system",
-		"--set",
-		"manager.deviceRuntimeMode=direct",
-		"--show-only",
-		"templates/host-endpoint-rbac.yaml",
-	)
-	rbacRaw = renderedHelmYAML(t, rbacRaw)
-	decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(rbacRaw), 4096)
-
-	for {
-		role := &k8srbacv1.ClusterRole{}
-		if err = decoder.Decode(role); err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-
-			t.Fatal(err)
-		}
-
-		if role.Kind != "ClusterRole" || role.GetName() != "clabernetes-host-endpoint" {
-			continue
-		}
-
-		want := []k8srbacv1.PolicyRule{
-			{
-				APIGroups: []string{"c9s.run"}, Resources: []string{"links"},
-				Verbs: []string{"get", "list", "watch", "update", "patch"},
-			},
-			{
-				APIGroups: []string{"c9s.run"}, Resources: []string{"nodes"},
-				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				APIGroups: []string{""}, Resources: []string{"pods"},
-				Verbs: []string{"get", "list", "watch"},
-			},
-		}
-		if !reflect.DeepEqual(role.Rules, want) {
-			t.Fatalf("host endpoint role grants unexpected permissions: %#v", role.Rules)
-		}
-
-		return
-	}
-
-	t.Fatal("host endpoint ClusterRole is absent")
 }
 
 func renderedHelmYAML(t *testing.T, output []byte) []byte {

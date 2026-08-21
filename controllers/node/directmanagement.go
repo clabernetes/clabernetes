@@ -401,3 +401,48 @@ func directNodeManagementError(
 		Behavior: "controller-input", Message: message,
 	}
 }
+
+// defaultManagementIPv4Subnet mirrors the pinned containerlab core default management network
+// (containerlab core/config.go dockerNetIPv4Addr), so a topology without a management policy
+// allocates node management identities exactly as containerlab's default network would.
+const defaultManagementIPv4Subnet = "172.20.20.0/24"
+
+// applyDefaultManagementPolicy completes an operator policy into a fully allocatable one: a
+// missing IPv4 subnet becomes containerlab's default management subnet, and a missing gateway
+// becomes its subnet's first usable address (containerlab's bridge-gateway convention). The
+// direct runtime never uses the Pod address as a management identity, so every topology needs a
+// complete policy.
+func applyDefaultManagementPolicy(settings *clabernetesapisv1alpha1.ManagementPolicy) error {
+	if settings.IPv4Subnet == "" {
+		settings.IPv4Subnet = defaultManagementIPv4Subnet
+	}
+
+	if settings.IPv4Gw == "" {
+		gateway, err := firstUsableManagementAddress(settings.IPv4Subnet)
+		if err != nil {
+			return directManagementError("ipv4-subnet", err.Error())
+		}
+
+		settings.IPv4Gw = gateway
+	}
+
+	if settings.IPv6Subnet != "" && settings.IPv6Gw == "" {
+		gateway, err := firstUsableManagementAddress(settings.IPv6Subnet)
+		if err != nil {
+			return directManagementError("ipv6-subnet", err.Error())
+		}
+
+		settings.IPv6Gw = gateway
+	}
+
+	return nil
+}
+
+func firstUsableManagementAddress(subnet string) (string, error) {
+	prefix, err := netip.ParsePrefix(subnet)
+	if err != nil {
+		return "", errors.New("management subnet is invalid")
+	}
+
+	return prefix.Masked().Addr().Next().String(), nil
+}

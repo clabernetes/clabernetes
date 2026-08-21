@@ -22,7 +22,6 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
-	clabernetesinternalhostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
@@ -51,7 +50,6 @@ const (
 	hostNetworkNamespaceName         = "worker-host-network-namespace"
 	hostNetworkNamespaceSourcePath   = "/proc/1/ns"
 	hostNetworkNamespaceMountPath    = "/var/run/clabernetes/host-network-namespaces"
-	hostEndpointSocketVolumeName     = "host-endpoint-socket"
 	lifecycleVolumeName              = "device-lifecycle-manager"
 	lifecycleBinaryRoot              = "/var/lib/clabernetes/lifecycle-bin"
 	lifecycleBinaryPath              = lifecycleBinaryRoot + "/manager"
@@ -411,17 +409,10 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 			}},
 		},
 	)
+
 	volumes = append(volumes, k8scorev1.Volume{
 		Name:         connectivityStateName,
 		VolumeSource: k8scorev1.VolumeSource{EmptyDir: &k8scorev1.EmptyDirVolumeSource{}},
-	})
-	hostEndpointPathType := k8scorev1.HostPathDirectory
-
-	volumes = append(volumes, k8scorev1.Volume{
-		Name: hostEndpointSocketVolumeName,
-		VolumeSource: k8scorev1.VolumeSource{HostPath: &k8scorev1.HostPathVolumeSource{
-			Path: clabernetesinternalhostendpoint.SocketDirectory, Type: &hostEndpointPathType,
-		}},
 	})
 	if options.ConnectivityRevisionConfigMapName != "" {
 		volumes = append(volumes, k8scorev1.Volume{
@@ -2347,10 +2338,6 @@ func renderHelpers(
 		planMount,
 		inputMount,
 		stateMount,
-		{
-			Name:      hostEndpointSocketVolumeName,
-			MountPath: clabernetesinternalhostendpoint.SocketDirectory,
-		},
 	}
 
 	if options.ConnectivityRevisionConfigMapName != "" {
@@ -2518,6 +2505,14 @@ func hasImportedEndpointLifecycle(plan clabernetesinternaldeviceplan.Plan) bool 
 		if action.Phase == clabernetesinternaldeviceplan.PhaseInterfaceFixup &&
 			action.Kind == clabernetesinternaldeviceplan.ActionImportedDeployEndpoints &&
 			action.ImportedDeployEndpoints != nil {
+			return true
+		}
+	}
+
+	// Host Links place their worker-side veth end through the same read-only namespace handle,
+	// so they carry the identical mount requirement.
+	for _, intf := range plan.Interfaces {
+		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityHost {
 			return true
 		}
 	}

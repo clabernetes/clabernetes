@@ -18,7 +18,7 @@ const (
 // TestMultiWorkerRecoveryDirect is the task-scoped multi-worker recovery suite: every Link
 // flavor is realized in one namespace, cross-worker traffic is proven, and the lab must then
 // survive a partial update, forced Pod deletion, rescheduling onto another worker, a manager
-// restart, and a host-endpoint helper restart. Cleanup must leave no owned host state behind.
+// restart. Cleanup must leave no owned worker state behind: connectivity is Pod-scoped.
 func TestMultiWorkerRecoveryDirect(t *testing.T) {
 	workers := schedulableWorkers(t)
 	if len(workers) < 2 {
@@ -52,7 +52,7 @@ func TestMultiWorkerRecoveryDirect(t *testing.T) {
 	lin3 := observeDevicePod(t, namespace, "lin3")
 
 	// Cross-worker traffic across both accepted connectivity flavors: the controller realizes
-	// each of them through the host-endpoint daemon, and the device only ever sees plain veth.
+	// each of them inside the Pod on the preserved underlay; the device only ever sees plain legs.
 	waitForDeviceCommand(t, namespace, lin1,
 		[]string{"ping", "-c", "2", "-W", "2", "10.10.0.1"}, " 0% packet loss")
 	waitForDeviceCommand(t, namespace, lin1,
@@ -129,12 +129,6 @@ func TestMultiWorkerRecoveryDirect(t *testing.T) {
 	forceDeletePod(t, namespace, lin2.podName)
 	waitForDevicePodReplacement(t, namespace, "lin2", lin2.podName)
 	waitForDirectNodeReady(t, namespace, "lin2")
-	waitForDeviceCommand(t, namespace, lin1,
-		[]string{"ping", "-c", "2", "-W", "2", "10.10.0.1"}, " 0% packet loss")
-
-	t.Log("host-endpoint helper restart")
-
-	restartHostEndpointDaemon(t)
 	waitForDeviceCommand(t, namespace, lin1,
 		[]string{"ping", "-c", "2", "-W", "2", "10.10.0.1"}, " 0% packet loss")
 }
@@ -424,21 +418,6 @@ func restartManager(t *testing.T) {
 	clabernetestesthelper.Execute(t, cmd)
 
 	waitForComponentReady(t, "c9s.run/component=manager")
-}
-
-// restartHostEndpointDaemon deletes every host-endpoint daemon Pod and waits for the DaemonSet
-// to converge again.
-func restartHostEndpointDaemon(t *testing.T) {
-	t.Helper()
-
-	cmd := exec.CommandContext(
-		t.Context(),
-		"kubectl", "delete", "pod",
-		"--all-namespaces", "--selector", "c9s.run/component=host-endpoint", "--wait=false",
-	)
-	clabernetestesthelper.Execute(t, cmd)
-
-	waitForComponentReady(t, "c9s.run/component=host-endpoint")
 }
 
 func waitForComponentReady(t *testing.T, selector string) {

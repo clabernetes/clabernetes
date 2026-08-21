@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	clabernetesclicker "github.com/clabernetes/clabernetes/clicker"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
-	clabernetesinternalhostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
 	clabernetesinternalupgradepreflight "github.com/clabernetes/clabernetes/internal/upgradepreflight"
 	clabernetesmanager "github.com/clabernetes/clabernetes/manager"
 	"github.com/urfave/cli/v2"
@@ -67,9 +67,6 @@ const (
 	deviceRuntimePodUID               = "podUID"
 	deviceRuntimePodAddress           = "podAddress"
 	deviceRuntimeConnectivityRevision = "connectivityRevision"
-	deviceRuntimeHostEndpointSocket   = "socket"
-	deviceRuntimeWorkerNodeName       = "nodeName"
-	deviceRuntimeWorkerNodeAddress    = "nodeAddress"
 	deviceRuntimeRequest              = "request"
 	deviceRuntimeSignal               = "signal"
 	deviceRuntimeNodeID               = "nodeID"
@@ -79,10 +76,14 @@ const (
 	deviceRuntimeDuration             = "duration"
 )
 
+// versionPrinterOnce guards the process-global urfave/cli version printer: Entrypoint may be
+// constructed concurrently (parallel tests), and the assignment is identical every time.
+var versionPrinterOnce sync.Once //nolint:gochecknoglobals // guards a third-party global.
+
 // Entrypoint returns the clabernetes manager entrypoint, kicking off one of the clabernetes
 // processes.
 func Entrypoint() *cli.App {
-	cli.VersionPrinter = ShowVersion
+	versionPrinterOnce.Do(func() { cli.VersionPrinter = ShowVersion })
 
 	return &cli.App{
 		Name:    "clabernetes",
@@ -294,32 +295,6 @@ func deviceRuntimeCommand() *cli.Command {
 		Usage: "run a generic direct-device helper",
 		Subcommands: []*cli.Command{
 			{
-				Name:   "host-endpoint-daemon",
-				Usage:  "run the node-local host-endpoint reconciler",
-				Hidden: true,
-				Flags: []cli.Flag{
-					&cli.StringFlag{Name: deviceRuntimeWorkerNodeName, Required: true},
-					&cli.StringFlag{Name: deviceRuntimeWorkerNodeAddress, Required: true},
-					&cli.StringFlag{
-						Name:  deviceRuntimeHostEndpointSocket,
-						Value: clabernetesinternalhostendpoint.DefaultSocketPath,
-					},
-				},
-				Action: func(c *cli.Context) error {
-					ctx := c.Context
-					if ctx == nil {
-						ctx = context.Background()
-					}
-
-					return clabernetesinternalhostendpoint.Run(
-						ctx,
-						c.String(deviceRuntimeWorkerNodeName),
-						c.String(deviceRuntimeWorkerNodeAddress),
-						c.String(deviceRuntimeHostEndpointSocket),
-					)
-				},
-			},
-			{
 				Name:  "prepare",
 				Usage: "regenerate and verify imported preparation artifacts",
 				Flags: []cli.Flag{
@@ -358,29 +333,17 @@ func deviceRuntimeCommand() *cli.Command {
 						ctx = context.Background()
 					}
 
-					podAddress, podGateway := clabernetesinternaldirectruntime.
-						RuntimePodManagementIdentity()
-
 					err = (clabernetesinternaldeviceplan.Preparer{
 						Adapter: clabernetesinternaldeviceplan.Adapter{
 							Revision:        c.String(devicePlanRevision),
 							CertificateRoot: c.String(devicePlanCertificates),
 							EntropyRoot:     c.String(devicePlanEntropy),
-							PodAddress:      podAddress,
-							PodGateway:      podGateway,
 							PodDNSServers: clabernetesinternaldirectruntime.
 								RuntimePodDNSServers(),
 						},
 						PayloadRoot: c.String(deviceRuntimePayloads),
 					}).Prepare(ctx, input, plan, c.String(deviceRuntimeArtifacts))
 					if err != nil || c.String(deviceRuntimeBinary) == "" {
-						return err
-					}
-					// Record the Pod's prefixed management identity while the primary
-					// interface is still pristine; devices may strip it at boot.
-					if err = clabernetesinternaldirectruntime.RecordPodAddress(
-						c.String(deviceRuntimeArtifacts),
-					); err != nil {
 						return err
 					}
 

@@ -168,9 +168,6 @@ func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) 
 			}
 
 			if len(plan.Management) != 1 || plan.Management[0].NodeID != "registry-node" ||
-				(plan.Management[0].InterfaceName == "" &&
-					plan.Management[0].InterfaceSelector !=
-						clabernetesinternaldeviceplan.ManagementInterfacePodTransport) ||
 				plan.Management[0].IPv4 != "192.0.2.10/24" ||
 				plan.Management[0].IPv6 != "2001:db8::10/64" ||
 				!slices.Equal(
@@ -178,6 +175,21 @@ func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) 
 					[]string{"192.0.2.53", "2001:db8::53"},
 				) {
 				t.Fatalf("generic registry management plan = %#v", plan.Management)
+			}
+
+			// Every allocated namespace-owning kind must yield a complete vendor-neutral
+			// interposition profile derived from the registry, never from kind dispatch.
+			entry := plan.Management[0]
+			if entry.InterfaceSelector !=
+				clabernetesinternaldeviceplan.ManagementInterfaceInterposed ||
+				entry.Interposition == nil ||
+				entry.Interposition.DeviceInterface == "" ||
+				len(entry.Interposition.DeviceInterface) >= 16 {
+				t.Fatalf(
+					"kind %q yields no complete interposition profile: %#v",
+					kind,
+					entry.Interposition,
+				)
 			}
 		})
 	}

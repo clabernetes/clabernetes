@@ -20,6 +20,8 @@ type unsupportedEndpointNamespace struct{}
 
 func (*unsupportedEndpointNamespace) TargetPath() string { return "" }
 
+func (*unsupportedEndpointNamespace) WorkerPath() string { return "" }
+
 func (*unsupportedEndpointNamespace) Execute(func() error) error {
 	return fmt.Errorf("endpoint namespaces are unsupported")
 }

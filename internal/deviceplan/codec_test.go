@@ -282,6 +282,111 @@ func TestManagementPlanAcceptsOneGenericInterfaceSelection(t *testing.T) {
 	}
 }
 
+func TestManagementPlanInterpositionContract(t *testing.T) {
+	t.Parallel()
+
+	inputDigest, err := validInput().Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	validContract := func() *clabernetesinternaldeviceplan.ManagementInterposition {
+		return &clabernetesinternaldeviceplan.ManagementInterposition{
+			DeviceInterface: "eth0",
+			DeviceMAC:       "00:1c:73:c9:50:31",
+			TransportCIDRs:  []string{"10.96.0.0/12", "10.244.0.0/16"},
+			InboundPorts: []clabernetesinternaldeviceplan.ManagementPortMap{
+				{Protocol: "tcp", PodPort: 22, DevicePort: 22},
+			},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		mutate  func(*clabernetesinternaldeviceplan.ManagementPlan)
+		wantErr bool
+	}{
+		{
+			name:   "valid interposed entry",
+			mutate: func(_ *clabernetesinternaldeviceplan.ManagementPlan) {},
+		},
+		{
+			name: "contract without interposed selector",
+			mutate: func(entry *clabernetesinternaldeviceplan.ManagementPlan) {
+				entry.InterfaceSelector = clabernetesinternaldeviceplan.ManagementInterfacePodTransport
+			},
+			wantErr: true,
+		},
+		{
+			name: "interposed selector without contract",
+			mutate: func(entry *clabernetesinternaldeviceplan.ManagementPlan) {
+				entry.Interposition = nil
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing allocated identity",
+			mutate: func(entry *clabernetesinternaldeviceplan.ManagementPlan) {
+				entry.IPv4 = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing gateway",
+			mutate: func(entry *clabernetesinternaldeviceplan.ManagementPlan) {
+				entry.IPv4Gateway = ""
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid device MAC",
+			mutate: func(entry *clabernetesinternaldeviceplan.ManagementPlan) {
+				entry.Interposition.DeviceMAC = "not-a-mac"
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid transport CIDR",
+			mutate: func(entry *clabernetesinternaldeviceplan.ManagementPlan) {
+				entry.Interposition.TransportCIDRs = []string{"10.96.0.0"}
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid inbound protocol",
+			mutate: func(entry *clabernetesinternaldeviceplan.ManagementPlan) {
+				entry.Interposition.InboundPorts = []clabernetesinternaldeviceplan.ManagementPortMap{
+					{Protocol: "sctp", PodPort: 22, DevicePort: 22},
+				}
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := validPlan(inputDigest)
+			plan.Management[0].InterfaceName = ""
+			plan.Management[0].InterfaceSelector = clabernetesinternaldeviceplan.ManagementInterfaceInterposed
+			plan.Management[0].IPv4 = "172.20.20.11/24"
+			plan.Management[0].IPv4Gateway = "172.20.20.1"
+			plan.Management[0].Interposition = validContract()
+			tt.mutate(&plan.Management[0])
+
+			_, normalizeErr := clabernetesinternaldeviceplan.NormalizePlan(plan)
+			if tt.wantErr && normalizeErr == nil {
+				t.Fatal("NormalizePlan() succeeded for an invalid interposition contract")
+			}
+
+			if !tt.wantErr && normalizeErr != nil {
+				t.Fatalf("NormalizePlan() error = %v", normalizeErr)
+			}
+		})
+	}
+}
+
 func TestDecodeRejectsUnknownAndTrailingJSON(t *testing.T) {
 	t.Parallel()
 

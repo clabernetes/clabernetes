@@ -16,6 +16,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/vishvananda/netlink"
 )
@@ -25,7 +26,8 @@ type peerAddressResolver interface {
 }
 
 type netlinkOperations struct {
-	resolver peerAddressResolver
+	resolver  peerAddressResolver
+	namespace EndpointNamespace
 }
 
 const vethLinkType = "veth"
@@ -43,7 +45,7 @@ func newLinkOperations(networkNamespace EndpointNamespace) LinkOperations {
 		}
 	}
 
-	return netlinkOperations{resolver: resolver}
+	return netlinkOperations{resolver: resolver, namespace: networkNamespace}
 }
 
 func (netlinkOperations) EnsureSysctl(name, value string) error {
@@ -578,4 +580,75 @@ func lookupLink(name string) (netlink.Link, bool, error) {
 	}
 
 	return nil, false, fmt.Errorf("looking up interface %q: %w", name, err)
+}
+
+// Constants from linux/sockios.h, linux/ethtool.h, and linux/if.h for the legacy ethtool
+// checksum-offload operation, matching the containerlab management-interface behavior.
+const (
+	ethtoolIoctlRequest    = 0x8946
+	ethtoolGetTxChecksum   = 0x00000016
+	ethtoolSetTxChecksum   = 0x00000017
+	linuxInterfaceNameSize = 16
+)
+
+// ethtoolValue is linux/ethtool.h 'struct ethtool_value'.
+type ethtoolValue struct {
+	command uint32
+	data    uint32
+}
+
+// ethtoolInterfaceRequest is linux/if.h 'struct ifreq' with an ethtool payload pointer.
+type ethtoolInterfaceRequest struct {
+	name [linuxInterfaceNameSize]byte
+	data uintptr
+}
+
+func (netlinkOperations) DisableTxChecksumOffload(interfaceName string) error {
+	if interfaceName == "" || len(interfaceName)+1 > linuxInterfaceNameSize {
+		return fmt.Errorf("interface name %q is invalid for checksum offload", interfaceName)
+	}
+
+	socket, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, 0)
+	if err != nil {
+		return fmt.Errorf("opening ethtool socket: %w", err)
+	}
+
+	defer func() { _ = syscall.Close(socket) }()
+
+	value := ethtoolValue{command: ethtoolGetTxChecksum}
+
+	request := ethtoolInterfaceRequest{
+		data: uintptr(unsafe.Pointer(&value)), //nolint:gosec // fixed-layout kernel ABI struct.
+	}
+	copy(request.name[:], interfaceName)
+
+	if err := ioctlEthtool(socket, uintptr(unsafe.Pointer(&request))); err != nil { //nolint:gosec // fixed-layout kernel ABI struct.
+		return fmt.Errorf("reading checksum offload state for %q: %w", interfaceName, err)
+	}
+
+	if value.data == 0 {
+		return nil
+	}
+
+	value = ethtoolValue{command: ethtoolSetTxChecksum, data: 0}
+
+	if err := ioctlEthtool(socket, uintptr(unsafe.Pointer(&request))); err != nil { //nolint:gosec // fixed-layout kernel ABI struct.
+		return fmt.Errorf("disabling checksum offload for %q: %w", interfaceName, err)
+	}
+
+	return nil
+}
+
+func ioctlEthtool(socket int, argument uintptr) error {
+	_, _, errno := syscall.RawSyscall(
+		syscall.SYS_IOCTL,
+		uintptr(socket), //nolint:gosec // non-negative fd.
+		uintptr(ethtoolIoctlRequest),
+		argument,
+	)
+	if errno != 0 {
+		return errno
+	}
+
+	return nil
 }

@@ -14,7 +14,6 @@ import (
 
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
-	clabernetesinternalhostendpoint "github.com/clabernetes/clabernetes/internal/hostendpoint"
 )
 
 type fakeLinkOperations struct {
@@ -24,9 +23,77 @@ type fakeLinkOperations struct {
 	deletions           []string
 	managementAddresses []string
 	managementRoutes    []string
+	offloadDisabled     []string
+	interpositions      []clabernetesinternaldirectruntime.InterpositionSpec
+	interpositionError  error
+	fabricSpecs         []clabernetesinternaldirectruntime.FabricEndpointSpec
+	fabricUnready       bool
+	fabricError         error
+	hostSpecs           []clabernetesinternaldirectruntime.HostInterfaceSpec
+	hostError           error
+	sweepKeepCounts     chan int
 	podTransport        string
 	pairSignal          chan struct{}
 	ensurePairError     error
+}
+
+func (f *fakeLinkOperations) DisableTxChecksumOffload(interfaceName string) error {
+	f.offloadDisabled = append(f.offloadDisabled, interfaceName)
+
+	return nil
+}
+
+func (f *fakeLinkOperations) EnsureInterposition(
+	spec clabernetesinternaldirectruntime.InterpositionSpec,
+) error {
+	if f.interpositionError != nil {
+		return f.interpositionError
+	}
+
+	f.interpositions = append(f.interpositions, spec)
+
+	return nil
+}
+
+func (f *fakeLinkOperations) EnsureFabricEndpoint(
+	spec clabernetesinternaldirectruntime.FabricEndpointSpec,
+) (clabernetesinternaldirectruntime.FabricEndpointResult, error) {
+	if f.fabricError != nil {
+		return clabernetesinternaldirectruntime.FabricEndpointResult{}, f.fabricError
+	}
+
+	f.fabricSpecs = append(f.fabricSpecs, spec)
+
+	if f.fabricUnready {
+		return clabernetesinternaldirectruntime.FabricEndpointResult{
+			Reason: "peer transport is not yet resolvable",
+		}, nil
+	}
+
+	return clabernetesinternaldirectruntime.FabricEndpointResult{Ready: true}, nil
+}
+
+func (f *fakeLinkOperations) EnsureHostInterface(
+	spec clabernetesinternaldirectruntime.HostInterfaceSpec,
+) error {
+	if f.hostError != nil {
+		return f.hostError
+	}
+
+	f.hostSpecs = append(f.hostSpecs, spec)
+
+	return nil
+}
+
+func (f *fakeLinkOperations) SweepTransportState(_ string, keepOwners []string) error {
+	if f.sweepKeepCounts != nil {
+		select {
+		case f.sweepKeepCounts <- len(keepOwners):
+		default:
+		}
+	}
+
+	return nil
 }
 
 func (f *fakeLinkOperations) ResolvePodTransportInterface(podAddress string) (string, error) {
@@ -45,49 +112,6 @@ func (f *fakeLinkOperations) EnsureSysctl(name, value string) error {
 	f.sysctls = append(f.sysctls, name+"="+value)
 
 	return nil
-}
-
-type fakeHostEndpointReconciler struct {
-	requests      chan clabernetesinternalhostendpoint.ReconcileRequest
-	err           error
-	fabricUnready bool
-}
-
-func (f *fakeHostEndpointReconciler) Reconcile(
-	_ context.Context,
-	request clabernetesinternalhostendpoint.ReconcileRequest,
-	networkNamespacePath string,
-) (
-	[]clabernetesinternalhostendpoint.FabricStatus,
-	*clabernetesinternalhostendpoint.ManagementStatus,
-	error,
-) {
-	if networkNamespacePath != "/proc/self/ns/net" {
-		return nil, nil, fmt.Errorf("network namespace path = %q", networkNamespacePath)
-	}
-
-	if f.requests != nil {
-		f.requests <- request
-	}
-
-	if f.err != nil {
-		return nil, nil, f.err
-	}
-
-	statuses := make([]clabernetesinternalhostendpoint.FabricStatus, 0, len(request.Fabric))
-	for _, endpoint := range request.Fabric {
-		statuses = append(statuses, clabernetesinternalhostendpoint.FabricStatus{
-			LinkUID: endpoint.Link.UID,
-			Ready:   !f.fabricUnready,
-		})
-	}
-
-	var management *clabernetesinternalhostendpoint.ManagementStatus
-	if request.Management != nil {
-		management = &clabernetesinternalhostendpoint.ManagementStatus{Ready: true}
-	}
-
-	return statuses, management, nil
 }
 
 func (f *fakeLinkOperations) EnsureVethPair(left, right string, mtu int, owner string) error {
@@ -347,17 +371,16 @@ func TestConnectivityFailsClosedForUnimplementedInterfaces(t *testing.T) {
 	}
 }
 
-func TestHostConnectivityReconcilesImmutableRequestBeforeReadiness(t *testing.T) {
+func TestHostConnectivityRealizesWorkerLegBeforeReadiness(t *testing.T) {
 	t.Parallel()
 
 	input, plan := connectivityTestInputAndPlan(t)
 	setHostLink(t, &input, &plan)
 
-	reconciler := &fakeHostEndpointReconciler{
-		requests: make(chan clabernetesinternalhostendpoint.ReconcileRequest, 1),
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+
+	operations := &fakeLinkOperations{}
 
 	state := t.TempDir()
 	if err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
@@ -365,34 +388,25 @@ func TestHostConnectivityReconcilesImmutableRequestBeforeReadiness(t *testing.T)
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory:         state,
-			PodNamespace:           "lab",
-			PodName:                "router-pod",
-			PodUID:                 "pod-uid-a",
-			HostEndpointReconciler: reconciler,
+			StateDirectory: state,
+			PodNamespace:   "lab",
+			PodName:        "router-pod",
+			PodUID:         "pod-uid-a",
 		},
-		&fakeLinkOperations{},
+		operations,
 		nil,
 	); err != nil {
 		t.Fatal(err)
 	}
 
-	request := <-reconciler.requests
-	if request.SchemaVersion != clabernetesinternalhostendpoint.SchemaVersion ||
-		request.Pod != (clabernetesinternalhostendpoint.ObjectIdentity{
-			Namespace: "lab", Name: "router-pod", UID: "pod-uid-a",
-		}) || len(request.Endpoints) != 1 {
-		t.Fatalf("host-endpoint request = %#v", request)
+	if len(operations.hostSpecs) != 1 {
+		t.Fatalf("host Link operations = %#v", operations.hostSpecs)
 	}
 
-	endpoint := request.Endpoints[0]
-	if endpoint.Link != (clabernetesinternalhostendpoint.ObjectIdentity{
-		Namespace: "lab", Name: "host-link-a", UID: "link-uid-a",
-	}) || endpoint.Node != (clabernetesinternalhostendpoint.ObjectIdentity{
-		Namespace: "lab", Name: "router", UID: "node-a",
-	}) || endpoint.HostInterface != "c9s-host-a" || endpoint.PodInterface != "eth1" ||
-		endpoint.MTU != 1450 {
-		t.Fatalf("host endpoint = %#v", endpoint)
+	spec := operations.hostSpecs[0]
+	if spec.InterfaceName != "eth1" || spec.HostInterface != "c9s-host-a" || spec.MTU != 1450 ||
+		!strings.HasPrefix(spec.Owner, "c9s:direct:v1:") {
+		t.Fatalf("host Link spec = %#v", spec)
 	}
 
 	if err := clabernetesinternaldirectruntime.ConnectivityReady(plan, state); err != nil {
@@ -418,11 +432,8 @@ func TestHostConnectivityFailurePreventsReadiness(t *testing.T) {
 			PodNamespace:   "lab",
 			PodName:        "router-pod",
 			PodUID:         "pod-uid-a",
-			HostEndpointReconciler: &fakeHostEndpointReconciler{
-				err: errors.New("collision with foreign host interface"),
-			},
 		},
-		&fakeLinkOperations{},
+		&fakeLinkOperations{hostError: errors.New("collision with foreign host interface")},
 		nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "collision with foreign host interface") {
@@ -434,7 +445,7 @@ func TestHostConnectivityFailurePreventsReadiness(t *testing.T) {
 	}
 }
 
-func TestHostConnectivityLiveRemovalReconcilesEmptyPodSet(t *testing.T) {
+func TestHostConnectivityLiveRemovalSweepsTransportState(t *testing.T) {
 	t.Parallel()
 
 	baseInput, basePlan := connectivityTestInputAndPlan(t)
@@ -474,11 +485,9 @@ func TestHostConnectivityLiveRemovalReconcilesEmptyPodSet(t *testing.T) {
 	revisionPath := filepath.Join(t.TempDir(), "revision.json")
 	writeConnectivityRevisionFile(t, revisionPath, initialRaw)
 
-	reconciler := &fakeHostEndpointReconciler{
-		requests: make(chan clabernetesinternalhostendpoint.ReconcileRequest, 32),
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
+	operations := &fakeLinkOperations{sweepKeepCounts: make(chan int, 16)}
 
 	go func() {
 		errCh <- clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
@@ -492,9 +501,8 @@ func TestHostConnectivityLiveRemovalReconcilesEmptyPodSet(t *testing.T) {
 				PodUID:                   "pod-uid-a",
 				ConnectivityRevisionPath: revisionPath,
 				RevisionPollInterval:     5 * time.Millisecond,
-				HostEndpointReconciler:   reconciler,
 			},
-			&fakeLinkOperations{},
+			operations,
 			nil,
 		)
 	}()
@@ -502,9 +510,9 @@ func TestHostConnectivityLiveRemovalReconcilesEmptyPodSet(t *testing.T) {
 	t.Cleanup(cancel)
 
 	select {
-	case request := <-reconciler.requests:
-		if len(request.Endpoints) != 1 {
-			t.Fatalf("initial host endpoint request = %#v", request)
+	case keep := <-operations.sweepKeepCounts:
+		if keep != 1 {
+			t.Fatalf("initial transport sweep kept %d owners, want 1", keep)
 		}
 	case runErr := <-errCh:
 		t.Fatalf("connectivity helper exited before initial host Link: %v", runErr)
@@ -519,8 +527,8 @@ func TestHostConnectivityLiveRemovalReconcilesEmptyPodSet(t *testing.T) {
 
 	for {
 		select {
-		case request := <-reconciler.requests:
-			if len(request.Endpoints) != 0 {
+		case keep := <-operations.sweepKeepCounts:
+			if keep != 0 {
 				continue
 			}
 
@@ -534,7 +542,7 @@ func TestHostConnectivityLiveRemovalReconcilesEmptyPodSet(t *testing.T) {
 		case runErr := <-errCh:
 			t.Fatalf("connectivity helper exited before removing host Link: %v", runErr)
 		case <-deadline.C:
-			t.Fatal("connectivity helper did not reconcile an empty host endpoint set")
+			t.Fatal("connectivity helper did not sweep the removed host Link state")
 		}
 	}
 }
@@ -602,19 +610,15 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 			testCase.configure(t, &input, &plan)
 			state := t.TempDir()
 			operations := &fakeLinkOperations{}
-			hostReconciler := &fakeHostEndpointReconciler{
-				requests: make(chan clabernetesinternalhostendpoint.ReconcileRequest, 8),
-			}
 			run := func() error {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
 
 				options := clabernetesinternaldirectruntime.ConnectivityOptions{
-					StateDirectory:         state,
-					PodNamespace:           "lab",
-					PodName:                "router-pod",
-					PodUID:                 "pod-uid-a",
-					HostEndpointReconciler: hostReconciler,
+					StateDirectory: state,
+					PodNamespace:   "lab",
+					PodName:        "router-pod",
+					PodUID:         "pod-uid-a",
 				}
 
 				return clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
@@ -625,8 +629,10 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 			switch testCase.flavor {
 			case "local":
 				operations.ensurePairError = errors.New("injected local Link failure")
-			case "fabric", "host":
-				hostReconciler.err = errors.New("injected daemon endpoint failure")
+			case "fabric":
+				operations.fabricError = errors.New("injected fabric endpoint failure")
+			case "host":
+				operations.hostError = errors.New("injected host endpoint failure")
 			}
 
 			if err := run(); err == nil {
@@ -638,7 +644,8 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 			}
 
 			operations.ensurePairError = nil
-			hostReconciler.err = nil
+			operations.fabricError = nil
+			operations.hostError = nil
 
 			for restart := range 2 {
 				if err := run(); err != nil {
@@ -667,24 +674,25 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 					strings.SplitN(latest[1], "/", 4)[3] {
 					t.Fatalf("helper restart changed veth ownership: %#v", latest)
 				}
-			case "fabric", "host":
-				requests := []clabernetesinternalhostendpoint.ReconcileRequest{}
-				for len(hostReconciler.requests) != 0 {
-					requests = append(requests, <-hostReconciler.requests)
+			case "fabric":
+				if len(operations.fabricSpecs) != 2 ||
+					!reflect.DeepEqual(operations.fabricSpecs[0], operations.fabricSpecs[1]) {
+					t.Fatalf("helper restart fabric specs = %#v", operations.fabricSpecs)
 				}
-
-				if len(requests) != 3 || !reflect.DeepEqual(requests[1], requests[2]) {
-					t.Fatalf("helper restart daemon requests = %#v", requests)
+			case "host":
+				if len(operations.hostSpecs) != 2 ||
+					!reflect.DeepEqual(operations.hostSpecs[0], operations.hostSpecs[1]) {
+					t.Fatalf("helper restart host specs = %#v", operations.hostSpecs)
 				}
 			}
 		})
 	}
 }
 
-// TestFabricConnectivityRequestsDaemonRealizationBeforeReadiness proves cross-Pod endpoints are
-// realized through the node-local daemon: the Pod side is a plain veth leg, so the request must
-// carry the Link identity, the plan interface name, and the allocated tunnel id.
-func TestFabricConnectivityRequestsDaemonRealizationBeforeReadiness(t *testing.T) {
+// TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness proves cross-Pod endpoints are
+// realized inside the Pod on the preserved underlay: the spec must carry the plan interface
+// name, the allocated tunnel id, and the peer transport identity.
+func TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness(t *testing.T) {
 	t.Parallel()
 
 	for _, connectivity := range []string{"vxlan", "slurpeeth"} {
@@ -698,11 +706,10 @@ func TestFabricConnectivityRequestsDaemonRealizationBeforeReadiness(t *testing.T
 				setSlurpeethLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
 			}
 
-			reconciler := &fakeHostEndpointReconciler{
-				requests: make(chan clabernetesinternalhostendpoint.ReconcileRequest, 1),
-			}
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
+
+			operations := &fakeLinkOperations{}
 
 			state := t.TempDir()
 			if err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
@@ -710,27 +717,27 @@ func TestFabricConnectivityRequestsDaemonRealizationBeforeReadiness(t *testing.T
 				input,
 				plan,
 				clabernetesinternaldirectruntime.ConnectivityOptions{
-					StateDirectory:         state,
-					PodNamespace:           "lab",
-					PodName:                "router-pod",
-					PodUID:                 "pod-uid-a",
-					HostEndpointReconciler: reconciler,
+					StateDirectory: state,
+					PodNamespace:   "lab",
+					PodName:        "router-pod",
+					PodUID:         "pod-uid-a",
+					PodAddress:     "10.244.0.12",
 				},
-				&fakeLinkOperations{},
+				operations,
 				nil,
 			); err != nil {
 				t.Fatal(err)
 			}
 
-			request := <-reconciler.requests
-			if len(request.Fabric) != 1 || len(request.Endpoints) != 0 {
-				t.Fatalf("daemon request = %#v", request)
+			if len(operations.fabricSpecs) != 1 {
+				t.Fatalf("fabric operations = %#v", operations.fabricSpecs)
 			}
 
-			endpoint := request.Fabric[0]
-			if endpoint.Link.Namespace != "lab" || endpoint.Link.UID == "" ||
-				endpoint.PodInterface == "" || endpoint.TunnelID != 73 || endpoint.MTU != 1450 {
-				t.Fatalf("fabric endpoint = %#v", endpoint)
+			spec := operations.fabricSpecs[0]
+			if spec.InterfaceName == "" || spec.TunnelID != 73 || spec.MTU != 1450 ||
+				spec.PeerTransport != "peer-vx" || spec.PodAddress != "10.244.0.12" ||
+				!strings.HasPrefix(spec.Owner, "c9s:direct:v1:") {
+				t.Fatalf("fabric endpoint spec = %#v", spec)
 			}
 
 			if err := clabernetesinternaldirectruntime.ConnectivityReady(plan, state); err != nil {
@@ -740,15 +747,14 @@ func TestFabricConnectivityRequestsDaemonRealizationBeforeReadiness(t *testing.T
 	}
 }
 
-// TestFabricConnectivityStaysUnreadyUntilDaemonReportsPeer holds readiness back while the
-// daemon reports the transport is still waiting on its peer.
-func TestFabricConnectivityStaysUnreadyUntilDaemonReportsPeer(t *testing.T) {
+// TestFabricConnectivityStaysUnreadyUntilPeerResolves holds readiness back while the endpoint
+// transport still waits on its peer.
+func TestFabricConnectivityStaysUnreadyUntilPeerResolves(t *testing.T) {
 	t.Parallel()
 
 	input, plan := connectivityTestInputAndPlan(t)
 	setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
 
-	reconciler := &fakeHostEndpointReconciler{fabricUnready: true}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -758,13 +764,13 @@ func TestFabricConnectivityStaysUnreadyUntilDaemonReportsPeer(t *testing.T) {
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory:         state,
-			PodNamespace:           "lab",
-			PodName:                "router-pod",
-			PodUID:                 "pod-uid-a",
-			HostEndpointReconciler: reconciler,
+			StateDirectory: state,
+			PodNamespace:   "lab",
+			PodName:        "router-pod",
+			PodUID:         "pod-uid-a",
+			PodAddress:     "10.244.0.12",
 		},
-		&fakeLinkOperations{},
+		&fakeLinkOperations{fabricUnready: true},
 		nil,
 	); err != nil {
 		t.Fatal(err)
@@ -849,9 +855,8 @@ func TestManagementConnectivityAddsPackageSelectedAddressesBeforeReadiness(t *te
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory:         state,
-			PodAddress:             "10.244.0.12",
-			HostEndpointReconciler: &fakeHostEndpointReconciler{},
+			StateDirectory: state,
+			PodAddress:     "10.244.0.12",
 		},
 		operations,
 		nil,
@@ -2309,4 +2314,204 @@ func setHostLink(
 			InterfaceID: "link-uid-a/a", TimeoutSeconds: 30,
 		},
 	}}
+}
+
+type fakeNATOperations struct {
+	specs []clabernetesinternaldirectruntime.InterpositionNATSpec
+	err   error
+}
+
+func (f *fakeNATOperations) EnsureInterpositionNAT(
+	spec clabernetesinternaldirectruntime.InterpositionNATSpec,
+) error {
+	if f.err != nil {
+		return f.err
+	}
+
+	f.specs = append(f.specs, spec)
+
+	return nil
+}
+
+func (f *fakeNATOperations) DeleteInterpositionNAT() error {
+	return nil
+}
+
+func interposedConnectivityFixture(
+	t *testing.T,
+) (clabernetesinternaldeviceplan.Input, clabernetesinternaldeviceplan.Plan) {
+	t.Helper()
+
+	input, plan := connectivityTestInputAndPlan(t)
+	input.Management = []clabernetesinternaldeviceplan.ManagementInput{{
+		NodeID: "node-a", IPv4: "172.20.20.11/24", IPv4Gateway: "172.20.20.1",
+	}}
+
+	digest, err := input.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan.InputDigest = digest
+	plan.Management = []clabernetesinternaldeviceplan.ManagementPlan{{
+		ID: "management/node-a", NodeID: "node-a",
+		InterfaceSelector: clabernetesinternaldeviceplan.ManagementInterfaceInterposed,
+		IPv4:              "172.20.20.11/24", IPv4Gateway: "172.20.20.1",
+		Interposition: &clabernetesinternaldeviceplan.ManagementInterposition{
+			DeviceInterface: "eth0",
+			DeviceMAC:       "00:1c:73:c9:50:31",
+			InboundPorts: []clabernetesinternaldeviceplan.ManagementPortMap{
+				{Protocol: "tcp", PodPort: 22, DevicePort: 22},
+			},
+		},
+	}}
+
+	return input, plan
+}
+
+func TestInterposedManagementRealizesPodLocallyBeforeReadiness(t *testing.T) {
+	t.Parallel()
+
+	input, plan := interposedConnectivityFixture(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	operations := &fakeLinkOperations{}
+	nat := &fakeNATOperations{}
+
+	state := t.TempDir()
+	if err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
+		ctx,
+		input,
+		plan,
+		clabernetesinternaldirectruntime.ConnectivityOptions{
+			StateDirectory: state,
+			PodAddress:     "10.244.0.12",
+			NATOperations:  nat,
+		},
+		operations,
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(operations.interpositions) != 1 {
+		t.Fatalf("interposition operations = %#v", operations.interpositions)
+	}
+
+	spec := operations.interpositions[0]
+	if spec.DeviceInterface != "eth0" ||
+		spec.DeviceMAC != "00:1c:73:c9:50:31" ||
+		spec.ManagementIPv4 != "172.20.20.11/24" ||
+		spec.GatewayIPv4 != "172.20.20.1" ||
+		spec.TransportInterface != clabernetesinternaldirectruntime.TransportInterfaceName ||
+		spec.RouterInterface != clabernetesinternaldirectruntime.RouterInterfaceName ||
+		spec.PodAddress != "10.244.0.12" {
+		t.Fatalf("interposition spec = %#v", spec)
+	}
+
+	if len(nat.specs) != 1 {
+		t.Fatalf("translation operations = %#v", nat.specs)
+	}
+
+	natSpec := nat.specs[0]
+	if natSpec.ManagementAddress != "172.20.20.11" ||
+		natSpec.ManagementSubnet != "172.20.20.0/24" ||
+		natSpec.PodAddress != "10.244.0.12" ||
+		len(natSpec.InboundPorts) != 1 || natSpec.InboundPorts[0].DevicePort != 22 {
+		t.Fatalf("translation spec = %#v", natSpec)
+	}
+
+	// The interposed identity must not be double-realized on the Pod transport interface.
+	if len(operations.managementAddresses) != 0 {
+		t.Fatalf("interposed identity leaked to Pod transport: %#v", operations.managementAddresses)
+	}
+
+	if err := clabernetesinternaldirectruntime.ConnectivityReady(plan, state); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInterposedManagementFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	for name, mutate := range map[string]func(
+		*clabernetesinternaldirectruntime.ConnectivityOptions,
+		*fakeLinkOperations,
+		*fakeNATOperations,
+	){
+		"namespace preparation fails": func(
+			_ *clabernetesinternaldirectruntime.ConnectivityOptions,
+			operations *fakeLinkOperations,
+			_ *fakeNATOperations,
+		) {
+			operations.interpositionError = errors.New("device leg is unavailable")
+		},
+		"translation fails": func(
+			_ *clabernetesinternaldirectruntime.ConnectivityOptions,
+			_ *fakeLinkOperations,
+			nat *fakeNATOperations,
+		) {
+			nat.err = errors.New("translation backend is unavailable")
+		},
+		"pod address missing": func(
+			options *clabernetesinternaldirectruntime.ConnectivityOptions,
+			_ *fakeLinkOperations,
+			_ *fakeNATOperations,
+		) {
+			options.PodAddress = ""
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			input, plan := interposedConnectivityFixture(t)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			operations := &fakeLinkOperations{}
+			nat := &fakeNATOperations{}
+			options := clabernetesinternaldirectruntime.ConnectivityOptions{
+				StateDirectory: t.TempDir(),
+				PodAddress:     "10.244.0.12",
+				NATOperations:  nat,
+			}
+			mutate(&options, operations, nat)
+
+			err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
+				ctx,
+				input,
+				plan,
+				options,
+				operations,
+				nil,
+			)
+			if err == nil {
+				t.Fatal("interposition did not fail closed")
+			}
+
+			if err = clabernetesinternaldirectruntime.ConnectivityReady(
+				plan,
+				options.StateDirectory,
+			); err == nil {
+				t.Fatal("connectivity readiness was published despite interposition failure")
+			}
+
+			if name != "pod address missing" {
+				conditions, readErr := os.ReadFile(filepath.Join(
+					options.StateDirectory,
+					clabernetesinternaldirectruntime.InterpositionConditionsFile,
+				))
+				if readErr != nil || !strings.Contains(string(conditions), "=False:") {
+					t.Fatalf(
+						"failed interposition recorded no failing condition: %s err=%v",
+						conditions,
+						readErr,
+					)
+				}
+			}
+		})
+	}
 }

@@ -118,17 +118,21 @@ func (c *Controller) Reconcile(
 		)
 	}
 
-	if IsHostLink(link) && !slices.Contains(
+	if slices.Contains(
 		link.GetFinalizers(),
 		clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
 	) {
-		link.SetFinalizers(append(
+		// Daemon-era host Links carried a node-local cleanup finalizer; host state is now
+		// Pod-namespace-scoped, so the finalizer is stripped on sight.
+		link.SetFinalizers(slices.DeleteFunc(
 			slices.Clone(link.GetFinalizers()),
-			clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
+			func(finalizer string) bool {
+				return finalizer == clabernetesapisv1alpha1.LinkHostEndpointFinalizer
+			},
 		))
 
 		if err = c.BaseController.Client.Update(ctx, link); err != nil {
-			return ctrlruntime.Result{}, fmt.Errorf("adding host-endpoint finalizer: %w", err)
+			return ctrlruntime.Result{}, fmt.Errorf("removing host-endpoint finalizer: %w", err)
 		}
 
 		return ctrlruntime.Result{}, nil
@@ -263,6 +267,25 @@ func (c *Controller) prepareReconcile(
 	}
 
 	if link.DeletionTimestamp != nil || c.BaseController.ShouldIgnoreReconcile(link) {
+		// Host Link state is Pod-namespace-scoped and dies with the Pod; nothing node-local
+		// gates deletion. A daemon-era finalizer from a previous version is stripped so the
+		// Link can finish deleting.
+		if slices.Contains(
+			link.GetFinalizers(),
+			clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
+		) {
+			link.SetFinalizers(slices.DeleteFunc(
+				slices.Clone(link.GetFinalizers()),
+				func(finalizer string) bool {
+					return finalizer == clabernetesapisv1alpha1.LinkHostEndpointFinalizer
+				},
+			))
+
+			if err = c.BaseController.Client.Update(ctx, link); err != nil {
+				return nil, false, fmt.Errorf("removing legacy host-endpoint finalizer: %w", err)
+			}
+		}
+
 		return nil, true, nil
 	}
 

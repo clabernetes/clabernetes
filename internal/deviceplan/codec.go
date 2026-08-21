@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
 	"path"
 	"slices"
 	"strings"
@@ -117,6 +119,17 @@ func NormalizeInput(input Input) (Input, error) {
 	slices.SortFunc(normalized.Management, func(left, right ManagementInput) int {
 		return strings.Compare(left.NodeID, right.NodeID)
 	})
+
+	for index := range normalized.Management {
+		slices.SortFunc(normalized.Management[index].InboundPorts, func(left, right Port) int {
+			if compared := strings.Compare(left.Protocol, right.Protocol); compared != 0 {
+				return compared
+			}
+
+			return left.Number - right.Number
+		})
+	}
+
 	slices.SortFunc(normalized.Interfaces, func(left, right InterfaceInput) int {
 		return strings.Compare(left.ID, right.ID)
 	})
@@ -199,6 +212,17 @@ func NormalizePlan(plan Plan) (Plan, error) {
 
 	for index := range normalized.Management {
 		slices.SortFunc(normalized.Management[index].Routes, compareRoute)
+
+		if contract := normalized.Management[index].Interposition; contract != nil {
+			slices.Sort(contract.TransportCIDRs)
+			slices.SortFunc(contract.InboundPorts, func(left, right ManagementPortMap) int {
+				if compared := strings.Compare(left.Protocol, right.Protocol); compared != 0 {
+					return compared
+				}
+
+				return int(left.PodPort) - int(right.PodPort)
+			})
+		}
 	}
 
 	slices.SortFunc(normalized.Interfaces, func(left, right InterfacePlan) int {
@@ -404,6 +428,20 @@ func validateInput(input Input) error {
 		}
 
 		managementNodes[management.NodeID] = true
+
+		for portIndex, port := range management.InboundPorts {
+			portField := fmt.Sprintf("%s.inboundPorts[%d]", field, portIndex)
+			if port.Number <= 0 || port.Number > 65535 {
+				return planningError(ErrorInvalidInput, portField, "port number is invalid", nil)
+			}
+
+			switch strings.ToLower(port.Protocol) {
+			case "", protocolTCP, protocolUDP:
+			default:
+				return planningError(ErrorInvalidInput, portField, "port protocol is invalid", nil)
+			}
+		}
+
 	}
 
 	interfaces := map[string]bool{}
@@ -762,8 +800,13 @@ func validatePlan(plan Plan) error {
 			(item.InterfaceName == "" && item.InterfaceSelector == "") ||
 			(item.InterfaceName != "" && item.InterfaceSelector != "") ||
 			(item.InterfaceSelector != "" &&
-				item.InterfaceSelector != ManagementInterfacePodTransport) {
+				item.InterfaceSelector != ManagementInterfacePodTransport &&
+				item.InterfaceSelector != ManagementInterfaceInterposed) {
 			return planningError(ErrorInvalidInput, field, "management plan is incomplete", nil)
+		}
+
+		if err := validateManagementInterposition(field, item); err != nil {
+			return err
 		}
 
 		if _, exists := nodes[item.NodeID]; !exists || managementNodes[item.NodeID] {
@@ -1291,4 +1334,83 @@ func decodeStrict[T any](raw []byte, field string) (T, error) {
 	}
 
 	return decoded, nil
+}
+
+// Inbound management port protocols accepted by the interposition contract.
+const (
+	protocolTCP = "tcp"
+	protocolUDP = "udp"
+)
+
+// validateManagementInterposition enforces the selector/contract pairing: an Interposed entry
+// carries a complete translation contract, and no other entry carries one at all.
+func validateManagementInterposition(field string, item ManagementPlan) error {
+	if item.InterfaceSelector != ManagementInterfaceInterposed {
+		if item.Interposition != nil {
+			return planningError(
+				ErrorInvalidInput,
+				field+".interposition",
+				"interposition contract requires the Interposed selector",
+				nil,
+			)
+		}
+
+		return nil
+	}
+
+	contract := item.Interposition
+	if contract == nil || contract.DeviceInterface == "" ||
+		len(contract.DeviceInterface) >= 16 {
+		return planningError(
+			ErrorInvalidInput,
+			field+".interposition",
+			"interposed management requires a valid device interface",
+			nil,
+		)
+	}
+
+	if item.IPv4 == "" || item.IPv4Gateway == "" {
+		return planningError(
+			ErrorInvalidInput,
+			field+".interposition",
+			"interposed management requires an allocated IPv4 identity and gateway",
+			nil,
+		)
+	}
+
+	if contract.DeviceMAC != "" {
+		if _, err := net.ParseMAC(contract.DeviceMAC); err != nil {
+			return planningError(
+				ErrorInvalidInput,
+				field+".interposition.deviceMAC",
+				"device MAC is invalid",
+				nil,
+			)
+		}
+	}
+
+	for _, cidr := range contract.TransportCIDRs {
+		if _, err := netip.ParsePrefix(cidr); err != nil {
+			return planningError(
+				ErrorInvalidInput,
+				field+".interposition.transportCIDRs",
+				"transport CIDR is invalid",
+				nil,
+			)
+		}
+	}
+
+	for _, port := range contract.InboundPorts {
+		if (port.Protocol != protocolTCP && port.Protocol != protocolUDP) ||
+			port.PodPort == 0 || port.DevicePort == 0 {
+			return planningError(
+				ErrorInvalidInput,
+				field+".interposition.inboundPorts",
+				"inbound port map is invalid",
+				nil,
+			)
+		}
+	}
+
+	return nil
 }

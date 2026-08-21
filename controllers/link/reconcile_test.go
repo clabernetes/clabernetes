@@ -363,11 +363,12 @@ func TestReconcileBindsHostEndpointWithoutNodeUID(t *testing.T) {
 		t.Fatalf("expected valid local host Link status, got %+v", actual.Status)
 	}
 
-	if !slices.Contains(
+	// Host Link state is Pod-namespace-scoped; no node-local finalizer may gate deletion.
+	if slices.Contains(
 		actual.GetFinalizers(),
 		clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
 	) {
-		t.Fatalf("host Link finalizers = %v", actual.GetFinalizers())
+		t.Fatalf("host Link carries a daemon-era finalizer: %v", actual.GetFinalizers())
 	}
 }
 

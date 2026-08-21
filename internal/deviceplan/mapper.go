@@ -1120,9 +1120,14 @@ func appendExecActions(
 	return nil
 }
 
+// defaultManagementDeviceInterface is containerlab's primary-interface contract: every kind
+// consumes this name as its management port unless its evaluated configuration names another.
+const defaultManagementDeviceInterface = "eth0"
+
 // appendManagementPlan records one management entry per logical Node even when the controller
 // allocated no addresses: the package-declared management interface must ride the plan so
-// runtime completion can rehydrate it after planning.
+// runtime completion can rehydrate it after planning. A namespace-owning Node with a complete
+// allocated identity is realized by sidecar interposition and carries the derived contract.
 func appendManagementPlan(plan *Plan, node *EvaluatedNode, values []ManagementInput) {
 	interfaceSelector := ManagementInterfaceSelector("")
 	if node.Config.MgmtIntf == "" {
@@ -1140,8 +1145,99 @@ func appendManagementPlan(plan *Plan, node *EvaluatedNode, values []ManagementIn
 		entry.IPv6 = value.IPv6
 		entry.IPv6Gateway = value.IPv6Gateway
 		entry.DNS = value.DNS
+
+		if entry.IPv4 != "" && entry.IPv4Gateway != "" &&
+			!strings.HasPrefix(node.Config.NetworkMode, "container:") {
+			entry.InterfaceName = ""
+			entry.InterfaceSelector = ManagementInterfaceInterposed
+			entry.Interposition = interpositionContract(plan, node, value)
+		}
 	}
 	plan.Management = append(plan.Management, entry)
+}
+
+// interpositionContract derives the vendor-neutral interposition data for one Node from its
+// evaluated containerlab configuration, its planned container ports, and the controller's
+// declared inbound port set. It never branches on kind or vendor identity.
+func interpositionContract(
+	plan *Plan,
+	node *EvaluatedNode,
+	management *ManagementInput,
+) *ManagementInterposition {
+	deviceInterface := node.Config.MgmtIntf
+	if deviceInterface == "" {
+		deviceInterface = defaultManagementDeviceInterface
+	}
+
+	contract := &ManagementInterposition{
+		DeviceInterface: deviceInterface,
+		DeviceMAC:       node.Config.MacAddress,
+	}
+
+	seen := map[string]bool{}
+
+	appendPort := func(port Port, translate bool) {
+		if port.Number <= 0 || port.Number > 65535 {
+			return
+		}
+
+		protocol := strings.ToLower(port.Protocol)
+		if protocol == "" {
+			protocol = protocolTCP
+		}
+
+		if protocol != protocolTCP && protocol != protocolUDP {
+			return
+		}
+
+		key := protocol + "/" + strconv.Itoa(port.Number)
+		if seen[key] {
+			return
+		}
+
+		seen[key] = true
+
+		if !translate {
+			return
+		}
+
+		contract.InboundPorts = append(contract.InboundPorts, ManagementPortMap{
+			Protocol:   protocol,
+			PodPort:    uint16(port.Number),
+			DevicePort: uint16(port.Number),
+		})
+	}
+
+	// Ports planned for the Node's own containers translate to its management address; ports of
+	// other containers sharing the Pod namespace only claim the Pod-side port so a declared
+	// inbound port never shadows a group member's listener.
+	for _, container := range plan.Containers {
+		if container.NodeID != node.Input.ID {
+			continue
+		}
+
+		for _, port := range container.Ports {
+			appendPort(port, true)
+		}
+	}
+
+	for _, container := range plan.Containers {
+		if container.NodeID == node.Input.ID {
+			continue
+		}
+
+		for _, port := range container.Ports {
+			appendPort(port, false)
+		}
+	}
+
+	if management != nil {
+		for _, port := range management.InboundPorts {
+			appendPort(port, true)
+		}
+	}
+
+	return contract
 }
 
 func appendInterfacePlans(

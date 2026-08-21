@@ -33,7 +33,8 @@ nothing is silently dropped.
   exactly like the node's own name.
 - **`mgmt-net` and `macvlan` endpoints are rejected.** They require host networking a cluster
   does not provide. Host Links (`host:<interface>`) are supported through the node-local
-  host-endpoint daemon.
+  connectivity sidecar, which places the worker-side veth end through a read-only worker
+  namespace handle; the pair dies with the Pod, leaving no worker residue.
 - **Rewiring through a Topology replaces the Link object.** Compiled Link names encode both
   endpoints, so changing either endpoint's interface in the definition deletes the old Link and
   creates a new one -- the former endpoints are removed and recreated *on both sides*, exactly
