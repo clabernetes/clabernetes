@@ -35,7 +35,6 @@ vars:
   IMAGE_BASE: ${REGISTRY}/${CLABERNETES}
   MANAGER_IMAGE: ${REGISTRY}/${CLABERNETES}-manager
   MANAGER_DEV_IMAGE: ${MANAGER_IMAGE}-dev
-  LAUNCHER_IMAGE: ${REGISTRY}/${CLABERNETES}-launcher
   CLABVERTER_IMAGE: ${REGISTRY}/clabverter
   DEV_IMAGE_TAG: dev-latest
   # DevSpace strips tags from devImage when it matches images.*.image; keep the tag on the
@@ -52,12 +51,6 @@ vars:
     args:
       - -c
       - printf '%s:%s' "${MANAGER_DEV_IMAGE}" "${DEV_IMAGE_TAG}"
-  LAUNCHER_IMAGE_TAGGED:
-    source: command
-    command: bash
-    args:
-      - -c
-      - printf '%s:%s' "${LAUNCHER_IMAGE}" "${DEV_IMAGE_TAG}"
   LOCAL_MANAGER_IMAGE:
     source: command
     command: bash
@@ -71,13 +64,6 @@ vars:
     args:
       - local-registry-image-ref.sh
       - ${MANAGER_DEV_IMAGE}
-      - ${DEV_IMAGE_TAG}
-  LOCAL_LAUNCHER_IMAGE:
-    source: command
-    command: bash
-    args:
-      - local-registry-image-ref.sh
-      - ${LAUNCHER_IMAGE}
       - ${DEV_IMAGE_TAG}
   # always build w/ 0.0.0 -- overridden for actual releases by release profile. for "normal" builds
   # (not releases) we'll do VERSION-HASH, for releases we'll just override to have version tag.
@@ -125,23 +111,6 @@ images:
       - ${COMMIT_HASH}
       - dev-latest
 
-  clabernetes-launcher:
-    createPullSecret: false
-    image: ${LAUNCHER_IMAGE}
-    context: ../
-    dockerfile: ../build/launcher.Dockerfile
-    rebuildStrategy: ignoreContextChanges
-    buildArgs:
-      VERSION: ${VERSION}-${COMMIT_HASH}
-    buildKit:
-      command: ["docker", "buildx"]
-      args:
-        - "--platform=${TARGET_PLATFORM}"
-        - "--secret=id=host_ca,src=/etc/ssl/certs/ca-certificates.crt"
-    tags:
-      - ${COMMIT_HASH}
-      - dev-latest
-
   clabverter:
     createPullSecret: false
     image: ${CLABVERTER_IMAGE}
@@ -169,14 +138,11 @@ deployments:
           image: ${MANAGER_IMAGE_TAGGED}
           imagePullPolicy: ${PULL_POLICY}
         globalConfig:
-          # The development deployment is declarative: it must replace launcher settings left by
-          # an earlier checkout/release so the synced manager never starts an incompatible image.
+          # The development deployment is declarative: it must replace settings left by an
+          # earlier checkout/release so the synced manager never runs an incompatible config.
           mergeMode: overwrite
           imagePull:
             criKindOverride: containerd
-          deployment:
-            launcherImage: ${LAUNCHER_IMAGE_TAGGED}
-            launcherImagePullPolicy: ${PULL_POLICY}
         clicker:
           image: ${MANAGER_IMAGE_TAGGED}
           imagePullPolicy: ${PULL_POLICY}
@@ -206,9 +172,6 @@ profiles:
       - op: add
         path: deployments.clabernetes.helm.values.manager.controllerLogLevel
         value: debug
-      - op: add
-        path: deployments.clabernetes.helm.values.globalConfig.deployment.launcherLogLevel
-        value: debug
 
   - name: single-manager
     patches:
@@ -234,9 +197,6 @@ profiles:
         path: deployments.clabernetes.helm.values.manager.image
         value: ${LOCAL_MANAGER_IMAGE}
       - op: replace
-        path: deployments.clabernetes.helm.values.globalConfig.deployment.launcherImage
-        value: ${LOCAL_LAUNCHER_IMAGE}
-      - op: replace
         path: deployments.clabernetes.helm.values.clicker.image
         value: ${LOCAL_MANAGER_IMAGE}
       - op: remove
@@ -259,17 +219,6 @@ profiles:
         path: images.clabernetes.custom
         value:
           command: LOCAL_REGISTRY_BUILD=1 bash build-for-local-registry.sh ${runtime.images.clabernetes.image} ${runtime.images.clabernetes.tag} build/manager.Dockerfile .
-      - op: remove
-        path: images.clabernetes-launcher.buildKit
-      - op: remove
-        path: images.clabernetes-launcher.buildArgs
-      - op: add
-        path: images.clabernetes-launcher.skipPush
-        value: true
-      - op: add
-        path: images.clabernetes-launcher.custom
-        value:
-          command: LOCAL_REGISTRY_BUILD=1 bash build-for-local-registry.sh ${runtime.images.clabernetes-launcher.image} ${runtime.images.clabernetes-launcher.tag} build/launcher.Dockerfile .
 
   # LOCAL_REGISTRY=0: buildx pushes to REGISTRY (e.g. GHCR). Force rebuild/push every run because
   # ignoreContextChanges would skip builds when images exist locally but not in the remote registry.
@@ -278,31 +227,24 @@ profiles:
       - op: replace
         path: pipelines.dev.run
         value: |-
-          build_images --force-rebuild clabernetes-dev clabernetes clabernetes-launcher
+          build_images --force-rebuild clabernetes-dev clabernetes
           create_deployments --all
           start_dev --all
       - op: replace
         path: deployments.clabernetes.helm.values.manager.imagePullPolicy
         value: Always
       - op: replace
-        path: deployments.clabernetes.helm.values.globalConfig.deployment.launcherImagePullPolicy
-        value: Always
-      - op: replace
         path: deployments.clabernetes.helm.values.clicker.imagePullPolicy
         value: Always
 
   # for development using devspace on "non-local" clusters (meaning *not* kind/docker-desktop/
-  # minikube/maybe others) you will want to have Always for image pull so launcher and clicker pick
-  # up the new image -- you may even want always pull on manager so the manager dev image is pulled;
-  # conversely, for the "local" clusters you *don't* want this because you want to use the image
-  # that you loaded (i.e `kind load docker-image`) to the cluster.
+  # minikube/maybe others) you will want to have Always for image pull so manager and clicker pick
+  # up the new image; conversely, for the "local" clusters you *don't* want this because you want
+  # to use the image that you loaded (i.e `kind load docker-image`) to the cluster.
   - name: always-pull
     patches:
       - op: replace
         path: deployments.clabernetes.helm.values.manager.imagePullPolicy
-        value: Always
-      - op: replace
-        path: deployments.clabernetes.helm.values.globalConfig.deployment.launcherImagePullPolicy
         value: Always
       - op: replace
         path: deployments.clabernetes.helm.values.clicker.imagePullPolicy
@@ -318,16 +260,6 @@ profiles:
           - ${COMMIT_HASH}
       - op: replace
         path: images.clabernetes.buildArgs.VERSION
-        value: ${RELEASE_VERSION}
-
-      - op: replace
-        path: images.clabernetes-launcher.tags
-        value:
-          - latest
-          - ${RELEASE_VERSION}
-          - ${COMMIT_HASH}
-      - op: replace
-        path: images.clabernetes-launcher.buildArgs.VERSION
         value: ${RELEASE_VERSION}
 
       - op: replace
@@ -353,14 +285,6 @@ profiles:
         value: ${RELEASE_VERSION}
 
       - op: replace
-        path: images.clabernetes-launcher.tags
-        value:
-          - ${RELEASE_VERSION}
-      - op: replace
-        path: images.clabernetes-launcher.buildArgs.VERSION
-        value: ${RELEASE_VERSION}
-
-      - op: replace
         path: images.clabverter.tags
         value:
           - ${RELEASE_VERSION}
@@ -372,12 +296,12 @@ pipelines:
   build:
     # override the default build pipeline so we don't bother building dev image in ci
     run: |
-      build_images clabernetes clabernetes-launcher clabverter
+      build_images clabernetes clabverter
 
   dev:
     # override the default dev pipeline to not bother building clabverter while doing dev things
     run: |
-      build_images clabernetes-dev clabernetes clabernetes-launcher
+      build_images clabernetes-dev clabernetes
       create_deployments --all
       start_dev --all
 
@@ -386,7 +310,7 @@ pipelines:
     # deploy pipeline
     run: |
       run_dependencies --all
-      build_images clabernetes clabernetes-launcher
+      build_images clabernetes
       create_deployments --all
 
   purge:

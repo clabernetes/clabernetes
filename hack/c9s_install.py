@@ -62,7 +62,6 @@ class Cluster:
 @dataclass(frozen=True)
 class Images:
     manager: str
-    launcher: str
 
 
 def fail(message: str) -> NoReturn:
@@ -278,9 +277,8 @@ def build_local_images(
     rebuild: bool,
 ) -> Images:
     manager = f"{DEFAULT_IMAGE_BASE}/clabernetes-manager:{image_tag}"
-    launcher = f"{DEFAULT_IMAGE_BASE}/clabernetes-launcher:{image_tag}"
     if reuse:
-        return Images(manager=manager, launcher=launcher)
+        return Images(manager=manager)
     if shutil.which("docker") is None:
         fail("local source installation requires Docker")
     run(["docker", "info"], capture=True)
@@ -291,15 +289,12 @@ def build_local_images(
         )
     platform = cluster.platforms[0]
     if kind_name:
-        if rebuild or not (
-            docker_image_present(manager) and docker_image_present(launcher)
-        ):
+        if rebuild or not docker_image_present(manager):
             run(
                 [
                     "make",
                     "--no-print-directory",
                     "build-manager",
-                    "build-launcher",
                     f"IMAGE_TAG={image_tag}",
                     f"TARGET_PLATFORM={platform}",
                     f"C9S_LOCAL_BUILD_ID={build_id}",
@@ -307,38 +302,31 @@ def build_local_images(
                 cwd=repo_root,
             )
         run([str(tools.kind), "load", "docker-image", manager, "--name", kind_name])
-        run([str(tools.kind), "load", "docker-image", launcher, "--name", kind_name])
-        return Images(manager=manager, launcher=launcher)
+        return Images(manager=manager)
     if not registry:
         fail("local source requires a KinD cluster or C9S_REGISTRY")
     registry = registry.rstrip("/")
     manager = f"{registry}/clabernetes-manager:{image_tag}"
-    launcher = f"{registry}/clabernetes-launcher:{image_tag}"
     run(
         ["bash", ".develop/ensure-registry-auth.sh"],
         cwd=repo_root,
         extra_env={"REGISTRY": registry, "UV": str(tools.uv)},
     )
-    if rebuild or not (
-        docker_image_present(manager) and docker_image_present(launcher)
-    ):
+    if rebuild or not docker_image_present(manager):
         run(
             [
                 "make",
                 "--no-print-directory",
                 "build-manager",
-                "build-launcher",
                 f"IMAGE_TAG={image_tag}",
                 f"TARGET_PLATFORM={platform}",
                 f"C9S_LOCAL_BUILD_ID={build_id}",
                 f"MANAGER_IMAGE={manager.rsplit(':', 1)[0]}",
-                f"LAUNCHER_IMAGE={launcher.rsplit(':', 1)[0]}",
             ],
             cwd=repo_root,
         )
     run(["docker", "push", manager])
-    run(["docker", "push", launcher])
-    return Images(manager=manager, launcher=launcher)
+    return Images(manager=manager)
 
 
 def chart_images(tools: Tools, chart: str, version: str) -> Images:
@@ -346,12 +334,9 @@ def chart_images(tools: Tools, chart: str, version: str) -> Images:
         [str(tools.helm), "show", "values", chart, "--version", version], capture=True
     )
     manager = yq(tools, '.manager.image // ""', values)
-    launcher = yq(tools, '.manager.launcherImage // ""', values)
     if not manager:
         manager = f"{DEFAULT_IMAGE_BASE}/clabernetes-manager:{'dev-latest' if version == '0.0.0' else version}"
-    if not launcher:
-        launcher = f"{DEFAULT_IMAGE_BASE}/clabernetes-launcher:{'dev-latest' if version == '0.0.0' else version}"
-    return Images(manager=manager, launcher=launcher)
+    return Images(manager=manager)
 
 
 def install(
@@ -465,8 +450,6 @@ def install(
         f"manager.image={images.manager}",
         "--set",
         "manager.imagePullPolicy=IfNotPresent",
-        "--set",
-        f"manager.launcherImage={images.launcher}",
     ]
     run(helm_args)
     run(
@@ -514,27 +497,10 @@ def install(
         time.sleep(1)
     else:
         fail("Config singleton did not become available")
-    launcher_observed = run(
-        kubectl(
-            cluster,
-            tools,
-            "-n",
-            namespace,
-            "get",
-            "deploy/clabernetes-manager",
-            "-o",
-            'jsonpath={.spec.template.spec.containers[?(@.name=="manager")].env[?(@.name=="LAUNCHER_IMAGE")].value}',
-        ),
-        capture=True,
-    ).strip()
-    if launcher_observed != images.launcher:
-        fail(
-            f"launcher image mismatch: expected {images.launcher}, observed {launcher_observed}"
-        )
     console.print(
         f"Installed [bold]{source}[/bold] chart={selected_version} "
         f"context={cluster.context} namespace={namespace} "
-        f"manager={manager_observed} launcher={launcher_observed}"
+        f"manager={manager_observed}"
     )
 
 

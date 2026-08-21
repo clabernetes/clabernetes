@@ -21,7 +21,7 @@ Full options: see [Development](../README.md#development) in the root README.
 ## How `make dev` works
 
 1. Detect the cluster platform (`linux/amd64` or `linux/arm64`) via [`target-platform.sh`](target-platform.sh)
-2. Build `clabernetes-manager`, `clabernetes-manager-dev`, and `clabernetes-launcher` for that platform
+2. Build `clabernetes-manager` and `clabernetes-manager-dev` for that platform
 3. Deploy the Helm chart into namespace `c9s-dev` (or `DEV_NS=...`)
 4. Sync source into the manager dev pod and run via `.develop/start.sh`
 
@@ -68,7 +68,6 @@ DevSpace builds and pushes three images (tags `dev-latest` and the current git c
 
 - `ghcr.io/clabernetes/clabernetes/clabernetes-manager-dev`
 - `ghcr.io/clabernetes/clabernetes/clabernetes-manager`
-- `ghcr.io/clabernetes/clabernetes/clabernetes-launcher`
 
 The `always-pull` profile is enabled automatically via `external-registry` for this path so nodes pick up freshly pushed
 tags. Override the registry with `DEV_REGISTRY=ghcr.io/my-org/clabernetes make dev` if needed.
@@ -123,18 +122,9 @@ TARGET_PLATFORM=linux/amd64 make dev
 
 ## Build hosts behind Zscaler
 
-Launcher builds can pass the host trust bundle via BuildKit `--secret`. The Dockerfile uses the
-secret only as a temporary CA file for `apt` and `curl`; it never copies it into the image
-filesystem. Runtime CA should still come from a Kubernetes Secret on launcher pods:
-
-- **In-cluster registry path:** the launcher build uses
-  `/etc/ssl/certs/ca-certificates.crt` by default; override it with
-  `LOCAL_REGISTRY_BUILD_SECRET=/path/to/ca-bundle.crt`
-- **External registry path (`LOCAL_REGISTRY=0`):** `buildKit.args` `--secret=id=host_ca,...` in
-  `devspace.yaml`
-
-The release workflow does not provide `host_ca`, and a build without the secret uses the standard
-public CA bundle. `required=false` keeps the secret optional.
+Image builds can pass the host trust bundle via BuildKit `--secret` when a Dockerfile consumes
+it as a temporary CA file; set `LOCAL_REGISTRY_BUILD_SECRET=/path/to/ca-bundle.crt` for the
+in-cluster registry path. A build without the secret uses the standard public CA bundle.
 
 ## Image tags
 

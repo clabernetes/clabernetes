@@ -68,7 +68,7 @@ make test-e2e CLUSTER=kind
 ```
 
 This downloads pinned tools into `build/e2e/bin`, creates a single-node KinD
-cluster, builds the manager/launcher images, loads them into the cluster,
+cluster, builds the manager image, loads it into the cluster,
 installs the local Helm chart, and runs the `e2e/...` Go tests. Re-runs are
 cheap: tools are cached and the cluster is reused.
 
