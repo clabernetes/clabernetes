@@ -1,6 +1,6 @@
 ---
 title: Resources and scheduling
-description: Configure device Pod resources, node selection, tolerations, and privileges.
+description: Configure device Pod resources, node selection, tolerations, and affinity.
 ---
 
 This guide explains how to configure resource limits, requests, node scheduling, and tolerations for Clabernetes topologies.
@@ -279,6 +279,87 @@ kubectl describe node worker-1 | grep Taints
 # Remove taint
 kubectl taint nodes worker-1 dedicated=network-lab:NoSchedule-
 ```
+
+## Affinity Rules
+
+Affinity rules apply to direct device Pods and use the native Kubernetes affinity structure. They
+can require or prefer particular Kubernetes nodes with `nodeAffinity`, or place device Pods in
+relation to other Pods with `podAffinity` and `podAntiAffinity`.
+
+### Topology-level affinity
+
+Set affinity under `spec.deployment.scheduling` to apply one scheduling policy to all device Pods
+generated for a Topology:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: scheduled-topology
+spec:
+  deployment:
+    scheduling:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/zone
+                    operator: In
+                    values:
+                      - zone-a
+                      - zone-b
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    c9s.run/topologyOwner: scheduled-topology
+                topologyKey: kubernetes.io/hostname
+```
+
+The Topology controller copies this policy into its generated shared LauncherProfile. Dedicated
+profiles generated for resource overrides retain the same topology-wide affinity.
+
+### LauncherProfile-level affinity
+
+For directly authored Nodes, put the same affinity structure on a LauncherProfile and reference it
+from each Node that should use the policy:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: LauncherProfile
+metadata:
+  name: network-lab-scheduling
+spec:
+  scheduling:
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            preference:
+              matchExpressions:
+                - key: node-type
+                  operator: In
+                  values:
+                    - network-lab
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+spec:
+  launcherProfileRef:
+    name: network-lab-scheduling
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+```
+
+One LauncherProfile can be referenced by multiple Nodes. If Nodes share one Pod through
+`network-mode: container:<primary>`, the primary Node's LauncherProfile controls that shared Pod.
+Affinity `labelSelector` fields select peer Pods for pod affinity or anti-affinity; they do not
+select which Nodes receive a LauncherProfile.
 
 ## Complete Example
 

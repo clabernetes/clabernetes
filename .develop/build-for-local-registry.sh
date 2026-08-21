@@ -66,7 +66,7 @@ else
     platform=$("${script_dir}/target-platform.sh")
 fi
 
-build_args=(--build-arg "BUILDPLATFORM=${platform}")
+build_args=()
 for arg in "$@"; do
     build_args+=(--build-arg "$arg")
 done

@@ -41,6 +41,16 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 		"future-kind-known-only-to-imported-package",
 		"registry.example/device:1",
 	)
+	affinity := &k8scorev1.Affinity{PodAntiAffinity: &k8scorev1.PodAntiAffinity{}}
+	profile := &clabernetesapisv1alpha1.LauncherProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "scheduled", Namespace: node.GetNamespace(), UID: "scheduled-uid",
+		},
+		Spec: clabernetesapisv1alpha1.LauncherProfileSpec{
+			Scheduling: &clabernetesapisv1alpha1.Scheduling{Affinity: affinity},
+		},
+	}
+	node.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: profile.GetName()}
 
 	scheme := plannerTestScheme(t)
 	if err := k8sappsv1.AddToScheme(scheme); err != nil {
@@ -48,7 +58,7 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 	}
 
 	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
-		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).Build()
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node, profile).Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes",
 		clabernetesconfig.GetFakeManager,
@@ -81,6 +91,10 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 		deployment := &k8sappsv1.Deployment{}
 		if err := client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(node), deployment); err == nil {
 			pod := deployment.Spec.Template.Spec
+			if !reflect.DeepEqual(pod.Affinity, affinity) {
+				t.Fatalf("direct device Pod affinity = %#v, want %#v", pod.Affinity, affinity)
+			}
+
 			if len(pod.Containers) != 1 ||
 				pod.Containers[0].Image !=
 					"registry.example/device@sha256:"+strings.Repeat("a", 64) {

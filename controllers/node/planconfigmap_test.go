@@ -228,7 +228,7 @@ func TestPlanConfigMapGarbageCollectionIsUIDSafe(t *testing.T) {
 				Kind:       "Node",
 				Name:       "old-router",
 				UID:        apimachinerytypes.UID("different-node-uid"),
-				Controller: boolPointer(true),
+				Controller: new(true),
 			}},
 		},
 	}
@@ -273,8 +273,4 @@ func planTestScheme(t *testing.T) *apimachineryruntime.Scheme {
 		}
 	}
 	return scheme
-}
-
-func boolPointer(value bool) *bool {
-	return &value
 }

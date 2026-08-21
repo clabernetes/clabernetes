@@ -1438,6 +1438,11 @@ func (in *Scheduling) DeepCopyInto(out *Scheduling) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.Affinity != nil {
+		in, out := &in.Affinity, &out.Affinity
+		*out = new(v1.Affinity)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 

@@ -404,7 +404,7 @@ func (l *MDAS) UnmarshalYAML(unmarshal func(any) error) error {
 	for _, e := range entries {
 		if e.Type == "" || e.Slot <= 0 {
 			return fmt.Errorf(
-				"%w: invalid mda entry. slot and type are required, got slot %q, type %q",
+				"%w: invalid mda entry. slot and type are required, got slot %d, type %q",
 				claberneteserrors.ErrInvalidData,
 				e.Slot,
 				e.Type,
@@ -447,7 +447,7 @@ func (l *XIOMS) UnmarshalYAML(unmarshal func(any) error) error {
 	for _, e := range entries {
 		if e.Type == "" || e.Slot <= 0 {
 			return fmt.Errorf(
-				"%w: invalid xiom entry. slot and type are required, got slot %q, type %q",
+				"%w: invalid xiom entry. slot and type are required, got slot %d, type %q",
 				claberneteserrors.ErrInvalidData,
 				e.Slot,
 				e.Type,

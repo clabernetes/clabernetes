@@ -11,7 +11,7 @@ deployment concerns separate from the containerlab-shaped Node payload.
 Typical profile settings include:
 
 - CPU and memory for a Node's primary application container
-- scheduling and tolerations
+- scheduling, tolerations, and affinity rules
 - service exposure
 - Kubernetes image pull policy and pull Secrets
 - status probes
@@ -52,6 +52,12 @@ spec:
 Profiles are not selected by labels and are not merged into inheritance chains. Fields set on the
 referenced profile take precedence over global `Config` defaults; fields it omits continue through
 global resolution.
+
+The `spec.scheduling.affinity` field accepts the native Kubernetes node affinity, pod affinity, and
+pod anti-affinity structure. A single LauncherProfile can be referenced by multiple Nodes, so the
+same affinity policy can be reused across direct device Pods. For a Topology, configure the
+equivalent field at `spec.deployment.scheduling.affinity`; the Topology controller copies it into
+the generated LauncherProfile.
 
 c9s considers a Node ready only when every device application container representing it is running
 and passes its Kubernetes probes: readiness behavior declared by the imported containerlab plan,

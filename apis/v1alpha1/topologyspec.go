@@ -187,6 +187,10 @@ type Scheduling struct {
 	// +listType=atomic
 	// +optional
 	Tolerations []k8scorev1.Toleration `json:"tolerations"`
+	// Affinity sets the affinity rules that will be configured on all direct device Pods using this
+	// scheduling policy. This supports node affinity, pod affinity, and pod anti-affinity.
+	// +optional
+	Affinity *k8scorev1.Affinity `json:"affinity,omitempty"`
 }
 
 // StatusProbes holds details about if the status probes are enabled and if so how they should be

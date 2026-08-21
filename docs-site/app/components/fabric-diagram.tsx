@@ -1,5 +1,5 @@
 import c9sLogo from '@/assets/c9s-logo-clean.png';
-import containerlabMark from '@/assets/clab-reimagined-logo.svg';
+import containerlabMark from '@/assets/clab-chevron.svg';
 import kubernetesLogo from '@/assets/kubernetes-logo.svg';
 import { SwitchIcon } from '@/components/switch-icon';
 import { Laptop } from 'lucide-react';

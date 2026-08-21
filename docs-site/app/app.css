@@ -14,6 +14,11 @@ body {
   background: var(--color-fd-background);
 }
 
+.fd-scroll-container {
+  scrollbar-color: var(--color-fd-border) transparent;
+  scrollbar-width: thin;
+}
+
 .c9s-development-banner {
   position: relative;
   z-index: 50;

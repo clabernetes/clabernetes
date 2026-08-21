@@ -32,6 +32,7 @@ type ResolvedProfile struct {
 	// scheduling
 	NodeSelector map[string]string
 	Tolerations  []k8scorev1.Toleration
+	Affinity     *k8scorev1.Affinity
 
 	// direct workload persistence settings
 	Persistence clabernetesapisv1alpha1.Persistence
@@ -93,6 +94,10 @@ func applyProfile(
 
 		if scheduling.Tolerations != nil {
 			resolved.Tolerations = scheduling.Tolerations
+		}
+
+		if profile.Spec.Scheduling.Affinity != nil {
+			resolved.Affinity = profile.Spec.Scheduling.Affinity.DeepCopy()
 		}
 	}
 

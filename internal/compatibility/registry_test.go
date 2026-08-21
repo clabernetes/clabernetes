@@ -237,8 +237,7 @@ func topLevelJSONFields(typeOf reflect.Type) []string {
 	}
 
 	fields := []string{}
-	for index := range typeOf.NumField() {
-		field := typeOf.Field(index)
+	for field := range typeOf.Fields() {
 		name := strings.Split(field.Tag.Get("json"), ",")[0]
 		if name == "-" {
 			continue

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	"github.com/google/go-cmp/cmp"
 	"gopkg.in/yaml.v3"
@@ -355,8 +354,8 @@ func getFullVocabularyConfigObject() *clabernetesutilcontainerlab.Config {
 		Image:                 "ghcr.io/nokia/srlinux",
 		License:               "/opt/license.key",
 		StartupConfig:         "/opt/startup.cfg",
-		EnforceStartupConfig:  clabernetesutil.ToPointer(true),
-		SuppressStartupConfig: clabernetesutil.ToPointer(false),
+		EnforceStartupConfig:  new(true),
+		SuppressStartupConfig: new(false),
 		Entrypoint:            "/entrypoint.sh",
 		Cmd:                   "--verbose",
 		Exec:                  []string{"ip link set dev e1-1 up"},
@@ -364,7 +363,7 @@ func getFullVocabularyConfigObject() *clabernetesutilcontainerlab.Config {
 		Binds:                 []string{"/tmp/foo:/tmp/foo"},
 		Devices:               []string{"/dev/net/tun"},
 		CapAdd:                []string{"NET_ADMIN"},
-		Privileged:            clabernetesutil.ToPointer(true),
+		Privileged:            new(true),
 		SecurityOpts:          []string{"seccomp=unconfined"},
 		Tmpfs:                 map[string]string{"/tmp/scratch": "size=64m"},
 		ShmSize:               "256m",
@@ -381,7 +380,7 @@ func getFullVocabularyConfigObject() *clabernetesutilcontainerlab.Config {
 			Search:  []string{"example.com"},
 		},
 		Certificate: &clabernetesutilcontainerlab.CertificateConfig{
-			Issue:            clabernetesutil.ToPointer(true),
+			Issue:            new(true),
 			KeySize:          4096,
 			ValidityDuration: "8760h",
 			SANs:             []string{"srl1.example.com"},

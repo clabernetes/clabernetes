@@ -1350,8 +1350,7 @@ func rewriteImportedStringLeaves(
 		}
 		value.Set(duplicate)
 	case reflect.Struct:
-		for index := range value.NumField() {
-			field := value.Field(index)
+		for _, field := range value.Fields() {
 			if field.CanSet() {
 				if err := rewriteImportedStringLeaves(field, rewrite); err != nil {
 					return err

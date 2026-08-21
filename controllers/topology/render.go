@@ -12,7 +12,6 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryequality "k8s.io/apimachinery/pkg/api/equality"
@@ -255,15 +254,15 @@ func renderTopologyLauncherProfile(
 ) *clabernetesapisv1alpha1.LauncherProfile {
 	spec := clabernetesapisv1alpha1.LauncherProfileSpec{
 		Expose: &clabernetesapisv1alpha1.LauncherProfileExpose{
-			DisableExpose: clabernetesutil.ToPointer(topology.Spec.Expose.DisableExpose),
-			DisableAutoExpose: clabernetesutil.ToPointer(
+			DisableExpose: new(topology.Spec.Expose.DisableExpose),
+			DisableAutoExpose: new(
 				topology.Spec.Expose.DisableAutoExpose,
 			),
 			ExposeType: topology.Spec.Expose.ExposeType,
-			UseNodeMgmtIpv4Address: clabernetesutil.ToPointer(
+			UseNodeMgmtIpv4Address: new(
 				topology.Spec.Expose.UseNodeMgmtIpv4Address,
 			),
-			UseNodeMgmtIpv6Address: clabernetesutil.ToPointer(
+			UseNodeMgmtIpv6Address: new(
 				topology.Spec.Expose.UseNodeMgmtIpv6Address,
 			),
 		},
@@ -285,7 +284,8 @@ func renderTopologyLauncherProfile(
 	}
 
 	if topology.Spec.Deployment.Scheduling.NodeSelector != nil ||
-		topology.Spec.Deployment.Scheduling.Tolerations != nil {
+		topology.Spec.Deployment.Scheduling.Tolerations != nil ||
+		topology.Spec.Deployment.Scheduling.Affinity != nil {
 		spec.Scheduling = topology.Spec.Deployment.Scheduling.DeepCopy()
 	}
 

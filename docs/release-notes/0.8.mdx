@@ -2,81 +2,101 @@
 title: "0.8"
 ---
 
-Unreleased · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.7.0...main)
+2026-08-18 · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.7.1...v0.8.0)
 
-<Callout type='warn'>
+> Existing 0.7.x installations can [upgrade](/docs/installation.mdx#upgrade) in place.
 
-This release replaces the nested launcher runtime with the direct device runtime and removes
-launcher-era API fields. Upgrading is destructive: run the read-only upgrade preflight first,
-back up your resources, and plan a reinstall. There is no in-place `helm upgrade` path and no
-nested-runtime fallback in this release.
+## Component-based Nokia SR-SIM support
 
-</Callout>
+Support for the Nokia SR-SIM nodes has been added for both single- and multi-component configurations. See the [Nokia SR-SIM guide](/docs/guides/nokia-srsim.md) for details and examples.
 
-## The direct device runtime
+> Note, that the distributed SR-SIM nodes are running inside the single launcher pod, and are not distributed across multiple pods.
 
-Every network device now runs as a regular application container in a c9s-managed Pod. The
-launcher image, the Docker daemon inside the Pod, the containerlab executable, image import,
-and nested container discovery are gone. What this changes in practice:
+## SR Linux management DNS
 
-- `kubectl logs`, `kubectl exec`, resource limits, and Pod status address the *actual* device
-  container. Chassis cards and grouped nodes are visible application containers of one Pod.
-- The kubelet performs the only image pull, with native `imagePullPolicy` and
-  `imagePullSecrets`. c9s resolves only registry metadata (manifests and config blobs) and
-  fails readiness if the running image diverges from the planned digest.
-- Kind behavior comes exclusively from the pinned containerlab 0.78.0 Go module, executed in
-  short-lived locked-down planning Pods that record a deterministic device plan. A containerlab
-  module bump admits newly registered kinds without c9s code changes.
-- Each device Pod boots through a preparation init container (stages and digest-verifies every
-  generated and payload artifact) and a restartable privileged connectivity init-sidecar that
-  gates device start on the accepted cold-start interface set and reconciles live Link changes.
+SR Linux nodes are now able to resolve cluster DNS names (using cluster DNS service like kube-dns or CoreDNS). This allows you to use node names in SR Linux configurations when the node reaches out to the other c9s nodes in the topology.
 
-## Connectivity realization
+The cluster DNS IP is automatically added to the SR Linux configuration, so no manual configuration is needed.
 
-Cross-Pod wires are realized by a node-local host-endpoint DaemonSet: the device always sees a
-plain veth interface, same-worker endpoints are patched together without encapsulation, and
-cross-worker endpoints use VXLAN tunnels in the worker host namespace keyed by the Link's
-cluster-wide tunnel id. `Link.spec.connectivity: vxlan | slurpeeth` remains accepted input;
-both map onto this controller-selected realization and the slurpeeth userspace TCP transport is
-retired. Wire semantics -- L2 point-to-point, MTU intent, live rewires, cleanup, rescheduling --
-are unchanged.
+## Portable service ports
 
-## Expanded node vocabulary
+To enable the upcoming containerlab's "c9s as runtime" feature, we needed a way to encode in the topology file the ports that should be exposed by the c9s manager which are not using the containerlab's `ports` directive, since the `ports` directive exposes the ports to the local Docker host, and that is not always desired.
 
-The Node spec and Topology compiler accept more of the native containerlab vocabulary:
-`startup-delay`, `restart-policy` (`always`/`unless-stopped`), `image-pull-policy`, `cpu` and
-`memory` (device-container limits), `healthcheck` (merged over the image OCI healthcheck),
-`aliases` (extra same-namespace Service names for the node's Pod), `link-apply-mode`, `group`,
-and `topology.groups` inheritance. Compilation is fail-closed: vocabulary the direct runtime
-deliberately rejects (`runtime`, `auto-remove`, `pid-mode`, `cgroupns-mode`, `cpu-set`,
-`stages`, `credentials`) fails with a diagnostic stating why, and only cosmetic Docker-only
-constructs are accepted with warnings.
+To provide this port metadata, the reserved node label `c9s.run/exposePorts` was added:
 
-## Breaking API changes
-
-Launcher-era fields are removed from `Config`, `LauncherProfile`, and `Topology`: launcher
-image/log/env settings, `privilegedLauncher`, containerlab debug/timeout/version, Docker
-config and daemon config, insecure registries, pull-through, CRI overrides, by-kind resource
-defaults, and Docker management-network fields. `LauncherProfile` keeps its name and carries
-reusable direct-workload policy (expose, scheduling, resources, persistence, probes, image
-pull); device privilege and kind-owned container requirements come from the imported package
-plan. See [Upgrading](/docs/upgrading) for the complete field disposition table.
-
-Before upgrading, run the read-only preflight against the live cluster; it names every stored
-object still using a removed field and the replacement per path:
-
-```bash
-clabernetes upgrade-preflight
+```yaml
+topology:
+  nodes:
+    gnmic:
+      kind: linux
+      image: ghcr.io/openconfig/gnmic:latest
+      labels:
+        c9s.run/exposePorts: "9273/tcp,8125/udp"
 ```
 
-Rollback after the CRD replacement means reinstalling the prior release with its matching CRDs
-and restoring backed-up resources; the direct runtime deliberately contains no nested emergency
-path.
+Entries use the same destination-port grammar as `Node.spec.ports`. The list of ports in this label will be used by the c9s manager to expose the ports via the K8s service.
 
-## Compatibility
+The effective LauncherProfile still chooses whether the Service is `ClusterIP`, `LoadBalancer`,
+`Headless`, or disabled. See [Service exposure](/docs/guides/expose-configuration#portable-containerlab-topologies).
 
-Per-kind compatibility is generated from the live imported registry and the recorded
-conformance evidence -- see [Compatibility](/docs/compatibility). A kind is reported compatible
-only while its planning, boot, management, dataplane, lifecycle, and cleanup evidence is
-current; evidence is invalidated automatically when the baseline, planner, renderer,
-preparation, or connectivity implementation changes.
+## Launcher affinity
+
+Launcher Pods can now carry native Kubernetes node affinity, pod affinity, and pod anti-affinity.
+
+Set `spec.scheduling.affinity` on a LauncherProfile to reuse one policy across every Node that
+references it. For a Topology, set the same structure at `spec.deployment.scheduling.affinity`; the
+controller copies it into generated shared and dedicated profiles. Grouped Nodes keep the primary
+profile's affinity on the shared launcher Pod.
+
+Affinity `labelSelector` fields select peer Pods; they do not assign LauncherProfiles. See
+[Resource management](/docs/guides/resource-management#affinity-rules) for Topology and
+LauncherProfile examples.
+
+## Containerd registry hosts for pull-through
+
+Some Kubernetes distributions keep containerd registry mirrors, TLS certificates, and host
+configuration outside the default `/etc/containerd/certs.d` path. Pull-through launchers can now
+mount that node directory through global Config:
+
+```yaml
+spec:
+  imagePull:
+    pullThroughOverride: always
+    criHostsDir: /path/to/containerd/hosts
+```
+
+The directory is mounted read-only at both its original path and `/etc/containerd/certs.d`, so
+absolute certificate paths rooted in the node tree continue to work. The mount is omitted when
+pull-through is disabled or the effective CRI is not containerd. On Talos, the volume is an untyped
+hostPath so kubelet does not type-check a path that exists only in the host mount namespace.
+
+See [Image pull](/docs/guides/image-pull#cri-registry-hosts).
+
+## Readiness and topology compilation
+
+With `statusProbes.enabled`, every non-excluded Node now gets startup and readiness probes, even
+when no TCP or SSH check is configured. Readiness is additive:
+
+- the nested Docker container is running and is not paused, restarting, or dead;
+- an image-defined Docker healthcheck, when present, is healthy;
+- configured TCP and SSH probes remain additional application-level requirements.
+
+A running image without a healthcheck is still only process-level readiness. Grouped Nodes and
+expanded component sets share one atomic result: every nested container must pass the generic
+checks before the launcher reports ready. The manager Deployment also waits on `/alive`, so Helm
+rollouts do not become available before controllers have finished starting.
+
+Topology compilation continues to warn, with source locations, when it omits lossy compatibility
+fields. Structures that cannot produce valid c9s resources now fail instead of emitting a partial
+lab: unresolved or special link endpoints, invalid launcher-group network modes, and unsupported
+explicit link types. Concurrent Node and Topology status writes retry from an uncached API read
+after a resource-version conflict.
+
+## Recovering from failed launcher deploys
+
+If containerlab creates a host-side veth and then fails before moving both ends into nested
+namespaces, Kubernetes restarts only the launcher container. The stale interface used to survive in
+the pod network namespace and block every subsequent deploy until the pod was deleted.
+
+The launcher now removes topology-defined host-side interfaces before invoking containerlab, while
+protecting `lo`, `eth0`, and `docker0`. Failed deploys can retry in place.

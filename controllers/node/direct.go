@@ -394,6 +394,7 @@ func (r *Reconciler) reconcileDirect(
 		OwnerReferences:            []metav1.OwnerReference{owner},
 		NodeSelector:               nodeSelector,
 		Tolerations:                slices.Clone(profile.Tolerations),
+		Affinity:                   profile.Affinity.DeepCopy(),
 		PrimaryContainerResources:  primaryContainerResources,
 		ApplicationImagePullPolicy: profile.ImagePullPolicy,
 		Payloads:                   planInput.Payloads,

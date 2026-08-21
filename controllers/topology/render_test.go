@@ -457,6 +457,47 @@ func TestRenderLauncherProfiles(t *testing.T) {
 	assertPerNodeLauncherProfile(t, profiles[1])
 }
 
+func TestRenderLauncherProfilesPreservesAffinity(t *testing.T) {
+	topology, compiled := renderTestTopology(t)
+	affinity := &k8scorev1.Affinity{
+		NodeAffinity: &k8scorev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &k8scorev1.NodeSelector{
+				NodeSelectorTerms: []k8scorev1.NodeSelectorTerm{{
+					MatchExpressions: []k8scorev1.NodeSelectorRequirement{{
+						Key:      "topology.kubernetes.io/zone",
+						Operator: k8scorev1.NodeSelectorOpIn,
+						Values:   []string{"zone-a", "zone-b"},
+					}},
+				}},
+			},
+		},
+	}
+	topology.Spec.Deployment.Scheduling.Affinity = affinity
+
+	profiles := clabernetescontrollerstopology.RenderLauncherProfiles(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	if len(profiles) != 2 {
+		t.Fatalf("expected shared + dedicated profiles, got %d", len(profiles))
+	}
+
+	for _, profile := range profiles {
+		if profile.Spec.Scheduling == nil {
+			t.Fatalf("expected scheduling block on profile %q", profile.GetName())
+		}
+
+		if !reflect.DeepEqual(profile.Spec.Scheduling.Affinity, affinity) {
+			t.Fatalf(
+				"profile %q affinity = %#v, want %#v",
+				profile.GetName(), profile.Spec.Scheduling.Affinity, affinity,
+			)
+		}
+	}
+}
+
 func TestRenderLauncherProfilesOmitsUnusedSharedProfile(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 	topology.Spec.Deployment.Resources = map[string]k8scorev1.ResourceRequirements{

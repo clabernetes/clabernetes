@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-ARG BUILDPLATFORM=linux/amd64
+ARG BUILDPLATFORM
 
-FROM --platform=${BUILDPLATFORM} golang:1.25-bookworm AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26-bookworm AS builder
 
 WORKDIR /clabernetes
 
