@@ -40,9 +40,8 @@ nothing is silently dropped.
   like deleting and re-adding the wire. Editing a Link custom resource in place keeps its
   identity, and only the endpoint you changed is touched; the peer keeps its interface. Either
   way, the lifecycle action follows each kind's declared link-apply mode -- and runtime state a
-  device applied to a recreated interface (a linux-kind `exec` address, a NOS's binding to the
-  old interface) does not survive the recreation, matching a containerlab redeploy of that
-  wire.
+  device applied to a recreated interface (most visibly a linux-kind `exec` address) does not
+  survive the recreation, matching a containerlab redeploy of that wire.
 
 ## Naming and metadata
 

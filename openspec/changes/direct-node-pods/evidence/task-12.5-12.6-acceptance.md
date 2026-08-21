@@ -72,16 +72,20 @@ separate line-card containers). Findings:
   attaches its data port — identically on 26.7.R1 and 25.7.R1, contradicting Nokia's own
   supported-hardware appendix. Upstream report material; the modern platforms (SR-2s family)
   work as documented.
-- **Link changes against a running SR-SIM need `link-apply-mode: recreate`.** The imported
-  kind declares live link-apply, but a data veth added or recreated under a running simulator
-  leaves its dataplane dead with no self-recovery (observed 20+ minutes). Declared `restart`
-  is honored exactly by c9s (same Pod, device containers signaled; observed restartCounts
-  increment with no Pod roll) but is pathological for multi-container chassis: SR OS exits
-  255 on SIGTERM, the kubelet backs off exponentially, and card containers crash-loop until
-  the CPM returns (5+ minutes, unconverged). Declared `recreate` measured 87s for a Node
-  change and **41s for a Link removal** (change to fully ready), with untouched Links
-  carrying traffic immediately — matching cold-boot behavior (38-90s across all runs). The
-  wired `link-apply-mode` vocabulary from task 13.3 is the operative knob.
+- **Live link changes on SR-SIM work — the earlier failure attribution was wrong.**
+  Controlled A/B on the same host and image (26.7.R1, SR-1-92s distributed): plain
+  containerlab (`clab apply`) hot-attaches both a live-added and a live-recreated data veth
+  with dataplane passing, and the direct runtime matches it exactly — live-added Link into a
+  running chassis: **PASS with zero device restarts**; deleted-and-recreated Link (new UID,
+  cross-worker VXLAN, MTU 1450): **PASS** after the daemon replumbs both legs. The
+  mixed-chassis incident originally blamed on SR-SIM live handling decomposes into the
+  neighboring broken SR-7, a linux peer's flushed boot-time `exec` address (its veth was
+  legitimately recreated by a Topology-driven Link replacement), and ARP convergence. The
+  imported kind's live declaration stands. Retained findings: declared `restart` is honored
+  exactly by c9s (same Pod, restartCounts increment) but is pathological for multi-container
+  chassis (SR OS exits 255 on SIGTERM, kubelet backs off exponentially, cards crash-loop
+  until the CPM returns — 5+ minutes); declared `recreate` measured 87s for a Node change and
+  41s for a Link removal, matching cold-boot behavior (38-90s across all runs).
 
 Verified against the live cluster after the last suite:
 
