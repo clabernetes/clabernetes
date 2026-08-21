@@ -4,7 +4,10 @@
 package directruntime
 
 import (
+	"context"
+	"errors"
 	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"runtime"
@@ -12,7 +15,100 @@ import (
 	"testing"
 
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
+
+var errStaticMeshResolver = errors.New("transient resolver failure")
+
+type staticMeshResolver struct {
+	addresses []netip.Addr
+	err       error
+}
+
+func (s staticMeshResolver) LookupNetIP(
+	_ context.Context,
+	_, _ string,
+) ([]netip.Addr, error) {
+	return s.addresses, s.err
+}
+
+// listMeshHeadEndPeers returns the destinations of the VTEP's zero-MAC head-end entries.
+func listMeshHeadEndPeers(t *testing.T, vtep netlink.Link) map[string]bool {
+	t.Helper()
+
+	entries, err := netlink.NeighList(vtep.Attrs().Index, unix.AF_BRIDGE)
+	if err != nil {
+		t.Fatalf("listing mesh forwarding entries: %v", err)
+	}
+
+	peers := map[string]bool{}
+
+	for _, entry := range entries {
+		if entry.Flags&unix.NTF_SELF == 0 || entry.IP == nil {
+			continue
+		}
+
+		if entry.HardwareAddr.String() == "00:00:00:00:00:00" {
+			peers[entry.IP.String()] = true
+		}
+	}
+
+	return peers
+}
+
+// assertMeshPeerReconciliation exercises head-end replication maintenance directly against the
+// realized VTEP: discovery adds peers minus self, shrinking removes exactly the departed peer,
+// and a resolver failure keeps the last-known set.
+func assertMeshPeerReconciliation(t *testing.T) {
+	t.Helper()
+
+	vtep, err := netlink.LinkByName(MeshVTEPName)
+	if err != nil {
+		t.Fatalf("mesh VTEP is absent: %v", err)
+	}
+
+	pod := netip.MustParseAddr("10.244.2.134")
+	// A non-address Pod identity routes resolution through the injected resolver seam.
+	spec := InterpositionSpec{PodAddress: "resolver-seam", MeshPeerService: "peers"}
+
+	operations := netlinkOperations{resolver: staticMeshResolver{addresses: []netip.Addr{
+		netip.MustParseAddr("10.244.1.5"),
+		netip.MustParseAddr("10.244.2.9"),
+		pod,
+	}}}
+	if err = operations.ensureMeshPeers(spec, vtep, pod); err != nil {
+		t.Fatalf("ensureMeshPeers() discovery pass: %v", err)
+	}
+
+	peers := listMeshHeadEndPeers(t, vtep)
+	if len(peers) != 2 || !peers["10.244.1.5"] || !peers["10.244.2.9"] {
+		t.Fatalf("head-end peers = %v, want the discovered set minus self", peers)
+	}
+
+	operations = netlinkOperations{resolver: staticMeshResolver{addresses: []netip.Addr{
+		netip.MustParseAddr("10.244.1.5"),
+	}}}
+	if err = operations.ensureMeshPeers(spec, vtep, pod); err != nil {
+		t.Fatalf("ensureMeshPeers() shrink pass: %v", err)
+	}
+
+	peers = listMeshHeadEndPeers(t, vtep)
+	if len(peers) != 1 || !peers["10.244.1.5"] {
+		t.Fatalf("head-end peers = %v, want exactly the remaining peer", peers)
+	}
+
+	operations = netlinkOperations{resolver: staticMeshResolver{
+		err: errStaticMeshResolver,
+	}}
+	if err = operations.ensureMeshPeers(spec, vtep, pod); err != nil {
+		t.Fatalf("ensureMeshPeers() failure pass: %v", err)
+	}
+
+	peers = listMeshHeadEndPeers(t, vtep)
+	if len(peers) != 1 || !peers["10.244.1.5"] {
+		t.Fatalf("head-end peers = %v, want the last-known set kept", peers)
+	}
+}
 
 const interpositionNetlinkChild = "C9S_INTERPOSITION_NETLINK_TEST_CHILD"
 
@@ -133,6 +229,9 @@ func testEnsureInterpositionConverges(t *testing.T) {
 		ManagementIPv4:     "172.80.80.11/24",
 		GatewayIPv4:        "172.80.80.1",
 		StateDirectory:     state,
+		MeshTunnelID:       16_100_007,
+		MeshGatewayMAC:     "02:c9:aa:bb:cc:dd",
+		MeshPeerService:    "c9s-management-mesh",
 	}
 
 	// The device interface name equals the original CNI name, exactly like real kinds: the
@@ -215,9 +314,94 @@ func testEnsureInterpositionConverges(t *testing.T) {
 			t.Fatalf("%s: transport rules missing: %+v", step, rules)
 		}
 
+		// The management rule must cover exactly the local device address: a subnet-wide rule
+		// would pull peer management traffic into the isolated gateway leg instead of the mesh.
+		haveLocalManagementRule := false
+
+		for _, rule := range rules {
+			if rule.Table == interpositionTransportTable &&
+				rule.Priority == interpositionManagementRulePriority &&
+				rule.Dst != nil && rule.Dst.String() == "172.80.80.11/32" {
+				haveLocalManagementRule = true
+			}
+		}
+
+		if !haveLocalManagementRule {
+			t.Fatalf("%s: management rule is not scoped to the local device address", step)
+		}
+
+		bridge, bridgeErr := netlink.LinkByName(MeshBridgeName)
+		if bridgeErr != nil || bridge.Type() != "bridge" {
+			t.Fatalf("%s: mesh bridge is absent: %v", step, bridgeErr)
+		}
+
+		for portName, wantIsolated := range map[string]bool{
+			MeshDevicePortName:  false,
+			MeshGatewayPortName: true,
+			MeshVTEPName:        true,
+		} {
+			port, portErr := netlink.LinkByName(portName)
+			if portErr != nil {
+				t.Fatalf("%s: mesh port %q is absent: %v", step, portName, portErr)
+			}
+
+			if port.Attrs().MasterIndex != bridge.Attrs().Index {
+				t.Fatalf("%s: mesh port %q is not enslaved to the bridge", step, portName)
+			}
+
+			protinfo, protErr := netlink.LinkGetProtinfo(port)
+			if protErr != nil {
+				t.Fatalf("%s: reading mesh port %q protinfo: %v", step, portName, protErr)
+			}
+
+			if protinfo.Isolated != wantIsolated {
+				t.Fatalf(
+					"%s: mesh port %q isolated = %t, want %t",
+					step, portName, protinfo.Isolated, wantIsolated,
+				)
+			}
+		}
+
+		vtepLink, vtepErr := netlink.LinkByName(MeshVTEPName)
+		if vtepErr != nil {
+			t.Fatalf("%s: mesh VTEP is absent: %v", step, vtepErr)
+		}
+
+		vxlan, isVXLAN := vtepLink.(*netlink.Vxlan)
+		if !isVXLAN || vxlan.VxlanId != 16_100_007 || !vxlan.Learning ||
+			vxlan.Port != 14789 || vxlan.SrcAddr.String() != "10.244.2.134" {
+			t.Fatalf("%s: mesh VTEP does not conform: %+v", step, vtepLink)
+		}
+
+		router, routerErr := netlink.LinkByName(RouterInterfaceName)
+		if routerErr != nil ||
+			router.Attrs().HardwareAddr.String() != "02:c9:aa:bb:cc:dd" {
+			t.Fatalf(
+				"%s: router leg gateway MAC = %v, want pinned deterministic identity (%v)",
+				step, router.Attrs().HardwareAddr, routerErr,
+			)
+		}
+
+		// The fake CNI underlay is 1500; every mesh element must carry underlay minus
+		// encapsulation overhead so device segment sizes fit the cross-Pod path.
+		for _, name := range []string{
+			MeshBridgeName, MeshDevicePortName, MeshGatewayPortName,
+			MeshVTEPName, RouterInterfaceName, "eth0",
+		} {
+			link, linkErr := netlink.LinkByName(name)
+			if linkErr != nil {
+				t.Fatalf("%s: mesh element %q is absent: %v", step, name, linkErr)
+			}
+
+			if link.Attrs().MTU != 1450 {
+				t.Fatalf("%s: mesh element %q MTU = %d, want 1450", step, name, link.Attrs().MTU)
+			}
+		}
 	}
 
 	assertInterposedState("cold pass")
+
+	assertMeshPeerReconciliation(t)
 
 	// Second pass must be idempotent.
 	if err = operations.EnsureInterposition(spec); err != nil {

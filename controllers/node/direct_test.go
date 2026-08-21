@@ -1140,6 +1140,20 @@ func TestCompileDirectManagementCarriesInboundPorts(t *testing.T) {
 	if len(management) != 1 || !reflect.DeepEqual(management[0].InboundPorts, inbound) {
 		t.Fatalf("management = %#v, want carried inbound ports", management)
 	}
+
+	mesh := management[0].Mesh
+	if mesh == nil || mesh.PeerService != clabernetesconstants.ManagementMeshServiceName ||
+		mesh.TunnelID <= 16_000_000 || mesh.TunnelID >= 1<<24 || mesh.GatewayMAC == "" {
+		t.Fatalf("management mesh = %#v, want namespace-derived mesh above Link ceiling", mesh)
+	}
+
+	tunnelID, gatewayMAC := managementMeshIdentity(node.GetNamespace())
+	if mesh.TunnelID != tunnelID || mesh.GatewayMAC != gatewayMAC {
+		t.Fatalf(
+			"management mesh = %#v, want deterministic namespace identity (%d, %s)",
+			mesh, tunnelID, gatewayMAC,
+		)
+	}
 }
 
 func TestDirectManagementInboundPortsFollowAutoExpose(t *testing.T) {

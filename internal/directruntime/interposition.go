@@ -21,6 +21,16 @@ const (
 	// RouterInterfaceName is the sidecar-owned router leg of the synthetic management pair; it
 	// carries the management gateway address.
 	RouterInterfaceName = "c9sr0"
+	// MeshBridgeName is the sidecar-owned pure-L2 bridge stitching the device leg, the gateway
+	// leg, and the management mesh VTEP.
+	MeshBridgeName = "c9sb0"
+	// MeshVTEPName is the sidecar-owned management mesh VTEP; an isolated bridge port.
+	MeshVTEPName = "c9sm0"
+	// MeshDevicePortName is the Pod-side leg of the synthetic device pair; a normal bridge port.
+	MeshDevicePortName = "c9sd0"
+	// MeshGatewayPortName is the bridge-side leg of the gateway pair; an isolated bridge port,
+	// so gateway traffic can never cross the mesh in either direction.
+	MeshGatewayPortName = "c9sg0"
 	// interpositionTransportTable is the sidecar-owned policy routing table carrying Kubernetes
 	// transport, distinct from the source-specific management tables.
 	interpositionTransportTable = 20_000
@@ -31,9 +41,10 @@ const (
 	// transport replies and the fabric VTEPs (whose encapsulation sources the Pod address).
 	// Scoping by source keeps a kernel-dataplane device's own data routes in main authoritative.
 	interpositionTransportRulePriority = 901
-	// interpositionManagementRulePriority selects the transport table for traffic to the
-	// management subnet, so application hooks reach the device even when a device stripped or
-	// rewrote the main table.
+	// interpositionManagementRulePriority selects the transport table for traffic to the Pod's
+	// own management address, so application hooks reach the device even when a device stripped
+	// or rewrote the main table. Peer management addresses deliberately fall through to the
+	// device leg's connected route and ride the management mesh.
 	interpositionManagementRulePriority = 902
 )
 
@@ -62,6 +73,12 @@ type InterpositionSpec struct {
 	// StateDirectory is the sidecar-owned state root where the captured transport gateway is
 	// persisted, so re-assertion survives a device stripping routes from every table.
 	StateDirectory string
+	// MeshTunnelID is the VNI of the namespace's management L2 mesh.
+	MeshTunnelID int
+	// MeshGatewayMAC is the deterministic gateway link-layer identity pinned on the router leg.
+	MeshGatewayMAC string
+	// MeshPeerService is the stable transport name resolving to every mesh member Pod.
+	MeshPeerService string
 }
 
 var errInterposition = errors.New("management interposition invariant failed")
@@ -141,12 +158,23 @@ func interpositionSpecForEntry(
 		)
 	}
 
+	if entry.Interposition.Mesh == nil {
+		return spec, InterpositionNATSpec{}, fmt.Errorf(
+			"%w: interposed entry %q carries no management mesh membership",
+			errInterposition,
+			entry.ID,
+		)
+	}
+
 	spec.DeviceInterface = entry.Interposition.DeviceInterface
 	spec.DeviceMAC = entry.Interposition.DeviceMAC
 	spec.ManagementIPv4 = entry.IPv4
 	spec.GatewayIPv4 = entry.IPv4Gateway
 	spec.ManagementIPv6 = entry.IPv6
 	spec.GatewayIPv6 = entry.IPv6Gateway
+	spec.MeshTunnelID = entry.Interposition.Mesh.TunnelID
+	spec.MeshGatewayMAC = entry.Interposition.Mesh.GatewayMAC
+	spec.MeshPeerService = entry.Interposition.Mesh.PeerService
 
 	natSpec := InterpositionNATSpec{
 		PodAddress:         spec.PodAddress,

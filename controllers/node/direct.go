@@ -3,6 +3,8 @@ package node
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -1222,6 +1224,27 @@ func appendDirectPayload(
 	return nil
 }
 
+const (
+	// managementMeshTunnelBase sits above the Link tunnel-ID ceiling (maxVXLANTunnelID in the
+	// Link controller), so a mesh VNI can never collide with any allocated Link.
+	managementMeshTunnelBase = 16_000_001
+	// managementMeshTunnelSpan keeps the derived VNI inside the 24-bit VXLAN identifier space.
+	managementMeshTunnelSpan = 777_000
+)
+
+// managementMeshIdentity derives the namespace's management mesh VNI and its deterministic
+// gateway MAC. Every Pod of a namespace derives the same values, making the namespace one
+// management L2 domain — mirroring the namespace-wide management address allocation.
+func managementMeshIdentity(namespace string) (int, string) {
+	sum := sha256.Sum256([]byte("c9s-management-mesh/" + namespace))
+
+	tunnelID := managementMeshTunnelBase +
+		int(binary.BigEndian.Uint32(sum[0:4]))%managementMeshTunnelSpan
+	gatewayMAC := fmt.Sprintf("02:c9:%02x:%02x:%02x:%02x", sum[4], sum[5], sum[6], sum[7])
+
+	return tunnelID, gatewayMAC
+}
+
 // directManagementInboundPorts returns the auto-expose default port set as management inbound
 // translations; with auto expose disabled, inbound translation covers declared container ports
 // only.
@@ -1347,9 +1370,15 @@ func compileDirectManagement(
 			}
 			addresses[key] = name
 		}
+		meshTunnelID, meshGatewayMAC := managementMeshIdentity(node.GetNamespace())
 		value := clabernetesinternaldeviceplan.ManagementInput{
 			NodeID: string(node.GetUID()), IPv4: ipv4, IPv6: ipv6,
 			InboundPorts: slices.Clone(inboundPorts),
+			Mesh: &clabernetesinternaldeviceplan.ManagementMesh{
+				TunnelID:    meshTunnelID,
+				GatewayMAC:  meshGatewayMAC,
+				PeerService: clabernetesconstants.ManagementMeshServiceName,
+			},
 		}
 		value.IPv4Gateway = settings.IPv4Gw
 		value.IPv6Gateway = settings.IPv6Gw

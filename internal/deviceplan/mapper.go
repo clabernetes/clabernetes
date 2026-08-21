@@ -1235,6 +1235,11 @@ func interpositionContract(
 		for _, port := range management.InboundPorts {
 			appendPort(port, true)
 		}
+
+		if management.Mesh != nil {
+			mesh := *management.Mesh
+			contract.Mesh = &mesh
+		}
 	}
 
 	return contract

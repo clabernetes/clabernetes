@@ -919,6 +919,62 @@ func TestPlanMergesManagementInboundPortsIntoInterposition(t *testing.T) {
 	}
 }
 
+func TestPlanCarriesManagementMeshIntoInterposition(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Management = []clabernetesinternaldeviceplan.ManagementInput{{
+		NodeID: "node-a", IPv4: "192.0.2.10/24", IPv4Gateway: "192.0.2.1",
+		Mesh: &clabernetesinternaldeviceplan.ManagementMesh{
+			TunnelID:    16_000_001,
+			GatewayMAC:  "02:c9:aa:bb:cc:dd",
+			PeerService: "c9s-management-mesh",
+		},
+	}}
+
+	plan, err := (clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "management-mesh-v1",
+	}).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(plan.Management) != 1 || plan.Management[0].Interposition == nil ||
+		!reflect.DeepEqual(plan.Management[0].Interposition.Mesh, input.Management[0].Mesh) {
+		t.Fatalf("management plan = %#v, want carried mesh contract", plan.Management)
+	}
+}
+
+func TestPlanRejectsInvalidManagementMesh(t *testing.T) {
+	t.Parallel()
+
+	invalid := []clabernetesinternaldeviceplan.ManagementMesh{
+		{TunnelID: 0, GatewayMAC: "02:c9:aa:bb:cc:dd", PeerService: "c9s-management-mesh"},
+		{TunnelID: 1 << 24, GatewayMAC: "02:c9:aa:bb:cc:dd", PeerService: "c9s-management-mesh"},
+		{TunnelID: 7, GatewayMAC: "not-a-mac", PeerService: "c9s-management-mesh"},
+		{TunnelID: 7, GatewayMAC: "02:c9:aa:bb:cc:dd", PeerService: ""},
+	}
+
+	for index, mesh := range invalid {
+		input := singleNodeInput(syntheticKind, "example/future:1")
+		input.Management = []clabernetesinternaldeviceplan.ManagementInput{{
+			NodeID: "node-a", IPv4: "192.0.2.10/24", IPv4Gateway: "192.0.2.1",
+			Mesh: &mesh,
+		}}
+
+		_, err := (clabernetesinternaldeviceplan.Adapter{
+			Registry: newSyntheticRegistry(t), Revision: "management-mesh-v1",
+		}).Plan(context.Background(), input)
+
+		var planErr *clabernetesinternaldeviceplan.Error
+		if !errors.As(err, &planErr) ||
+			planErr.Code != clabernetesinternaldeviceplan.ErrorInvalidInput ||
+			!strings.HasPrefix(planErr.Field, "management[0].mesh") {
+			t.Fatalf("Plan() case %d error = %#v, %v", index, planErr, err)
+		}
+	}
+}
+
 func TestPlanRejectsInvalidManagementInboundPort(t *testing.T) {
 	t.Parallel()
 

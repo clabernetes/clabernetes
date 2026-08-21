@@ -442,6 +442,11 @@ func validateInput(input Input) error {
 			}
 		}
 
+		if management.Mesh != nil {
+			if err := validateManagementMesh(field+".mesh", management.Mesh); err != nil {
+				return err
+			}
+		}
 	}
 
 	interfaces := map[string]bool{}
@@ -1342,6 +1347,9 @@ const (
 	protocolUDP = "udp"
 )
 
+// maxVXLANIdentifier is the VXLAN 24-bit VNI ceiling; the management mesh tunnel ID must fit it.
+const maxVXLANIdentifier = 1<<24 - 1
+
 // validateManagementInterposition enforces the selector/contract pairing: an Interposed entry
 // carries a complete translation contract, and no other entry carries one at all.
 func validateManagementInterposition(field string, item ManagementPlan) error {
@@ -1410,6 +1418,35 @@ func validateManagementInterposition(field string, item ManagementPlan) error {
 				nil,
 			)
 		}
+	}
+
+	if contract.Mesh != nil {
+		if err := validateManagementMesh(field+".interposition.mesh", contract.Mesh); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateManagementMesh enforces a complete mesh membership: a VNI-range tunnel ID, a valid
+// deterministic gateway MAC, and a peer-discovery transport name.
+func validateManagementMesh(field string, mesh *ManagementMesh) error {
+	if mesh.TunnelID <= 0 || mesh.TunnelID > maxVXLANIdentifier {
+		return planningError(ErrorInvalidInput, field+".tunnelID", "mesh tunnel ID is invalid", nil)
+	}
+
+	if _, err := net.ParseMAC(mesh.GatewayMAC); err != nil {
+		return planningError(ErrorInvalidInput, field+".gatewayMAC", "gateway MAC is invalid", nil)
+	}
+
+	if mesh.PeerService == "" {
+		return planningError(
+			ErrorInvalidInput,
+			field+".peerService",
+			"mesh peer-discovery transport name is required",
+			nil,
+		)
 	}
 
 	return nil

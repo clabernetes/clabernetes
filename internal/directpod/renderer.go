@@ -70,6 +70,7 @@ const (
 	preparationName                  = "prepare-device-plan"
 	connectivityName                 = "device-connectivity"
 	directWorkloadLabel              = clabernetesconstants.LabelDirectWorkload
+	directMeshMemberLabel            = clabernetesconstants.LabelDirectMeshMember
 	planDigestAnnotation             = "c9s.run/device-plan-digest"
 )
 
@@ -366,6 +367,7 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 	}
 
 	labels[directWorkloadLabel] = options.Name
+	labels[directMeshMemberLabel] = clabernetesconstants.DirectMeshMemberEnabled
 
 	annotations := maps.Clone(options.Annotations)
 	if annotations == nil {

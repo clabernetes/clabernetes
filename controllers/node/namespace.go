@@ -59,17 +59,102 @@ func NewNamespaceResourcesReconciler(
 }
 
 // ReconcileDirect ensures the read-only direct connectivity identity exists without granting
-// legacy image-import or nested-runtime permissions.
+// legacy image-import or nested-runtime permissions, along with the namespace's management mesh
+// discovery Service.
 func (r *NamespaceResourcesReconciler) ReconcileDirect(
 	ctx context.Context,
 	namespace string,
 ) error {
-	return r.reconcileIdentity(ctx, namespace, namespaceRuntimeIdentity{
+	if err := r.reconcileIdentity(ctx, namespace, namespaceRuntimeIdentity{
 		serviceAccountName: directRuntimeServiceAccountName(),
 		roleBindingName:    directRuntimeRoleBindingName(),
 		clusterRoleName:    fmt.Sprintf("%s-direct-runtime-role", r.appName),
 		description:        "direct runtime",
-	})
+	}); err != nil {
+		return err
+	}
+
+	return r.reconcileMeshService(ctx, namespace)
+}
+
+// renderMeshService renders the namespace-scoped headless discovery Service through which mesh
+// member Pods resolve the current management L2 mesh peer set. Not-ready addresses are published
+// so peers converge while devices are still booting.
+func (r *NamespaceResourcesReconciler) renderMeshService(namespace string) *k8scorev1.Service {
+	annotations, globalLabels := r.configManagerGetter().GetAllMetadata()
+
+	labels := map[string]string{
+		clabernetesconstants.LabelApp: clabernetesconstants.Clabernetes,
+	}
+
+	maps.Copy(labels, globalLabels)
+
+	selector := map[string]string{
+		clabernetesconstants.LabelDirectMeshMember: clabernetesconstants.DirectMeshMemberEnabled,
+	}
+
+	return &k8scorev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        clabernetesconstants.ManagementMeshServiceName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec: k8scorev1.ServiceSpec{
+			Type:                     k8scorev1.ServiceTypeClusterIP,
+			ClusterIP:                k8scorev1.ClusterIPNone,
+			PublishNotReadyAddresses: true,
+			Selector:                 selector,
+			Ports: []k8scorev1.ServicePort{
+				{
+					Name:     "vxlan",
+					Protocol: clabernetesconstants.UDP,
+					Port:     clabernetesconstants.VXLANServicePort,
+				},
+			},
+		},
+	}
+}
+
+func (r *NamespaceResourcesReconciler) reconcileMeshService(
+	ctx context.Context,
+	namespace string,
+) error {
+	rendered := r.renderMeshService(namespace)
+
+	existing := &k8scorev1.Service{}
+
+	err := r.client.Get(
+		ctx,
+		apimachinerytypes.NamespacedName{Namespace: namespace, Name: rendered.GetName()},
+		existing,
+	)
+	if apimachineryerrors.IsNotFound(err) {
+		r.log.Infof("creating management mesh service in namespace %q", namespace)
+
+		return r.client.Create(ctx, rendered)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if reflect.DeepEqual(existing.Spec.Selector, rendered.Spec.Selector) &&
+		existing.Spec.PublishNotReadyAddresses == rendered.Spec.PublishNotReadyAddresses &&
+		existing.Spec.ClusterIP == k8scorev1.ClusterIPNone &&
+		clabernetesutilkubernetes.ExistingMapStringStringContainsAllExpectedKeyValues(
+			existing.Labels, rendered.Labels,
+		) {
+		return nil
+	}
+
+	r.log.Infof("management mesh service in namespace %q does not conform, recreating", namespace)
+
+	if err = r.client.Delete(ctx, existing); err != nil && !apimachineryerrors.IsNotFound(err) {
+		return err
+	}
+
+	return r.client.Create(ctx, rendered)
 }
 
 func (r *NamespaceResourcesReconciler) reconcileIdentity(

@@ -135,6 +135,9 @@ type ManagementInput struct {
 	// auto-expose default set) translated to the Node's interposed management address when the
 	// port is not already claimed by a planned container port in the Pod.
 	InboundPorts []Port `json:"inboundPorts,omitempty"`
+	// Mesh is the controller-allocated management L2 mesh membership carried into the
+	// interposition contract.
+	Mesh *ManagementMesh `json:"mesh,omitempty"`
 }
 
 // Connectivity vocabulary for accepted Link endpoints. The values are containerlab's own link
@@ -568,6 +571,10 @@ type ManagementInterposition struct {
 	// InboundPorts are declared management ports translated from the Pod address to the device
 	// management address.
 	InboundPorts []ManagementPortMap `json:"inboundPorts,omitempty"`
+	// Mesh is the Pod's membership in the topology's management L2 domain; when present the
+	// sidecar bridges the device leg, the gateway leg, and a management VTEP so peer management
+	// addresses are reachable device-to-device.
+	Mesh *ManagementMesh `json:"mesh,omitempty"`
 }
 
 // ManagementPortMap is one declared inbound management port translation.
@@ -578,6 +585,20 @@ type ManagementPortMap struct {
 	PodPort uint16 `json:"podPort"`
 	// DevicePort is the port the device binds on its management address.
 	DevicePort uint16 `json:"devicePort"`
+}
+
+// ManagementMesh is controller-allocated membership in the management L2 domain shared by a
+// namespace's interposed Pods.
+type ManagementMesh struct {
+	// TunnelID is the VNI of the management mesh; it is derived above the Link tunnel-ID
+	// ceiling so no Link can collide with it.
+	TunnelID int `json:"tunnelID"`
+	// GatewayMAC is the deterministic gateway link-layer identity shared by every Pod of the
+	// namespace.
+	GatewayMAC string `json:"gatewayMAC"`
+	// PeerService is the stable transport (Service DNS) name resolving to every mesh member
+	// Pod; the sidecar discovers the current peer set through it on the revision tick.
+	PeerService string `json:"peerService"`
 }
 
 // ManagementInterfaceSelector identifies a generic runtime-owned interface when the imported
