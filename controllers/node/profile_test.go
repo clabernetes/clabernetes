@@ -7,7 +7,6 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
@@ -67,11 +66,11 @@ func TestResolveExplicitLauncherProfile(t *testing.T) {
 		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
 			spec.Deployment = &clabernetesapisv1alpha1.LauncherProfileDeployment{
 				LauncherLogLevel:    "debug",
-				ContainerlabTimeout: clabernetesutil.ToPointer("5m"),
-				PrivilegedLauncher:  clabernetesutil.ToPointer(false),
+				ContainerlabTimeout: new("5m"),
+				PrivilegedLauncher:  new(false),
 			}
 			spec.Expose = &clabernetesapisv1alpha1.LauncherProfileExpose{
-				DisableAutoExpose: clabernetesutil.ToPointer(true),
+				DisableAutoExpose: new(true),
 			}
 		},
 	)
@@ -116,8 +115,8 @@ func TestResolveProfilePreservesExplicitEmptyValues(t *testing.T) {
 			spec.ImagePull = &clabernetesapisv1alpha1.LauncherProfileImagePull{
 				InsecureRegistries: []string{},
 				PullSecrets:        []string{},
-				DockerDaemonConfig: clabernetesutil.ToPointer(""),
-				DockerConfig:       clabernetesutil.ToPointer(""),
+				DockerDaemonConfig: new(""),
+				DockerConfig:       new(""),
 			}
 			spec.Scheduling = &clabernetesapisv1alpha1.Scheduling{
 				NodeSelector: map[string]string{},
@@ -125,8 +124,8 @@ func TestResolveProfilePreservesExplicitEmptyValues(t *testing.T) {
 				Affinity:     &k8scorev1.Affinity{},
 			}
 			spec.Deployment = &clabernetesapisv1alpha1.LauncherProfileDeployment{
-				ContainerlabTimeout: clabernetesutil.ToPointer(""),
-				ContainerlabVersion: clabernetesutil.ToPointer(""),
+				ContainerlabTimeout: new(""),
+				ContainerlabVersion: new(""),
 				ExtraEnv:            []k8scorev1.EnvVar{},
 			}
 		},

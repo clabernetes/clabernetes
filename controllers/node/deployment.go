@@ -15,7 +15,6 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
@@ -339,8 +338,8 @@ func (r *DeploymentReconciler) renderDeploymentBase(
 			Labels:      labels,
 		},
 		Spec: k8sappsv1.DeploymentSpec{
-			Replicas:             clabernetesutil.ToPointer(int32(1)),
-			RevisionHistoryLimit: clabernetesutil.ToPointer(int32(0)),
+			Replicas:             new(int32(1)),
+			RevisionHistoryLimit: new(int32(0)),
 			Strategy: k8sappsv1.DeploymentStrategy{
 				// there is no need for gracefully updating launcher pods -- nos boots are not
 				// graceful things anyway -- so just recreate
@@ -386,7 +385,7 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 				DownwardAPI: &k8scorev1.DownwardAPIVolumeSource{
 					// set explicitly (to the kubernetes default) so the rendered volume matches
 					// the api server defaulted object -- otherwise conforms never settles
-					DefaultMode: clabernetesutil.ToPointer(
+					DefaultMode: new(
 						int32(clabernetesconstants.PermissionsEveryoneRead),
 					),
 					Items: []k8scorev1.DownwardAPIVolumeFile{
@@ -424,7 +423,7 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 				VolumeSource: k8scorev1.VolumeSource{
 					HostPath: &k8scorev1.HostPathVolumeSource{
 						Path: criPath,
-						Type: clabernetesutil.ToPointer(k8scorev1.HostPathType("")),
+						Type: new(k8scorev1.HostPathType("")),
 					},
 				},
 			},
@@ -459,7 +458,7 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 				VolumeSource: k8scorev1.VolumeSource{
 					Secret: &k8scorev1.SecretVolumeSource{
 						SecretName: input.Profile.DockerDaemonConfig,
-						DefaultMode: clabernetesutil.ToPointer(
+						DefaultMode: new(
 							int32(clabernetesconstants.PermissionsEveryoneReadWriteOwnerExecute),
 						),
 					},
@@ -485,7 +484,7 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 				VolumeSource: k8scorev1.VolumeSource{
 					Secret: &k8scorev1.SecretVolumeSource{
 						SecretName: input.Profile.DockerConfig,
-						DefaultMode: clabernetesutil.ToPointer(
+						DefaultMode: new(
 							int32(clabernetesconstants.PermissionsEveryoneReadWriteOwnerExecute),
 						),
 					},
@@ -544,11 +543,11 @@ func (r *DeploymentReconciler) renderDeploymentVolumes( //nolint:funlen
 
 			switch podVolume.Mode {
 			case clabernetesconstants.FileModeRead:
-				mode = clabernetesutil.ToPointer(
+				mode = new(
 					int32(clabernetesconstants.PermissionsEveryoneRead),
 				)
 			case clabernetesconstants.FileModeExecute:
-				mode = clabernetesutil.ToPointer(
+				mode = new(
 					int32(clabernetesconstants.PermissionsEveryoneReadExecute),
 				)
 			}
@@ -620,7 +619,7 @@ func (r *DeploymentReconciler) renderDeploymentCRIHostsVolumes(
 			VolumeSource: k8scorev1.VolumeSource{
 				HostPath: &k8scorev1.HostPathVolumeSource{
 					Path: criHostsDir,
-					Type: clabernetesutil.ToPointer(k8scorev1.HostPathType("")),
+					Type: new(k8scorev1.HostPathType("")),
 				},
 			},
 		},
@@ -938,8 +937,8 @@ func (r *DeploymentReconciler) renderDeploymentContainerPrivileges(
 ) {
 	if profile.PrivilegedLauncher {
 		deployment.Spec.Template.Spec.Containers[0].SecurityContext = &k8scorev1.SecurityContext{
-			Privileged: clabernetesutil.ToPointer(true),
-			RunAsUser:  clabernetesutil.ToPointer(int64(0)),
+			Privileged: new(true),
+			RunAsUser:  new(int64(0)),
 		}
 
 		return
@@ -953,8 +952,8 @@ func (r *DeploymentReconciler) renderDeploymentContainerPrivileges(
 	)] = "unconfined"
 
 	deployment.Spec.Template.Spec.Containers[0].SecurityContext = &k8scorev1.SecurityContext{
-		Privileged: clabernetesutil.ToPointer(false),
-		RunAsUser:  clabernetesutil.ToPointer(int64(0)),
+		Privileged: new(false),
+		RunAsUser:  new(int64(0)),
 		Capabilities: &k8scorev1.Capabilities{
 			Add: []k8scorev1.Capability{
 				// docker says we need these ones:
@@ -1155,7 +1154,7 @@ func (r *DeploymentReconciler) renderDeploymentDevices(
 				VolumeSource: k8scorev1.VolumeSource{
 					HostPath: &k8scorev1.HostPathVolumeSource{
 						Path: "/dev/kvm",
-						Type: clabernetesutil.ToPointer(k8scorev1.HostPathType("")),
+						Type: new(k8scorev1.HostPathType("")),
 					},
 				},
 			},
@@ -1164,7 +1163,7 @@ func (r *DeploymentReconciler) renderDeploymentDevices(
 				VolumeSource: k8scorev1.VolumeSource{
 					HostPath: &k8scorev1.HostPathVolumeSource{
 						Path: "/dev/fuse",
-						Type: clabernetesutil.ToPointer(k8scorev1.HostPathType("")),
+						Type: new(k8scorev1.HostPathType("")),
 					},
 				},
 			},
@@ -1173,7 +1172,7 @@ func (r *DeploymentReconciler) renderDeploymentDevices(
 				VolumeSource: k8scorev1.VolumeSource{
 					HostPath: &k8scorev1.HostPathVolumeSource{
 						Path: "/dev/net/tun",
-						Type: clabernetesutil.ToPointer(k8scorev1.HostPathType("")),
+						Type: new(k8scorev1.HostPathType("")),
 					},
 				},
 			},

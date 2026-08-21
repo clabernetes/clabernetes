@@ -11,7 +11,6 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryequality "k8s.io/apimachinery/pkg/api/equality"
@@ -243,15 +242,15 @@ func renderTopologyLauncherProfile(
 ) *clabernetesapisv1alpha1.LauncherProfile {
 	spec := clabernetesapisv1alpha1.LauncherProfileSpec{
 		Expose: &clabernetesapisv1alpha1.LauncherProfileExpose{
-			DisableExpose: clabernetesutil.ToPointer(topology.Spec.Expose.DisableExpose),
-			DisableAutoExpose: clabernetesutil.ToPointer(
+			DisableExpose: new(topology.Spec.Expose.DisableExpose),
+			DisableAutoExpose: new(
 				topology.Spec.Expose.DisableAutoExpose,
 			),
 			ExposeType: topology.Spec.Expose.ExposeType,
-			UseNodeMgmtIpv4Address: clabernetesutil.ToPointer(
+			UseNodeMgmtIpv4Address: new(
 				topology.Spec.Expose.UseNodeMgmtIpv4Address,
 			),
-			UseNodeMgmtIpv6Address: clabernetesutil.ToPointer(
+			UseNodeMgmtIpv6Address: new(
 				topology.Spec.Expose.UseNodeMgmtIpv6Address,
 			),
 		},
@@ -264,13 +263,13 @@ func renderTopologyLauncherProfile(
 	}
 
 	if topology.Spec.ImagePull.DockerDaemonConfig != "" {
-		imagePull.DockerDaemonConfig = clabernetesutil.ToPointer(
+		imagePull.DockerDaemonConfig = new(
 			topology.Spec.ImagePull.DockerDaemonConfig,
 		)
 	}
 
 	if topology.Spec.ImagePull.DockerConfig != "" {
-		imagePull.DockerConfig = clabernetesutil.ToPointer(topology.Spec.ImagePull.DockerConfig)
+		imagePull.DockerConfig = new(topology.Spec.ImagePull.DockerConfig)
 	}
 
 	if !reflectValueIsZero(imagePull) {
@@ -299,13 +298,13 @@ func renderTopologyLauncherProfile(
 	}
 
 	if topology.Spec.Deployment.ContainerlabTimeout != "" {
-		deployment.ContainerlabTimeout = clabernetesutil.ToPointer(
+		deployment.ContainerlabTimeout = new(
 			topology.Spec.Deployment.ContainerlabTimeout,
 		)
 	}
 
 	if topology.Spec.Deployment.ContainerlabVersion != "" {
-		deployment.ContainerlabVersion = clabernetesutil.ToPointer(
+		deployment.ContainerlabVersion = new(
 			topology.Spec.Deployment.ContainerlabVersion,
 		)
 	}

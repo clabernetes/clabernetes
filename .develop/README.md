@@ -112,7 +112,7 @@ platform. The build commands select the cluster's `TARGET_PLATFORM` for the outp
 
 ```dockerfile
 ARG BUILDPLATFORM
-FROM --platform=${BUILDPLATFORM} golang:1.25-bookworm AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.26-bookworm AS builder
 ```
 
 Override detection explicitly on mixed-platform clusters:
