@@ -8,64 +8,64 @@ Define Topology as an optional high-level source that compiles deterministically
 
 ### Requirement: Topology is an auxiliary high-level resource
 
-The system SHALL retain Topology as an auxiliary resource for quickly defining a lab through a supported Containerlab definition. Its controller SHALL expand that high-level definition into Node, Link, and LauncherProfile resources. Node and Link reconciliation MUST NOT require a Topology resource or distinguish generated resources from equivalent directly authored resources.
+Topology SHALL remain an optional aggregate source that compiles into the direct primitive resources. Node, Link, and LauncherProfile SHALL remain the authoritative runtime inputs after compilation.
 
 #### Scenario: Define a lab with Topology
 
 - **WHEN** a user creates a valid supported Topology
-- **THEN** the Topology controller emits the primitive resources needed to realize the lab
+- **THEN** the Topology controller emits the primitive resources and plans needed to realize the direct lab
 
 #### Scenario: Run without a Topology
 
 - **WHEN** equivalent Node, Link, and LauncherProfile manifests are created directly
-- **THEN** the same Node and Link controllers realize the lab
+- **THEN** the same Node and Link controllers realize an equivalent direct lab
 
 ### Requirement: Compilation emits self-contained Nodes
 
-The compiler SHALL parse the source definition and expand topology defaults, kinds, and other inherited node settings into every emitted Node. It SHALL attach per-node payload declarations to the corresponding Node.
+The compiler SHALL parse the source definition and expand topology defaults, kinds, and other inherited node settings into every emitted Node. It SHALL attach per-node payload declarations to the corresponding Node and SHALL preserve every representable input required by the direct planner.
 
 #### Scenario: Source node inherits defaults
 
-- **WHEN** a source topology node omits values supplied by topology defaults or a kind definition
-- **THEN** its emitted Node contains the fully resolved values
+- **WHEN** a source topology Node omits values supplied by topology defaults or a kind definition
+- **THEN** its emitted Node contains the fully resolved values needed to produce the same device plan
 
 #### Scenario: Source includes per-node files
 
-- **WHEN** source processing associates payload files with one node
+- **WHEN** source processing associates payload files with one Node
 - **THEN** the emitted Node contains those payload attachment declarations
 
 ### Requirement: Compilation emits explicit LauncherProfile references
 
-The compiler SHALL convert topology-level launcher/Kubernetes policy into one or more LauncherProfiles and SHALL stamp each emitted Node with the appropriate `launcherProfileRef`. It MUST preserve existing custom management-network settings in the generated profile as a compatibility bridge, and MUST NOT depend on profile label selectors or priority merging.
+The compiler SHALL convert topology-level Kubernetes realization policy into one or more LauncherProfiles and SHALL stamp each emitted Node with the appropriate `launcherProfileRef`. It MUST preserve supported direct management policy and MUST NOT emit Docker, launcher-image, nested-CRI, or containerlab-version policy.
 
 #### Scenario: Nodes share topology policy
 
-- **WHEN** all source Nodes use the same launcher policy
+- **WHEN** all source Nodes use the same direct-workload policy
 - **THEN** the compiler emits one shared LauncherProfile and references it from all emitted Nodes
 
 #### Scenario: One Node has a launcher override
 
-- **WHEN** one source Node has distinct launcher resources or other launcher policy
+- **WHEN** one source Node has distinct resources or other direct-workload policy
 - **THEN** the compiler emits a complete dedicated LauncherProfile for that Node and stamps its explicit reference
 
 #### Scenario: Topology defines a custom management network
 
-- **WHEN** an existing Topology defines custom shared management-network settings
-- **THEN** the compiler preserves those settings in every generated LauncherProfile needed by its Nodes
+- **WHEN** an existing Topology defines management settings with supported direct semantics
+- **THEN** the compiler preserves those settings in the generated resources that own them
 
 ### Requirement: Compilation puts connectivity on Links
 
-The compiler SHALL translate topology connectivity policy into the connectivity field of every emitted Link. It MUST NOT place connectivity on LauncherProfile or require endpoint Nodes to resolve matching connectivity independently.
+The compiler SHALL translate topology connectivity policy and endpoint type into the connectivity field of every emitted Link. It MUST NOT place connectivity on LauncherProfile or require endpoint Nodes to resolve matching connectivity independently.
 
 #### Scenario: Topology selects slurpeeth
 
 - **WHEN** a source Topology selects slurpeeth connectivity
-- **THEN** each emitted cross-node Link explicitly selects slurpeeth
+- **THEN** each emitted cross-Pod Link explicitly selects slurpeeth
 
 #### Scenario: Topology omits connectivity
 
 - **WHEN** a source Topology does not select a connectivity flavor
-- **THEN** emitted Links either omit the field or select VXLAN with equivalent default behavior
+- **THEN** emitted Links select the direct-runtime default appropriate to their endpoint placement
 
 ### Requirement: Generated resources have deterministic identity and ownership
 
@@ -88,7 +88,7 @@ For a given Topology input, the compiler SHALL produce stable Node, Link, and La
 
 ### Requirement: Dependencies are made available before Node realization
 
-The compiler SHALL reconcile referenced LauncherProfiles and Links before creating or updating Nodes that depend on them. Node and Link controllers MUST nevertheless handle transiently unresolved references through status and later reconciliation.
+The compiler SHALL reconcile referenced LauncherProfiles and Links before creating or updating Nodes that depend on them, so initial device plans include accepted interfaces. Node and Link controllers MUST nevertheless handle transiently unresolved references through status and later reconciliation.
 
 #### Scenario: Create a new compiled lab
 
@@ -97,17 +97,17 @@ The compiler SHALL reconcile referenced LauncherProfiles and Links before creati
 
 #### Scenario: API events are observed out of order
 
-- **WHEN** a Node controller observes a generated Node before its LauncherProfile is readable
-- **THEN** it reports an unresolved profile and realizes the Node after the profile event arrives
+- **WHEN** a Node controller observes a generated Node before its LauncherProfile or Links are readable
+- **THEN** it reports unresolved dependencies and realizes the Node after their events arrive
 
 ### Requirement: Direct manifest generation matches in-cluster compilation
 
-The command-line conversion path SHALL use the same compile and render behavior as the Topology controller when emitting direct Node, Link, and LauncherProfile manifests, except for in-cluster owner references and status.
+The command-line conversion path SHALL use the same compile, validation, and planning behavior as the Topology controller when emitting direct Node, Link, and LauncherProfile manifests, except for in-cluster owner references and status.
 
 #### Scenario: Emit primitive manifests
 
 - **WHEN** a user converts a supported source topology to direct custom resources
-- **THEN** the resulting specs are semantically equivalent to those emitted by an in-cluster Topology
+- **THEN** the resulting specs produce normalized plans equivalent to those emitted by an in-cluster Topology
 
 ### Requirement: Topology status remains bounded
 
@@ -129,64 +129,49 @@ The system SHALL document and support direct application of generated primitive 
 
 ### Requirement: A source definition accepts native Containerlab vocabulary
 
-The compiler SHALL accept a Containerlab definition that carries node vocabulary c9s does not implement, so an existing working Containerlab topology can be used unchanged. Fields the compiler does not recognize MUST be omitted from the emitted resources, and each one MUST be reported as a warning naming the field and its location in the definition. Unrecognized vocabulary MUST NOT fail compilation.
+The compiler SHALL accept native Containerlab vocabulary from the declared compatibility baseline only when it can preserve that vocabulary through direct resources and device plans. It MUST reject unrecognized or unrepresentable fields with deterministic structured diagnostics before rendering resources; it MUST NOT omit such fields under a compatibility warning mode.
 
-The compiler SHALL expose an unsupported-field policy. The compatibility Topology controller uses
-the warning policy above. Strict callers MAY select an error policy, in which case all otherwise
-lossy warnings are collected into deterministic structured diagnostics and compilation fails before
-resources are rendered. This allows a CLI runtime to share the compiler's capability matrix without
-silently changing topology semantics.
-
-A definition that is malformed, or that declares a recognized field with an unusable value, SHALL still fail compilation rather than have that field silently omitted.
-Structures that cannot identify realizable c9s resources, including external bridge/host pseudo
-nodes, unresolved endpoint Nodes, `mgmt-net` or macvlan endpoints, and unsupported explicit link
-types other than `veth`, SHALL fail under every policy. An explicit `veth` link SHALL accept brief
-`node:interface` endpoints or structured node/interface mappings when both forms identify the same
-representable c9s Link endpoints. Endpoint values that are empty, malformed, or not strings or
-node/interface mappings MUST fail parsing.
+Malformed input, a recognized field with an unusable value, an unsupported explicit link type, or a structure that cannot identify realizable direct resources SHALL also fail. Explicit `veth` links SHALL accept brief `node:interface` endpoints or structured node/interface mappings when both identify the same representable endpoints.
 
 #### Scenario: Compile a definition carrying unimplemented vocabulary
 
-- **WHEN** a Topology definition declares Containerlab node fields c9s does not implement
-- **THEN** compilation succeeds, the emitted Nodes omit those fields, and each omitted field is reported as a warning naming it and where it appears
+- **WHEN** a Topology definition declares baseline Containerlab vocabulary the direct planner does not implement
+- **THEN** compilation fails before resource creation with diagnostics naming every unsupported field and location
 
 #### Scenario: Recognized vocabulary survives alongside unrecognized fields
 
-- **WHEN** a source node mixes unrecognized fields with recognized ones
-- **THEN** every recognized field is compiled into the emitted Node
+- **WHEN** a source Node uses supported baseline vocabulary without unrepresentable fields
+- **THEN** every field contributes its defined semantics to the emitted resources or device plan
 
 #### Scenario: Direct manifest generation reports the same omissions
 
 - **WHEN** direct manifest generation runs against a definition carrying unimplemented vocabulary
-- **THEN** it reports the same omitted fields before the user applies anything
+- **THEN** it fails with the same sorted diagnostics before the user applies anything
 
 #### Scenario: Strict caller rejects lossy compatibility
 
-- **WHEN** a strict caller compiles a definition containing unsupported fields, native management
-  network settings, host-side port pinning, unusable labels, or link labels and vars that c9s cannot
-  preserve
+- **WHEN** any caller compiles a definition containing unsupported fields, management settings, host-side port pinning, unusable labels, or Link metadata c9s cannot preserve
 - **THEN** compilation fails with sorted diagnostics naming every unsupported location
 
 #### Scenario: Compile an explicit veth link with structured endpoints
 
-- **WHEN** a source definition declares an explicit `veth` link whose endpoints are node/interface mappings
+- **WHEN** a source definition declares an explicit `veth` Link whose endpoints are Node/interface mappings
 - **THEN** the compiler emits the same c9s Link as the equivalent brief `node:interface` endpoint syntax
 
 #### Scenario: Compile an explicit veth link with brief endpoints
 
-- **WHEN** a source definition declares an explicit `veth` link whose endpoints are non-empty brief strings
+- **WHEN** a source definition declares an explicit `veth` Link whose endpoints are non-empty brief strings
 - **THEN** the compiler emits the same c9s Link as the equivalent structured endpoint syntax
 
 #### Scenario: Reject malformed veth endpoints
 
-- **WHEN** an explicit `veth` link contains an empty endpoint, an endpoint with an empty node or interface, or an endpoint with an unsupported YAML shape
+- **WHEN** an explicit `veth` Link contains an empty endpoint, an endpoint with an empty Node or interface, or an unsupported YAML shape
 - **THEN** parsing or compilation fails before a Link resource is emitted
 
 #### Scenario: Structurally impossible link fails in compatibility mode
 
-- **WHEN** a definition references an external bridge, `mgmt-net`, macvlan, a nonexistent Node, or
-  an unsupported explicit link type other than `veth`
-- **THEN** compilation fails instead of creating resources that can only fail after deployment
+- **WHEN** a definition references an unsupported external bridge, `mgmt-net`, macvlan endpoint, nonexistent Node, or unsupported explicit Link type
+- **THEN** compilation fails instead of creating partially working resources
 
 #### Scenario: Reject a recognized field holding an unusable value
 
@@ -200,66 +185,54 @@ node/interface mappings MUST fail parsing.
 
 ### Requirement: Containerlab node labels become Kubernetes labels
 
-The compiler SHALL carry Containerlab node labels onto the emitted Node's object metadata, inheriting them from topology defaults and kinds the same way node environment variables are inherited. The Node controller SHALL propagate a Node's labels to the launcher Deployment and its Pods, excluding labels in the reserved `c9s.run/` namespace and controller-owned label keys, without altering the Deployment's Pod selector.
+The compiler SHALL carry Containerlab Node labels onto the emitted Node's object metadata, inheriting them from topology defaults and kinds the same way Node environment variables are inherited. The Node controller SHALL propagate a Node's labels to its direct workload and Pods, excluding labels in the reserved `c9s.run/` namespace and controller-owned label keys, without altering the workload's Pod selector.
 
-A label that Kubernetes would reject, or that is in the reserved `c9s.run/` namespace or uses a
-controller-owned label key, MUST be omitted with a warning naming it, so that a definition can
-neither produce an unacceptable Node nor set labels the controllers act on. The sole recognized
-source-directive exception is `c9s.run/exposePorts`: the compiler MUST consume its effective
-node-label value into the emitted Node's `spec.ports` and MUST NOT copy the directive to object
-metadata.
-
-The `c9s.run/exposePorts` value MUST contain one or more comma-separated destination-port entries.
-Each trimmed entry MUST use the established `port` or `port/{tcp,udp}` grammar, with TCP as the
-default protocol. The compiler MUST canonicalize successful entries to numeric destination port
-plus lowercase protocol and MUST deduplicate them semantically with ordinary topology ports and
-other directive entries. Any empty or malformed entry MUST make compilation fail with a diagnostic
-naming the node, directive, and invalid entry.
+A label Kubernetes would reject, a reserved label, or a controller-owned key MUST be rejected under the direct runtime's no-semantic-loss compilation contract unless it is a recognized source directive. The `c9s.run/exposePorts` directive SHALL be consumed into `spec.ports` and SHALL NOT be copied to object metadata.
 
 #### Scenario: Label a lab node
 
-- **WHEN** a source topology node declares a Containerlab label
-- **THEN** the emitted Node carries it in `metadata.labels`, and its launcher Deployment and Pods carry it too, so the Pods can be selected by it
+- **WHEN** a source topology Node declares a valid Containerlab label
+- **THEN** the emitted Node and direct workload carry it so the Pod can be selected by it
 
 #### Scenario: Labels inherit from defaults and kinds
 
-- **WHEN** labels are declared at topology defaults, kind, and node level
-- **THEN** the emitted Node carries the merged set, with the most specific value winning
+- **WHEN** labels are declared at topology defaults, kind, and Node level
+- **THEN** the emitted Node carries the merged set with the most specific value winning
 
 #### Scenario: Omit a label Kubernetes cannot accept
 
-- **WHEN** a source topology node declares a label whose key or value is invalid as a Kubernetes label
-- **THEN** it is omitted with a warning naming it, and the Node is still emitted
+- **WHEN** a source topology Node declares a label whose key or value is invalid as a Kubernetes label
+- **THEN** compilation fails with a diagnostic naming it instead of silently dropping metadata
 
 #### Scenario: Omit a label in the reserved namespace
 
-- **WHEN** a source topology node declares a label in the `c9s.run/` namespace other than a recognized source directive
-- **THEN** it is omitted with a warning, because those labels carry meaning to the controllers
+- **WHEN** a source topology Node declares a label in the `c9s.run/` namespace other than a recognized source directive
+- **THEN** compilation fails because user input cannot set controller behavior implicitly
 
 #### Scenario: Declare c9s-only service ports without publishing Docker host ports
 
-- **WHEN** a source topology node declares `c9s.run/exposePorts: "9273/tcp,8125/udp"`
-- **THEN** the emitted Node carries both entries in `spec.ports`, the directive is absent from `metadata.labels`, and an equivalent ordinary port entry is not duplicated
+- **WHEN** a source topology Node declares `c9s.run/exposePorts: "9273/tcp,8125/udp"`
+- **THEN** the emitted Node carries both entries in `spec.ports`, the directive is absent from metadata, and equivalent ordinary entries are not duplicated
 
 #### Scenario: Reject an invalid c9s expose ports directive
 
-- **WHEN** a source topology node's `c9s.run/exposePorts` value contains an empty or malformed entry
-- **THEN** compilation fails with a diagnostic naming the node, label, and invalid entry rather than silently omitting the requested Service port
+- **WHEN** the directive contains an empty or malformed entry
+- **THEN** compilation fails with a diagnostic naming the Node, label, and invalid entry
 
 #### Scenario: Inherit c9s-only service ports
 
 - **WHEN** `c9s.run/exposePorts` is declared on topology defaults or a kind
-- **THEN** every effective node inheriting that label receives its canonical ports, subject to normal node-label override semantics, and no emitted Node carries the directive in metadata
+- **THEN** every effective Node receives its canonical ports subject to normal label override semantics and no emitted Node carries the directive in metadata
 
 #### Scenario: Preserve exposure policy
 
 - **WHEN** a valid directive is compiled for a Topology whose effective LauncherProfile disables exposure or auto-exposure
-- **THEN** the directive contributes only to Node port intent and the existing LauncherProfile policy continues to control whether a Service and automatic ports are realized
+- **THEN** the directive contributes only Node port intent and the profile continues to control whether a Service and automatic ports are realized
 
 #### Scenario: Omit a controller-owned label key
 
-- **WHEN** a source topology node declares a valid label using a key such as `app.kubernetes.io/name` that c9s uses for identity or selection
-- **THEN** it is omitted with a warning, because user metadata must not overwrite controller invariants
+- **WHEN** a source topology Node declares a key such as `app.kubernetes.io/name` that c9s owns for identity or selection
+- **THEN** compilation fails rather than allowing it to overwrite a controller invariant
 
 ### Requirement: Topology status updates tolerate resource-version conflicts
 

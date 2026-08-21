@@ -8,69 +8,40 @@ Define independently reconcilable network Nodes, their self-contained intent and
 
 ### Requirement: Node is an independently reconcilable network node
 
-The system SHALL represent each Containerlab network node as one namespaced Node resource whose metadata name is the Containerlab node name. Creating a valid Node SHALL be sufficient to request realization without a Topology resource.
+The system SHALL represent each Containerlab network node as one namespaced Node resource whose metadata name is the Containerlab node name. Creating a valid Node SHALL be sufficient to request direct realization without a Topology resource.
 
 #### Scenario: Create a standalone Node directly
 
 - **WHEN** a user creates a valid Node without a Topology owner
-- **THEN** the Node controller reconciles the launcher resources for that Node
+- **THEN** the Node controller plans the Node and reconciles its direct device workload
 
 #### Scenario: Delete one Node independently
 
 - **WHEN** a user deletes one Node from a namespace containing other Nodes
-- **THEN** the controller removes only resources owned by that Node and reconciles affected grouped nodes and Links without deleting unrelated Nodes
+- **THEN** the controller removes only resources owned by that Node and reconciles affected grouped Nodes and Links without deleting unrelated Nodes
 
 ### Requirement: Node spec is self-contained Containerlab node intent
 
-The Node spec SHALL contain a flattened Containerlab node definition drawn from a curated subset of Containerlab node vocabulary, including node kind, image, device configuration, and per-device management addresses. Emitters MUST expand source topology defaults and kinds before creating a Node, and wiring MUST NOT be embedded in Node spec.
+The Node spec SHALL contain a flattened Containerlab node definition drawn from the supported compatibility vocabulary, including node kind, image, device configuration, and per-device management addresses. Emitters MUST expand source topology defaults and kinds before creating a Node, wiring MUST NOT be embedded in Node spec, and the direct planner MUST NOT require a complete topology document.
 
 #### Scenario: Materialize a Node definition
 
-- **WHEN** the launcher reads a Node containing a valid flattened Containerlab definition
-- **THEN** it renders the equivalent Containerlab node entry without needing topology-level defaults or kinds
+- **WHEN** the controller receives a Node containing a valid flattened Containerlab definition and its referenced inputs
+- **THEN** it produces the equivalent direct device plan without topology-level defaults, kinds, a rendered containerlab topology, or a containerlab executable
 
 #### Scenario: Wiring is changed independently
 
 - **WHEN** a Link terminating on a Node is added, changed, or removed
 - **THEN** the Node spec remains unchanged
 
-### Requirement: Node vocabulary excludes fields a launcher cannot realize
-
-The Node spec SHALL NOT expose Containerlab node fields that the launcher cannot realize for a single node in one launcher Pod. Excluded fields are those absent from the launcher's Containerlab version, those whose meaning spans several nodes of one Containerlab lab, and those describing Pod-level policy owned by LauncherProfile or the Pod spec.
-
-#### Scenario: Field owned by launcher policy is absent from Node
-
-- **WHEN** a user inspects the Node schema for container resource limits, image pull policy, or container healthchecks
-- **THEN** those fields are absent from the Node spec and available on LauncherProfile instead
-
-#### Scenario: Labels live in Node metadata, not in the spec
-
-- **WHEN** a user inspects the Node schema for Containerlab node labels
-- **THEN** no such spec field exists, because Kubernetes object metadata is where labels belong and only those are selectable
-
-#### Scenario: Inter-node deployment ordering is absent from Node
-
-- **WHEN** a user inspects the Node schema for Containerlab deployment stages or startup ordering against other nodes
-- **THEN** those fields are absent, because each launcher Pod runs its own single-node lab and ordering across Pods is a Kubernetes concern
-
-#### Scenario: Container escape hatch is available
-
-- **WHEN** a Node declares supported container options such as devices, added capabilities, shared memory size, or privileged execution
-- **THEN** the launcher renders them into the Containerlab node entry
-
-#### Scenario: Certificate SANs are reachable
-
-- **WHEN** a Node requests an issued certificate with subject alternative names
-- **THEN** the names are declared on the Node's certificate configuration and rendered into the Containerlab node entry
-
 ### Requirement: Node declares destination ports, not host mappings
 
-A Node SHALL declare additional ports as destination ports with an optional protocol. The pod-side port carrying each destination port is an allocation owned by the controller and MUST NOT be user-specifiable. The schema MUST reject host-to-container mapping syntax, and port parsing MUST reject any form it cannot represent rather than reinterpreting it.
+A Node SHALL declare additional ports as destination ports with an optional protocol. The Pod-side port carrying each destination port is an allocation owned by the controller and MUST NOT be user-specifiable. The schema MUST reject host-to-container mapping syntax, and port parsing MUST reject any form it cannot represent rather than reinterpreting it.
 
 #### Scenario: Declare an additional port
 
 - **WHEN** a Node lists a destination port with an optional protocol
-- **THEN** the controller allocates a pod-side port, records the pair in status, programs the expose Service, and the launcher publishes the mapping in the rendered topology
+- **THEN** the controller allocates a Pod-side port, records the pair in status, and programs a Service that targets the direct device Pod and destination port
 
 #### Scenario: Reject a host-to-container mapping
 
@@ -98,31 +69,17 @@ The Node schema SHALL reject unknown and removed field names rather than accepti
 
 #### Scenario: Arbitrary user data is preserved
 
-- **WHEN** a Node declares Containerlab config engine variables with nested arbitrary values
-- **THEN** those values are stored unchanged and rendered into the Containerlab node entry
-
-### Requirement: Node vocabulary is parseable by the launcher's Containerlab
-
-Every field in the Node containerlab vocabulary SHALL exist in the Containerlab version installed in the launcher image. The repository MUST verify this relationship automatically so that a Containerlab version change or a vocabulary addition cannot silently produce topologies the launcher refuses to parse.
-
-#### Scenario: Vocabulary gains a field the launcher cannot parse
-
-- **WHEN** a field absent from the launcher's Containerlab node definition is added to the Node vocabulary
-- **THEN** the verification fails before release
-
-#### Scenario: Rendered topology deploys
-
-- **WHEN** a Node populating every supported vocabulary field is materialized by the launcher
-- **THEN** Containerlab parses the rendered topology without unknown-field errors
+- **WHEN** a Node declares Containerlab config-engine variables with nested arbitrary values
+- **THEN** those values are stored unchanged and supplied to the direct device planner
 
 ### Requirement: Node grouping is declared only by container network mode
 
-Grouping Nodes into one launcher Pod SHALL be declared exclusively by Containerlab `network-mode: container:<primary>`. The schema MUST reject other network mode values.
+Grouping Nodes into one direct Pod SHALL be declared exclusively by Containerlab `network-mode: container:<primary>`. The schema MUST reject other network-mode values.
 
 #### Scenario: Group a secondary Node onto its primary
 
 - **WHEN** a Node sets `network-mode` to `container:<primary>` naming another Node in its namespace
-- **THEN** the controller realizes it inside the primary Node's launcher Pod
+- **THEN** the controller renders it as another application container in the primary Node's Pod
 
 #### Scenario: Reject an unrealizable network mode
 
@@ -131,68 +88,56 @@ Grouping Nodes into one launcher Pod SHALL be declared exclusively by Containerl
 
 ### Requirement: Component-based Nodes retain one logical lifecycle
 
-A Node that Containerlab expands into multiple component containers SHALL remain one logical c9s
-Node and one launcher workload. The launcher SHALL discover every expanded component from the
-logical root-node identity, require every component to satisfy generic readiness, and use the sole
-component that owns the shared network namespace for application probes. Every
-`container:<target>` network mode SHALL resolve to a discovered component in the same namespace.
-Missing or ambiguous component identity, an external or cyclic namespace reference, or ambiguous
-network-namespace ownership MUST fail launcher discovery.
+A Node that the baseline planner expands into multiple component containers SHALL remain one logical c9s Node and one direct workload. Every component SHALL be declared as a Kubernetes application container, every required component SHALL satisfy generic readiness, and the plan SHALL identify the sole owner of a shared network namespace for application probes. Every component namespace reference MUST resolve within that workload; missing or ambiguous identity, external or cyclic references, or ambiguous ownership MUST fail planning.
 
 #### Scenario: Materialize a component-based Node
 
-- **WHEN** Containerlab expands one Node into multiple labeled component containers
-- **THEN** the launcher tracks all components as the nested realization of that one Node
+- **WHEN** the planner expands one Node into several identified component containers
+- **THEN** the controller renders every component directly in the logical Node's Pod
 
 #### Scenario: One expanded component stops
 
-- **WHEN** any component container of a component-based Node is stopped, paused, restarting, dead, or unhealthy
+- **WHEN** any required component is terminated, waiting, restarting, or unready
 - **THEN** generic readiness for the logical Node fails
 
 #### Scenario: Probe a shared component network namespace
 
 - **WHEN** application probes are configured for a component-based Node
-- **THEN** the launcher addresses the component that owns the network namespace shared by the chassis
+- **THEN** the plan addresses the component declared to own the network namespace shared by the chassis
 
 #### Scenario: Component ownership is ambiguous
 
-- **WHEN** component labels identify duplicate component names, no network-namespace owner, or multiple network-namespace owners
-- **THEN** launcher discovery fails instead of selecting a component arbitrarily
+- **WHEN** planned components contain duplicate identities, no network-namespace owner, or multiple network-namespace owners
+- **THEN** planning fails instead of selecting a component arbitrarily
 
 #### Scenario: Component namespace references are invalid
 
-- **WHEN** a component references an undiscovered container, forms a cycle, or does not resolve to the sole namespace owner
-- **THEN** launcher discovery fails before readiness and application probes begin
+- **WHEN** a component references an undeclared component, forms a cycle, or does not resolve to the sole namespace owner
+- **THEN** planning fails before the workload is created
 
 ### Requirement: Node owns per-node payload attachments
 
-The Node spec SHALL describe files and other payload required to instantiate that network node,
-including supported URL- and ConfigMap-backed sources. Launcher Pod policy MUST NOT be used merely
-to associate a payload attachment with one Node. When Nodes share one launcher filesystem and
-declare the same normalized destination for a shared payload, the controller SHALL render that
-destination as one Pod mount only when the source ConfigMap, key, and file mode are identical.
-Conflicting attachments at one destination MUST fail reconciliation before the launcher Deployment
-is created or updated.
+The Node spec SHALL describe files and other payload required to instantiate that network node, including supported URL- and ConfigMap-backed sources. Profile policy MUST NOT be used merely to associate a payload with one Node. When grouped Nodes declare the same normalized destination for a shared payload, the controller SHALL stage that destination once only when source identity and mode are identical. Conflicting attachments at one destination MUST fail planning before workload creation or update.
 
 #### Scenario: Attach a ConfigMap-backed startup file
 
 - **WHEN** a Node references a supported ConfigMap-backed payload file
-- **THEN** the Node controller mounts that file into the launcher responsible for the Node
+- **THEN** the controller mounts or stages that file for the direct device container at the planned destination
 
 #### Scenario: Fetch a URL-backed payload file
 
 - **WHEN** a Node references a supported URL-backed payload file
-- **THEN** the launcher fetches the file before materializing the Containerlab node
+- **THEN** a preparation component fetches and verifies it before the affected device starts
 
 #### Scenario: Group members share an identical license destination
 
 - **WHEN** grouped Nodes reference the same normalized license destination and identical payload source
-- **THEN** the controller renders one mount at that path and Kubernetes accepts the launcher Pod
+- **THEN** the controller stages one shared file and every planned consumer receives it
 
 #### Scenario: Group members conflict at one destination
 
 - **WHEN** grouped Nodes reference the same normalized destination with different payload sources or modes
-- **THEN** reconciliation reports the conflict and does not create or update the launcher Deployment
+- **THEN** reconciliation reports the conflict and does not create or update the direct workload
 
 ### Requirement: LauncherProfile reference is optional and explicit
 
@@ -206,30 +151,30 @@ The Node spec SHALL expose an optional, same-namespace `launcherProfileRef`. The
 #### Scenario: Node references an existing LauncherProfile
 
 - **WHEN** a Node references a LauncherProfile in its namespace
-- **THEN** the controller realizes it using that profile layered over global Config defaults
+- **THEN** the controller realizes its direct workload using that profile layered over global Config defaults
 
 #### Scenario: Node references a missing LauncherProfile
 
 - **WHEN** a Node names a LauncherProfile that does not exist
-- **THEN** the controller does not create or update the launcher workload and reports `LauncherProfileResolved=False`
+- **THEN** the controller does not create or update the direct workload and reports `LauncherProfileResolved=False`
 
 ### Requirement: Grouped Nodes use one launcher policy
 
-Nodes sharing a launcher through Containerlab `network-mode: container:<primary>` SHALL use the primary Node's effective LauncherProfile. A secondary Node MUST NOT select a conflicting LauncherProfile.
+Nodes sharing a direct Pod through Containerlab `network-mode: container:<primary>` SHALL use the primary Node's effective LauncherProfile. A secondary Node MUST NOT select a conflicting LauncherProfile.
 
 #### Scenario: Secondary omits a profile reference
 
 - **WHEN** a secondary Node omits `launcherProfileRef` and its primary references a LauncherProfile
-- **THEN** the secondary is realized in the primary launcher using the primary's effective profile
+- **THEN** the secondary is realized in the primary workload using the primary's effective profile
 
 #### Scenario: Group members reference conflicting profiles
 
 - **WHEN** a secondary Node explicitly references a different LauncherProfile than its primary
-- **THEN** the controller reports the group as invalid and does not realize the inconsistent launcher workload
+- **THEN** the controller reports the group as invalid and does not realize the inconsistent workload
 
 ### Requirement: Node status contains only per-node observations and allocations
 
-The controller SHALL record Node readiness, probe observations, exposed-port allocations, standard conditions, and applied LauncherProfile identity in Node status. User intent MUST NOT be stored in status.
+The controller SHALL record Node readiness, plan identity, probe observations, exposed-port allocations, standard conditions, and applied LauncherProfile identity in Node status. User intent and full plans MUST NOT be stored in status.
 
 #### Scenario: LauncherProfile is applied
 
@@ -238,64 +183,8 @@ The controller SHALL record Node readiness, probe observations, exposed-port all
 
 #### Scenario: Node readiness changes
 
-- **WHEN** the launcher Pod or configured probes change readiness
+- **WHEN** a direct application container, preparation/connectivity condition, or configured probe changes readiness
 - **THEN** the controller updates only the affected Node readiness and conditions
-
-### Requirement: Enabled Node readiness reflects generic launcher state
-
-When status probes are enabled for a non-excluded Node, the launcher SHALL report readiness only
-when the represented nested Docker container is running and is not paused, restarting, or dead. If
-the nested image defines a Docker healthcheck, that healthcheck SHALL also report `healthy`.
-
-When multiple Nodes share one launcher through `network-mode: container:<primary>`, the launcher
-SHALL evaluate the generic nested-container readiness of every group member. The shared launcher
-Pod SHALL be ready only when all group members are ready; all member Nodes inherit that atomic
-group result. Application-specific TCP or SSH probes remain scoped to the primary Node.
-
-#### Scenario: Generic Node has no application-specific probe
-
-- **WHEN** a Node uses an enabled status-probe configuration without TCP or SSH settings
-- **THEN** its launcher Deployment renders startup and readiness probes and reports the generic
-  nested-container readiness through the launcher status marker
-
-#### Scenario: Running container without a healthcheck
-
-- **WHEN** the represented nested container is running, not paused, not restarting, not dead, and
-  has no Docker healthcheck
-- **THEN** the Node reports ready under the generic readiness contract
-
-#### Scenario: Nested container is not runnable
-
-- **WHEN** the represented nested container is stopped, paused, restarting, or dead
-- **THEN** the Node reports not ready
-
-#### Scenario: Grouped secondary container restarts
-
-- **WHEN** a secondary nested container is paused, restarting, stopped, dead, or has an unhealthy
-  image healthcheck while the primary remains healthy
-- **THEN** the shared launcher Pod and every Node in the launcher group report not ready
-
-#### Scenario: Image healthcheck is not healthy
-
-- **WHEN** the represented nested container is running but its Docker healthcheck is `starting` or
-  `unhealthy`
-- **THEN** the Node reports not ready
-
-#### Scenario: Image healthcheck becomes healthy
-
-- **WHEN** a running nested container's Docker healthcheck reports `healthy`
-- **THEN** the generic readiness condition succeeds
-
-#### Scenario: Explicit application probe fails
-
-- **WHEN** the nested container satisfies the generic readiness contract but a configured TCP or
-  SSH probe fails
-- **THEN** the Node remains not ready
-
-#### Scenario: Status probes are disabled or excluded
-
-- **WHEN** status probes are disabled for a Node or the Node is listed in `excludedNodes`
-- **THEN** the controller does not render launcher status probes for that Node
 
 ### Requirement: Individual Node object size is independent of topology size
 
@@ -315,3 +204,32 @@ issuing an update when the current status already equals the desired status.
 
 - **WHEN** a Node status write receives a resource-version conflict
 - **THEN** the controller refetches the current Node and retries without failing the reconcile solely because of the conflict
+
+### Requirement: Node vocabulary excludes fields the direct runtime cannot realize
+
+The Node spec SHALL NOT expose Containerlab node fields the direct runtime cannot represent with defined portable semantics. Excluded fields are those absent from the declared compatibility baseline, those whose meaning spans several Nodes and belongs to another c9s resource, and those describing Pod-level policy owned by LauncherProfile or the Pod plan. Supported fields MUST be planned and enforced rather than ignored.
+
+#### Scenario: Field owned by realization policy is absent from Node
+
+- **WHEN** a user inspects the Node schema for container resource limits, image pull policy, or operational probes
+- **THEN** those fields are absent from the Node spec and available on LauncherProfile instead
+
+#### Scenario: Labels live in Node metadata, not in the spec
+
+- **WHEN** a user inspects the Node schema for Containerlab node labels
+- **THEN** no such spec field exists, because Kubernetes object metadata is where labels belong and only those are selectable
+
+#### Scenario: Inter-node deployment ordering is absent from Node
+
+- **WHEN** a user inspects the Node schema for Containerlab deployment stages or startup ordering against other Nodes
+- **THEN** those fields are absent because c9s owns workload ordering and reports dependencies explicitly
+
+#### Scenario: Container policy is enforced directly
+
+- **WHEN** a Node declares supported devices, added capabilities, shared memory size, tmpfs, security options, or privileged execution
+- **THEN** its plan enforces them on the direct application container and Pod
+
+#### Scenario: Certificate SANs are reachable
+
+- **WHEN** a Node requests an issued certificate with subject alternative names
+- **THEN** the names are declared on the Node's certificate configuration and the direct preparation plan stages the certificate for the device

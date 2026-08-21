@@ -22,16 +22,28 @@ All c9s custom resources SHALL be registered under API group `c9s.run` at versio
 
 ### Requirement: Registered CRD kinds
 
-The system SHALL register exactly these namespaced CRDs under `c9s.run/v1alpha1`: Topology, Node, Link, LauncherProfile, ImageRequest, and Config.
+The system SHALL register exactly these namespaced CRDs under `c9s.run/v1alpha1`: Topology, Node,
+Link, LauncherProfile, and Config. The direct runtime SHALL NOT register ImageRequest because the
+kubelet pulls application images from each rendered PodSpec.
 
 #### Scenario: Manager installs CRDs on startup
 
 - **WHEN** the c9s manager starts with CRD initialization enabled
-- **THEN** all six `c9s.run` CRDs are present in the cluster
+- **THEN** all five `c9s.run` CRDs are present in the cluster and no ImageRequest CRD is installed
+
+#### Scenario: Direct workload needs a private image
+
+- **WHEN** a direct device Pod references a private image and same-namespace pull Secret
+- **THEN** its PodSpec carries the image and `imagePullSecrets` directly without creating an ImageRequest, puller Pod, CRI-socket mount, export, or import operation
 
 ### Requirement: Generated API artifacts use the new group
 
 CRD YAML, typed clients, and OpenAPI documents SHALL be generated from API source constants that declare group `c9s.run`. REST discovery paths SHALL use `/apis/c9s.run/v1alpha1/`.
+
+#### Scenario: Discover generated resources
+
+- **WHEN** a client performs REST discovery against a cluster with the generated CRDs installed
+- **THEN** the generated artifacts expose group `c9s.run` at `/apis/c9s.run/v1alpha1/` and typed clients resolve the same group
 
 ### Requirement: Helm RBAC grants access to the new group
 

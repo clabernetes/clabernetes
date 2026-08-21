@@ -66,6 +66,36 @@ Global Config SHALL provide base direct-workload defaults. For a Node with `laun
 - **WHEN** a supported LauncherProfile collection is explicitly set to empty
 - **THEN** the effective direct-workload policy uses the empty collection rather than inheriting the Config value
 
+### Requirement: Missing or deleted referenced profiles fail closed
+
+An explicit LauncherProfile reference that cannot be resolved SHALL prevent creation or mutation of the direct workload. The system MUST surface the resolution failure on the affected Node and MUST NOT silently fall back to Config defaults.
+
+#### Scenario: Referenced profile is deleted
+
+- **WHEN** a LauncherProfile still referenced by Nodes is deleted
+- **THEN** affected Nodes report profile resolution failure and the controller does not roll them to an unintended default policy
+
+#### Scenario: Missing profile is created
+
+- **WHEN** the referenced LauncherProfile is subsequently created
+- **THEN** the affected Nodes automatically reconcile and clear the resolution failure
+
+### Requirement: Profile events reconcile only referencing Nodes
+
+The controller SHALL index Nodes by namespace and LauncherProfile reference. A LauncherProfile create, update, or delete event SHALL enqueue only direct workloads containing Nodes that reference that profile.
+
+#### Scenario: Update an unused profile
+
+- **WHEN** a LauncherProfile with no references is updated
+- **THEN** no Node workload is reconciled because of that update
+
+#### Scenario: Update a shared profile
+
+- **WHEN** a LauncherProfile referenced by several Nodes is updated
+- **THEN** all and only affected direct workloads reconcile to the new profile generation
+
+## ADDED Requirements
+
 ### Requirement: Image-pull defaults have Kubernetes semantics
 
 `LauncherProfile.spec.imagePull.pullSecrets` SHALL become the direct Pod's same-namespace `imagePullSecrets`. `LauncherProfile.spec.imagePull.policy` SHALL be an optional Kubernetes application-container pull-policy default. An explicit Node/containerlab image-pull policy SHALL take precedence over the profile default, and the profile default SHALL take precedence over `Config.spec.imagePull.policy`. Controller registry metadata trust SHALL remain a separate global Config policy and MUST NOT be weakened by a namespaced profile.
@@ -115,34 +145,6 @@ Before CRD replacement, a read-only preflight SHALL inspect stored resources usi
 
 - **WHEN** a user applies a manifest containing an old launcher, Docker, CRI, kind-keyed, or Docker-management path to the new CRD
 - **THEN** the API server rejects the unknown field rather than preserving or ignoring it
-
-### Requirement: Missing or deleted referenced profiles fail closed
-
-An explicit LauncherProfile reference that cannot be resolved SHALL prevent creation or mutation of the direct workload. The system MUST surface the resolution failure on the affected Node and MUST NOT silently fall back to Config defaults.
-
-#### Scenario: Referenced profile is deleted
-
-- **WHEN** a LauncherProfile still referenced by Nodes is deleted
-- **THEN** affected Nodes report profile resolution failure and the controller does not roll them to an unintended default policy
-
-#### Scenario: Missing profile is created
-
-- **WHEN** the referenced LauncherProfile is subsequently created
-- **THEN** the affected Nodes automatically reconcile and clear the resolution failure
-
-### Requirement: Profile events reconcile only referencing Nodes
-
-The controller SHALL index Nodes by namespace and LauncherProfile reference. A LauncherProfile create, update, or delete event SHALL enqueue only direct workloads containing Nodes that reference that profile.
-
-#### Scenario: Update an unused profile
-
-- **WHEN** a LauncherProfile with no references is updated
-- **THEN** no Node workload is reconciled because of that update
-
-#### Scenario: Update a shared profile
-
-- **WHEN** a LauncherProfile referenced by several Nodes is updated
-- **THEN** all and only affected direct workloads reconcile to the new profile generation
 
 ## REMOVED Requirements
 

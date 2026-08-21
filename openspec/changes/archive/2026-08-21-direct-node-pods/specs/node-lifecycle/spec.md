@@ -28,35 +28,6 @@ The Node spec SHALL contain a flattened Containerlab node definition drawn from 
 - **WHEN** a Link terminating on a Node is added, changed, or removed
 - **THEN** the Node spec remains unchanged
 
-### Requirement: Node vocabulary excludes fields the direct runtime cannot realize
-
-The Node spec SHALL NOT expose Containerlab node fields the direct runtime cannot represent with defined portable semantics. Excluded fields are those absent from the declared compatibility baseline, those whose meaning spans several Nodes and belongs to another c9s resource, and those describing Pod-level policy owned by LauncherProfile or the Pod plan. Supported fields MUST be planned and enforced rather than ignored.
-
-#### Scenario: Field owned by realization policy is absent from Node
-
-- **WHEN** a user inspects the Node schema for container resource limits, image pull policy, or operational probes
-- **THEN** those fields are absent from the Node spec and available on LauncherProfile instead
-
-#### Scenario: Labels live in Node metadata, not in the spec
-
-- **WHEN** a user inspects the Node schema for Containerlab node labels
-- **THEN** no such spec field exists, because Kubernetes object metadata is where labels belong and only those are selectable
-
-#### Scenario: Inter-node deployment ordering is absent from Node
-
-- **WHEN** a user inspects the Node schema for Containerlab deployment stages or startup ordering against other Nodes
-- **THEN** those fields are absent because c9s owns workload ordering and reports dependencies explicitly
-
-#### Scenario: Container policy is enforced directly
-
-- **WHEN** a Node declares supported devices, added capabilities, shared memory size, tmpfs, security options, or privileged execution
-- **THEN** its plan enforces them on the direct application container and Pod
-
-#### Scenario: Certificate SANs are reachable
-
-- **WHEN** a Node requests an issued certificate with subject alternative names
-- **THEN** the names are declared on the Node's certificate configuration and the direct preparation plan stages the certificate for the device
-
 ### Requirement: Node declares destination ports, not host mappings
 
 A Node SHALL declare additional ports as destination ports with an optional protocol. The Pod-side port carrying each destination port is an allocation owned by the controller and MUST NOT be user-specifiable. The schema MUST reject host-to-container mapping syntax, and port parsing MUST reject any form it cannot represent rather than reinterpreting it.
@@ -209,7 +180,44 @@ The controller SHALL record Node readiness, plan identity, probe observations, e
 - **WHEN** a direct application container, preparation/connectivity condition, or configured probe changes readiness
 - **THEN** the controller updates only the affected Node readiness and conditions
 
+## ADDED Requirements
+
+### Requirement: Node vocabulary excludes fields the direct runtime cannot realize
+
+The Node spec SHALL NOT expose Containerlab node fields the direct runtime cannot represent with defined portable semantics. Excluded fields are those absent from the declared compatibility baseline, those whose meaning spans several Nodes and belongs to another c9s resource, and those describing Pod-level policy owned by LauncherProfile or the Pod plan. Supported fields MUST be planned and enforced rather than ignored.
+
+#### Scenario: Field owned by realization policy is absent from Node
+
+- **WHEN** a user inspects the Node schema for container resource limits, image pull policy, or operational probes
+- **THEN** those fields are absent from the Node spec and available on LauncherProfile instead
+
+#### Scenario: Labels live in Node metadata, not in the spec
+
+- **WHEN** a user inspects the Node schema for Containerlab node labels
+- **THEN** no such spec field exists, because Kubernetes object metadata is where labels belong and only those are selectable
+
+#### Scenario: Inter-node deployment ordering is absent from Node
+
+- **WHEN** a user inspects the Node schema for Containerlab deployment stages or startup ordering against other Nodes
+- **THEN** those fields are absent because c9s owns workload ordering and reports dependencies explicitly
+
+#### Scenario: Container policy is enforced directly
+
+- **WHEN** a Node declares supported devices, added capabilities, shared memory size, tmpfs, security options, or privileged execution
+- **THEN** its plan enforces them on the direct application container and Pod
+
+#### Scenario: Certificate SANs are reachable
+
+- **WHEN** a Node requests an issued certificate with subject alternative names
+- **THEN** the names are declared on the Node's certificate configuration and the direct preparation plan stages the certificate for the device
+
 ## REMOVED Requirements
+
+### Requirement: Node vocabulary excludes fields a launcher cannot realize
+
+**Reason**: Renamed for the direct runtime: the launcher boundary no longer defines realizable Node vocabulary; the direct runtime does. The replacement requirement is added in this change.
+
+**Migration**: Use the added requirement "Node vocabulary excludes fields the direct runtime cannot realize".
 
 ### Requirement: Node vocabulary is parseable by the launcher's Containerlab
 

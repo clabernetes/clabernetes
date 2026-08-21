@@ -22,7 +22,13 @@ The repository SHALL provide a pnpm-managed documentation application that can b
 
 ### Requirement: Structured repository-owned documentation
 
-The site SHALL render repository-owned Markdown or MDX as navigable documentation with a landing page, quickstart, architecture and core concepts, guides, examples, and a CRD reference section. Core-concept navigation in the Guide category SHALL present Node and Link as the primary API and SHALL describe Topology as a supported higher-level compatibility resource. CRD field schemas SHALL be presented in a separate CRD Reference documentation category rather than as hand-maintained field tables.
+The site SHALL render repository-owned Markdown or MDX as navigable documentation with a landing
+page, quickstart, architecture and core concepts, guides, examples, and a CRD reference section.
+Core-concept navigation in the Guide category SHALL present Node and Link as the primary API and
+SHALL describe Topology as a supported higher-level compatibility resource. CRD field schemas SHALL
+be presented in a separate CRD Reference documentation category rather than as hand-maintained
+field tables. The reference SHALL describe only the five direct-runtime CRDs and SHALL NOT publish
+an ImageRequest page.
 
 #### Scenario: Navigate the primary API documentation
 
@@ -37,7 +43,7 @@ The site SHALL render repository-owned Markdown or MDX as navigable documentatio
 #### Scenario: Browse CRD reference by kind
 
 - **WHEN** a reader opens the CRD Reference category
-- **THEN** the reader can navigate to per-kind schema pages for Topology, Node, Link, LauncherProfile, Config, and ImageRequest
+- **THEN** the reader can navigate to per-kind schema pages for Topology, Node, Link, LauncherProfile, and Config, with no ImageRequest route or generated schema entry
 
 ### Requirement: Documentation category navigation
 
