@@ -34,6 +34,15 @@ nothing is silently dropped.
 - **`mgmt-net` and `macvlan` endpoints are rejected.** They require host networking a cluster
   does not provide. Host Links (`host:<interface>`) are supported through the node-local
   host-endpoint daemon.
+- **Rewiring through a Topology replaces the Link object.** Compiled Link names encode both
+  endpoints, so changing either endpoint's interface in the definition deletes the old Link and
+  creates a new one -- the former endpoints are removed and recreated *on both sides*, exactly
+  like deleting and re-adding the wire. Editing a Link custom resource in place keeps its
+  identity, and only the endpoint you changed is touched; the peer keeps its interface. Either
+  way, the lifecycle action follows each kind's declared link-apply mode -- and runtime state a
+  device applied to a recreated interface (a linux-kind `exec` address, a NOS's binding to the
+  old interface) does not survive the recreation, matching a containerlab redeploy of that
+  wire.
 
 ## Naming and metadata
 

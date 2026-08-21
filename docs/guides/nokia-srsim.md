@@ -47,12 +47,21 @@ import fallback.
 
 ### Integrated Systems
 
-Integrated SR-SIM systems run as a single container:
+Integrated SR-SIM systems run as a single container. Nokia supports the integrated model only
+for these platform types -- every other chassis, including the FP5 small fixed platforms such
+as `sr-1-92s`, must run distributed (declare `components`):
 
 | Platform Type | Description                      |
 | ------------- | -------------------------------- |
 | `sr-1`        | SR-1 integrated system (default) |
 | `sr-1s`       | SR-1s integrated system          |
+| `ixr-r6`      | 7250 IXR-R6                      |
+| `ixr-ec`      | 7250 IXR-ec                      |
+| `ixr-e2`      | 7250 IXR-e2                      |
+| `ixr-e2c`     | 7250 IXR-e2c                     |
+
+A componentless node of any other type boots a single simulator container that never attaches
+its data-path ports -- the Node reports ready on management but forwards nothing.
 
 **Example topology:**
 
@@ -309,6 +318,47 @@ nodes:
 A component entry containing only `slot` starts that card's simulator container but does not tell
 containerlab which SR OS card, SFM, or MDA to provision. Supply `type`, `sfm`, and `mda` inventory
 when automatic card provisioning is required.
+
+### Platform Rules Cheat Sheet
+
+Modular chassis follow real SR OS equipage semantics, so a lab that skips them fails with exact
+SR OS diagnostics rather than booting degraded:
+
+- **Modular chassis need typed components.** SR OS requires configuration-side equipage
+  (`card <slot> card-type ...`, `mda <slot> mda-type ...`) before any port on that card exists.
+  Containerlab generates those lines only from typed `components` entries; a bare `slot: 1`
+  yields `MGMT_CORE #4001: ... MDA must exist` at config commit and dead ports.
+- **Card/MDA pairings come from Nokia's supported-hardware tables** (the SR-SIM Installation
+  and Setup appendix). Pairing an MDA with the wrong card fails commit with
+  `Not supported by chassis/card/xiom type/capability` -- for example `me6-100gb-qsfp28`
+  pairs with `iom5-e`, not `iom4-e`.
+- **XIOM-based cards take `ms*` MDAs.** On `-s` chassis (`sr-2s`, `sr-7s`, ...) the XIOM MDA
+  must be one of the `ms*` types (`ms18-100gb-qsfp28`, `ms24-10/100gb-sfpdd`, ...); the config
+  commit rejects anything else and names the accepted keywords. Ports gain an `x` element:
+  `1/x1/1/c1/1` maps to interface `1/x1/1/c1/1` on the Link and `e1-x1-1-c1-1` in the Pod.
+- **SR-SIM forwards at most ~1000 pps per port** by design -- it validates control-plane and
+  reachability behavior, not throughput.
+- **Declare `link-apply-mode: recreate` on SR-SIM nodes.** Nokia documents data-path
+  interfaces attached at container start only; a data interface added or recreated underneath
+  a running simulator leaves its dataplane dead with no self-recovery, yet the imported kind
+  declares live link-apply. Overriding the mode per node (or per kind in a Topology) makes
+  every Link change roll the device Pod cleanly -- measured at roughly 40-90 seconds from
+  change to ready on a distributed chassis, with untouched Links carrying traffic again
+  immediately. Avoid `restart` for multi-container chassis: SR OS exits non-zero on its stop
+  signal, so the kubelet treats each in-place restart as a failure and applies exponential
+  backoff while the card containers crash-loop until their CPM is back, stretching a
+  seconds-scale reboot into many minutes.
+
+  ```yaml
+  topology:
+    kinds:
+      nokia_srsim:
+        link-apply-mode: recreate
+  ```
+
+Verified live combinations on the direct runtime: `sr-1` (integrated), `sr-1-92s` with
+`components: [slot: A, slot: 1]`, and `sr-2s` with typed `xcm-2s`/`iom-s-3.0t`/
+`ms18-100gb-qsfp28` components carrying end-to-end dataplane across both line cards.
 
 ## Interface Naming
 

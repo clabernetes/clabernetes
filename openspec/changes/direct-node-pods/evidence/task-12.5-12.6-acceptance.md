@@ -58,7 +58,30 @@ environment defects were diagnosed and fixed on the cluster along the way (stale
 image records and a stale kubelet image cache left by historical `kind load` side-loading —
 both infrastructure state, not c9s behavior; the c9s digest gate surfaced them precisely).
 
-## Cleanup and final audit (task 12.7)
+## Follow-up: SR-SIM classic chassis and link-change behavior (2026-08-21)
+
+Post-acceptance validation driven by clabverter-entry mixed-chassis labs (SR-2s two line
+cards + SR-1-92s distributed + SR-1 integrated + three linux endpoints; all five end-to-end
+dataplane paths passed, including forwarding across the distributed chassis fabric between
+separate line-card containers). Findings:
+
+- **Classic SR-7 is broken in the SR-SIM images, not in c9s.** With the exact
+  Nokia-documented pairing (`iom5-e` + `me6-100gb-qsfp28`, typed components), the CPM commits
+  the configuration cleanly but the card simulator binary rejects the card at boot
+  ("TiMOS card type 1 (Unknown), Hw card type 146 (burger_r1) is not supported") and never
+  attaches its data port — identically on 26.7.R1 and 25.7.R1, contradicting Nokia's own
+  supported-hardware appendix. Upstream report material; the modern platforms (SR-2s family)
+  work as documented.
+- **Link changes against a running SR-SIM need `link-apply-mode: recreate`.** The imported
+  kind declares live link-apply, but a data veth added or recreated under a running simulator
+  leaves its dataplane dead with no self-recovery (observed 20+ minutes). Declared `restart`
+  is honored exactly by c9s (same Pod, device containers signaled; observed restartCounts
+  increment with no Pod roll) but is pathological for multi-container chassis: SR OS exits
+  255 on SIGTERM, the kubelet backs off exponentially, and card containers crash-loop until
+  the CPM returns (5+ minutes, unconverged). Declared `recreate` measured 87s for a Node
+  change and **41s for a Link removal** (change to fully ready), with untouched Links
+  carrying traffic immediately — matching cold-boot behavior (38-90s across all runs). The
+  wired `link-apply-mode` vocabulary from task 13.3 is the operative knob.
 
 Verified against the live cluster after the last suite:
 
