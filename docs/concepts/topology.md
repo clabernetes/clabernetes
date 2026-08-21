@@ -84,6 +84,21 @@ The compiler:
 4. prunes generated resources removed from the source
 5. aggregates bounded readiness and resource counts into Topology status
 
+## Child-resource name conflicts
+
+Generated Node, Link, and LauncherProfile names are namespace-scoped and are not automatically
+prefixed with the Topology name. Before creating children, the controller checks that each desired
+name is available. If another resource already uses one of those names, the Topology remains
+unmaterialized and reports the conflicts in `status.error`, for example:
+
+```text
+duplicate resources found in the lab namespace: node/frr1, link/frr1-eth1-frr2-eth1
+create the topology in a different namespace or disambiguate node names.
+```
+
+Create the Topology in a different namespace or rename the conflicting nodes. Existing children
+owned by the same Topology are compatible and do not trigger this error.
+
 ## When to use direct resources
 
 A Topology still embeds the entire source lab in one Kubernetes object. For large or generated labs,
