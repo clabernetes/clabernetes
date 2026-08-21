@@ -9,7 +9,6 @@ import (
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
 	k8srbacv1 "k8s.io/api/rbac/v1"
@@ -505,7 +504,7 @@ func TestReconcileFailsClosedForMissingLauncherProfile(t *testing.T) {
 		},
 		Spec: clabernetesapisv1alpha1.LauncherProfileSpec{
 			Expose: &clabernetesapisv1alpha1.LauncherProfileExpose{
-				DisableExpose: clabernetesutil.ToPointer(true),
+				DisableExpose: new(true),
 			},
 		},
 	}

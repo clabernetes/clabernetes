@@ -7,7 +7,6 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteslauncherconnectivity "github.com/clabernetes/clabernetes/launcher/connectivity"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
@@ -76,7 +75,7 @@ func materializeTopology(
 
 	config := &clabernetesutilcontainerlab.Config{
 		Name:   fmt.Sprintf("clabernetes-%s", launcherNodeName),
-		Prefix: clabernetesutil.ToPointer(""),
+		Prefix: new(""),
 		Mgmt:   mgmt,
 		Topology: &clabernetesutilcontainerlab.Topology{
 			// node definitions are self contained (emitters expand defaults/kinds), so the

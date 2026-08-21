@@ -14,7 +14,6 @@ import (
 	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	k8scorev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -65,7 +64,7 @@ func renderTestTopology(t *testing.T) (
 			},
 		},
 	}
-	topology.Spec.Deployment.PrivilegedLauncher = clabernetesutil.ToPointer(true)
+	topology.Spec.Deployment.PrivilegedLauncher = new(true)
 
 	compiled, err := clabernetescontrollerstopology.CompileTopology(
 		&claberneteslogging.FakeInstance{},

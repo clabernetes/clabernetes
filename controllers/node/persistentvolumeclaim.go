@@ -7,7 +7,6 @@ import (
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	k8scorev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -78,7 +77,7 @@ func (r *PersistentVolumeClaimReconciler) Render(
 	var storageClassName *string
 
 	if persistence.StorageClassName != "" {
-		storageClassName = clabernetesutil.ToPointer(persistence.StorageClassName)
+		storageClassName = new(persistence.StorageClassName)
 	}
 
 	pvcSize := resource.MustParse("5Gi")
@@ -106,7 +105,7 @@ func (r *PersistentVolumeClaimReconciler) Render(
 			},
 		},
 		StorageClassName: storageClassName,
-		VolumeMode:       clabernetesutil.ToPointer(k8scorev1.PersistentVolumeFilesystem),
+		VolumeMode:       new(k8scorev1.PersistentVolumeFilesystem),
 	}
 
 	if existingPVC != nil {

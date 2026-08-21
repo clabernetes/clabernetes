@@ -1,4 +1,4 @@
-FROM golang:1.25-bookworm
+FROM golang:1.26-bookworm
 
 RUN apt-get update -y && \
     apt-get install -yq --no-install-recommends \
