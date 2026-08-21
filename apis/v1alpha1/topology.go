@@ -140,6 +140,10 @@ type TopologyStatus struct {
 	// TopologyState is the high-level lifecycle state of the topology.
 	// +optional
 	TopologyState TopologyState `json:"topologyState,omitempty"`
+	// Error holds a bounded controller error that prevents the Topology from realizing its desired
+	// child resources. An empty value means no such error is currently reported.
+	// +optional
+	Error string `json:"error,omitempty"`
 	// Conditions is a list of conditions for the topology custom resource.
 	// +listType=atomic
 	Conditions []metav1.Condition `json:"conditions"`
