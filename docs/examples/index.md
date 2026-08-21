@@ -26,7 +26,7 @@ ClusterIP, Headless, disabled auto-expose, and fully disabled exposure modes.
 ## Advanced labs
 
 [Advanced examples](https://github.com/clabernetes/clabernetes/tree/main/examples/advanced) include
-larger topologies, private registries, probes, grouped nodes, slurpeeth, and Nokia SR-SIM.
+larger topologies, private registries, probes, grouped nodes, and Nokia SR-SIM.
 
 ## Apply an example
 

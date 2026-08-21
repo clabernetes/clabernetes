@@ -15,7 +15,6 @@ import {
   Cable,
   Maximize2,
   Minimize2,
-  Network,
   ScrollText,
   Server,
   Settings,
@@ -51,13 +50,12 @@ const flowNodeHandles: Record<
   { source: HandlePosition[]; target: HandlePosition[] }
 > = {
   topology: { source: ['bottom'], target: [] },
-  'launcher-profile': { source: ['right'], target: ['top'] },
+  'node-profile': { source: ['right'], target: ['top'] },
   nodes: { source: [], target: ['top', 'bottom', 'left'] },
   links: { source: [], target: ['top', 'bottom'] },
   'node-controller': { source: ['top', 'bottom'], target: [] },
   'link-controller': { source: ['top', 'bottom'], target: ['top'] },
   'planning-pods': { source: ['bottom'], target: ['top'] },
-  'host-daemon': { source: ['bottom'], target: ['top'] },
   'device-pods': { source: [], target: ['top'] },
 };
 
@@ -76,7 +74,7 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
     },
   },
   {
-    id: 'launcher-profile',
+    id: 'node-profile',
     type: 'architecture',
     position: { x: 24, y: 220 },
     style: { width: 250 },
@@ -84,7 +82,7 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
       badge: 'policy',
       detail: 'reusable workload policy',
       icon: ScrollText,
-      title: 'LauncherProfile',
+      title: 'NodeProfile',
       tone: 'gray',
     },
   },
@@ -108,7 +106,7 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
     style: { width: 250 },
     data: {
       badge: 'per wire',
-      detail: 'one wire + connectivity',
+      detail: 'one wire per resource',
       icon: Cable,
       title: 'Link CRs',
       tone: 'indigo',
@@ -155,20 +153,6 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
     },
   },
   {
-    id: 'host-daemon',
-    type: 'architecture',
-    position: { x: 616, y: 660 },
-    style: { width: 300 },
-    data: {
-      badge: 'daemonset · per worker',
-      detail: 'realizes cross-Pod wires in the worker host namespace',
-      icon: Network,
-      title: 'Host-endpoint daemon',
-      tone: 'indigo',
-      chips: ['same-worker patch', 'VXLAN · VNI = tunnel id', 'peers via <name>-vx'],
-    },
-  },
-  {
     id: 'device-pods',
     type: 'architecture',
     position: { x: 150, y: 905 },
@@ -180,16 +164,20 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
       icon: Server,
       title: 'Device Pods',
       tone: 'emerald',
-      chips: ['preparation init', 'connectivity init-sidecar', 'device container(s)'],
+      chips: [
+        'preparation init',
+        'connectivity sidecar · in-Pod VXLAN',
+        'device container(s)',
+      ],
     },
   },
 ];
 
 const flowEdges: Edge[] = [
   {
-    id: 'topology-launcher-profile',
+    id: 'topology-node-profile',
     source: 'topology',
-    target: 'launcher-profile',
+    target: 'node-profile',
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
@@ -229,8 +217,8 @@ const flowEdges: Edge[] = [
     type: 'smoothstep',
   },
   {
-    id: 'launcher-profile-nodes',
-    source: 'launcher-profile',
+    id: 'node-profile-nodes',
+    source: 'node-profile',
     target: 'nodes',
     sourceHandle: 'source-right',
     targetHandle: 'target-left',
@@ -265,22 +253,13 @@ const flowEdges: Edge[] = [
     label: 'plan ConfigMap',
   },
   {
-    id: 'link-controller-host-daemon',
+    id: 'link-controller-device-pods',
     source: 'link-controller',
-    target: 'host-daemon',
-    sourceHandle: 'source-bottom',
-    targetHandle: 'target-top',
-    type: 'smoothstep',
-    label: 'tunnel ids',
-  },
-  {
-    id: 'host-daemon-device-pods',
-    source: 'host-daemon',
     target: 'device-pods',
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
-    label: 'veth legs',
+    label: 'tunnel ids',
   },
 ];
 
@@ -377,7 +356,7 @@ export function ArchitectureReactFlowDiagram() {
         ) : null}
       </div>
       <div
-        aria-label="The clabernetes architecture, with Topology resources compiling into the primary API, controllers running planning pods, and device pods wired by the host-endpoint daemon."
+        aria-label="The clabernetes architecture, with Topology resources compiling into the primary API, controllers running planning pods, and device pods whose connectivity sidecars wire the lab together."
         className="c9s-react-flow-canvas"
         role="img"
       >
@@ -422,9 +401,9 @@ export function ArchitectureReactFlowDiagram() {
         </ReactFlow>
       </div>
       <figcaption className="sr-only">
-        Topology compiles into LauncherProfile, Node, and Link resources; the node controller
+        Topology compiles into NodeProfile, Node, and Link resources; the node controller
         runs planning pods and renders device pods, while the link controller allocates tunnel
-        ids consumed by the host-endpoint daemon that wires the pods together.
+        ids consumed by each pod's connectivity sidecar to wire the pods together.
       </figcaption>
     </figure>
   );

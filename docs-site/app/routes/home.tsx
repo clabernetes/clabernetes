@@ -27,8 +27,8 @@ const highlights = [
     eyebrow: 'Kubernetes native',
     title: 'Policy that composes',
     description:
-      'Use launcher profiles, scheduling, persistence, services, and familiar cluster workflows.',
-    href: '/docs/concepts/launcher-profiles',
+      'Use node profiles, scheduling, persistence, services, and familiar cluster workflows.',
+    href: '/docs/concepts/node-profiles',
   },
   {
     icon: Rocket,
@@ -54,7 +54,7 @@ const architecture = [
   {
     icon: Server,
     label: 'Run',
-    detail: 'One launcher per node',
+    detail: 'One device Pod per node',
   },
 ];
 
@@ -210,7 +210,7 @@ export default function Home() {
                 </h2>
                 <p className="mt-4 leading-7 text-fd-muted-foreground">
                   Author direct resources or bring an existing topology. c9s
-                  handles the controller and launcher lifecycle.
+                  handles the controller and device Pod lifecycle.
                 </p>
               </div>
 

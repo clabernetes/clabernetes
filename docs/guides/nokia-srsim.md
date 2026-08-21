@@ -340,19 +340,13 @@ SR OS diagnostics rather than booting degraded:
   reachability behavior, not throughput.
 - **Live link changes work; leave the default `link-apply-mode` alone.** Although Nokia
   documents data-path interfaces attached at container start only, the simulator hot-attaches
-  interfaces added or recreated at runtime -- verified identically on plain containerlab and
-  on the direct runtime (cross-worker links, live-added and live-replaced wires, no device
-  restart). Two practical caveats remain: a linux peer's boot-time `exec` addressing does not
-  survive its own veth being recreated (exactly as on a containerlab host), and a freshly
-  changed wire can take a few seconds of ARP convergence. If you do override the mode, prefer
-  `recreate` (a clean Pod roll, roughly 40-90 seconds to ready) and avoid `restart` for
+  interfaces added or recreated at runtime. Two practical caveats: a linux peer's boot-time
+  `exec` addressing does not survive its own veth being recreated (exactly as on a containerlab
+  host), and a freshly changed wire can take a few seconds of ARP convergence. If you do
+  override the mode, prefer `recreate` (a clean Pod roll) and avoid `restart` for
   multi-container chassis: SR OS exits non-zero on its stop signal, so the kubelet treats
   each in-place restart as a failure and applies exponential backoff while the card
   containers crash-loop until their CPM is back.
-
-Verified live combinations on the direct runtime: `sr-1` (integrated), `sr-1-92s` with
-`components: [slot: A, slot: 1]`, and `sr-2s` with typed `xcm-2s`/`iom-s-3.0t`/
-`ms18-100gb-qsfp28` components carrying end-to-end dataplane across both line cards.
 
 ## Interface Naming
 

@@ -4,7 +4,7 @@ description: Breaking changes and upgrade steps for c9s releases.
 icon: ArrowUpCircle
 ---
 
-## The direct device runtime and the upgrade preflight
+## The direct device runtime
 
 The nested launcher-pod runtime is removed. The manager always runs every network-device image
 as a regular application container in a c9s-managed Pod, with planning executed in short-lived
@@ -13,25 +13,30 @@ cannot realize stays failed with a structured diagnostic. Private registries and
 are Kubernetes concerns (`imagePullSecrets`, cluster runtime configuration, and the
 controller-only `Config.spec.imagePull.registryMetadataTrust`).
 
-Before upgrading across the breaking API cut, run the read-only preflight against the live
-cluster. It lists every stored `Config`, `LauncherProfile`, and `Topology` that still uses a
-removed field, with the replacement guidance per path, and exits non-zero when anything needs a
-decision:
+## The `connectivity` field is removed
 
-```bash
-clabernetes upgrade-preflight
-```
+**Breaking change:** `Topology.spec.connectivity` and `Link.spec.connectivity` no longer exist;
+remove the field from your manifests. There is exactly one cross-Pod realization: the device
+sees a plain veth interface, and each endpoint terminates on an in-Pod VXLAN tunnel keyed by
+the Link's allocated tunnel id. Wire semantics (L2 point-to-point, MTU intent, live rewires,
+cleanup, rescheduling) are unchanged; the experimental slurpeeth userspace TCP transport is
+retired.
 
-The tool never rewrites objects: several removed launcher fields have no automatic replacement,
-and silently retargeting launcher policy onto device containers would change behavior.
+## LauncherProfile is renamed to NodeProfile
 
-In direct mode, `Link.spec.connectivity: vxlan | slurpeeth` no longer selects a transport
-implementation. Both values remain accepted, and the controller realizes every cross-Pod wire
-through the node-local daemon: the device sees a plain veth interface, same-worker endpoints are
-patched in the worker's host network namespace without encapsulation, and cross-worker endpoints
-use a node-addressed VXLAN tunnel keyed by the Link's allocated tunnel id. Wire semantics (L2
-point-to-point, MTU intent, live rewires, cleanup, rescheduling) are unchanged; the slurpeeth
-userspace TCP transport is retired.
+**Breaking change:** the profile CRD is now `NodeProfile` (`kubectl get nodeprofiles`); the
+spec is unchanged. Update your manifests:
+
+- `kind: LauncherProfile` becomes `kind: NodeProfile`
+- `Node.spec.launcherProfileRef` becomes `Node.spec.profileRef`
+- `Node.status.appliedLauncherProfile` is now `Node.status.appliedProfile`, and the Node
+  condition is `NodeProfileResolved`
+
+## Slimmed statuses
+
+`Link.status.error` is removed -- read the `Accepted` condition instead (its message carries
+the same text). `Node.status.probeStatuses` is removed -- direct-runtime observations live in
+`Node.status.conditions` and `Node.status.directContainers`.
 
 ## Node spec is a curated containerlab subset
 
@@ -114,7 +119,7 @@ topology:
         owner: roman
 ```
 
-`owner: roman` lands on the emitted Node's `metadata.labels`, and from there on the launcher
+`owner: roman` lands on the emitted Node's `metadata.labels`, and from there on the device
 Deployment and its pods -- so `kubectl get pods -l owner=roman` finds the lab. They inherit from
 `defaults` and `kinds` exactly as `env` does. Unlike containerlab, these are *not* docker labels on
 the node container.
@@ -136,7 +141,7 @@ written or selected. Annotation keys retain their existing `clabernetes/...` nam
 This release requires a **full uninstall and reinstall**. Do not `helm upgrade` an existing install
 in place.
 
-Uninstalling c9s deletes all Topology, Node, Link, LauncherProfile, and Config
+Uninstalling c9s deletes all Topology, Node, Link, NodeProfile, and Config
 resources when the CRDs are removed.
 
 ### Upgrade steps
@@ -144,7 +149,7 @@ resources when the CRDs are removed.
 1. Export your manifests before uninstalling:
 
    ```bash
-   kubectl get topologies,nodes,links,launcherprofiles,configs -A -o yaml > backup.yaml
+   kubectl get topologies,nodes,links,nodeprofiles,configs -A -o yaml > backup.yaml
    ```
 
 2. Uninstall the existing c9s install and remove its CRDs:
@@ -174,7 +179,7 @@ C9S_CONTEXT=<your-context> make uninstall
 C9S_CONTEXT=<your-context> VERSION=latest make install
 ```
 
-The installer reconciles manager and launcher image references while preserving unrelated fields in
+The installer reconciles the manager image reference while preserving unrelated fields in
 the global `Config` resource. Development charts use immutable commit-scoped image tags; `0.0.0` is
 a mutable main channel and is not a rollback target. For a reproducible rollback within one API
 group, select an exact published chart version.

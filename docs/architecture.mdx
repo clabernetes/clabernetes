@@ -41,8 +41,8 @@ node's services derive from it, which also means the **namespace is the topology
 Everything operational is controller-stamped into the statuses: expose port allocations and
 readiness on Nodes, tunnel id allocations on Links. Deployment *policy* -- expose behavior,
 image pull defaults, primary-container resources, scheduling, persistence, probes -- lives on
-`LauncherProfile` (the retained CRD name for reusable direct-workload policy). Each Node can
-explicitly reference one same-namespace profile through `spec.launcherProfileRef`; an omitted
+`NodeProfile` (the retained CRD name for reusable direct-workload policy). Each Node can
+explicitly reference one same-namespace profile through `spec.profileRef`; an omitted
 reference uses global Config defaults, while a missing explicit reference prevents realization
 instead of silently falling back. Device privilege, capabilities, devices, and other kind-owned
 container requirements are *not* profile policy: they come from the imported package's plan.
@@ -72,16 +72,16 @@ The "brains" of clabernetes is the manager deployment which runs three cooperati
   runs planning (below); a Node whose plan fails stays failed with a structured diagnostic and
   never mutates the last successfully applied workload.
 - the **link controller** validates Links and allocates cluster-wide tunnel ids into their
-  statuses (tunnel ids become VXLAN VNIs terminated in worker host namespaces, so the space is
-  global, not per-namespace).
+  statuses (tunnel ids become the VXLAN VNIs of in-Pod fabric tunnel endpoints; the allocation
+  space is global, not per-namespace, so no two wires anywhere share a VNI).
 - the **topology controller** is the optional convenience layer: it *compiles* a Topology
-  (a containerlab file plus knobs) into LauncherProfile/Link/Node objects -- expanding
+  (a containerlab file plus knobs) into NodeProfile/Link/Node objects -- expanding
   topology defaults/kinds/groups into each node so every emitted Node is self contained --
   prunes emitted objects that fall out of the definition, protects them from drift, and
   aggregates fixed-size counts and readiness back into the Topology status. Profiles and Links
   are reconciled before Nodes.
 
-The compiler normally emits one shared LauncherProfile and places its explicit reference on
+The compiler normally emits one shared NodeProfile and places its explicit reference on
 every Node. A distinct per-node workload resource policy produces a complete dedicated profile,
 not an inheritance chain.
 
@@ -99,9 +99,8 @@ emitted.
 ### Planning
 
 Imported containerlab code mixes intent with side effects, so kind hooks never run inside the
-long-running manager. The node controller instead launches a short-lived, locked-down
-**planning Pod** per plan input (no service-account token, read-only root, private scratch,
-capabilities dropped to `CHOWN`/`FOWNER`, bounded deadline). Inside it, the imported registry
+long-running manager. The node controller instead launches a short-lived, locked-down and
+deadline-bounded **planning Pod** per plan input. Inside it, the imported registry
 and node hooks run against a generic recording runtime and a disposable workspace: container
 creation, files, mounts, lifecycle, exec, namespace, and interface operations are *recorded*
 rather than performed, and the result is a deterministic, runtime-neutral **device plan**.
@@ -123,10 +122,9 @@ Each rendered Pod runs, in order:
 
 1. a **preparation init container** that re-runs the imported deterministic file generation
    against its mounted payload/certificate inputs, verifies every planned path, mode, and
-   digest, and stages artifacts into plan-scoped volumes. It renders generated configuration
-   twice: once with planning inputs to prove determinism, once with the runtime-completed
-   management identity (the Pod's own address) so package templates emit the real management
-   address, prefix, and gateway;
+   digest, and stages artifacts into plan-scoped volumes -- rendering generated configuration
+   with the runtime-completed management identity so package templates emit the real
+   management address, prefix, and gateway;
 2. a **restartable privileged connectivity init-sidecar** whose startup probe gates device
    start until the accepted cold-start interface set exists. It stays running to reconcile
    live Link changes, invoke imported endpoint hooks, and publish connectivity readiness; and
@@ -156,8 +154,7 @@ Kubernetes underlay survives whatever a device does to the interfaces it is show
 
 Cross-pod wires terminate inside the Pod on that preserved underlay: each endpoint is a veth
 leg stitched (tc mirred, checksums materialized) to an in-Pod VXLAN VTEP whose VNI is the
-Link's allocated tunnel id. `Link.spec.connectivity: vxlan | slurpeeth` remains accepted
-input; both map onto this Pod-local realization. Peer discovery uses the per-node headless
+Link's allocated tunnel id. Peer discovery uses the per-node headless
 fabric service (`<remote node>-vx.<namespace>...`), which publishes the current Pod address
 even before readiness; rewiring and Pod rescheduling converge on the sidecar's reconcile tick.
 Same-Pod, loopback, and local veth state stays inside the Pod sandbox and is removed
@@ -178,7 +175,17 @@ policy routing table keeps Kubernetes transport immune to device rewrites of the
 and an nftables translation table (hooked ahead of anything a device programs) SNATs outbound
 management traffic to the Pod address and DNATs declared ports from it, so Service exposure
 keeps working. Management configuration renders at plan time through each kind's own imported
-templates using the allocated address, prefix, and gateway. Lab members resolve each other by
+templates using the allocated address, prefix, and gateway.
+
+The management subnet is one shared L2 domain across the whole topology, exactly as on
+containerlab's management network: a device dialing a peer's *management address* (a hardcoded
+telemetry target, a syslog collector, plain ping) reaches the peer device itself, any protocol,
+both directions. Each Pod bridges its management legs onto a management VXLAN tunnel endpoint
+riding the same substrate as Link fabric, with peers discovered through a namespace-scoped
+headless Service (`c9s-management-mesh`) -- so nodes joining or leaving the namespace converge
+on the sidecar's reconcile tick without restarting any Pod. The management *gateway* stays
+strictly Pod-local: every Pod answers the gateway address itself with one deterministic
+identity, and gateway traffic never crosses the mesh. Lab members also resolve each other by
 node name through namespace-local Services; declared `aliases` add extra headless Services
 bound to the same Pod.
 
@@ -218,7 +225,7 @@ configmaps containing the file contents and a Topology that appropriately mounts
 the pods.
 
 clabverter can also skip the Topology object entirely: `--emit-crs` renders the primitive
-LauncherProfile/Link/Node manifests directly, using the same compile and render pipeline as the
+NodeProfile/Link/Node manifests directly, using the same compile and render pipeline as the
 in-cluster compiler (without Topology owner references). This is the preferred path when the
 aggregate source Topology would be too large to persist. Both paths validate identically and
 fail with the same sorted diagnostics before anything reaches the cluster.

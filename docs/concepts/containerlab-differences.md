@@ -12,15 +12,14 @@ nothing is silently dropped.
 
 ## Networking
 
-- **Cross-node wires are controller-realized.** `Link.spec.connectivity: vxlan | slurpeeth`
-  remains accepted input, but the transport is an implementation detail: same-worker endpoint
-  pairs are patched directly in the worker host namespace, cross-worker pairs use VXLAN keyed
-  by the Link's cluster-wide tunnel id. The device always sees a plain veth; wire semantics
-  (L2 point-to-point, MTU intent, live rewires, cleanup) are preserved. The slurpeeth
-  userspace TCP transport is retired.
-- **The management network is the Pod network.** There is no Docker management bridge; the Pod
-  address is the node's management identity and is always addressed and reachable in-Pod, even
-  for kinds that take ownership of the Pod's primary interface. Docker-only `mgmt` fields
+- **Cross-node wires are sidecar-realized.** The transport is an implementation detail: each
+  endpoint terminates on an in-Pod VXLAN tunnel keyed by the Link's cluster-wide tunnel id.
+  The device always sees a plain veth; wire semantics (L2 point-to-point, MTU intent, live
+  rewires, cleanup) are preserved.
+- **The management network keeps containerlab semantics.** There is no Docker management
+  bridge, but every node still gets a controller-allocated management address on a shared
+  management subnet spanning the whole topology -- peers are reachable by management address
+  device-to-device, and the gateway answers Pod-locally. Docker-only `mgmt` fields
   (`network`, `bridge`, `mtu`, `external-access`, `skip-when-unused`, `driver-opts`) are
   accepted and ignored with a warning; the address-policy fields keep their meaning for the
   management overlay.

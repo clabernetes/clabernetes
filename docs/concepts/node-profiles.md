@@ -1,12 +1,12 @@
 ---
-title: Launcher profiles
+title: Node profiles
 description: Reusable direct-workload Kubernetes policy referenced explicitly by network Nodes.
 icon: Settings2
 ---
 
-A `LauncherProfile` contains reusable Kubernetes policy for the direct device workload that
-realizes one or more Nodes; the CRD name is retained from the earlier runtime. It keeps Kubernetes
-deployment concerns separate from the containerlab-shaped Node payload.
+A `NodeProfile` contains reusable Kubernetes policy for the direct device workload that
+realizes one or more Nodes. It keeps Kubernetes deployment concerns separate from the
+containerlab-shaped Node payload.
 
 Typical profile settings include:
 
@@ -23,11 +23,11 @@ containerlab package's plan.
 
 ## Explicit references
 
-A Node references at most one LauncherProfile in the same namespace:
+A Node references at most one NodeProfile in the same namespace:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: lab-policy
 spec:
@@ -43,7 +43,7 @@ kind: Node
 metadata:
   name: srl1
 spec:
-  launcherProfileRef:
+  profileRef:
     name: lab-policy
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux:26.3
@@ -54,10 +54,10 @@ referenced profile take precedence over global `Config` defaults; fields it omit
 global resolution.
 
 The `spec.scheduling.affinity` field accepts the native Kubernetes node affinity, pod affinity, and
-pod anti-affinity structure. A single LauncherProfile can be referenced by multiple Nodes, so the
+pod anti-affinity structure. A single NodeProfile can be referenced by multiple Nodes, so the
 same affinity policy can be reused across direct device Pods. For a Topology, configure the
 equivalent field at `spec.deployment.scheduling.affinity`; the Topology controller copies it into
-the generated LauncherProfile.
+the generated NodeProfile.
 
 c9s considers a Node ready only when every device application container representing it is running
 and passes its Kubernetes probes: readiness behavior declared by the imported containerlab plan,
@@ -77,7 +77,7 @@ The Node remains unrealized until that explicit reference resolves.
 
 ## Profiles generated from Topology
 
-The [Topology compiler](/docs/concepts/topology) normally creates one shared LauncherProfile and
+The [Topology compiler](/docs/concepts/topology) normally creates one shared NodeProfile and
 references it from every generated Node. A Node with distinct resource policy receives a complete
 dedicated profile rather than a partial child profile.
 
@@ -85,4 +85,4 @@ dedicated profile rather than a partial child profile.
 
 - [Resource and scheduling guide](/docs/guides/resource-management)
 - [Image pull guide](/docs/guides/image-pull)
-- [LauncherProfile reference](/docs/crd/launcher-profile)
+- [NodeProfile reference](/docs/crd/node-profile)

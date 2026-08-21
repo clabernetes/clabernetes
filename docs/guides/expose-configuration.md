@@ -50,7 +50,7 @@ compiler and `clabverter --emit-crs` consume all entries into `Node.spec.ports`;
 copied to Kubernetes labels. Invalid entries fail compilation. Local containerlab keeps the value
 as an inert container label and does not publish either port on the host.
 
-This label only declares which ports the c9s Service carries. The effective LauncherProfile still
+This label only declares which ports the c9s Service carries. The effective NodeProfile still
 controls whether that Service is a `ClusterIP`, `LoadBalancer`, `Headless`, or disabled.
 
 ## Exposure Options

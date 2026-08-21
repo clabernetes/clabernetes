@@ -71,7 +71,7 @@ spec:
 ```
 
 Topology remains a supported auxiliary input. The compiler moves each map entry onto the
-corresponding generated Node; it does not create a one-off LauncherProfile just to carry payload.
+corresponding generated Node; it does not create a one-off NodeProfile just to carry payload.
 
 ### Mounting on a Direct Node
 
@@ -96,7 +96,7 @@ spec:
       digest: sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
 
-LauncherProfile contains deployment policy only; it does not own per-node files.
+NodeProfile contains deployment policy only; it does not own per-node files.
 
 ### FileFromConfigMap Fields
 

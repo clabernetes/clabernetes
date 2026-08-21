@@ -7,9 +7,9 @@ Unreleased · [Full Changelog](https://github.com/clabernetes/clabernetes/compar
 <Callout type='warn'>
 
 This release replaces the nested launcher runtime with the direct device runtime and removes
-launcher-era API fields. Upgrading is destructive: run the read-only upgrade preflight first,
-back up your resources, and plan a reinstall. There is no in-place `helm upgrade` path and no
-nested-runtime fallback in this release.
+launcher-era API fields. Upgrading is destructive: back up your resources and plan a full
+uninstall and reinstall. There is no in-place `helm upgrade` path and no nested-runtime
+fallback in this release.
 
 </Callout>
 
@@ -36,10 +36,18 @@ and nested container discovery are gone. What this changes in practice:
 Each device Pod's privileged connectivity sidecar realizes its own links; no node-resident agent
 is installed. Cross-Pod wires terminate on in-Pod VXLAN VTEPs keyed by the Link's cluster-wide
 tunnel id, while same-Pod, loopback, and local veth state stays inside the Pod sandbox. The device
-always sees a plain veth interface. `Link.spec.connectivity: vxlan | slurpeeth` remains accepted
-input; both values map onto this Pod-local realization and the slurpeeth userspace TCP transport
-is retired. Wire semantics -- L2 point-to-point, MTU intent, live rewires, cleanup, rescheduling --
-are unchanged.
+always sees a plain veth interface. Wire semantics -- L2 point-to-point, MTU intent, live rewires,
+cleanup, rescheduling -- are unchanged. The `connectivity` field is removed from Topology and Link
+specs (there is exactly one realization; the experimental slurpeeth transport is retired).
+
+## The management network is one L2 domain
+
+The management subnet spans the whole topology as a single broadcast domain, matching
+containerlab's management network: devices reach each other's *management addresses*
+device-to-device -- hardcoded telemetry targets, syslog collectors, and plain ping across Pods
+all work -- while the management gateway stays strictly Pod-local with one deterministic
+identity. Peers are discovered through a namespace-scoped headless Service and converge on the
+sidecar's reconcile tick, so nodes joining or leaving never restart other Pods.
 
 ## Expanded node vocabulary
 
@@ -54,20 +62,17 @@ constructs are accepted with warnings.
 
 ## Breaking API changes
 
-Launcher-era fields are removed from `Config`, `LauncherProfile`, and `Topology`: launcher
+The `LauncherProfile` CRD is renamed to `NodeProfile` (`Node.spec.profileRef`,
+`Node.status.appliedProfile`); its spec is unchanged and carries reusable direct-workload
+policy (expose, scheduling, resources, persistence, probes, image pull). Device privilege and
+kind-owned container requirements come from the imported package plan.
+
+Launcher-era fields are removed from `Config`, `NodeProfile`, and `Topology`: launcher
 image/log/env settings, `privilegedLauncher`, containerlab debug/timeout/version, Docker
 config and daemon config, insecure registries, pull-through, CRI overrides, by-kind resource
-defaults, and Docker management-network fields. `LauncherProfile` keeps its name and carries
-reusable direct-workload policy (expose, scheduling, resources, persistence, probes, image
-pull); device privilege and kind-owned container requirements come from the imported package
-plan. See [Upgrading](/docs/upgrading) for the complete field disposition table.
-
-Before upgrading, run the read-only preflight against the live cluster; it names every stored
-object still using a removed field and the replacement per path:
-
-```bash
-clabernetes upgrade-preflight
-```
+defaults, and Docker management-network fields. `Link.status.error` is replaced by the
+`Accepted` condition, and `Node.status.probeStatuses` is removed. See
+[Upgrading](/docs/upgrading) for the complete field disposition table.
 
 Rollback after the CRD replacement means reinstalling the prior release with its matching CRDs
 and restoring backed-up resources; the direct runtime deliberately contains no nested emergency

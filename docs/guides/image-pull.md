@@ -9,7 +9,7 @@ Pods, mount a CRI socket, or copy images into an inner Docker daemon.
 
 ## Pull policy
 
-Set the default Kubernetes pull policy in the singleton Config or in the one LauncherProfile
+Set the default Kubernetes pull policy in the singleton Config or in the one NodeProfile
 selected by a Node:
 
 ```yaml
@@ -37,11 +37,11 @@ kubectl -n lab create secret docker-registry device-registry \
   --docker-password=mypass
 ```
 
-Reference it from a LauncherProfile:
+Reference it from a NodeProfile:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: private-images
   namespace: lab
@@ -56,7 +56,7 @@ metadata:
   name: router
   namespace: lab
 spec:
-  launcherProfileRef:
+  profileRef:
     name: private-images
   kind: nokia_srlinux
   image: registry.example.com/network/srlinux:latest
@@ -66,9 +66,9 @@ c9s places the Secret name in `Pod.spec.imagePullSecrets`; credential bytes are 
 device plan or immutable ConfigMap. The controller accepts only Kubernetes Docker-config Secret
 types when it needs the same credentials for OCI metadata access.
 
-Topology-level `spec.imagePull` is compiled into the shared LauncherProfile generated for that
+Topology-level `spec.imagePull` is compiled into the shared NodeProfile generated for that
 Topology. Direct Node manifests select a profile explicitly through
-`Node.spec.launcherProfileRef`.
+`Node.spec.profileRef`.
 
 ## Registry mirrors, private CAs, HTTP, and proxies
 
@@ -117,7 +117,7 @@ Inspect the Node, Pod, events, and resolved profile:
 kubectl -n lab describe nodes.c9s.run router
 kubectl -n lab get pods -l c9s.run/direct-workload=router
 kubectl -n lab describe pod -l c9s.run/direct-workload=router
-kubectl -n lab get launcherprofile private-images -o yaml
+kubectl -n lab get nodeprofile private-images -o yaml
 ```
 
 Test the kubelet path independently:
@@ -135,5 +135,5 @@ has no CRI-socket, insecure-registry, pull-through, Docker-config mount, or imag
 
 - [Private registry example](https://github.com/clabernetes/clabernetes/blob/main/examples/advanced/private-registry.yaml)
 - [Topology CRD reference](/docs/crd/topology)
-- [LauncherProfile CRD reference](/docs/crd/launcher-profile)
+- [NodeProfile CRD reference](/docs/crd/node-profile)
 - [Config CRD reference](/docs/crd/config)

@@ -9,7 +9,7 @@ lab as one object. Its controller compiles that source into the primary c9s reso
 
 ```text
 Topology
-   └── LauncherProfile
+   └── NodeProfile
    └── Node (one per network node)
    └── Link (one per wire)
 ```
@@ -40,11 +40,10 @@ spec:
           - endpoints:
               - srl1:e1-1
               - client:eth1
-  connectivity: vxlan
 ```
 
-Existing Topology settings for connectivity, exposure, deployment, image pulling, and status
-probes are translated into the generated primitive resources and LauncherProfile policy.
+Existing Topology settings for exposure, deployment, image pulling, and status
+probes are translated into the generated primitive resources and NodeProfile policy.
 
 ### Native definition vocabulary
 
@@ -86,7 +85,7 @@ bindings, which would publish ports on the local Docker host; see
 The compiler:
 
 1. validates and expands the source definition
-2. reconciles LauncherProfiles and Links before Nodes
+2. reconciles NodeProfiles and Links before Nodes
 3. corrects drift on generated resources
 4. prunes generated resources removed from the source
 5. aggregates bounded readiness and resource counts into Topology status
@@ -100,6 +99,6 @@ prefer direct resources or use:
 clabverter --emit-crs <topology-file>
 ```
 
-This emits LauncherProfile, Node, and Link manifests without persisting an aggregate Topology.
+This emits NodeProfile, Node, and Link manifests without persisting an aggregate Topology.
 
 See the [Topology reference](/docs/crd/topology) for all fields.

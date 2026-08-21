@@ -71,14 +71,14 @@ spec:
 - SSD-backed storage for better performance
 - Avoid network-attached storage for latency-sensitive workloads
 
-### Direct Node and LauncherProfile Persistence
+### Direct Node and NodeProfile Persistence
 
-When authoring the primary API directly, persistence lives on the LauncherProfile referenced by
+When authoring the primary API directly, persistence lives on the NodeProfile referenced by
 each intended Node:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: persistent
 spec:
@@ -94,7 +94,7 @@ metadata:
 spec:
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux:latest
-  launcherProfileRef:
+  profileRef:
     name: persistent
 ```
 
@@ -245,11 +245,11 @@ Common causes:
 
 ### Data Not Persisting
 
-Verify persistence is enabled on the Topology or on the effective LauncherProfile:
+Verify persistence is enabled on the Topology or on the effective NodeProfile:
 
 ```bash
 kubectl get topology <name> -o yaml | grep -A5 persistence
-kubectl get launcherprofile <name> -o yaml | grep -A5 persistence
+kubectl get nodeprofile <name> -o yaml | grep -A5 persistence
 ```
 
 Check if PVC is mounted:
@@ -277,4 +277,4 @@ Consider:
 ## Related
 
 - [Example: with-persistence.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-persistence.yaml)
-- [CRD Reference: Persistence](/docs/crd/launcher-profile)
+- [CRD Reference: Persistence](/docs/crd/node-profile)
