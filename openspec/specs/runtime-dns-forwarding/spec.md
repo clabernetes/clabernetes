@@ -2,8 +2,9 @@
 
 ## Purpose
 
-Define the launcher runtime repair that allows SR Linux management namespaces to reach DNS and
-remote Kubernetes launcher networking through the nested Docker management network.
+Bound how the direct runtime handles management-plane platform gaps (such as SR Linux DNS
+reachability): unmodified imported behavior first, generic evidence-gated capabilities only, and
+never a kind- or vendor-specific repair.
 
 ## Requirements
 

@@ -7,7 +7,7 @@ subnet as per-Pod islands: peer management addresses are unreachable across Pods
 Service reachability works. Containerlab semantics — and real labs (hardcoded telemetry targets,
 syslog collectors, ping) — require the management network to be one broadcast domain.
 
-A plain-docker spike (evidence `evidence/spike-mesh-mechanics.md`) validated all mechanics on
+A plain-docker spike validated all mechanics on
 2026-08-21, including a real SR Linux 25.10 adopting the new leg shape and bidirectional
 hardcoded-address management traffic. Spike-established constraints that bind this design:
 
@@ -99,6 +99,25 @@ address-based reachability coexist.
   realization fails closed with a precise readiness reason if the flag is rejected.
 - [Duplicate gateway address across Pods] → By design; containment (D2) plus deterministic MAC
   (D5) make it unobservable. Validated in the spike with three concurrent gateways.
+
+## Conformance-found decisions
+
+Cluster conformance (beyond the plain-docker spike) surfaced three defects whose fixes are part
+of the design baseline:
+
+- **The management policy rule covers exactly the local device `/32`, not the subnet.** A
+  subnet-wide `to <mgmt-subnet>` rule pulled peer-address traffic of single-namespace kinds into
+  the isolated gateway leg; scoping it to the local device address keeps hook and Pod-address
+  translation flows on the gateway path while peer addresses fall through to the device leg's
+  connected route onto the mesh.
+- **`arp_ignore=1` also applies to the device leg.** Single-namespace kinds share their stack
+  with the gateway leg's address, so without it remote devices flux-answer mesh-flooded gateway
+  ARP through their non-isolated device port.
+- **The sidecar disables `bridge-nf-call-{ip,ip6,arp}tables` in the Pod namespace.** Kubernetes
+  nodes load `br_netfilter`, which re-runs bridged frames through Pod netfilter after the L3
+  gateway hop — conntrack clash resolution rewrote source ports and DNAT replies left the Pod
+  untranslated. The sysctl is per-netns (the node is unaffected) and skipped when the module is
+  absent.
 
 ## Migration Plan
 

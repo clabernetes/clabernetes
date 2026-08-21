@@ -23,7 +23,7 @@ All c9s custom resources SHALL be registered under API group `c9s.run` at versio
 ### Requirement: Registered CRD kinds
 
 The system SHALL register exactly these namespaced CRDs under `c9s.run/v1alpha1`: Topology, Node,
-Link, LauncherProfile, and Config. The direct runtime SHALL NOT register ImageRequest because the
+Link, NodeProfile, and Config. The direct runtime SHALL NOT register ImageRequest because the
 kubelet pulls application images from each rendered PodSpec.
 
 #### Scenario: Manager installs CRDs on startup
@@ -47,7 +47,7 @@ CRD YAML, typed clients, and OpenAPI documents SHALL be generated from API sourc
 
 ### Requirement: Helm RBAC grants access to the new group
 
-The Helm chart ClusterRole SHALL authorize all verbs on `c9s.run` resources required by the manager and launcher components.
+The Helm chart ClusterRole SHALL authorize all verbs on `c9s.run` resources required by the manager and direct-runtime components.
 
 #### Scenario: Manager reconciles a Node
 

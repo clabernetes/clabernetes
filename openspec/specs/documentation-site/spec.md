@@ -33,7 +33,7 @@ an ImageRequest page.
 #### Scenario: Navigate the primary API documentation
 
 - **WHEN** a reader opens the core concepts section in the Guide category
-- **THEN** the reader can reach Node, Link, LauncherProfile, and Topology documentation with the primary-versus-compatibility relationship stated explicitly
+- **THEN** the reader can reach Node, Link, NodeProfile, and Topology documentation with the primary-versus-compatibility relationship stated explicitly
 
 #### Scenario: Reach existing user documentation
 
@@ -43,7 +43,7 @@ an ImageRequest page.
 #### Scenario: Browse CRD reference by kind
 
 - **WHEN** a reader opens the CRD Reference category
-- **THEN** the reader can navigate to per-kind schema pages for Topology, Node, Link, LauncherProfile, and Config, with no ImageRequest route or generated schema entry
+- **THEN** the reader can navigate to per-kind schema pages for Topology, Node, Link, NodeProfile, and Config, with no ImageRequest route or generated schema entry
 
 ### Requirement: Documentation category navigation
 
@@ -188,18 +188,3 @@ be documented as deployment failures.
 - **WHEN** grouped Nodes declare different payload sources for one normalized destination
 - **THEN** the documentation explains that reconciliation rejects the conflict instead of selecting one source silently
 
-### Requirement: Custom containerd registry hosts configuration is documented
-
-The user documentation SHALL explain how to configure a non-default containerd registry hosts
-directory through the Config API, how the directory is mounted for pull-through launchers, and the
-node-path and certificate-path constraints that operators must satisfy.
-
-#### Scenario: Operator configures a custom hosts directory
-
-- **WHEN** an operator consults the image-pull guide for a containerd installation with a non-default hosts directory
-- **THEN** the guide provides the Config field, explains both read-only mount locations, and states that the directory must exist on every eligible containerd node
-
-#### Scenario: Hosts configuration references certificates
-
-- **WHEN** an operator uses certificate paths in containerd hosts configuration
-- **THEN** the guide explains that absolute certificate paths outside the configured directory are not mounted automatically

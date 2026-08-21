@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define independently reconcilable network Nodes, their self-contained intent and payloads, launcher policy references, grouping, and bounded status.
+Define independently reconcilable network Nodes, their self-contained intent and payloads, profile references, grouping, and bounded status.
 
 ## Requirements
 
@@ -139,46 +139,46 @@ The Node spec SHALL describe files and other payload required to instantiate tha
 - **WHEN** grouped Nodes reference the same normalized destination with different payload sources or modes
 - **THEN** reconciliation reports the conflict and does not create or update the direct workload
 
-### Requirement: LauncherProfile reference is optional and explicit
+### Requirement: NodeProfile reference is optional and explicit
 
-The Node spec SHALL expose an optional, same-namespace `launcherProfileRef`. The system MUST resolve at most one LauncherProfile for a Node and MUST NOT attach LauncherProfiles through labels, selectors, priorities, or implicit multi-profile merging.
+The Node spec SHALL expose an optional, same-namespace `profileRef`. The system MUST resolve at most one NodeProfile for a Node and MUST NOT attach NodeProfiles through labels, selectors, priorities, or implicit multi-profile merging.
 
-#### Scenario: Node omits launcherProfileRef
+#### Scenario: Node omits profileRef
 
-- **WHEN** a Node has no `launcherProfileRef`
+- **WHEN** a Node has no `profileRef`
 - **THEN** the controller realizes it using global Config defaults
 
-#### Scenario: Node references an existing LauncherProfile
+#### Scenario: Node references an existing NodeProfile
 
-- **WHEN** a Node references a LauncherProfile in its namespace
+- **WHEN** a Node references a NodeProfile in its namespace
 - **THEN** the controller realizes its direct workload using that profile layered over global Config defaults
 
-#### Scenario: Node references a missing LauncherProfile
+#### Scenario: Node references a missing NodeProfile
 
-- **WHEN** a Node names a LauncherProfile that does not exist
-- **THEN** the controller does not create or update the direct workload and reports `LauncherProfileResolved=False`
+- **WHEN** a Node names a NodeProfile that does not exist
+- **THEN** the controller does not create or update the direct workload and reports `NodeProfileResolved=False`
 
-### Requirement: Grouped Nodes use one launcher policy
+### Requirement: Grouped Nodes use one profile policy
 
-Nodes sharing a direct Pod through Containerlab `network-mode: container:<primary>` SHALL use the primary Node's effective LauncherProfile. A secondary Node MUST NOT select a conflicting LauncherProfile.
+Nodes sharing a direct Pod through Containerlab `network-mode: container:<primary>` SHALL use the primary Node's effective NodeProfile. A secondary Node MUST NOT select a conflicting NodeProfile.
 
 #### Scenario: Secondary omits a profile reference
 
-- **WHEN** a secondary Node omits `launcherProfileRef` and its primary references a LauncherProfile
+- **WHEN** a secondary Node omits `profileRef` and its primary references a NodeProfile
 - **THEN** the secondary is realized in the primary workload using the primary's effective profile
 
 #### Scenario: Group members reference conflicting profiles
 
-- **WHEN** a secondary Node explicitly references a different LauncherProfile than its primary
+- **WHEN** a secondary Node explicitly references a different NodeProfile than its primary
 - **THEN** the controller reports the group as invalid and does not realize the inconsistent workload
 
 ### Requirement: Node status contains only per-node observations and allocations
 
-The controller SHALL record Node readiness, plan identity, probe observations, exposed-port allocations, standard conditions, and applied LauncherProfile identity in Node status. User intent and full plans MUST NOT be stored in status.
+The controller SHALL record Node readiness, plan identity, exposed-port allocations, standard conditions, direct container observations, and applied NodeProfile identity in Node status. User intent and full plans MUST NOT be stored in status. Migration-era observation fields (`probeStatuses`) SHALL NOT exist: probe outcomes surface through conditions and direct container observations.
 
-#### Scenario: LauncherProfile is applied
+#### Scenario: NodeProfile is applied
 
-- **WHEN** a Node is successfully realized with a referenced LauncherProfile
+- **WHEN** a Node is successfully realized with a referenced NodeProfile
 - **THEN** Node status records the applied profile name, UID, and generation
 
 #### Scenario: Node readiness changes
@@ -188,7 +188,7 @@ The controller SHALL record Node readiness, plan identity, probe observations, e
 
 ### Requirement: Individual Node object size is independent of topology size
 
-A Node resource SHALL contain only its own definition, payload references, launcher profile reference, and status. The system MUST NOT copy all topology Nodes, Links, or aggregate child statuses into a Node.
+A Node resource SHALL contain only its own definition, payload references, profile reference, and status. The system MUST NOT copy all topology Nodes, Links, or aggregate child statuses into a Node.
 
 #### Scenario: Add unrelated Nodes and Links
 
@@ -207,12 +207,12 @@ issuing an update when the current status already equals the desired status.
 
 ### Requirement: Node vocabulary excludes fields the direct runtime cannot realize
 
-The Node spec SHALL NOT expose Containerlab node fields the direct runtime cannot represent with defined portable semantics. Excluded fields are those absent from the declared compatibility baseline, those whose meaning spans several Nodes and belongs to another c9s resource, and those describing Pod-level policy owned by LauncherProfile or the Pod plan. Supported fields MUST be planned and enforced rather than ignored.
+The Node spec SHALL NOT expose Containerlab node fields the direct runtime cannot represent with defined portable semantics. Excluded fields are those absent from the declared compatibility baseline, those whose meaning spans several Nodes and belongs to another c9s resource, and those describing Pod-level policy owned by NodeProfile or the Pod plan. Supported fields MUST be planned and enforced rather than ignored.
 
 #### Scenario: Field owned by realization policy is absent from Node
 
 - **WHEN** a user inspects the Node schema for container resource limits, image pull policy, or operational probes
-- **THEN** those fields are absent from the Node spec and available on LauncherProfile instead
+- **THEN** those fields are absent from the Node spec and available on NodeProfile instead
 
 #### Scenario: Labels live in Node metadata, not in the spec
 

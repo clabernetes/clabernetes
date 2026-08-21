@@ -38,7 +38,7 @@
 ## 6. Cluster validation and conformance evidence
 
 - [x] 6.1 Deploy to the kind cluster (`make try-c9s` flow with locally built images) with an SR Linux topology using a management policy subnet + fixed `mgmt-ipv4`; verify device sees the policy address, Pod transport invariants, outbound SNAT, Service/DNAT SSH, and cross-worker fabric traffic
-- [x] 6.2 Repeat for SR-SIM (25.10/26.7 with licenses) and cEOS (main-table hijack survival, chain precedence); validate a topology with no management policy gets containerlab default-subnet identities; record per-kind evidence under `evidence/`
+- [x] 6.2 Repeat for SR-SIM (25.10/26.7 with licenses) and cEOS (main-table hijack survival, chain precedence); validate a topology with no management policy gets containerlab default-subnet identities
 - [x] 6.3 Validate forced deletion and worker inspection: no daemon, no sockets, no residue; multi-worker recovery e2e passes against the sidecar owner
 - [x] 6.4 Update/extend e2e in `e2e/topology/direct/` for the daemonless model
 

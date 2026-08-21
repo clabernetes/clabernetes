@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define independently managed point-to-point Links, including endpoint validation, lifecycle ownership, connectivity, allocation, and launcher observation.
+Define independently managed point-to-point Links, including endpoint validation, lifecycle ownership, connectivity, allocation, and connectivity observation.
 
 ## Requirements
 
@@ -64,35 +64,16 @@ The Link controller SHALL monitor the non-host Nodes named by each Link. After b
 - **WHEN** a Node that is not referenced by a Link is deleted
 - **THEN** that Link remains unchanged
 
-### Requirement: Link owns connectivity flavor
-
-Each Link SHALL contain the authoritative connectivity flavor used by both endpoints. Omitted cross-Pod connectivity SHALL default to `vxlan`; supported values SHALL cover VXLAN, slurpeeth, same-Pod, loopback, and host realization where applicable. LauncherProfile and Node MUST NOT independently override a Link's connectivity.
-
-#### Scenario: Connectivity is omitted
-
-- **WHEN** a cross-Pod Link omits connectivity
-- **THEN** both endpoints realize it using VXLAN
-
-#### Scenario: Slurpeeth is selected
-
-- **WHEN** a cross-Pod Link selects `slurpeeth`
-- **THEN** both endpoints realize the Link using the same slurpeeth segment
-
-#### Scenario: Connectivity changes
-
-- **WHEN** a valid Link changes from one supported connectivity flavor to another
-- **THEN** both endpoints remove the obsolete realization and converge on the new flavor
-
 ### Requirement: Tunnel allocation belongs to Link status
 
 For a valid Link whose selected direct realization needs a shared tunnel or segment identifier, the Link controller SHALL allocate it and store it in Link status. Users MUST NOT supply controller-owned allocation values in Link spec.
 
-#### Scenario: Cross-launcher Link needs an allocation
+#### Scenario: Cross-pod Link needs an allocation
 
 - **WHEN** a valid Link terminates on Nodes realized by different Pods and its flavor needs a shared identifier
 - **THEN** the controller allocates one identifier that both endpoint reconcilers consume
 
-#### Scenario: Link is local to one launcher
+#### Scenario: Link is local to one pod
 
 - **WHEN** both endpoints share one Pod or one endpoint is `host`
 - **THEN** the Link is materialized locally without an unnecessary tunnel allocation

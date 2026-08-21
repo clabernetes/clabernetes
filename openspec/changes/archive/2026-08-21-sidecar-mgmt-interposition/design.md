@@ -10,7 +10,7 @@ Constraints and load-bearing existing structure:
 - The plan vocabulary already carries everything fabric needs: `InterfacePlan{Connectivity, TunnelID, MTU, PeerTransport, PeerInterface, NamespaceOwnerID, LinkApplyMode, RequiredAtStart}` where `PeerTransport` is a stable per-node fabric Service DNS name (`controllers/node/planinput.go:196`), and `newLinkOperations` already takes a pluggable peer-address resolver (`links_linux.go:37-47`).
 - The sidecar already receives an optional read-only worker network-namespace handle (`HostNetworkNamespacePath`, `connectivity.go:39-41`) used today for imported host-side endpoint fixups — the exact mechanism host Links need.
 - Management allocation is controller-side (`compileDirectManagement`, `controllers/node/direct.go:1220-1332`) and flows as `ManagementInput` into the plan; `applyManagementInput` (`deviceplan/adapter.go:1566-1582`) feeds each kind's own containerlab config templates.
-- The nftables translation backend, checksum-offload helper, and their tests landed in task group 1 and are validated against the hardest case (cEOS programming its own x_tables chains) — see `evidence/task-1.2-nftables-precedence.md`.
+- The nftables translation backend, checksum-offload helper, and their tests landed in task group 1 and are validated against the hardest case (cEOS programming its own x_tables chains).
 - `internal/deviceplan/kind_agnostic_test.go` AST-forbids kind-name dispatch across the direct runtime; all vendor variance must be plan data.
 
 ## Goals / Non-Goals

@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Define Topology as an optional high-level source that compiles deterministically into directly reconcilable Node, Link, and LauncherProfile resources.
+Define Topology as an optional high-level source that compiles deterministically into directly reconcilable Node, Link, and NodeProfile resources.
 
 ## Requirements
 
 ### Requirement: Topology is an auxiliary high-level resource
 
-Topology SHALL remain an optional aggregate source that compiles into the direct primitive resources. Node, Link, and LauncherProfile SHALL remain the authoritative runtime inputs after compilation.
+Topology SHALL remain an optional aggregate source that compiles into the direct primitive resources. Node, Link, and NodeProfile SHALL remain the authoritative runtime inputs after compilation.
 
 #### Scenario: Define a lab with Topology
 
@@ -17,7 +17,7 @@ Topology SHALL remain an optional aggregate source that compiles into the direct
 
 #### Scenario: Run without a Topology
 
-- **WHEN** equivalent Node, Link, and LauncherProfile manifests are created directly
+- **WHEN** equivalent Node, Link, and NodeProfile manifests are created directly
 - **THEN** the same Node and Link controllers realize an equivalent direct lab
 
 ### Requirement: Compilation emits self-contained Nodes
@@ -34,42 +34,28 @@ The compiler SHALL parse the source definition and expand topology defaults, kin
 - **WHEN** source processing associates payload files with one Node
 - **THEN** the emitted Node contains those payload attachment declarations
 
-### Requirement: Compilation emits explicit LauncherProfile references
+### Requirement: Compilation emits explicit NodeProfile references
 
-The compiler SHALL convert topology-level Kubernetes realization policy into one or more LauncherProfiles and SHALL stamp each emitted Node with the appropriate `launcherProfileRef`. It MUST preserve supported direct management policy and MUST NOT emit Docker, launcher-image, nested-CRI, or containerlab-version policy.
+The compiler SHALL convert topology-level Kubernetes realization policy into one or more NodeProfiles and SHALL stamp each emitted Node with the appropriate `profileRef`. It MUST preserve supported direct management policy and MUST NOT emit Docker, launcher-image, nested-CRI, or containerlab-version policy.
 
 #### Scenario: Nodes share topology policy
 
 - **WHEN** all source Nodes use the same direct-workload policy
-- **THEN** the compiler emits one shared LauncherProfile and references it from all emitted Nodes
+- **THEN** the compiler emits one shared NodeProfile and references it from all emitted Nodes
 
-#### Scenario: One Node has a launcher override
+#### Scenario: One Node has a profile override
 
 - **WHEN** one source Node has distinct resources or other direct-workload policy
-- **THEN** the compiler emits a complete dedicated LauncherProfile for that Node and stamps its explicit reference
+- **THEN** the compiler emits a complete dedicated NodeProfile for that Node and stamps its explicit reference
 
 #### Scenario: Topology defines a custom management network
 
 - **WHEN** an existing Topology defines management settings with supported direct semantics
 - **THEN** the compiler preserves those settings in the generated resources that own them
 
-### Requirement: Compilation puts connectivity on Links
-
-The compiler SHALL translate topology connectivity policy and endpoint type into the connectivity field of every emitted Link. It MUST NOT place connectivity on LauncherProfile or require endpoint Nodes to resolve matching connectivity independently.
-
-#### Scenario: Topology selects slurpeeth
-
-- **WHEN** a source Topology selects slurpeeth connectivity
-- **THEN** each emitted cross-Pod Link explicitly selects slurpeeth
-
-#### Scenario: Topology omits connectivity
-
-- **WHEN** a source Topology does not select a connectivity flavor
-- **THEN** emitted Links select the direct-runtime default appropriate to their endpoint placement
-
 ### Requirement: Generated resources have deterministic identity and ownership
 
-For a given Topology input, the compiler SHALL produce stable Node, Link, and LauncherProfile names and specs. In-cluster generated resources SHALL carry a controller owner reference to the Topology and labels sufficient for observability and pruning.
+For a given Topology input, the compiler SHALL produce stable Node, Link, and NodeProfile names and specs. In-cluster generated resources SHALL carry a controller owner reference to the Topology and labels sufficient for observability and pruning.
 
 #### Scenario: Reconcile unchanged input
 
@@ -83,26 +69,26 @@ For a given Topology input, the compiler SHALL produce stable Node, Link, and La
 
 #### Scenario: Generated resource drifts
 
-- **WHEN** a user mutates a compiler-owned Node, Link, or LauncherProfile away from compiled intent
+- **WHEN** a user mutates a compiler-owned Node, Link, or NodeProfile away from compiled intent
 - **THEN** the Topology controller restores the generated resource
 
 ### Requirement: Dependencies are made available before Node realization
 
-The compiler SHALL reconcile referenced LauncherProfiles and Links before creating or updating Nodes that depend on them, so initial device plans include accepted interfaces. Node and Link controllers MUST nevertheless handle transiently unresolved references through status and later reconciliation.
+The compiler SHALL reconcile referenced NodeProfiles and Links before creating or updating Nodes that depend on them, so initial device plans include accepted interfaces. Node and Link controllers MUST nevertheless handle transiently unresolved references through status and later reconciliation.
 
 #### Scenario: Create a new compiled lab
 
 - **WHEN** the compiler emits resources for a new Topology
-- **THEN** LauncherProfiles and Links are submitted before the Nodes that reference or consume them
+- **THEN** NodeProfiles and Links are submitted before the Nodes that reference or consume them
 
 #### Scenario: API events are observed out of order
 
-- **WHEN** a Node controller observes a generated Node before its LauncherProfile or Links are readable
+- **WHEN** a Node controller observes a generated Node before its NodeProfile or Links are readable
 - **THEN** it reports unresolved dependencies and realizes the Node after their events arrive
 
 ### Requirement: Direct manifest generation matches in-cluster compilation
 
-The command-line conversion path SHALL use the same compile, validation, and planning behavior as the Topology controller when emitting direct Node, Link, and LauncherProfile manifests, except for in-cluster owner references and status.
+The command-line conversion path SHALL use the same compile, validation, and planning behavior as the Topology controller when emitting direct Node, Link, and NodeProfile manifests, except for in-cluster owner references and status.
 
 #### Scenario: Emit primitive manifests
 
@@ -124,7 +110,7 @@ The system SHALL document and support direct application of generated primitive 
 
 #### Scenario: Deploy a large generated lab
 
-- **WHEN** a user applies independently generated Node, Link, and LauncherProfile manifests without a Topology
+- **WHEN** a user applies independently generated Node, Link, and NodeProfile manifests without a Topology
 - **THEN** no persisted Clabernetes object contains the entire lab definition
 
 ### Requirement: A source definition accepts native Containerlab vocabulary
@@ -226,7 +212,7 @@ A label Kubernetes would reject, a reserved label, or a controller-owned key MUS
 
 #### Scenario: Preserve exposure policy
 
-- **WHEN** a valid directive is compiled for a Topology whose effective LauncherProfile disables exposure or auto-exposure
+- **WHEN** a valid directive is compiled for a Topology whose effective NodeProfile disables exposure or auto-exposure
 - **THEN** the directive contributes only Node port intent and the profile continues to control whether a Service and automatic ports are realized
 
 #### Scenario: Omit a controller-owned label key
@@ -247,7 +233,7 @@ avoid issuing an update when the current status already equals the desired statu
 ### Requirement: Topology projects device Pod affinity into generated profiles
 
 `Topology.spec.deployment.scheduling.affinity` SHALL accept the native Kubernetes `Affinity`
-structure and SHALL be copied to every generated LauncherProfile required by the Topology. The
+structure and SHALL be copied to every generated NodeProfile required by the Topology. The
 Topology controller and the direct CR-manifest generation path MUST preserve the affinity structure
 without placing it on Nodes or Links.
 
@@ -255,26 +241,26 @@ without placing it on Nodes or Links.
 
 - **WHEN** a Topology configures node affinity, pod affinity, or pod anti-affinity under
   `spec.deployment.scheduling`
-- **THEN** its generated shared LauncherProfile contains the same affinity structure and every
+- **THEN** its generated shared NodeProfile contains the same affinity structure and every
   generated Node references that profile
 
 #### Scenario: Preserve affinity-only scheduling
 
 - **WHEN** a Topology configures affinity but omits `nodeSelector` and `tolerations`
-- **THEN** the generated LauncherProfile still contains the scheduling block and its affinity
+- **THEN** the generated NodeProfile still contains the scheduling block and its affinity
 
 #### Scenario: Preserve affinity on dedicated profiles
 
-- **WHEN** a Topology emits a dedicated LauncherProfile for a Node with distinct resource policy
+- **WHEN** a Topology emits a dedicated NodeProfile for a Node with distinct resource policy
 - **THEN** that dedicated profile retains the Topology-wide affinity from the shared device Pod policy
 
 #### Scenario: Restore drifted generated affinity
 
-- **WHEN** a generated LauncherProfile's affinity differs from the Topology's declared affinity
+- **WHEN** a generated NodeProfile's affinity differs from the Topology's declared affinity
 - **THEN** the Topology controller restores the generated profile to the declared affinity
 
 #### Scenario: Emit equivalent direct manifests
 
 - **WHEN** `clabverter --emit-crs` processes a Topology definition with device Pod affinity
-- **THEN** the emitted LauncherProfile manifest contains the same affinity structure as in-cluster
+- **THEN** the emitted NodeProfile manifest contains the same affinity structure as in-cluster
   Topology compilation
