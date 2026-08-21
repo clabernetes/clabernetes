@@ -158,7 +158,7 @@ fmt: ## Run formatters
 	golines --base-formatter="gofmt" --no-reformat-tags -w .
 
 lint: fmt ## Run linters
-	golangci-lint run
+	$(C9S_GO_ENV) golangci-lint run
 	helm lint --quiet charts/clabernetes
 	helm lint --quiet charts/clicker
 

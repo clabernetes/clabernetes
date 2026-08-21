@@ -1,5 +1,4 @@
 ---
-connectivity: slurpeeth
 deployment:
   scheduling:
     affinity:

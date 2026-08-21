@@ -461,11 +461,11 @@ func c9sDocumentImages(kind string, raw []byte) ([]ImageObservation, error) {
 		return topologyDocumentImages(raw)
 	case "Link":
 		return nil, decodeStrictC9sDocument(kind, raw, &clabernetesapisv1alpha1.Link{})
-	case "LauncherProfile":
+	case "NodeProfile":
 		return nil, decodeStrictC9sDocument(
 			kind,
 			raw,
-			&clabernetesapisv1alpha1.LauncherProfile{},
+			&clabernetesapisv1alpha1.NodeProfile{},
 		)
 	case "Config":
 		return nil, decodeStrictC9sDocument(kind, raw, &clabernetesapisv1alpha1.Config{})

@@ -21,11 +21,11 @@ func testProfileNode(name string, nodeLabels map[string]string) *clabernetesapis
 	return node
 }
 
-func testLauncherProfile(
+func testNodeProfile(
 	name string,
-	mutate func(spec *clabernetesapisv1alpha1.LauncherProfileSpec),
-) *clabernetesapisv1alpha1.LauncherProfile {
-	profile := &clabernetesapisv1alpha1.LauncherProfile{
+	mutate func(spec *clabernetesapisv1alpha1.NodeProfileSpec),
+) *clabernetesapisv1alpha1.NodeProfile {
+	profile := &clabernetesapisv1alpha1.NodeProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
 			Namespace:  "clabernetes",
@@ -51,8 +51,8 @@ func TestResolveProfileDefaults(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	if resolved.AppliedLauncherProfile != nil {
-		t.Fatalf("expected no applied LauncherProfile, got %+v", resolved.AppliedLauncherProfile)
+	if resolved.AppliedProfile != nil {
+		t.Fatalf("expected no applied NodeProfile, got %+v", resolved.AppliedProfile)
 	}
 
 	if resolved.ExposeType != "LoadBalancer" {
@@ -60,19 +60,19 @@ func TestResolveProfileDefaults(t *testing.T) {
 	}
 }
 
-func TestResolveExplicitLauncherProfile(t *testing.T) {
-	profile := testLauncherProfile(
+func TestResolveExplicitNodeProfile(t *testing.T) {
+	profile := testNodeProfile(
 		"custom",
-		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
-			spec.Deployment = &clabernetesapisv1alpha1.LauncherProfileDeployment{
+		func(spec *clabernetesapisv1alpha1.NodeProfileSpec) {
+			spec.Deployment = &clabernetesapisv1alpha1.NodeProfileDeployment{
 				Persistence: &clabernetesapisv1alpha1.Persistence{
 					Enabled: true, ClaimSize: "10Gi",
 				},
 			}
-			spec.ImagePull = &clabernetesapisv1alpha1.LauncherProfileImagePull{
+			spec.ImagePull = &clabernetesapisv1alpha1.NodeProfileImagePull{
 				Policy: string(k8scorev1.PullNever),
 			}
-			spec.Expose = &clabernetesapisv1alpha1.LauncherProfileExpose{
+			spec.Expose = &clabernetesapisv1alpha1.NodeProfileExpose{
 				DisableAutoExpose: new(true),
 			}
 		},
@@ -87,14 +87,14 @@ func TestResolveExplicitLauncherProfile(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	if resolved.AppliedLauncherProfile == nil ||
-		resolved.AppliedLauncherProfile.Name != profile.GetName() ||
-		resolved.AppliedLauncherProfile.UID != profile.GetUID() ||
-		resolved.AppliedLauncherProfile.Generation != profile.GetGeneration() {
+	if resolved.AppliedProfile == nil ||
+		resolved.AppliedProfile.Name != profile.GetName() ||
+		resolved.AppliedProfile.UID != profile.GetUID() ||
+		resolved.AppliedProfile.Generation != profile.GetGeneration() {
 		t.Fatalf(
 			"expected applied profile identity from %q, got %+v",
 			profile.GetName(),
-			resolved.AppliedLauncherProfile,
+			resolved.AppliedProfile,
 		)
 	}
 
@@ -109,10 +109,10 @@ func TestResolveExplicitLauncherProfile(t *testing.T) {
 }
 
 func TestResolveProfilePreservesExplicitEmptyValues(t *testing.T) {
-	profile := testLauncherProfile(
+	profile := testNodeProfile(
 		"empty-values",
-		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
-			spec.ImagePull = &clabernetesapisv1alpha1.LauncherProfileImagePull{
+		func(spec *clabernetesapisv1alpha1.NodeProfileSpec) {
+			spec.ImagePull = &clabernetesapisv1alpha1.NodeProfileImagePull{
 				PullSecrets: []string{},
 			}
 			spec.Scheduling = &clabernetesapisv1alpha1.Scheduling{
@@ -164,9 +164,9 @@ func TestResolveProfileDeepCopiesAffinity(t *testing.T) {
 			},
 		},
 	}
-	profile := testLauncherProfile(
+	profile := testNodeProfile(
 		"affinity",
-		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
+		func(spec *clabernetesapisv1alpha1.NodeProfileSpec) {
 			spec.Scheduling = &clabernetesapisv1alpha1.Scheduling{Affinity: affinity}
 		},
 	)
@@ -193,6 +193,6 @@ func TestResolveProfileDeepCopiesAffinity(t *testing.T) {
 
 	if resolved.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
 		NodeSelectorTerms[0].MatchExpressions[0].Values[0] != "zone-a" {
-		t.Fatal("resolved affinity shares mutable state with the LauncherProfile")
+		t.Fatal("resolved affinity shares mutable state with the NodeProfile")
 	}
 }

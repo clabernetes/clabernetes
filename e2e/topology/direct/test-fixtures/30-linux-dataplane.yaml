@@ -1,6 +1,6 @@
 ---
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: direct-linux
 spec:
@@ -18,7 +18,6 @@ spec:
   endpointB:
     nodeName: lin2
     interfaceName: eth1
-  connectivity: vxlan
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Node
@@ -27,7 +26,7 @@ metadata:
 spec:
   kind: linux
   image: ghcr.io/srl-labs/network-multitool
-  launcherProfileRef:
+  profileRef:
     name: direct-linux
   exec:
     - ip address add 192.168.1.0/31 dev eth1
@@ -39,7 +38,7 @@ metadata:
 spec:
   kind: linux
   image: ghcr.io/srl-labs/network-multitool
-  launcherProfileRef:
+  profileRef:
     name: direct-linux
   exec:
     - ip address add 192.168.1.1/31 dev eth1

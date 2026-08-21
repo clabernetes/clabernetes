@@ -8,37 +8,37 @@ import (
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LauncherProfile holds reusable Kubernetes and launcher realization policy for Nodes. A Node
-// applies at most one LauncherProfile through spec.launcherProfileRef; fields omitted from the
-// profile inherit the global Config defaults.
+// NodeProfile holds reusable Kubernetes realization policy for Nodes. A Node applies at most
+// one NodeProfile through spec.profileRef; fields omitted from the profile inherit the global
+// Config defaults.
 // +k8s:openapi-gen=true
-// +kubebuilder:resource:path="launcherprofiles",shortName="c9sprofile"
+// +kubebuilder:resource:path="nodeprofiles",shortName="c9sprofile"
 // +kubebuilder:printcolumn:JSONPath=".metadata.creationTimestamp",name=Age,type=date
-type LauncherProfile struct {
+type NodeProfile struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   LauncherProfileSpec   `json:"spec,omitempty"`
-	Status LauncherProfileStatus `json:"status,omitempty"`
+	Spec   NodeProfileSpec   `json:"spec,omitempty"`
+	Status NodeProfileStatus `json:"status,omitempty"`
 }
 
-// LauncherProfileSpec is the spec for a LauncherProfile resource.
-type LauncherProfileSpec struct {
+// NodeProfileSpec is the spec for a NodeProfile resource.
+type NodeProfileSpec struct {
 	// Expose holds configurations relevant to how Nodes using this profile are exposed.
 	// +optional
-	Expose *LauncherProfileExpose `json:"expose,omitempty"`
-	// ImagePull holds configurations relevant to how launcher Pods handle pulling images.
+	Expose *NodeProfileExpose `json:"expose,omitempty"`
+	// ImagePull holds configurations relevant to how device Pods handle pulling images.
 	// +optional
-	ImagePull *LauncherProfileImagePull `json:"imagePull,omitempty"`
-	// Resources holds the Kubernetes resource requirements for launcher Pods.
+	ImagePull *NodeProfileImagePull `json:"imagePull,omitempty"`
+	// Resources holds the Kubernetes resource requirements for device Pods.
 	// +optional
 	Resources *k8scorev1.ResourceRequirements `json:"resources,omitempty"`
-	// Scheduling holds launcher Pod scheduling settings.
+	// Scheduling holds device Pod scheduling settings.
 	// +optional
 	Scheduling *Scheduling `json:"scheduling,omitempty"`
-	// Deployment holds launcher deployment settings.
+	// Deployment holds device workload settings.
 	// +optional
-	Deployment *LauncherProfileDeployment `json:"deployment,omitempty"`
+	Deployment *NodeProfileDeployment `json:"deployment,omitempty"`
 	// StatusProbes holds the configurations used to check and report Node status.
 	// +optional
 	StatusProbes *StatusProbes `json:"statusProbes,omitempty"`
@@ -47,9 +47,9 @@ type LauncherProfileSpec struct {
 	Mgmt *ManagementPolicy `json:"mgmt,omitempty"`
 }
 
-// LauncherProfileExpose holds the expose policy fields of a LauncherProfile. Pointers distinguish
+// NodeProfileExpose holds the expose policy fields of a NodeProfile. Pointers distinguish
 // an omitted value from an explicit false value.
-type LauncherProfileExpose struct {
+type NodeProfileExpose struct {
 	// DisableExpose indicates if exposing Nodes via a Service should be disabled.
 	// +optional
 	DisableExpose *bool `json:"disableExpose,omitempty"`
@@ -68,8 +68,8 @@ type LauncherProfileExpose struct {
 	UseNodeMgmtIpv6Address *bool `json:"useNodeMgmtIpv6Address,omitempty"`
 }
 
-// LauncherProfileImagePull holds Kubernetes-native image pull policy for direct device Pods.
-type LauncherProfileImagePull struct {
+// NodeProfileImagePull holds Kubernetes-native image pull policy for direct device Pods.
+type NodeProfileImagePull struct {
 	// Policy is the default Kubernetes pull policy for application containers whose flattened Node
 	// definition does not explicitly declare one.
 	// +kubebuilder:validation:Enum=IfNotPresent;Always;Never
@@ -82,8 +82,8 @@ type LauncherProfileImagePull struct {
 	PullSecrets []string `json:"pullSecrets,omitempty"`
 }
 
-// LauncherProfileDeployment holds portable direct workload persistence policy.
-type LauncherProfileDeployment struct {
+// NodeProfileDeployment holds portable direct workload persistence policy.
+type NodeProfileDeployment struct {
 	// Persistence enables persistence of the containerlab working directory.
 	// +optional
 	Persistence *Persistence `json:"persistence,omitempty"`
@@ -112,15 +112,15 @@ type ManagementPolicy struct {
 	IPv6Range string `json:"ipv6-range,omitempty"`
 }
 
-// LauncherProfileStatus is the status for a LauncherProfile resource.
-type LauncherProfileStatus struct{}
+// NodeProfileStatus is the status for a NodeProfile resource.
+type NodeProfileStatus struct{}
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LauncherProfileList is a list of LauncherProfile objects.
-type LauncherProfileList struct {
+// NodeProfileList is a list of NodeProfile objects.
+type NodeProfileList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 
-	Items []LauncherProfile `json:"items"`
+	Items []NodeProfile `json:"items"`
 }

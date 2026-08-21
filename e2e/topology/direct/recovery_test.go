@@ -106,7 +106,7 @@ func TestMultiWorkerRecoveryDirect(t *testing.T) {
 
 	t.Logf("rescheduling: moving lin1 from %q to %q", workerA, workerB)
 
-	patchLauncherProfile(t, namespace, "recovery-worker-a",
+	patchNodeProfile(t, namespace, "recovery-worker-a",
 		fmt.Sprintf(
 			`{"spec":{"scheduling":{"nodeSelector":{"kubernetes.io/hostname":%q}}}}`,
 			workerB,
@@ -134,12 +134,12 @@ func TestMultiWorkerRecoveryDirect(t *testing.T) {
 }
 
 // recoveryManifest renders the recovery lab: two standalone linux Nodes pinned to distinct
-// workers, one grouped pair, and one Link of every flavor (vxlan, slurpeeth, loopback,
-// same-Pod, host).
+// workers, one grouped pair, and one Link of every flavor (vxlan, loopback, same-Pod, host) --
+// plus a second cross-worker vxlan Link so recovery covers multiple allocated VNIs.
 func recoveryManifest(workerA, workerB string) string {
 	return fmt.Sprintf(`---
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: recovery-worker-a
 spec:
@@ -150,7 +150,7 @@ spec:
       kubernetes.io/hostname: %s
 ---
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: recovery-worker-b
 spec:
@@ -161,7 +161,7 @@ spec:
       kubernetes.io/hostname: %s
 ---
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: recovery-shared
 spec:
@@ -175,7 +175,7 @@ metadata:
 spec:
   kind: linux
   image: ghcr.io/srl-labs/network-multitool
-  launcherProfileRef:
+  profileRef:
     name: recovery-worker-a
   exec:
     - ip address add 10.10.0.0/31 dev eth1
@@ -190,7 +190,7 @@ metadata:
 spec:
   kind: linux
   image: ghcr.io/srl-labs/network-multitool
-  launcherProfileRef:
+  profileRef:
     name: recovery-worker-b
   exec:
     - ip address add 10.10.0.1/31 dev eth1
@@ -203,7 +203,7 @@ metadata:
 spec:
   kind: linux
   image: ghcr.io/srl-labs/network-multitool
-  launcherProfileRef:
+  profileRef:
     name: recovery-shared
   exec:
     - ip address add 10.10.3.0/31 dev eth1
@@ -216,7 +216,7 @@ spec:
   kind: linux
   image: ghcr.io/srl-labs/network-multitool
   network-mode: container:lin3
-  launcherProfileRef:
+  profileRef:
     name: recovery-shared
   # The grouped secondary shares lin3's network namespace, so it must not race the primary's
   # image services for their listen ports.
@@ -236,12 +236,11 @@ spec:
   endpointB:
     nodeName: lin2
     interfaceName: eth1
-  connectivity: vxlan
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Link
 metadata:
-  name: recovery-slurpeeth
+  name: recovery-vxlan-b
 spec:
   endpointA:
     nodeName: lin1
@@ -249,7 +248,6 @@ spec:
   endpointB:
     nodeName: lin2
     interfaceName: eth2
-  connectivity: slurpeeth
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Link
@@ -316,12 +314,12 @@ func patchNode(t *testing.T, namespace, nodeName, patch string) {
 	clabernetestesthelper.Execute(t, cmd)
 }
 
-func patchLauncherProfile(t *testing.T, namespace, profileName, patch string) {
+func patchNodeProfile(t *testing.T, namespace, profileName, patch string) {
 	t.Helper()
 
 	cmd := exec.CommandContext( //nolint:gosec
 		t.Context(),
-		"kubectl", "patch", "launcherprofile.c9s.run", profileName,
+		"kubectl", "patch", "nodeprofile.c9s.run", profileName,
 		"--namespace", namespace, "--type", "merge", "-p", patch,
 	)
 	clabernetestesthelper.Execute(t, cmd)

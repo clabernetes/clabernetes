@@ -25,16 +25,10 @@ const (
 
 const (
 	// GitHubTokenEnv is the env var that holds (optionally of course) a GitHub token -- this is
-	// useful for the clabverter tool as well as the launcher where we *may* need to use the
-	// GitHub api to list contents of a directory (this is specifically for dealing with large files
-	// that don't fit in configmaps).
+	// useful for the clabverter tool where we *may* need to use the GitHub api to list contents
+	// of a directory (this is specifically for dealing with large files that don't fit in
+	// configmaps).
 	GitHubTokenEnv = "GITHUB_TOKEN" //nolint:gosec
-)
-
-const (
-	// LauncherLoggerLevelEnv is the environment variable name that can be used to set the
-	// clabernetes launcher logger level.
-	LauncherLoggerLevelEnv = "LAUNCHER_LOGGER_LEVEL"
 )
 
 const (

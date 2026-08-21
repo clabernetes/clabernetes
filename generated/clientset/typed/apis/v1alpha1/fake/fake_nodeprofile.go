@@ -24,29 +24,29 @@ import (
 	gentype "k8s.io/client-go/gentype"
 )
 
-// fakeLauncherProfiles implements LauncherProfileInterface
-type fakeLauncherProfiles struct {
-	*gentype.FakeClientWithList[*v1alpha1.LauncherProfile, *v1alpha1.LauncherProfileList]
+// fakeNodeProfiles implements NodeProfileInterface
+type fakeNodeProfiles struct {
+	*gentype.FakeClientWithList[*v1alpha1.NodeProfile, *v1alpha1.NodeProfileList]
 	Fake *FakeC9sV1alpha1
 }
 
-func newFakeLauncherProfiles(
+func newFakeNodeProfiles(
 	fake *FakeC9sV1alpha1,
 	namespace string,
-) apisv1alpha1.LauncherProfileInterface {
-	return &fakeLauncherProfiles{
-		gentype.NewFakeClientWithList[*v1alpha1.LauncherProfile, *v1alpha1.LauncherProfileList](
+) apisv1alpha1.NodeProfileInterface {
+	return &fakeNodeProfiles{
+		gentype.NewFakeClientWithList[*v1alpha1.NodeProfile, *v1alpha1.NodeProfileList](
 			fake.Fake,
 			namespace,
-			v1alpha1.SchemeGroupVersion.WithResource("launcherprofiles"),
-			v1alpha1.SchemeGroupVersion.WithKind("LauncherProfile"),
-			func() *v1alpha1.LauncherProfile { return &v1alpha1.LauncherProfile{} },
-			func() *v1alpha1.LauncherProfileList { return &v1alpha1.LauncherProfileList{} },
-			func(dst, src *v1alpha1.LauncherProfileList) { dst.ListMeta = src.ListMeta },
-			func(list *v1alpha1.LauncherProfileList) []*v1alpha1.LauncherProfile {
+			v1alpha1.SchemeGroupVersion.WithResource("nodeprofiles"),
+			v1alpha1.SchemeGroupVersion.WithKind("NodeProfile"),
+			func() *v1alpha1.NodeProfile { return &v1alpha1.NodeProfile{} },
+			func() *v1alpha1.NodeProfileList { return &v1alpha1.NodeProfileList{} },
+			func(dst, src *v1alpha1.NodeProfileList) { dst.ListMeta = src.ListMeta },
+			func(list *v1alpha1.NodeProfileList) []*v1alpha1.NodeProfile {
 				return gentype.ToPointerSlice(list.Items)
 			},
-			func(list *v1alpha1.LauncherProfileList, items []*v1alpha1.LauncherProfile) {
+			func(list *v1alpha1.NodeProfileList, items []*v1alpha1.NodeProfile) {
 				list.Items = gentype.FromPointerSlice(items)
 			},
 		),

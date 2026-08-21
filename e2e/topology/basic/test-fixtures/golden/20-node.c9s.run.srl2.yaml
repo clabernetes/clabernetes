@@ -18,10 +18,10 @@ metadata:
 spec:
   image: ghcr.io/nokia/srlinux
   kind: srl
-  launcherProfileRef:
+  profileRef:
     name: topology-basic
 status:
-  appliedLauncherProfile:
+  appliedProfile:
     name: topology-basic
   exposedPorts:
     ports:

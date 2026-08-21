@@ -30,7 +30,7 @@ func TestContainerlabBasic(t *testing.T) {
 
 	steps := clabernetestesthelpersuite.Steps{
 		{
-			// the topology compiles to Node/Link/LauncherProfile objects and the Node controller
+			// the topology compiles to Node/Link/NodeProfile objects and the Node controller
 			// realizes those -- this asserts the compile pipeline plus the expose/fabric
 			// services (the device Pods themselves are covered behaviorally in e2e/topology/direct)
 			Index:       10,
@@ -52,7 +52,7 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 				},
-				"launcherprofile": {
+				"nodeprofile": {
 					{
 						Name:           testName,
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},

@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	// NodeConditionLauncherProfileResolved reports whether the Node's effective
-	// LauncherProfile reference resolved successfully.
-	NodeConditionLauncherProfileResolved = "LauncherProfileResolved"
+	// NodeConditionProfileResolved reports whether the Node's effective
+	// NodeProfile reference resolved successfully.
+	NodeConditionProfileResolved = "NodeProfileResolved"
 	// NodeConditionPlanApplied reports whether status was derived from the currently accepted plan.
 	NodeConditionPlanApplied = "PlanApplied"
 	// NodeConditionPrepared reports whether the direct preparation init container completed.
@@ -32,7 +32,7 @@ const (
 // the (optional) Topology compiler, or created by any other machinery (i.e. a containerlab
 // runtime); the Node controller treats all of these identically. The object name is the
 // containerlab Node name and the namespace is the topology boundary. The spec is the flattened
-// containerlab Node definition plus per-node payload and launcherProfileRef; wiring lives on Link
+// containerlab Node definition plus per-node payload and profileRef; wiring lives on Link
 // objects and bounded allocations and observations live in status.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path="nodes",shortName="c9snode"
@@ -44,7 +44,7 @@ const (
 // +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='Prepared')].status",name=Prepared,type=string,priority=1
 // +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='ConnectivityReady')].status",name=Connectivity,type=string,priority=1
 // +kubebuilder:printcolumn:JSONPath=".status.planDigest",name=Plan,type=string,priority=1
-// +kubebuilder:printcolumn:JSONPath=".status.appliedLauncherProfile.name",name=Profile,type=string,priority=1
+// +kubebuilder:printcolumn:JSONPath=".status.appliedProfile.name",name=Profile,type=string,priority=1
 // +kubebuilder:printcolumn:JSONPath=".metadata.creationTimestamp",name=Age,type=date
 type Node struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -56,20 +56,20 @@ type Node struct {
 
 // NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
 // containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an
-// optional LauncherProfile reference. The definition must be self-contained: expanding topology
+// optional NodeProfile reference. The definition must be self-contained: expanding topology
 // defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
 // this for you). Anything that is deployment *policy* rather than node payload -- expose
 // behavior, image pull defaults, generic resources, scheduling, and probes -- lives on
-// LauncherProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
+// NodeProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
 // curated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and
 // unknown fields are rejected rather than silently ignored.
 type NodeSpec struct {
 	NodeDefinition `json:",inline" yaml:",inline"`
 
-	// LauncherProfileRef optionally names the same-namespace LauncherProfile supplying direct
+	// ProfileRef optionally names the same-namespace NodeProfile supplying direct
 	// workload policy. When omitted, global Config defaults are used.
 	// +optional
-	LauncherProfileRef *k8scorev1.LocalObjectReference `json:"launcherProfileRef,omitempty" yaml:"-"`
+	ProfileRef *k8scorev1.LocalObjectReference `json:"profileRef,omitempty" yaml:"-"`
 	// FilesFromConfigMap holds files staged from ConfigMaps for this Node's application containers.
 	// +listType=atomic
 	// +optional
@@ -93,10 +93,6 @@ type NodeStatus struct {
 	// +kubebuilder:validation:Enum=ready;notready;unknown
 	// +optional
 	Readiness string `json:"readiness,omitempty"`
-	// ProbeStatuses holds legacy nested-runtime probe observations during migration. Direct mode
-	// reports application and helper observations through Conditions and DirectContainers.
-	// +optional
-	ProbeStatuses *NodeProbeStatuses `json:"probeStatuses,omitempty"`
 	// ExposedPorts holds expose-port allocations for this Node. The controller assigns and programs
 	// the direct Pod Service from this field.
 	// +optional
@@ -106,10 +102,10 @@ type NodeStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	// AppliedLauncherProfile identifies the LauncherProfile revision successfully applied to the
+	// AppliedProfile identifies the NodeProfile revision successfully applied to the
 	// direct workload. It is nil when the Node uses only global Config defaults.
 	// +optional
-	AppliedLauncherProfile *AppliedLauncherProfileStatus `json:"appliedLauncherProfile,omitempty"`
+	AppliedProfile *AppliedProfileStatus `json:"appliedProfile,omitempty"`
 	// PlanDigest identifies the immutable direct device plan observed by this status.
 	// +optional
 	PlanDigest string `json:"planDigest,omitempty"`
@@ -164,13 +160,13 @@ type NodeDirectContainerStatus struct {
 	ImageID string `json:"imageID,omitempty"`
 }
 
-// AppliedLauncherProfileStatus identifies the exact LauncherProfile revision applied to a Node.
-type AppliedLauncherProfileStatus struct {
-	// Name is the LauncherProfile name.
+// AppliedProfileStatus identifies the exact NodeProfile revision applied to a Node.
+type AppliedProfileStatus struct {
+	// Name is the NodeProfile name.
 	Name string `json:"name"`
 	// UID distinguishes replacement profiles that reuse a name.
 	UID apimachinerytypes.UID `json:"uid"`
-	// Generation is the applied LauncherProfile generation.
+	// Generation is the applied NodeProfile generation.
 	Generation int64 `json:"generation"`
 }
 

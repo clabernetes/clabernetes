@@ -144,46 +144,15 @@ func NormalizeFabricService(t *testing.T, objectData []byte) []byte {
 	return objectData
 }
 
-// NormalizeDeployment normalizes a deployment by removing fields that may change between ci and
-// local or other folks machines/clusters (like image/registry)-- so we can compare results more
-// easily.
-func NormalizeDeployment(t *testing.T, objectData []byte) []byte {
-	t.Helper()
-
-	// we dont care about testing that the image was set "right" really, so just remove it
-	objectData = YQCommand(t, objectData, "del(.spec.template.spec.containers[0].image)")
-	// The manager namespace and launcher log level differ between legacy and dedicated current
-	// checkout installs, but neither is part of the deployment shape under test.
-	objectData = YQCommand(
-		t,
-		objectData,
-		`(.spec.template.spec.containers[].env[] | `+
-			`select(.name == "MANAGER_NAMESPACE").value) = "c9s"`,
-	)
-	objectData = YQCommand(
-		t,
-		objectData,
-		`(.spec.template.spec.containers[].env[] | `+
-			`select(.name == "LAUNCHER_LOGGER_LEVEL").value) = "debug"`,
-	)
-	// these fields are defaulted differently across Kubernetes versions
-	objectData = YQCommand(t, objectData, "del(.spec.template.metadata.creationTimestamp)")
-	objectData = YQCommand(t, objectData, ".status = {}")
-
-	return objectData
-}
-
-// NormalizeNode normalizes a clabernetes node cr between ci and local or other folks
-// machines/clusters -- so we can compare results more easily. The load balancer address (if
-// any) obviously differs per cluster, and readiness/probe statuses are timing dependent.
+// NormalizeNode normalizes a clabernetes Node by removing fields that may change between ci
+// and local or other folks machines/clusters -- so we can compare results more easily.
 func NormalizeNode(t *testing.T, objectData []byte) []byte {
 	t.Helper()
 
 	objectData = YQCommand(t, objectData, "del(.status.exposedPorts.loadBalancerAddress)")
 	objectData = YQCommand(t, objectData, "del(.status.readiness)")
-	objectData = YQCommand(t, objectData, "del(.status.probeStatuses)")
-	objectData = YQCommand(t, objectData, "del(.status.appliedLauncherProfile.uid)")
-	objectData = YQCommand(t, objectData, "del(.status.appliedLauncherProfile.generation)")
+	objectData = YQCommand(t, objectData, "del(.status.appliedProfile.uid)")
+	objectData = YQCommand(t, objectData, "del(.status.appliedProfile.generation)")
 	// Direct runtime observations carry run-specific container identities, boot-timing state,
 	// and a digest over the run-specific plan; only their absence or presence is asserted
 	// elsewhere, never their values.

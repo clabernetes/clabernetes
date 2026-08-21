@@ -116,15 +116,6 @@ spec:
 - Useful for files larger than ConfigMap 1MB limit
 - Re-downloaded on pod restart
 
-### Removed launcher and containerlab options
-
-`containerlabDebug`, `containerlabTimeout`, `containerlabVersion`, `launcherImage`,
-`launcherImagePullPolicy`, `launcherLogLevel`, `privilegedLauncher`, and `extraEnv` are no
-longer part of the API, and the nested launcher runtime itself is removed. Containerlab
-behavior comes from the pinned Go module baseline, and device privilege comes exclusively from
-the imported kind plan. Run `clabernetes upgrade-preflight` to list stored objects still using
-these fields.
-
 ## Combining Options
 
 Multiple deployment options can be combined:

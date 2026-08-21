@@ -29,17 +29,14 @@ spec:
     - jsonPath: .spec.endpointB.interfaceName
       name: Interface-B
       type: string
-    - jsonPath: .spec.connectivity
-      name: Connectivity
-      type: string
     - jsonPath: .status.tunnelID
       name: Tunnel-ID
       type: integer
     - jsonPath: .status.conditions[?(@.type=='Accepted')].status
       name: Accepted
       type: string
-    - jsonPath: .status.error
-      name: Error
+    - jsonPath: .status.conditions[?(@.type=='Accepted')].message
+      name: Message
       priority: 1
       type: string
     name: v1alpha1
@@ -49,11 +46,11 @@ spec:
           Link represents a single point-to-point "wire" between two (containerlab) nodes. Links are a
           primary clabernetes API -- like Nodes they can be created by users directly or emitted by the
           (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints
-          (Node object names in the same namespace plus interface names), connectivity flavor, and an
-          optional MTU. The Link controller allocates a tunnel ID into status for cross-Pod transports;
-          same-Pod, loopback, and host Links need no tunnel allocation. Direct connectivity reconcilers
-          select only Links terminating on their Nodes with endpoint field selectors. Storing one object
-          per wire keeps every persisted object O(1) regardless of topology size.
+          (Node object names in the same namespace plus interface names) and an optional MTU. The Link
+          controller allocates a tunnel ID into status for cross-Pod transports; same-Pod, loopback, and
+          host Links need no tunnel allocation. Direct connectivity reconcilers select only Links
+          terminating on their Nodes with endpoint field selectors. Storing one object per wire keeps
+          every persisted object O(1) regardless of topology size.
         properties:
           apiVersion:
             description: |-
@@ -78,15 +75,6 @@ spec:
               Anything operational (the allocated tunnel ID and resolved identities) lives in status, and
               current peer transport identity is derived by direct connectivity reconcilers.
             properties:
-              connectivity:
-                default: vxlan
-                description: |-
-                  Connectivity is the flavor used to realize this Link across direct Pods. Empty values on
-                  objects stored before API defaulting was introduced are normalized to VXLAN by consumers.
-                enum:
-                - vxlan
-                - slurpeeth
-                type: string
               endpointA:
                 description: EndpointA is the "a" side of this link.
                 properties:
@@ -196,11 +184,6 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              error:
-                description: |-
-                  Error is a compact compatibility field containing the current Accepted=False message. New
-                  consumers should prefer Conditions.
-                type: string
               resolvedEndpoints:
                 description: |-
                   ResolvedEndpoints identifies the exact Nodes to which this Link is bound. The controller
@@ -243,10 +226,10 @@ spec:
                 type: object
               tunnelID:
                 description: |-
-                  TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller
-                  allocated for this link -- both sides of the link use the same id. This is an allocation
-                  rather than user intent, hence it living in the status; zero means "not allocated (yet)"
-                  (direct connectivity reconcilers wait until the controller has filled the ID in).
+                  TunnelID is the id number of the tunnel (the VXLAN VNI) the controller allocated for this
+                  link -- both sides of the link use the same id. This is an allocation rather than user
+                  intent, hence it living in the status; zero means "not allocated (yet)" (direct
+                  connectivity reconcilers wait until the controller has filled the ID in).
                 maximum: 16000000
                 minimum: 0
                 type: integer

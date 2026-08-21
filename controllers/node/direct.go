@@ -63,9 +63,9 @@ func (r *Reconciler) initializeDirectDependencies() {
 	}
 }
 
-// reconcileDirect advances a content-addressed, package-driven planning pipeline. It never invokes
-// the nested reconciler and does not create or update a device Deployment until every generic
-// operation has been planned and rendered successfully.
+// reconcileDirect advances a content-addressed, package-driven planning pipeline. It does not
+// create or update a device Deployment until every generic operation has been planned and
+// rendered successfully.
 func (r *Reconciler) reconcileDirect(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
@@ -101,8 +101,8 @@ func (r *Reconciler) reconcileDirect(
 	}
 	nodesByName := clabernetesutilcontainerlab.NodesByName(namespaceNodes.Items)
 	nodesByName[node.GetName()] = node
-	launcherName := clabernetesutilcontainerlab.ResolveLauncherNode(nodesByName, node.GetName())
-	if launcherName != node.GetName() {
+	primaryName := clabernetesutilcontainerlab.ResolvePrimaryNode(nodesByName, node.GetName())
+	if primaryName != node.GetName() {
 		// The primary owns the shared direct workload. Remove only a stale standalone workload
 		// from this Node; its per-Node Service and persistence remain independently owned and are
 		// reconciled by the primary group.
@@ -117,7 +117,7 @@ func (r *Reconciler) reconcileDirect(
 				ctx,
 				groupMembers,
 				nodesByName,
-				"LauncherProfileConflict",
+				"NodeProfileConflict",
 				err.Error(),
 			)
 		case apimachineryerrors.IsNotFound(err):
@@ -125,7 +125,7 @@ func (r *Reconciler) reconcileDirect(
 				ctx,
 				groupMembers,
 				nodesByName,
-				"LauncherProfileNotFound",
+				"NodeProfileNotFound",
 				err.Error(),
 			)
 		}
@@ -664,7 +664,7 @@ func compileDirectExposedPorts(
 	if profile == nil {
 		return nil, planInputError(
 			clabernetesinternaldeviceplan.ErrorInvalidInput,
-			"launcherProfile",
+			"nodeProfile",
 			"resolved profile is nil",
 		)
 	}
@@ -722,10 +722,10 @@ func compileDirectExposedPorts(
 			}
 		}
 	}
-	// Auto expose keeps nested parity: unless disabled, every member also exposes the default
+	// Auto expose keeps containerlab parity: unless disabled, every member also exposes the default
 	// NOS port set. The group shares one Pod network namespace, so a destination port already
 	// planned, declared, or claimed by an earlier member is skipped -- first member wins,
-	// matching the nested launcher's first-come allocation.
+	// matching containerlab's first-come allocation.
 	if !profile.DisableAutoExpose {
 		claimed := map[string]bool{}
 		for _, ports := range portsByNode {
@@ -803,7 +803,7 @@ func (r *Reconciler) directUnavailable(
 	reason string,
 ) error {
 	return fmt.Errorf(
-		"%w: Node %s/%s was not reconciled (%s) and no nested fallback was attempted",
+		"%w: Node %s/%s was not reconciled (%s); there is no fallback runtime",
 		clabernetesinternaldeviceruntime.ErrDirectRuntimeUnavailable,
 		node.GetNamespace(),
 		node.GetName(),
@@ -817,7 +817,7 @@ func (r *Reconciler) resolveDirectProfile(
 	groupMembers []string,
 	nodesByName map[string]*clabernetesapisv1alpha1.Node,
 ) (*ResolvedProfile, error) {
-	profileName, err := resolveGroupLauncherProfileReference(
+	profileName, err := resolveGroupProfileReference(
 		node.GetName(),
 		groupMembers,
 		nodesByName,
@@ -825,14 +825,14 @@ func (r *Reconciler) resolveDirectProfile(
 	if err != nil {
 		return nil, err
 	}
-	var profile *clabernetesapisv1alpha1.LauncherProfile
+	var profile *clabernetesapisv1alpha1.NodeProfile
 	if profileName != "" {
-		profile = &clabernetesapisv1alpha1.LauncherProfile{}
+		profile = &clabernetesapisv1alpha1.NodeProfile{}
 		if err = r.Client.Get(ctx, ctrlruntimeclient.ObjectKey{
 			Namespace: node.GetNamespace(), Name: profileName,
 		}, profile); err != nil {
 			return nil, fmt.Errorf(
-				"resolving direct-runtime LauncherProfile %q: %w",
+				"resolving direct-runtime NodeProfile %q: %w",
 				profileName,
 				err,
 			)
@@ -846,7 +846,7 @@ func validateDirectProfile(profile *ResolvedProfile) error {
 	if profile == nil {
 		return planInputError(
 			clabernetesinternaldeviceplan.ErrorInvalidInput,
-			"launcherProfile",
+			"nodeProfile",
 			"resolved profile is nil",
 		)
 	}
@@ -1449,7 +1449,7 @@ func (r *Reconciler) directMetadata(
 		labels[key] = value
 	}
 	maps.Copy(labels, globalLabels)
-	maps.Copy(labels, launcherSelectorLabels(node.GetName()))
+	maps.Copy(labels, podSelectorLabels(node.GetName()))
 	labels[clabernetesconstants.LabelKubernetesName] = node.GetName()
 	if owner, ok := node.GetLabels()[clabernetesconstants.LabelTopologyOwner]; ok {
 		labels[clabernetesconstants.LabelTopologyOwner] = owner

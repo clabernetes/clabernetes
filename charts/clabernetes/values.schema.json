@@ -32,9 +32,6 @@
           "type": "string",
           "enum": ["Never", "IfNotPresent", "Always"]
         },
-        "launcherImage": {
-          "type": "string"
-        },
         "replicaCount": {
           "type": "integer"
         },
@@ -51,10 +48,6 @@
         "controllerLogLevel": {
           "type": "string",
           "enum": ["disabled", "critical", "warn", "info", "debug"]
-        },
-        "deviceRuntimeMode": {
-          "type": "string",
-          "enum": ["nested", "direct"]
         },
         "affinity": {
           "type": "object"

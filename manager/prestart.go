@@ -27,7 +27,8 @@ func (c *clabernetes) preStart() {
 	if err != nil {
 		c.logger.Fatalf(
 			"the api server rejected the link endpoint field selectors -- clabernetes requires"+
-				" kubernetes 1.31+ (crd selectable fields) since launchers select their links"+
+				" kubernetes 1.31+ (crd selectable fields) since connectivity reconcilers select"+
+				" their links"+
 				" server side, err: %s",
 			err,
 		)
@@ -38,7 +39,8 @@ func (c *clabernetes) preStart() {
 	c.logger.Debug("pre-start complete...")
 }
 
-// preStartLinkFieldSelectors probes the api server with the same field selectors launchers (and
+// preStartLinkFieldSelectors probes the api server with the same field selectors the
+// connectivity reconcilers (and
 // controllers) use to select links -- on clusters older than 1.31 (no crd selectable fields)
 // the probe fails, and clabernetes cannot function without it.
 func preStartLinkFieldSelectors(c clabernetesmanagertypes.Clabernetes) error {

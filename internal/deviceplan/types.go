@@ -143,11 +143,10 @@ type ManagementInput struct {
 // Connectivity vocabulary for accepted Link endpoints. The values are containerlab's own link
 // flavor identifiers carried verbatim through the plan.
 const (
-	ConnectivityVXLAN     = "vxlan"
-	ConnectivitySlurpeeth = "slurpeeth"
-	ConnectivityHost      = "host"
-	ConnectivitySamePod   = "same-pod"
-	ConnectivityLoopback  = "loopback"
+	ConnectivityVXLAN    = "vxlan"
+	ConnectivityHost     = "host"
+	ConnectivitySamePod  = "same-pod"
+	ConnectivityLoopback = "loopback"
 )
 
 // InterfaceInput is one accepted Link endpoint supplied before planning.
@@ -212,7 +211,7 @@ type ContainerPlan struct {
 	ImageDigest      string `json:"imageDigest,omitempty"`
 	ImagePullPolicy  string `json:"imagePullPolicy,omitempty"`
 	// ImagePullPolicyExplicit distinguishes imported Node intent from the package default so a
-	// LauncherProfile default never overwrites an explicitly declared policy.
+	// NodeProfile default never overwrites an explicitly declared policy.
 	ImagePullPolicyExplicit bool       `json:"imagePullPolicyExplicit,omitempty"`
 	ImageEntrypoint         []string   `json:"imageEntrypoint,omitempty"`
 	ImageCommand            []string   `json:"imageCommand,omitempty"`

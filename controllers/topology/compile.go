@@ -143,7 +143,7 @@ type CompiledLink struct {
 // CompiledTopology is what a Topology definition compiles down to: flat, self contained node
 // definitions (topology defaults/kinds expanded into every node), the wires between them, and
 // the topology level management network settings. The compiler emits this as Node and Link
-// objects (plus LauncherProfiles for deployment policy) -- all actual reconciliation
+// objects (plus NodeProfiles for deployment policy) -- all actual reconciliation
 // happens in the node/link controllers, identically for compiled and hand written objects.
 type CompiledTopology struct {
 	// Kind is the topology definition kind -- containerlab.

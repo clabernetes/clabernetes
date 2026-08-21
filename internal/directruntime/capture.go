@@ -148,18 +148,6 @@ func PacketCaptureTarget(
 	return targets[0], nil
 }
 
-// RunPacketCapture writes a standard libpcap stream for one plan-owned interface. It is intended
-// to run inside the fixed connectivity helper through the Kubernetes Pod exec subresource.
-func RunPacketCapture(
-	ctx context.Context,
-	plan clabernetesinternaldeviceplan.Plan,
-	options PacketCaptureOptions,
-	output,
-	audit io.Writer,
-) error {
-	return runPacketCapture(ctx, plan, options, output, audit, openPacketCaptureSource)
-}
-
 // RunPacketCaptureWithRevision reconstructs the exact effective connectivity plan from the
 // immutable cold input/plan and its controller-validated projected revision before authorizing the
 // interface. This permits Live Link additions without trusting an unverified interface name.

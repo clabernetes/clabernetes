@@ -588,17 +588,6 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 				setVXLANLink(t, input, plan, "peer-node-uid", "peer-vx", 73, 1450)
 			},
 		},
-		{
-			name: "slurpeeth", flavor: "fabric",
-			configure: func(
-				t *testing.T,
-				input *clabernetesinternaldeviceplan.Input,
-				plan *clabernetesinternaldeviceplan.Plan,
-			) {
-				t.Helper()
-				setSlurpeethLink(t, input, plan, "peer-node-uid", "peer-vx", 73, 1450)
-			},
-		},
 		{name: "host", flavor: "host", configure: setHostLink},
 	}
 
@@ -695,55 +684,45 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 func TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness(t *testing.T) {
 	t.Parallel()
 
-	for _, connectivity := range []string{"vxlan", "slurpeeth"} {
-		t.Run(connectivity, func(t *testing.T) {
-			t.Parallel()
+	input, plan := connectivityTestInputAndPlan(t)
+	setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
 
-			input, plan := connectivityTestInputAndPlan(t)
-			if connectivity == "vxlan" {
-				setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-			} else {
-				setSlurpeethLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
-			}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
+	operations := &fakeLinkOperations{}
 
-			operations := &fakeLinkOperations{}
+	state := t.TempDir()
+	if err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
+		ctx,
+		input,
+		plan,
+		clabernetesinternaldirectruntime.ConnectivityOptions{
+			StateDirectory: state,
+			PodNamespace:   "lab",
+			PodName:        "router-pod",
+			PodUID:         "pod-uid-a",
+			PodAddress:     "10.244.0.12",
+		},
+		operations,
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
 
-			state := t.TempDir()
-			if err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
-				ctx,
-				input,
-				plan,
-				clabernetesinternaldirectruntime.ConnectivityOptions{
-					StateDirectory: state,
-					PodNamespace:   "lab",
-					PodName:        "router-pod",
-					PodUID:         "pod-uid-a",
-					PodAddress:     "10.244.0.12",
-				},
-				operations,
-				nil,
-			); err != nil {
-				t.Fatal(err)
-			}
+	if len(operations.fabricSpecs) != 1 {
+		t.Fatalf("fabric operations = %#v", operations.fabricSpecs)
+	}
 
-			if len(operations.fabricSpecs) != 1 {
-				t.Fatalf("fabric operations = %#v", operations.fabricSpecs)
-			}
+	spec := operations.fabricSpecs[0]
+	if spec.InterfaceName == "" || spec.TunnelID != 73 || spec.MTU != 1450 ||
+		spec.PeerTransport != "peer-vx" || spec.PodAddress != "10.244.0.12" ||
+		!strings.HasPrefix(spec.Owner, "c9s:direct:v1:") {
+		t.Fatalf("fabric endpoint spec = %#v", spec)
+	}
 
-			spec := operations.fabricSpecs[0]
-			if spec.InterfaceName == "" || spec.TunnelID != 73 || spec.MTU != 1450 ||
-				spec.PeerTransport != "peer-vx" || spec.PodAddress != "10.244.0.12" ||
-				!strings.HasPrefix(spec.Owner, "c9s:direct:v1:") {
-				t.Fatalf("fabric endpoint spec = %#v", spec)
-			}
-
-			if err := clabernetesinternaldirectruntime.ConnectivityReady(plan, state); err != nil {
-				t.Fatal(err)
-			}
-		})
+	if err := clabernetesinternaldirectruntime.ConnectivityReady(plan, state); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1988,48 +1967,6 @@ func setVXLANLink(
 		Name: "package-a", LinkID: "link-uid-a", PeerNodeID: peerNodeID,
 		PeerInterface: "requested-b", PeerTransport: peerTransport,
 		Connectivity: "vxlan", TunnelID: tunnelID, MTU: mtu,
-		LinkApplyMode: clabernetesinternaldeviceplan.LinkApplyLive, RequiredAtStart: true,
-	}}
-	plan.Actions = []clabernetesinternaldeviceplan.Action{{
-		ID: "wait/link-a/a", Phase: clabernetesinternaldeviceplan.PhasePreStart,
-		Target: clabernetesinternaldeviceplan.ActionTarget{
-			NodeID: "node-a", ContainerID: "container-a", NamespaceOwnerID: "container-a",
-		},
-		Kind: clabernetesinternaldeviceplan.ActionWaitInterface,
-		WaitInterface: &clabernetesinternaldeviceplan.WaitInterfaceAction{
-			InterfaceID: "link-a/a", TimeoutSeconds: 30,
-		},
-	}}
-}
-
-func setSlurpeethLink(
-	t *testing.T,
-	input *clabernetesinternaldeviceplan.Input,
-	plan *clabernetesinternaldeviceplan.Plan,
-	peerNodeID,
-	peerTransport string,
-	tunnelID,
-	mtu int,
-) {
-	t.Helper()
-
-	input.Interfaces = []clabernetesinternaldeviceplan.InterfaceInput{{
-		ID: "link-a/a", NodeID: "node-a", Name: "requested-a", LinkID: "link-uid-a",
-		PeerNodeID: peerNodeID, PeerInterface: "requested-b", PeerTransport: peerTransport,
-		Connectivity: "slurpeeth", TunnelID: tunnelID, MTU: mtu,
-	}}
-
-	digest, err := input.Digest()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	plan.InputDigest = digest
-	plan.Interfaces = []clabernetesinternaldeviceplan.InterfacePlan{{
-		ID: "link-a/a", NodeID: "node-a", NamespaceOwnerID: "container-a",
-		Name: "package-a", LinkID: "link-uid-a", PeerNodeID: peerNodeID,
-		PeerInterface: "requested-b", PeerTransport: peerTransport,
-		Connectivity: "slurpeeth", TunnelID: tunnelID, MTU: mtu,
 		LinkApplyMode: clabernetesinternaldeviceplan.LinkApplyLive, RequiredAtStart: true,
 	}}
 	plan.Actions = []clabernetesinternaldeviceplan.Action{{

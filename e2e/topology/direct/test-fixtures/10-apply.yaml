@@ -1,6 +1,6 @@
 ---
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: direct
 spec:
@@ -18,7 +18,6 @@ spec:
   endpointB:
     nodeName: srl2
     interfaceName: e1-1
-  connectivity: vxlan
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Node
@@ -29,7 +28,7 @@ metadata:
 spec:
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux
-  launcherProfileRef:
+  profileRef:
     name: direct
   startup-config: |
     set / interface ethernet-1/1 admin-state enable
@@ -49,7 +48,7 @@ metadata:
 spec:
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux
-  launcherProfileRef:
+  profileRef:
     name: direct
   startup-config: |
     set / interface ethernet-1/1 admin-state enable

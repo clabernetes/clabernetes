@@ -1,4 +1,4 @@
-//nolint:gocyclo,wsl_v5 // The compiler is a fail-closed identity boundary.
+//nolint:wsl_v5 // The compiler is a fail-closed identity boundary.
 package node
 
 import (
@@ -10,12 +10,14 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 )
 
 const (
 	connectivitySamePod  = "same-pod"
 	connectivityLoopback = "loopback"
 	connectivityHost     = "host"
+	connectivityVXLAN    = "vxlan"
 )
 
 // PlanInputCompileRequest contains only resolved API identities and generic planning inputs.
@@ -143,7 +145,12 @@ func compileAcceptedInterfaces(
 		if !terminates {
 			continue
 		}
-		if link.GetUID() == "" || link.Status.Error != "" || link.Status.ResolvedEndpoints == nil {
+		if link.GetUID() == "" ||
+			!apimachinerymeta.IsStatusConditionTrue(
+				link.Status.Conditions,
+				clabernetesapisv1alpha1.LinkConditionAccepted,
+			) ||
+			link.Status.ResolvedEndpoints == nil {
 			return nil, planInputError(
 				clabernetesinternaldeviceplan.ErrorMissingInput,
 				"links."+link.GetName(),
@@ -168,10 +175,8 @@ func compileAcceptedInterfaces(
 				endpoints[side],
 				endpoints[peerSide],
 				members,
-				link,
 			)
-			if (connectivity == string(clabernetesapisv1alpha1.LinkConnectivityVXLAN) ||
-				connectivity == string(clabernetesapisv1alpha1.LinkConnectivitySlurpeeth)) &&
+			if connectivity == connectivityVXLAN &&
 				link.Status.TunnelID == 0 {
 				return nil, planInputError(
 					clabernetesinternaldeviceplan.ErrorMissingInput,
@@ -184,8 +189,7 @@ func compileAcceptedInterfaces(
 				peerNodeID = string(resolved[peerSide].UID)
 			}
 			peerTransport := ""
-			if connectivity == string(clabernetesapisv1alpha1.LinkConnectivityVXLAN) ||
-				connectivity == string(clabernetesapisv1alpha1.LinkConnectivitySlurpeeth) {
+			if connectivity == connectivityVXLAN {
 				peerTransport = FabricServiceName(endpoints[peerSide].NodeName)
 			}
 			result = append(result, clabernetesinternaldeviceplan.InterfaceInput{
@@ -252,7 +256,6 @@ func interfaceConnectivity(
 	endpoint,
 	peer clabernetesapisv1alpha1.LinkEndpointSpec,
 	members map[string]*clabernetesapisv1alpha1.Node,
-	link *clabernetesapisv1alpha1.Link,
 ) string {
 	switch {
 	case peer.NodeName == clabernetesapisv1alpha1.LinkHostNodeName:
@@ -262,7 +265,7 @@ func interfaceConnectivity(
 	case members[peer.NodeName] != nil:
 		return connectivitySamePod
 	default:
-		return string(link.Spec.NormalizedConnectivity())
+		return connectivityVXLAN
 	}
 }
 

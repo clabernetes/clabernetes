@@ -874,14 +874,13 @@ type ConnectivityOptions struct {
 	// backend and tests inject fakes.
 	NATOperations NATOperations
 
-	// hostEndpointPacer rate-limits steady-state host endpoint re-assertion; the daemon owns
-	// drift correction, so unchanged ticks do not need a per-second RPC fan-out.
+	// hostEndpointPacer rate-limits steady-state host endpoint re-assertion; the sidecar owns
+	// drift correction, so unchanged ticks do not need a per-second reconcile fan-out.
 	hostEndpointPacer *hostEndpointPacer
 }
 
 // hostEndpointReassertInterval bounds how often an unchanged revision re-asserts host
-// endpoints against the node daemon. Cold starts, revision changes, and failures always
-// reconcile immediately.
+// endpoints. Cold starts, revision changes, and failures always reconcile immediately.
 const hostEndpointReassertInterval = 30 * time.Second
 
 type hostEndpointPacer struct {
@@ -928,7 +927,7 @@ func (p *hostEndpointPacer) record(now time.Time, succeeded, ready bool) {
 	p.lastReady = ready
 }
 
-// lastKnownReady returns the readiness observed by the most recent daemon exchange.
+// lastKnownReady returns the readiness observed by the most recent re-assertion pass.
 func (p *hostEndpointPacer) lastKnownReady() bool {
 	if p == nil {
 		return false
@@ -1142,7 +1141,6 @@ func runConnectivity(
 		effectivePlan,
 		options,
 		operations,
-		hasDaemonInterfaces(plan),
 		false,
 	)
 	if err != nil {
@@ -1463,8 +1461,7 @@ func waitForConnectivityRevisions(
 
 func hasRemoteInterfaces(plan clabernetesinternaldeviceplan.Plan) bool {
 	for _, intf := range plan.Interfaces {
-		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityVXLAN ||
-			intf.Connectivity == clabernetesinternaldeviceplan.ConnectivitySlurpeeth {
+		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityVXLAN {
 			return true
 		}
 	}
@@ -1472,23 +1469,6 @@ func hasRemoteInterfaces(plan clabernetesinternaldeviceplan.Plan) bool {
 	return false
 }
 
-func hasDaemonInterfaces(plan clabernetesinternaldeviceplan.Plan) bool {
-	for _, intf := range plan.Interfaces {
-		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityHost ||
-			intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityVXLAN ||
-			intf.Connectivity == clabernetesinternaldeviceplan.ConnectivitySlurpeeth {
-			return true
-		}
-	}
-
-	return false
-}
-
-// reconcileDaemonEndpoints realizes every host Link and cross-Pod fabric endpoint through the
-// node-local daemon, which owns all host-namespace transport state: the Pod side of each
-// endpoint is a plain veth leg, so a device that takes over the Pod's primary interface cannot
-// disturb the transport. The returned readiness covers every fabric endpoint's transport.
-//
 // directTransportOwnerType marks sidecar-owned fabric and host-Link transport state, distinct
 // from the local veth owner family so the local-interface sweep never touches it.
 const directTransportOwnerType = "transport"
@@ -1505,7 +1485,6 @@ func reconcileEndpointTransports(
 	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 	operations LinkOperations,
-	_ bool,
 	steadyState bool,
 ) (bool, error) {
 	if steadyState && !options.hostEndpointPacer.due(time.Now()) {
@@ -1524,8 +1503,7 @@ func reconcileEndpointTransports(
 
 	for _, intf := range plan.Interfaces {
 		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityHost &&
-			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityVXLAN &&
-			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivitySlurpeeth {
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityVXLAN {
 			continue
 		}
 
@@ -1627,7 +1605,6 @@ func applyProjectedConnectivityRevision(
 			revisedPlan,
 			options,
 			operations,
-			hasDaemonInterfaces(basePlan),
 			true,
 		)
 		if reconcileErr != nil {
@@ -1651,7 +1628,6 @@ func applyProjectedConnectivityRevision(
 		revisedPlan,
 		options,
 		operations,
-		hasDaemonInterfaces(basePlan),
 		false,
 	)
 	if err != nil {
@@ -2039,13 +2015,11 @@ func ValidatePlanCapabilities(plan clabernetesinternaldeviceplan.Plan) error {
 		len(normalized.Interfaces))
 	interfaceNames := make(map[string]string, len(normalized.Interfaces))
 	links := map[string][]clabernetesinternaldeviceplan.InterfacePlan{}
-	slurpeethSegments := map[int]string{}
 
 	for _, intf := range normalized.Interfaces {
 		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivitySamePod &&
 			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityLoopback &&
 			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityVXLAN &&
-			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivitySlurpeeth &&
 			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityHost {
 			return fmt.Errorf(
 				"direct connectivity operation %q is not yet implemented",
@@ -2072,17 +2046,6 @@ func ValidatePlanCapabilities(plan clabernetesinternaldeviceplan.Plan) error {
 		interfaces[intf.ID] = intf
 
 		links[intf.LinkID] = append(links[intf.LinkID], intf)
-		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivitySlurpeeth {
-			if existing := slurpeethSegments[intf.TunnelID]; existing != "" {
-				return fmt.Errorf(
-					"slurpeeth interfaces %q and %q use the same segment ID",
-					existing,
-					intf.ID,
-				)
-			}
-
-			slurpeethSegments[intf.TunnelID] = intf.ID
-		}
 	}
 
 	for linkID, endpoints := range links {
@@ -2110,16 +2073,6 @@ func ValidatePlanCapabilities(plan clabernetesinternaldeviceplan.Plan) error {
 				endpoint.PeerInterface == "" || !validPeerTransport(endpoint.PeerTransport) ||
 				endpoint.TunnelID < 1 || endpoint.TunnelID > 16_000_000 {
 				return fmt.Errorf("VXLAN Link %q has incomplete remote endpoint identity", linkID)
-			}
-		case "slurpeeth":
-			endpoint := endpoints[0]
-			if len(endpoints) != 1 || endpoint.PeerNodeID == "" ||
-				endpoint.PeerInterface == "" || !validPeerTransport(endpoint.PeerTransport) ||
-				endpoint.TunnelID < 1 || endpoint.TunnelID >= 1<<16 {
-				return fmt.Errorf(
-					"slurpeeth Link %q has incomplete remote endpoint identity",
-					linkID,
-				)
 			}
 		case "host":
 			endpoint := endpoints[0]

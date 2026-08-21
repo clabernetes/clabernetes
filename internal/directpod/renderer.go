@@ -119,7 +119,7 @@ type Options struct {
 	LinkLifecyclePlanDigest           string
 }
 
-// ProbePolicy is explicit, kind-neutral LauncherProfile policy for one logical Node. Password
+// ProbePolicy is explicit, kind-neutral NodeProfile policy for one logical Node. Password
 // bytes remain in ProbeSecretName; SSHPasswordKey names only the projected Secret entry.
 type ProbePolicy struct {
 	StartupSeconds int

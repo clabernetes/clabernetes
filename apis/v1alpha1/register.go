@@ -47,8 +47,8 @@ func GetAPIs() (apimachineryscheme.GroupVersion, []apimachineryruntime.Object) {
 		&LinkList{},
 		&Node{},
 		&NodeList{},
-		&LauncherProfile{},
-		&LauncherProfileList{},
+		&NodeProfile{},
+		&NodeProfileList{},
 		&Topology{},
 		&TopologyList{},
 	}

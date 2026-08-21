@@ -15,7 +15,6 @@ metadata:
       kind: Topology
       name: topology-basic
 spec:
-  connectivity: vxlan
   endpointA:
     interfaceName: e1-3
     nodeName: srl1

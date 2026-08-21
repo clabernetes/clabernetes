@@ -2,7 +2,7 @@ package directruntime
 
 // FabricEndpointSpec is the Pod-local realization request for one cross-Pod Link endpoint: a
 // device-facing veth leg stitched to an in-Pod VXLAN VTEP terminating on the preserved
-// Kubernetes underlay. Both `vxlan` and `slurpeeth` plan connectivity select this realization.
+// Kubernetes underlay.
 type FabricEndpointSpec struct {
 	// InterfaceID is the stable plan interface identity; sidecar-owned link names derive from
 	// it.

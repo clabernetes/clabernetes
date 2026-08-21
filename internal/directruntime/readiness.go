@@ -24,7 +24,7 @@ const (
 	maxProbePasswordBytes        = 64 << 10
 )
 
-// ReadinessChecks contains explicit kind-neutral LauncherProfile application checks.
+// ReadinessChecks contains explicit kind-neutral NodeProfile application checks.
 // SSHPasswordFile
 // is a single Secret-projected file and its bytes never enter the plan or command line.
 type ReadinessChecks struct {

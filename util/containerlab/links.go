@@ -12,17 +12,6 @@ import (
 func ValidateLink(link *clabernetesapisv1alpha1.Link) error {
 	endpointA, endpointB := link.Spec.EndpointA, link.Spec.EndpointB
 
-	switch link.Spec.NormalizedConnectivity() {
-	case clabernetesapisv1alpha1.LinkConnectivityVXLAN,
-		clabernetesapisv1alpha1.LinkConnectivitySlurpeeth:
-	default:
-		return fmt.Errorf(
-			"%w: unsupported link connectivity %q",
-			claberneteserrors.ErrInvalidData,
-			link.Spec.Connectivity,
-		)
-	}
-
 	if endpointA.NodeName == clabernetesapisv1alpha1.LinkHostNodeName &&
 		endpointB.NodeName == clabernetesapisv1alpha1.LinkHostNodeName {
 		return fmt.Errorf(
@@ -95,38 +84,6 @@ func FindEndpointConflict(
 	}
 
 	return ""
-}
-
-// ActiveLinks returns the deterministic, sorted subset of links that launchers are allowed to
-// realize. It independently rejects malformed specs and duplicate endpoint losers so consumers
-// are safe while controller status is converging; a controller-stamped status error also keeps a
-// remotely detected conflict out of a launcher's endpoint-scoped view.
-func ActiveLinks(links []clabernetesapisv1alpha1.Link) []clabernetesapisv1alpha1.Link {
-	candidates := make([]clabernetesapisv1alpha1.Link, len(links))
-	copy(candidates, links)
-
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].GetName() < candidates[j].GetName()
-	})
-
-	claimed := map[string]string{}
-	active := make([]clabernetesapisv1alpha1.Link, 0, len(candidates))
-
-	for idx := range candidates {
-		candidate := &candidates[idx]
-		if ValidateLink(candidate) != nil || candidate.Status.Error != "" {
-			continue
-		}
-
-		if conflictForClaimedEndpoints(candidate, claimed) != "" {
-			continue
-		}
-
-		claimLinkEndpoints(candidate, claimed)
-		active = append(active, *candidate)
-	}
-
-	return active
 }
 
 func endpointKey(endpoint clabernetesapisv1alpha1.LinkEndpointSpec) string {

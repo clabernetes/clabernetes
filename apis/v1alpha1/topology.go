@@ -24,34 +24,6 @@ const (
 	TopologyStateDeployFailed TopologyState = "deployfailed"
 )
 
-// NodeProbeStatus represents the status of a single probe type on a node.
-// +kubebuilder:validation:Enum=passing;failing;unknown;disabled
-type NodeProbeStatus string
-
-const (
-	// NodeProbeStatusPassing indicates the probe is succeeding.
-	NodeProbeStatusPassing NodeProbeStatus = "passing"
-
-	// NodeProbeStatusFailing indicates the probe is failing.
-	NodeProbeStatusFailing NodeProbeStatus = "failing"
-
-	// NodeProbeStatusUnknown indicates the probe status is not yet known.
-	NodeProbeStatusUnknown NodeProbeStatus = "unknown"
-
-	// NodeProbeStatusDisabled indicates the probe is not configured.
-	NodeProbeStatusDisabled NodeProbeStatus = "disabled"
-)
-
-// NodeProbeStatuses holds the individual probe statuses for a single node.
-type NodeProbeStatuses struct {
-	// StartupProbe is the status of the node's startup probe.
-	StartupProbe NodeProbeStatus `json:"startupProbe"`
-	// ReadinessProbe is the status of the node's readiness probe.
-	ReadinessProbe NodeProbeStatus `json:"readinessProbe"`
-	// LivenessProbe is the status of the node's liveness probe.
-	LivenessProbe NodeProbeStatus `json:"livenessProbe"`
-}
-
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -105,13 +77,6 @@ type TopologySpec struct {
 	// +kubebuilder:validation:Enum=prefixed;non-prefixed;global
 	// +kubebuilder:default=global
 	Naming string `json:"naming"`
-	// Connectivity defines the type of connectivity to use between nodes in the topology. The
-	// default behavior is to use vxlan tunnels, alternatively you can enable a more experimental
-	// "slurpeeth" connectivity flavor that stuffs traffic into tcp tunnels to avoid any vxlan mtu
-	// and/or fragmentation challenges.
-	// +kubebuilder:validation:Enum=vxlan;slurpeeth
-	// +kubebuilder:default=vxlan
-	Connectivity string `json:"connectivity,omitempty"`
 }
 
 // TopologyStatus is the status for a Topology resource. Note that all *per node* (and per link)

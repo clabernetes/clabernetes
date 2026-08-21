@@ -419,18 +419,6 @@ func containsActionKind(
 	return false
 }
 
-func containsRecordedCopy(actions []clabernetesinternaldeviceplan.Action, destination string) bool {
-	for _, action := range actions {
-		if action.Kind == clabernetesinternaldeviceplan.ActionFile &&
-			action.Phase == clabernetesinternaldeviceplan.PhasePostStart &&
-			action.File != nil && action.File.Destination == destination {
-			return true
-		}
-	}
-
-	return false
-}
-
 func TestPlanFailsClosedByGenericCapabilityNotKindIdentity(t *testing.T) {
 	t.Parallel()
 

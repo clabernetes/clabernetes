@@ -12,4 +12,3 @@ spec:
   endpointB:
     nodeName: multitool
     interfaceName: eth1
-  connectivity: vxlan

@@ -5,7 +5,6 @@ metadata:
   name: clabverter-basic
   namespace: NAMESPACE
 spec:
-  connectivity: vxlan
   definition:
     containerlab: |-
       ---

@@ -3,7 +3,7 @@
 This directory contains minimal examples to get started with Clabernetes.
 
 These examples use the backward-compatible auxiliary `Topology` resource for convenience. The
-controller compiles each file into explicitly referenced LauncherProfile, Link, and Node
+controller compiles each file into explicitly referenced NodeProfile, Link, and Node
 resources. For direct primitive manifests (and large labs that should avoid persisting one
 aggregate source object), use `clabverter --emit-crs`.
 
@@ -105,7 +105,7 @@ kubectl get nodes.c9s.run
 kubectl get node.c9s.run <node-name> -o yaml
 ```
 
-Node readiness, probe observations, exposed ports, and the applied LauncherProfile identity are
+Node readiness, probe observations, exposed ports, and the applied NodeProfile identity are
 resource-local Node status. Link tunnel allocation and errors are resource-local Link status.
 
 ## Cleanup

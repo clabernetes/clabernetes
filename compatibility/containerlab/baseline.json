@@ -22,10 +22,6 @@
     {
       "path": "docs/upgrading.md",
       "pattern": "containerlab {{version}}"
-    },
-    {
-      "path": "openspec/changes/archive/2026-08-21-direct-node-pods/design.md",
-      "pattern": "currently installs containerlab {{version}}"
     }
   ],
   "capabilities": [
@@ -168,10 +164,6 @@
       "description": "Carry traffic and recover direct VXLAN Links across workers."
     },
     {
-      "id": "link-slurpeeth",
-      "description": "Carry traffic and recover direct slurpeeth Links across workers."
-    },
-    {
       "id": "link-host",
       "description": "Create, reconcile, and clean up UID-owned host Links."
     },
@@ -205,7 +197,7 @@
     },
     {
       "id": "entry-direct-resources",
-      "description": "Direct Node, Link, and LauncherProfile resources produce a running direct lab."
+      "description": "Direct Node, Link, and NodeProfile resources produce a running direct lab."
     },
     {
       "id": "entry-topology",
@@ -361,7 +353,7 @@
       "category": "kubernetes-policy",
       "inputs": [
         "Node.spec.ports",
-        "LauncherProfile.spec.expose",
+        "NodeProfile.spec.expose",
         "Node.status.exposedPorts",
         "Node.spec.aliases"
       ],
@@ -386,7 +378,7 @@
         "Node.spec.mgmt-ipv6",
         "Node.spec.dns",
         "Node.spec.certificate",
-        "LauncherProfile.spec.mgmt"
+        "NodeProfile.spec.mgmt"
       ],
       "requiredCapabilities": [
         "management"
@@ -467,11 +459,11 @@
       "id": "node-profile-policy",
       "category": "kubernetes-policy",
       "inputs": [
-        "Node.spec.launcherProfileRef",
-        "LauncherProfile.spec.resources",
-        "LauncherProfile.spec.scheduling",
-        "LauncherProfile.spec.expose",
-        "LauncherProfile.spec.statusProbes",
+        "Node.spec.profileRef",
+        "NodeProfile.spec.resources",
+        "NodeProfile.spec.scheduling",
+        "NodeProfile.spec.expose",
+        "NodeProfile.spec.statusProbes",
         "Node.spec.cpu",
         "Node.spec.memory"
       ],
@@ -483,7 +475,7 @@
         "node-profile-policy"
       ],
       "sourcePaths": [
-        "apis/v1alpha1/launcherprofile.go",
+        "apis/v1alpha1/nodeprofile.go",
         "controllers/node/profile.go",
         "internal/directpod/renderer.go",
         "controllers/node/direct.go"
@@ -522,7 +514,7 @@
       "id": "node-persistence",
       "category": "kubernetes-policy",
       "inputs": [
-        "LauncherProfile.spec.deployment"
+        "NodeProfile.spec.deployment"
       ],
       "requiredCapabilities": [
         "filesystem"
@@ -541,7 +533,7 @@
       "category": "runtime",
       "inputs": [
         "Node.spec.image",
-        "LauncherProfile.spec.imagePull",
+        "NodeProfile.spec.imagePull",
         "Config.spec.imagePull",
         "Node.spec.image-pull-policy"
       ],
@@ -553,7 +545,7 @@
       ],
       "sourcePaths": [
         "apis/v1alpha1/configspec.go",
-        "apis/v1alpha1/launcherprofile.go",
+        "apis/v1alpha1/nodeprofile.go",
         "controllers/node/direct.go",
         "controllers/node/imagemetadata.go",
         "internal/directpod",
@@ -594,7 +586,7 @@
         "OCI healthcheck",
         "component status",
         "imported readiness",
-        "LauncherProfile.spec.statusProbes",
+        "NodeProfile.spec.statusProbes",
         "Node.spec.healthcheck"
       ],
       "requiredCapabilities": [
@@ -652,30 +644,6 @@
         "controllers/link/allocate.go",
         "internal/directruntime/connectivity.go",
         "internal/directruntime/links_linux.go",
-        "internal/directruntime/fabric_linux.go"
-      ],
-      "state": "direct"
-    },
-    {
-      "id": "link-slurpeeth",
-      "category": "link",
-      "inputs": [
-        "Link.spec.endpointA",
-        "Link.spec.endpointB",
-        "Link.spec.mtu",
-        "Link.spec.connectivity",
-        "Link.status.tunnelID",
-        "Pod peer"
-      ],
-      "requiredCapabilities": [
-        "connectivity"
-      ],
-      "scenarios": [
-        "link-slurpeeth"
-      ],
-      "sourcePaths": [
-        "controllers/link/allocate.go",
-        "internal/directruntime/connectivity.go",
         "internal/directruntime/fabric_linux.go"
       ],
       "state": "direct"
@@ -855,7 +823,7 @@
       "inputs": [
         "Node",
         "Link",
-        "LauncherProfile"
+        "NodeProfile"
       ],
       "requiredCapabilities": [
         "entry-path"
@@ -909,9 +877,9 @@
     }
   ],
   "invalidation": {
-    "planner": "sha256:890459a151b1faf1",
-    "renderer": "sha256:5c114f4d7c46a017",
-    "preparation": "sha256:98213d1dfd85480b",
-    "connectivity": "sha256:8f303d8955bb617e"
+    "planner": "sha256:8c479a8eb610a892",
+    "renderer": "sha256:e36b41709c244f35",
+    "preparation": "sha256:380010748b4f85bb",
+    "connectivity": "sha256:b837da5f5d08b9ec"
   }
 }

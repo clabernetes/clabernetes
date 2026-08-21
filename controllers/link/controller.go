@@ -20,7 +20,7 @@ import (
 )
 
 // Controller is the clabernetes Link controller -- it validates Link resources and allocates
-// (into the status) the tunnel ids that cross-launcher links use.
+// (into the status) the tunnel ids that cross-pod links use.
 type Controller struct {
 	*clabernetescontrollers.BaseController
 
@@ -72,7 +72,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 			ctrlruntimebuilder.WithPredicates(ctrlruntimepredicate.GenerationChangedPredicate{}),
 		).
 		// watch nodes (spec changes only) since node grouping (network-mode) decides which links
-		// are same-launcher links (and those need no tunnel id)
+		// are same-pod links (and those need no tunnel id)
 		Watches(
 			&clabernetesapisv1alpha1.Node{},
 			c.nodeEnqueueHandler(),
@@ -82,7 +82,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 }
 
 // nodeEnqueueHandler records actual Node deletion events and enqueues Links whose lifecycle or
-// launcher grouping may be affected. Reconcile performs the authoritative UID comparison and logs
+// pod grouping may be affected. Reconcile performs the authoritative UID comparison and logs
 // each Link it deletes.
 func (c *Controller) nodeEnqueueHandler() ctrlruntimehandler.EventHandler {
 	enqueue := func(

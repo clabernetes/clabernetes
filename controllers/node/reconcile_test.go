@@ -321,13 +321,13 @@ func TestPrepareServiceForUpdatePreservesNodePorts(t *testing.T) {
 	}
 }
 
-func TestResolveGroupLauncherProfileReferenceInheritsPrimary(t *testing.T) {
+func TestResolveGroupProfileReferenceInheritsPrimary(t *testing.T) {
 	primary := nodeReconcileTestNode()
-	primary.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: "group-profile"}
+	primary.Spec.ProfileRef = &k8scorev1.LocalObjectReference{Name: "group-profile"}
 	secondary := nodeReconcileTestNode()
 	secondary.Name = "sim-a"
 
-	profileName, err := resolveGroupLauncherProfileReference(
+	profileName, err := resolveGroupProfileReference(
 		primary.GetName(),
 		[]string{primary.GetName(), secondary.GetName()},
 		map[string]*clabernetesapisv1alpha1.Node{
@@ -336,7 +336,7 @@ func TestResolveGroupLauncherProfileReferenceInheritsPrimary(t *testing.T) {
 		},
 	)
 	if err != nil {
-		t.Fatalf("resolveGroupLauncherProfileReference() error = %s", err)
+		t.Fatalf("resolveGroupProfileReference() error = %s", err)
 	}
 
 	if profileName != "group-profile" {
@@ -344,14 +344,14 @@ func TestResolveGroupLauncherProfileReferenceInheritsPrimary(t *testing.T) {
 	}
 }
 
-func TestResolveGroupLauncherProfileReferenceRejectsConflict(t *testing.T) {
+func TestResolveGroupProfileReferenceRejectsConflict(t *testing.T) {
 	primary := nodeReconcileTestNode()
-	primary.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: "primary-profile"}
+	primary.Spec.ProfileRef = &k8scorev1.LocalObjectReference{Name: "primary-profile"}
 	secondary := nodeReconcileTestNode()
 	secondary.Name = "sim-a"
-	secondary.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: "other-profile"}
+	secondary.Spec.ProfileRef = &k8scorev1.LocalObjectReference{Name: "other-profile"}
 
-	_, err := resolveGroupLauncherProfileReference(
+	_, err := resolveGroupProfileReference(
 		primary.GetName(),
 		[]string{primary.GetName(), secondary.GetName()},
 		map[string]*clabernetesapisv1alpha1.Node{

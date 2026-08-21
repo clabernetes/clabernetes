@@ -18,7 +18,7 @@ import (
 )
 
 // Reconciler is the topology reconciler -- it *compiles* a Topology definition into the
-// primitive Node/Link/LauncherProfile objects (all actual reconciliation of those happens in their
+// primitive Node/Link/NodeProfile objects (all actual reconciliation of those happens in their
 // own controllers, identically for compiled and hand written objects), prunes emitted objects
 // that fell out of the definition, protects them from drift, and aggregates their statuses back
 // into the Topology status.
@@ -98,20 +98,13 @@ func (r *Reconciler) Reconcile(
 		return err
 	}
 
-	err = r.legacyCleanup(ctx, topology)
-	if err != nil {
-		r.Log.Criticalf("failed cleaning up legacy (pre node/link) objects, err: %s", err)
-
-		return err
-	}
-
 	// profiles carry the deployment/expose policy for the emitted nodes and links wire them --
 	// emit both *before* the nodes so the node controller never renders a node against default
 	// policy (i.e. creating expose load balancers the user explicitly disabled) or a partial
 	// wiring view while the rest of the compilation is still landing
-	err = r.reconcileLauncherProfiles(ctx, topology, compiled)
+	err = r.reconcileNodeProfiles(ctx, topology, compiled)
 	if err != nil {
-		r.logEmittedReconcileFailure("launcher profiles", err)
+		r.logEmittedReconcileFailure("node profiles", err)
 
 		return err
 	}
@@ -316,14 +309,14 @@ func (r *Reconciler) reconcileLinks( //nolint:dupl
 	)
 }
 
-func (r *Reconciler) reconcileLauncherProfiles(
+func (r *Reconciler) reconcileNodeProfiles(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
 ) error {
-	rendered := RenderLauncherProfiles(topology, compiled, r.configManagerGetter)
+	rendered := RenderNodeProfiles(topology, compiled, r.configManagerGetter)
 
-	ownedProfiles := &clabernetesapisv1alpha1.LauncherProfileList{}
+	ownedProfiles := &clabernetesapisv1alpha1.NodeProfileList{}
 
 	err := r.Client.List(
 		ctx,
@@ -335,7 +328,7 @@ func (r *Reconciler) reconcileLauncherProfiles(
 	}
 
 	existing := make(
-		map[string]*clabernetesapisv1alpha1.LauncherProfile,
+		map[string]*clabernetesapisv1alpha1.NodeProfile,
 		len(ownedProfiles.Items),
 	)
 
@@ -351,11 +344,11 @@ func (r *Reconciler) reconcileLauncherProfiles(
 		ctx,
 		r,
 		topology,
-		"launcher profile",
+		"node profile",
 		rendered,
 		existing,
-		emittedObjectConforms[*clabernetesapisv1alpha1.LauncherProfile],
-		func(_, _ *clabernetesapisv1alpha1.LauncherProfile) {},
+		emittedObjectConforms[*clabernetesapisv1alpha1.NodeProfile],
+		func(_, _ *clabernetesapisv1alpha1.NodeProfile) {},
 	)
 }
 

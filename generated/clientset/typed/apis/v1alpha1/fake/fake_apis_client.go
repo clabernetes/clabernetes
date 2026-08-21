@@ -32,16 +32,16 @@ func (c *FakeC9sV1alpha1) Configs(namespace string) v1alpha1.ConfigInterface {
 	return newFakeConfigs(c, namespace)
 }
 
-func (c *FakeC9sV1alpha1) LauncherProfiles(namespace string) v1alpha1.LauncherProfileInterface {
-	return newFakeLauncherProfiles(c, namespace)
-}
-
 func (c *FakeC9sV1alpha1) Links(namespace string) v1alpha1.LinkInterface {
 	return newFakeLinks(c, namespace)
 }
 
 func (c *FakeC9sV1alpha1) Nodes(namespace string) v1alpha1.NodeInterface {
 	return newFakeNodes(c, namespace)
+}
+
+func (c *FakeC9sV1alpha1) NodeProfiles(namespace string) v1alpha1.NodeProfileInterface {
+	return newFakeNodeProfiles(c, namespace)
 }
 
 func (c *FakeC9sV1alpha1) Topologies(namespace string) v1alpha1.TopologyInterface {

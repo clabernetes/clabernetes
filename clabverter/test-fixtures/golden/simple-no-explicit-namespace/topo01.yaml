@@ -4,7 +4,6 @@ metadata:
   name: topo01
   namespace: c9s-topo01
 spec:
-  connectivity: slurpeeth
   definition:
     containerlab: |-
       name: topo01

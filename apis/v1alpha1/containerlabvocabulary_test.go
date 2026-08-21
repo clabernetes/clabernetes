@@ -187,7 +187,7 @@ func TestNodeVocabularyIsContainerlabSubset(t *testing.T) {
 		for _, tag := range tags {
 			if !slices.Contains(theirs, tag) {
 				t.Errorf(
-					"%s field %q does not exist in containerlab %s -- the launcher would fail to"+
+					"%s field %q does not exist in containerlab %s -- the device runtime would fail to"+
 						" parse a topology using it",
 					typeName,
 					tag,

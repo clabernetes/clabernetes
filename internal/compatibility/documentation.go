@@ -46,48 +46,11 @@ require a c9s row, switch, fixture, or adapter for a new kind name.
 		baseline.Containerlab.Version, baseline.Containerlab.Commit, baseline.PlanSchemaVersion)
 
 	output.WriteString(`
-## Behavior inventory
-
-The current-realization column describes how each behavior is implemented:
-
-- ` + "`controller-native`" + `: owned by a Kubernetes controller, compiler, or the platform itself.
-- ` + "`direct`" + `: realized by the direct device runtime from imported containerlab behavior and generic plan operations.
-- ` + "`partial`" + `: implementation paths exist, but conformance evidence is incomplete.
-- ` + "`missing`" + `: no current implementation exists.
-
-| Category | Behavior | Inputs | Required capabilities | Required scenarios | Current realization |
-| --- | --- | --- | --- | --- | --- |
-`)
-
-	behaviors := slices.Clone(baseline.Behaviors)
-	slices.SortFunc(behaviors, func(left, right Behavior) int {
-		if comparison := strings.Compare(left.Category, right.Category); comparison != 0 {
-			return comparison
-		}
-		return strings.Compare(left.ID, right.ID)
-	})
-	for index := range behaviors {
-		behavior := &behaviors[index]
-		fmt.Fprintf(
-			&output,
-			"| %s | %s | %s | %s | %s | %s |\n",
-			code(behavior.Category),
-			code(behavior.ID),
-			codeList(behavior.Inputs),
-			codeList(
-				behavior.RequiredCapabilities,
-			),
-			codeList(behavior.Scenarios),
-			code(behavior.State),
-		)
-	}
-
-	output.WriteString(`
-## Capability contract
+## What compatibility covers
 
 Every compatible kind discovered from the live registry must satisfy every applicable
-generic capability and scenario. Behavior rows define the API and operational
-requirements used to generate those conformance runs.
+generic capability below; conformance runs are generated from the machine-readable
+behavior inventory in ` + "`" + DefaultBaselinePath + "`" + `.
 
 | Capability | Requirement |
 | --- | --- |
@@ -120,18 +83,6 @@ require c9s catalog edits. Generic behavior gaps still fail conformance.
 
 func code(value string) string {
 	return "`" + strings.ReplaceAll(markdownCell(value), "`", "\\`") + "`"
-}
-
-func codeList(values []string) string {
-	if len(values) == 0 {
-		return "—"
-	}
-
-	items := make([]string, 0, len(values))
-	for _, value := range values {
-		items = append(items, code(value))
-	}
-	return strings.Join(items, ", ")
 }
 
 func markdownCell(value string) string {

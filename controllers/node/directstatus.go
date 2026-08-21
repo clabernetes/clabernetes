@@ -189,10 +189,9 @@ func (r *Reconciler) updateDirectStatuses(
 			desiredStatus.Readiness = clabernetesconstants.NodeStatusNotReady
 		}
 
-		desiredStatus.ProbeStatuses = nil
 		desiredStatus.ExposedPorts = exposedPorts[memberName]
-		desiredStatus.AppliedLauncherProfile = copyAppliedLauncherProfile(
-			profile.AppliedLauncherProfile,
+		desiredStatus.AppliedProfile = copyAppliedProfile(
+			profile.AppliedProfile,
 		)
 		desiredStatus.PlanDigest = planDigest
 		desiredStatus.DirectContainers = observations
@@ -246,10 +245,10 @@ func (r *Reconciler) updateDirectStatuses(
 		setDirectStatusCondition(
 			&desiredStatus,
 			member,
-			clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+			clabernetesapisv1alpha1.NodeConditionProfileResolved,
 			metav1.ConditionTrue,
-			"LauncherProfileResolved",
-			launcherProfileResolutionMessage(desiredStatus.AppliedLauncherProfile),
+			"NodeProfileResolved",
+			nodeProfileResolutionMessage(desiredStatus.AppliedProfile),
 		)
 
 		if err = r.updateNodeStatus(ctx, member, desiredStatus); err != nil {
@@ -616,7 +615,7 @@ func (r *Reconciler) recordDirectConditionTransitions(
 
 func isDirectStatusCondition(conditionType string) bool {
 	switch conditionType {
-	case clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+	case clabernetesapisv1alpha1.NodeConditionProfileResolved,
 		clabernetesapisv1alpha1.NodeConditionPlanApplied,
 		clabernetesapisv1alpha1.NodeConditionPrepared,
 		clabernetesapisv1alpha1.NodeConditionConnectivityReady,

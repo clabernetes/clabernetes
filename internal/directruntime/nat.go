@@ -12,8 +12,8 @@ type InterpositionPortMap struct {
 }
 
 // InterpositionNATSpec is the complete translation state for one interposed management identity.
-// All addresses are IPv4: the daemon management loop this mode replaces is IPv4-only, and IPv6
-// translation is introduced together with its conformance evidence.
+// All addresses are IPv4; IPv6 translation is introduced together with its conformance
+// evidence.
 type InterpositionNATSpec struct {
 	// PodAddress is the bare kubelet-assigned Pod IPv4 address.
 	PodAddress string

@@ -5,7 +5,7 @@ The direct image suite reads an environment-owned YAML bundle from
 containerlab's imported live registry remains the only kind inventory, while the selected test
 environment reports which images and required credentials it can actually access.
 
-Each scenario contains ordinary `Node`, `Link`, `LauncherProfile`, or `Topology` manifests. The
+Each scenario contains ordinary `Node`, `Link`, `NodeProfile`, or `Topology` manifests. The
 harness compiles those resources, derives every kind/image pair, validates every kind against the
 live imported registry, requires every derived Node to be covered by both management and dataplane
 observations, waits for every Node to report direct readiness, runs the observations, and deletes

@@ -19,11 +19,11 @@ func NodesByName(
 	return byName
 }
 
-// ResolveLauncherNode resolves the name of the launcher (pod) hosting the given (containerlab)
+// ResolvePrimaryNode resolves the name of the primary node whose Pod hosts the given (containerlab)
 // node -- for "grouped" nodes (network-mode: container:<primary>) this walks to the group's
 // primary node; for anything else (including nodes that have no Node object (yet)) the node
 // name itself is returned.
-func ResolveLauncherNode(
+func ResolvePrimaryNode(
 	nodes map[string]*clabernetesapisv1alpha1.Node,
 	nodeName string,
 ) string {
@@ -53,20 +53,20 @@ func ResolveLauncherNode(
 	}
 }
 
-// ResolveGroupMembers returns the (sorted) names of all nodes hosted by the given launcher node
-// -- the launcher node itself first, then any nodes grouped onto it via network-mode.
+// ResolveGroupMembers returns the (sorted) names of all nodes hosted by the given primary node
+// -- the primary node itself first, then any nodes grouped onto it via network-mode.
 func ResolveGroupMembers(
 	nodes map[string]*clabernetesapisv1alpha1.Node,
-	launcherNode string,
+	primaryNode string,
 ) []string {
-	members := []string{launcherNode}
+	members := []string{primaryNode}
 
 	for nodeName := range nodes {
-		if nodeName == launcherNode {
+		if nodeName == primaryNode {
 			continue
 		}
 
-		if ResolveLauncherNode(nodes, nodeName) == launcherNode {
+		if ResolvePrimaryNode(nodes, nodeName) == primaryNode {
 			members = append(members, nodeName)
 		}
 	}

@@ -8,12 +8,12 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 )
 
-// ResolvedProfile holds the fully resolved launcher policy for a Node. Global Config values form
-// the base and, when present, one explicitly referenced LauncherProfile overrides them.
+// ResolvedProfile holds the fully resolved realization policy for a Node. Global Config values form
+// the base and, when present, one explicitly referenced NodeProfile overrides them.
 type ResolvedProfile struct {
-	// AppliedLauncherProfile identifies the explicit profile layered over Config. It is nil when
+	// AppliedProfile identifies the explicit profile layered over Config. It is nil when
 	// only Config defaults are used.
-	AppliedLauncherProfile *clabernetesapisv1alpha1.AppliedLauncherProfileStatus
+	AppliedProfile *clabernetesapisv1alpha1.AppliedProfileStatus
 
 	// expose policy
 	DisableExpose          bool
@@ -26,7 +26,7 @@ type ResolvedProfile struct {
 	ImagePullPolicy string
 	PullSecrets     []string
 
-	// launcher Pod resources -- nil means use the Config by-containerlab-kind lookup
+	// device Pod resources -- nil means use the Config default resources
 	Resources *k8scorev1.ResourceRequirements
 
 	// scheduling
@@ -40,14 +40,14 @@ type ResolvedProfile struct {
 	// status probes
 	StatusProbes clabernetesapisv1alpha1.StatusProbes
 
-	// management network settings for the launcher's Pod-local Docker network
+	// management-overlay allocation policy for the node's device Pod
 	Mgmt *clabernetesapisv1alpha1.ManagementPolicy
 }
 
-// ResolveProfile resolves Config defaults plus at most one explicitly selected LauncherProfile.
+// ResolveProfile resolves Config defaults plus at most one explicitly selected NodeProfile.
 func ResolveProfile(
 	_ *clabernetesapisv1alpha1.Node,
-	profile *clabernetesapisv1alpha1.LauncherProfile,
+	profile *clabernetesapisv1alpha1.NodeProfile,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) (*ResolvedProfile, error) {
 	configManager := configManagerGetter()
@@ -63,7 +63,7 @@ func ResolveProfile(
 	}
 
 	applyProfile(resolved, profile)
-	resolved.AppliedLauncherProfile = &clabernetesapisv1alpha1.AppliedLauncherProfileStatus{
+	resolved.AppliedProfile = &clabernetesapisv1alpha1.AppliedProfileStatus{
 		Name:       profile.GetName(),
 		UID:        profile.GetUID(),
 		Generation: profile.GetGeneration(),
@@ -74,7 +74,7 @@ func ResolveProfile(
 
 func applyProfile(
 	resolved *ResolvedProfile,
-	profile *clabernetesapisv1alpha1.LauncherProfile,
+	profile *clabernetesapisv1alpha1.NodeProfile,
 ) {
 	applyProfileExpose(resolved, profile.Spec.Expose)
 	applyProfileImagePull(resolved, profile.Spec.ImagePull)
@@ -112,7 +112,7 @@ func applyProfile(
 
 func applyProfileExpose(
 	resolved *ResolvedProfile,
-	expose *clabernetesapisv1alpha1.LauncherProfileExpose,
+	expose *clabernetesapisv1alpha1.NodeProfileExpose,
 ) {
 	if expose == nil {
 		return
@@ -141,7 +141,7 @@ func applyProfileExpose(
 
 func applyProfileImagePull(
 	resolved *ResolvedProfile,
-	imagePull *clabernetesapisv1alpha1.LauncherProfileImagePull,
+	imagePull *clabernetesapisv1alpha1.NodeProfileImagePull,
 ) {
 	if imagePull == nil {
 		return
@@ -158,7 +158,7 @@ func applyProfileImagePull(
 
 func applyProfileDeployment(
 	resolved *ResolvedProfile,
-	deployment *clabernetesapisv1alpha1.LauncherProfileDeployment,
+	deployment *clabernetesapisv1alpha1.NodeProfileDeployment,
 ) {
 	if deployment == nil {
 		return

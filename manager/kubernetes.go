@@ -57,8 +57,8 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 						// about anything else (for now -- and we can override it with opts.ByObject
 						// anyway?! and... who the hell calls their app "clabernetes" so this should
 						// really limit the cache nicely :)
-						// currently this matters for launcher service accounts, role bindings,
-						// services (fabric and expose), and (launcher) deployments
+						// currently this matters for direct-runtime service accounts, role
+						// bindings, services (fabric, expose, alias, mesh), and deployments
 						"c9s.run/app": appName,
 					},
 				)
@@ -72,7 +72,7 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 							},
 						},
 					},
-					// nodes/links/launcher profiles are the primary api -- they are created by
+					// nodes/links/node profiles are the primary api -- they are created by
 					// users (or tooling) and carry no c9s.run/app label, so they must be
 					// cached unconditionally
 					&clabernetesapisv1alpha1.Node{}: {
@@ -89,7 +89,7 @@ func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime
 							},
 						},
 					},
-					&clabernetesapisv1alpha1.LauncherProfile{}: {
+					&clabernetesapisv1alpha1.NodeProfile{}: {
 						Namespaces: map[string]ctrlruntimecache.Config{
 							ctrlruntimecache.AllNamespaces: {
 								LabelSelector: labels.Everything(),

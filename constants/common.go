@@ -25,9 +25,6 @@ const (
 	// VXLANServicePort is the port number for vxlan that we use in the kubernetes service.
 	VXLANServicePort = 14789
 
-	// SlurpeethServicePort is the port number for slurpeeth that we use in the kubernetes service.
-	SlurpeethServicePort = 4799
-
 	// ManagementMeshServiceName is the namespace-scoped headless Service through which mesh
 	// member Pods discover the current management L2 mesh peer set.
 	ManagementMeshServiceName = "c9s-management-mesh"

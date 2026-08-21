@@ -261,7 +261,7 @@ type TCPProbeConfiguration struct {
 	Port int `json:"port"`
 }
 
-// ImagePull holds Kubernetes-native image pull defaults compiled into LauncherProfile.
+// ImagePull holds Kubernetes-native image pull defaults compiled into NodeProfile.
 type ImagePull struct {
 	// Policy is the default Kubernetes pull policy for application containers whose flattened Node
 	// definition does not explicitly declare one.

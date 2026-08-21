@@ -118,26 +118,6 @@ func (c *Controller) Reconcile(
 		)
 	}
 
-	if slices.Contains(
-		link.GetFinalizers(),
-		clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
-	) {
-		// Daemon-era host Links carried a node-local cleanup finalizer; host state is now
-		// Pod-namespace-scoped, so the finalizer is stripped on sight.
-		link.SetFinalizers(slices.DeleteFunc(
-			slices.Clone(link.GetFinalizers()),
-			func(finalizer string) bool {
-				return finalizer == clabernetesapisv1alpha1.LinkHostEndpointFinalizer
-			},
-		))
-
-		if err = c.BaseController.Client.Update(ctx, link); err != nil {
-			return ctrlruntime.Result{}, fmt.Errorf("removing host-endpoint finalizer: %w", err)
-		}
-
-		return ctrlruntime.Result{}, nil
-	}
-
 	// Tunnel IDs are VXLAN VNIs terminating in the shared worker host namespaces, so the
 	// allocation space is cluster-wide: two Links in different namespaces with one VNI would
 	// collide on any worker hosting endpoints of both.
@@ -220,9 +200,6 @@ func desiredLinkStatus(
 		ResolvedEndpoints: resolvedEndpoints,
 		Conditions:        slices.Clone(link.Status.Conditions),
 	}
-	if conditionStatus == metav1.ConditionFalse {
-		status.Error = message
-	}
 
 	apimachinerymeta.SetStatusCondition(&status.Conditions, metav1.Condition{
 		Type: clabernetesapisv1alpha1.LinkConditionAccepted, Status: conditionStatus,
@@ -268,28 +245,11 @@ func (c *Controller) prepareReconcile(
 
 	if link.DeletionTimestamp != nil || c.BaseController.ShouldIgnoreReconcile(link) {
 		// Host Link state is Pod-namespace-scoped and dies with the Pod; nothing node-local
-		// gates deletion. A daemon-era finalizer from a previous version is stripped so the
-		// Link can finish deleting.
-		if slices.Contains(
-			link.GetFinalizers(),
-			clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
-		) {
-			link.SetFinalizers(slices.DeleteFunc(
-				slices.Clone(link.GetFinalizers()),
-				func(finalizer string) bool {
-					return finalizer == clabernetesapisv1alpha1.LinkHostEndpointFinalizer
-				},
-			))
-
-			if err = c.BaseController.Client.Update(ctx, link); err != nil {
-				return nil, false, fmt.Errorf("removing legacy host-endpoint finalizer: %w", err)
-			}
-		}
-
+		// gates deletion.
 		return nil, true, nil
 	}
 
-	// Endpoint identity and launcher grouping come from the live reader. Bindings whose names no
+	// Endpoint identity and pod grouping come from the live reader. Bindings whose names no
 	// longer match the spec are intentionally stale (the Link was rewired), so they are cleared
 	// and the new endpoint names are allowed to resolve normally.
 	namespaceNodes, nodesByName, err := c.listNamespaceNodes(ctx, req.Namespace)

@@ -28,7 +28,7 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.AppliedLauncherProfileStatus": schema_clabernetes_clabernetes_apis_v1alpha1_AppliedLauncherProfileStatus(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.AppliedProfileStatus": schema_clabernetes_clabernetes_apis_v1alpha1_AppliedProfileStatus(
 			ref,
 		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig": schema_clabernetes_clabernetes_apis_v1alpha1_CertificateConfig(
@@ -91,27 +91,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull": schema_clabernetes_clabernetes_apis_v1alpha1_ImagePull(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfile": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfile(
-			ref,
-		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileDeployment": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileDeployment(
-			ref,
-		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileExpose": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileExpose(
-			ref,
-		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileImagePull": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileImagePull(
-			ref,
-		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileList": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileList(
-			ref,
-		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileSpec": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileSpec(
-			ref,
-		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileStatus": schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileStatus(
-			ref,
-		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.Link": schema_clabernetes_clabernetes_apis_v1alpha1_Link(
 			ref,
 		),
@@ -160,7 +139,25 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeList": schema_clabernetes_clabernetes_apis_v1alpha1_NodeList(
 			ref,
 		),
-		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProbeStatuses": schema_clabernetes_clabernetes_apis_v1alpha1_NodeProbeStatuses(
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfile": schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfile(
+			ref,
+		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileDeployment": schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileDeployment(
+			ref,
+		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileExpose": schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileExpose(
+			ref,
+		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileImagePull": schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileImagePull(
+			ref,
+		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileList": schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileList(
+			ref,
+		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileSpec": schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileSpec(
+			ref,
+		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileStatus": schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileStatus(
 			ref,
 		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeSpec": schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
@@ -208,18 +205,18 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 	}
 }
 
-func schema_clabernetes_clabernetes_apis_v1alpha1_AppliedLauncherProfileStatus(
+func schema_clabernetes_clabernetes_apis_v1alpha1_AppliedProfileStatus(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "AppliedLauncherProfileStatus identifies the exact LauncherProfile revision applied to a Node.",
+				Description: "AppliedProfileStatus identifies the exact NodeProfile revision applied to a Node.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"name": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Name is the LauncherProfile name.",
+							Description: "Name is the NodeProfile name.",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
@@ -235,7 +232,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_AppliedLauncherProfileStatus(
 					},
 					"generation": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Generation is the applied LauncherProfile generation.",
+							Description: "Generation is the applied NodeProfile generation.",
 							Default:     0,
 							Type:        []string{"integer"},
 							Format:      "int64",
@@ -1272,7 +1269,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ImagePull(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "ImagePull holds Kubernetes-native image pull defaults compiled into LauncherProfile.",
+				Description: "ImagePull holds Kubernetes-native image pull defaults compiled into NodeProfile.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"policy": {
@@ -1307,318 +1304,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ImagePull(
 	}
 }
 
-func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfile(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LauncherProfile holds reusable Kubernetes and launcher realization policy for Nodes. A Node applies at most one LauncherProfile through spec.launcherProfileRef; fields omitted from the profile inherit the global Config defaults.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"apiVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"metadata": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
-						},
-					},
-					"spec": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileSpec",
-							),
-						},
-					},
-					"status": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileStatus",
-							),
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileSpec", "github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
-	}
-}
-
-func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileDeployment(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LauncherProfileDeployment holds portable direct workload persistence policy.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"persistence": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Persistence enables persistence of the containerlab working directory.",
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence",
-							),
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence"},
-	}
-}
-
-func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileExpose(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LauncherProfileExpose holds the expose policy fields of a LauncherProfile. Pointers distinguish an omitted value from an explicit false value.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"disableExpose": {
-						SchemaProps: spec.SchemaProps{
-							Description: "DisableExpose indicates if exposing Nodes via a Service should be disabled.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-					"disableAutoExpose": {
-						SchemaProps: spec.SchemaProps{
-							Description: "DisableAutoExpose disables automatic exposure of the default port list.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-					"exposeType": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ExposeType configures the Service type used for exposing Nodes.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"useNodeMgmtIpv4Address": {
-						SchemaProps: spec.SchemaProps{
-							Description: "UseNodeMgmtIpv4Address assigns a Node's management IPv4 address as its LoadBalancerIP.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-					"useNodeMgmtIpv6Address": {
-						SchemaProps: spec.SchemaProps{
-							Description: "UseNodeMgmtIpv6Address assigns a Node's management IPv6 address as its LoadBalancerIP.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileImagePull(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LauncherProfileImagePull holds Kubernetes-native image pull policy for direct device Pods.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"policy": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Policy is the default Kubernetes pull policy for application containers whose flattened Node definition does not explicitly declare one.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"pullSecrets": {
-						VendorExtensible: spec.VendorExtensible{
-							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "set",
-							},
-						},
-						SchemaProps: spec.SchemaProps{
-							Description: "PullSecrets provides same-namespace Docker-config Secrets to the kubelet through Pod.spec.imagePullSecrets. Credentials are not mounted into application containers.",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Type:   []string{"string"},
-										Format: "",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileList(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LauncherProfileList is a list of LauncherProfile objects.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"apiVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"metadata": {
-						SchemaProps: spec.SchemaProps{
-							Default: map[string]interface{}{},
-							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
-						},
-					},
-					"items": {
-						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref(
-											"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfile",
-										),
-									},
-								},
-							},
-						},
-					},
-				},
-				Required: []string{"items"},
-			},
-		},
-		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfile", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
-	}
-}
-
-func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileSpec(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LauncherProfileSpec is the spec for a LauncherProfile resource.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"expose": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Expose holds configurations relevant to how Nodes using this profile are exposed.",
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileExpose",
-							),
-						},
-					},
-					"imagePull": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ImagePull holds configurations relevant to how launcher Pods handle pulling images.",
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileImagePull",
-							),
-						},
-					},
-					"resources": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Resources holds the Kubernetes resource requirements for launcher Pods.",
-							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
-						},
-					},
-					"scheduling": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Scheduling holds launcher Pod scheduling settings.",
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling",
-							),
-						},
-					},
-					"deployment": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Deployment holds launcher deployment settings.",
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileDeployment",
-							),
-						},
-					},
-					"statusProbes": {
-						SchemaProps: spec.SchemaProps{
-							Description: "StatusProbes holds the configurations used to check and report Node status.",
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes",
-							),
-						},
-					},
-					"mgmt": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Mgmt holds shared direct management-overlay allocation policy.",
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.ManagementPolicy",
-							),
-						},
-					},
-				},
-			},
-		},
-		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileDeployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileExpose", "github.com/clabernetes/clabernetes/apis/v1alpha1.LauncherProfileImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.ManagementPolicy", "github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling", "github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes", "k8s.io/api/core/v1.ResourceRequirements"},
-	}
-}
-
-func schema_clabernetes_clabernetes_apis_v1alpha1_LauncherProfileStatus(
-	ref common.ReferenceCallback,
-) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "LauncherProfileStatus is the status for a LauncherProfile resource.",
-				Type:        []string{"object"},
-			},
-		},
-	}
-}
-
 func schema_clabernetes_clabernetes_apis_v1alpha1_Link(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a primary clabernetes API -- like Nodes they can be created by users directly or emitted by the (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints (Node object names in the same namespace plus interface names), connectivity flavor, and an optional MTU. The Link controller allocates a tunnel ID into status for cross-Pod transports; same-Pod, loopback, and host Links need no tunnel allocation. Direct connectivity reconcilers select only Links terminating on their Nodes with endpoint field selectors. Storing one object per wire keeps every persisted object O(1) regardless of topology size.",
+				Description: "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a primary clabernetes API -- like Nodes they can be created by users directly or emitted by the (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints (Node object names in the same namespace plus interface names) and an optional MTU. The Link controller allocates a tunnel ID into status for cross-Pod transports; same-Pod, loopback, and host Links need no tunnel allocation. Direct connectivity reconcilers select only Links terminating on their Nodes with endpoint field selectors. Storing one object per wire keeps every persisted object O(1) regardless of topology size.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -1850,13 +1542,6 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkSpec(
 							Format:      "int32",
 						},
 					},
-					"connectivity": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Connectivity is the flavor used to realize this Link across direct Pods. Empty values on objects stored before API defaulting was introduced are normalized to VXLAN by consumers.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 				},
 				Required: []string{"endpointA", "endpointB"},
 			},
@@ -1877,7 +1562,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkStatus(
 				Properties: map[string]spec.Schema{
 					"tunnelID": {
 						SchemaProps: spec.SchemaProps{
-							Description: "TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller allocated for this link -- both sides of the link use the same id. This is an allocation rather than user intent, hence it living in the status; zero means \"not allocated (yet)\" (direct connectivity reconcilers wait until the controller has filled the ID in).",
+							Description: "TunnelID is the id number of the tunnel (the VXLAN VNI) the controller allocated for this link -- both sides of the link use the same id. This is an allocation rather than user intent, hence it living in the status; zero means \"not allocated (yet)\" (direct connectivity reconcilers wait until the controller has filled the ID in).",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},
@@ -1888,13 +1573,6 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkStatus(
 							Ref: ref(
 								"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkResolvedEndpointsStatus",
 							),
-						},
-					},
-					"error": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Error is a compact compatibility field containing the current Accepted=False message. New consumers should prefer Conditions.",
-							Type:        []string{"string"},
-							Format:      "",
 						},
 					},
 					"conditions": {
@@ -2018,7 +1696,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Node(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "Node represents one logical containerlab node realized in a direct Kubernetes workload. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by the (optional) Topology compiler, or created by any other machinery (i.e. a containerlab runtime); the Node controller treats all of these identically. The object name is the containerlab Node name and the namespace is the topology boundary. The spec is the flattened containerlab Node definition plus per-node payload and launcherProfileRef; wiring lives on Link objects and bounded allocations and observations live in status.",
+				Description: "Node represents one logical containerlab node realized in a direct Kubernetes workload. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by the (optional) Topology compiler, or created by any other machinery (i.e. a containerlab runtime); the Node controller treats all of these identically. The object name is the containerlab Node name and the namespace is the topology boundary. The spec is the flattened containerlab Node definition plus per-node payload and profileRef; wiring lives on Link objects and bounded allocations and observations live in status.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -2751,41 +2429,306 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeList(
 	}
 }
 
-func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProbeStatuses(
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfile(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "NodeProbeStatuses holds the individual probe statuses for a single node.",
+				Description: "NodeProfile holds reusable Kubernetes realization policy for Nodes. A Node applies at most one NodeProfile through spec.profileRef; fields omitted from the profile inherit the global Config defaults.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"startupProbe": {
+					"kind": {
 						SchemaProps: spec.SchemaProps{
-							Description: "StartupProbe is the status of the node's startup probe.",
-							Default:     "",
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"readinessProbe": {
+					"apiVersion": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ReadinessProbe is the status of the node's readiness probe.",
-							Default:     "",
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
-					"livenessProbe": {
+					"metadata": {
 						SchemaProps: spec.SchemaProps{
-							Description: "LivenessProbe is the status of the node's liveness probe.",
-							Default:     "",
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
+						},
+					},
+					"spec": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileSpec",
+							),
+						},
+					},
+					"status": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileStatus",
+							),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileSpec", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileDeployment(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeProfileDeployment holds portable direct workload persistence policy.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"persistence": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Persistence enables persistence of the containerlab working directory.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence",
+							),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence"},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileExpose(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeProfileExpose holds the expose policy fields of a NodeProfile. Pointers distinguish an omitted value from an explicit false value.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"disableExpose": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DisableExpose indicates if exposing Nodes via a Service should be disabled.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"disableAutoExpose": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DisableAutoExpose disables automatic exposure of the default port list.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"exposeType": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ExposeType configures the Service type used for exposing Nodes.",
 							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"useNodeMgmtIpv4Address": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UseNodeMgmtIpv4Address assigns a Node's management IPv4 address as its LoadBalancerIP.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"useNodeMgmtIpv6Address": {
+						SchemaProps: spec.SchemaProps{
+							Description: "UseNodeMgmtIpv6Address assigns a Node's management IPv6 address as its LoadBalancerIP.",
+							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
 				},
-				Required: []string{"startupProbe", "readinessProbe", "livenessProbe"},
+			},
+		},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileImagePull(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeProfileImagePull holds Kubernetes-native image pull policy for direct device Pods.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"policy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Policy is the default Kubernetes pull policy for application containers whose flattened Node definition does not explicitly declare one.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"pullSecrets": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "set",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "PullSecrets provides same-namespace Docker-config Secrets to the kubelet through Pod.spec.imagePullSecrets. Credentials are not mounted into application containers.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileList(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeProfileList is a list of NodeProfile objects.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"kind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"apiVersion": {
+						SchemaProps: spec.SchemaProps{
+							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"metadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
+						},
+					},
+					"items": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfile",
+										),
+									},
+								},
+							},
+						},
+					},
+				},
+				Required: []string{"items"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfile", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileSpec(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeProfileSpec is the spec for a NodeProfile resource.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"expose": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Expose holds configurations relevant to how Nodes using this profile are exposed.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileExpose",
+							),
+						},
+					},
+					"imagePull": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ImagePull holds configurations relevant to how device Pods handle pulling images.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileImagePull",
+							),
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Resources holds the Kubernetes resource requirements for device Pods.",
+							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+						},
+					},
+					"scheduling": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Scheduling holds device Pod scheduling settings.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling",
+							),
+						},
+					},
+					"deployment": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Deployment holds device workload settings.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileDeployment",
+							),
+						},
+					},
+					"statusProbes": {
+						SchemaProps: spec.SchemaProps{
+							Description: "StatusProbes holds the configurations used to check and report Node status.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes",
+							),
+						},
+					},
+					"mgmt": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Mgmt holds shared direct management-overlay allocation policy.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ManagementPolicy",
+							),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ManagementPolicy", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileDeployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileExpose", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling", "github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes", "k8s.io/api/core/v1.ResourceRequirements"},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileStatus(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "NodeProfileStatus is the status for a NodeProfile resource.",
+				Type:        []string{"object"},
 			},
 		},
 	}
@@ -2797,7 +2740,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* -- containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an optional LauncherProfile reference. The definition must be self-contained: expanding topology defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do this for you). Anything that is deployment *policy* rather than node payload -- expose behavior, image pull defaults, generic resources, scheduling, and probes -- lives on LauncherProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a curated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and unknown fields are rejected rather than silently ignored.",
+				Description: "NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* -- containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an optional NodeProfile reference. The definition must be self-contained: expanding topology defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do this for you). Anything that is deployment *policy* rather than node payload -- expose behavior, image pull defaults, generic resources, scheduling, and probes -- lives on NodeProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a curated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and unknown fields are rejected rather than silently ignored.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -3211,9 +3154,9 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 							},
 						},
 					},
-					"launcherProfileRef": {
+					"profileRef": {
 						SchemaProps: spec.SchemaProps{
-							Description: "LauncherProfileRef optionally names the same-namespace LauncherProfile supplying direct workload policy. When omitted, global Config defaults are used.",
+							Description: "ProfileRef optionally names the same-namespace NodeProfile supplying direct workload policy. When omitted, global Config defaults are used.",
 							Ref:         ref("k8s.io/api/core/v1.LocalObjectReference"),
 						},
 					},
@@ -3301,14 +3244,6 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeStatus(
 							Format:      "",
 						},
 					},
-					"probeStatuses": {
-						SchemaProps: spec.SchemaProps{
-							Description: "ProbeStatuses holds legacy nested-runtime probe observations during migration. Direct mode reports application and helper observations through Conditions and DirectContainers.",
-							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProbeStatuses",
-							),
-						},
-					},
 					"exposedPorts": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ExposedPorts holds expose-port allocations for this Node. The controller assigns and programs the direct Pod Service from this field.",
@@ -3338,11 +3273,11 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeStatus(
 							},
 						},
 					},
-					"appliedLauncherProfile": {
+					"appliedProfile": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AppliedLauncherProfile identifies the LauncherProfile revision successfully applied to the direct workload. It is nil when the Node uses only global Config defaults.",
+							Description: "AppliedProfile identifies the NodeProfile revision successfully applied to the direct workload. It is nil when the Node uses only global Config defaults.",
 							Ref: ref(
-								"github.com/clabernetes/clabernetes/apis/v1alpha1.AppliedLauncherProfileStatus",
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.AppliedProfileStatus",
 							),
 						},
 					},
@@ -3388,7 +3323,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeStatus(
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.AppliedLauncherProfileStatus", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeDirectContainerStatus", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeDirectManagementStatus", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeExposedPorts", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProbeStatuses", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.AppliedProfileStatus", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeDirectContainerStatus", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeDirectManagementStatus", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeExposedPorts", "k8s.io/apimachinery/pkg/apis/meta/v1.Condition"},
 	}
 }
 
@@ -3861,13 +3796,6 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 						SchemaProps: spec.SchemaProps{
 							Description: "Naming tells the clabernetes controller how it should name resources it creates -- that is whether it should include the containerlab topology name as a prefix on resources spawned from this Topology or not; this includes the actual (containerlab) node Deployment(s), as well as the Service(s) for the Topology. This setting has three modes; \"prefixed\" -- which of course includes the containerlab topology name as a prefix, \"non-prefixed\" which does *not* include the containerlab topology name as a prefix, and \"global\" which defers to the global config setting for this (which defaults to \"prefixed\"). \"non-prefixed\" mode should only be enabled when/if Topologies are deployed in their own namespace -- the reason for this is simple: if two Topologies exist in the same namespace with a (containerlab) node named \"my-router\" there will be a conflicting Deployment and Services for the \"my-router\" (containerlab) node. Note that this field is immutable! If you want to change its value you need to delete the Topology and re-create it.",
 							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"connectivity": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Connectivity defines the type of connectivity to use between nodes in the topology. The default behavior is to use vxlan tunnels, alternatively you can enable a more experimental \"slurpeeth\" connectivity flavor that stuffs traffic into tcp tunnels to avoid any vxlan mtu and/or fragmentation challenges.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

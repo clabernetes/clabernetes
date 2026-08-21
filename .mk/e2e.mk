@@ -94,7 +94,7 @@ e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally 
 
 .PHONY: e2e-run
 e2e-run: ## Run the e2e Go tests against the caller-selected kube context
-	gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
+	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out ./e2e/...
 
 .PHONY: e2e-test
 e2e-test: e2e-tools install-test-tools ## Run e2e tests using the existing KinD setup

@@ -23,7 +23,7 @@ func TestMain(m *testing.M) {
 }
 
 // TestNodeLinkDirect exercises the primary api without any Topology object against the direct
-// device runtime: hand written Node, Link, and LauncherProfile objects must yield device Pods
+// device runtime: hand written Node, Link, and NodeProfile objects must yield device Pods
 // whose application container is the actual device image, planning worker artifacts must be
 // collected once their records are persisted, and a link rewire that the plan declares live
 // must be applied without rolling the device Pods.

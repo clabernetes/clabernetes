@@ -1,5 +1,5 @@
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   labels:
     c9s.run/app: clabernetes

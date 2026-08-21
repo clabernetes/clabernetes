@@ -3,7 +3,6 @@ package link //nolint:testpackage // tests exercise the unexported reconcile sta
 import (
 	"context"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
@@ -133,14 +132,6 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 				)
 			}
 
-			if !strings.Contains(actual.Status.Error, testCase.errorPart) {
-				t.Fatalf(
-					"expected status error containing %q, got %q",
-					testCase.errorPart,
-					actual.Status.Error,
-				)
-			}
-
 			condition := apimachinerymeta.FindStatusCondition(
 				actual.Status.Conditions,
 				clabernetesapisv1alpha1.LinkConditionAccepted,
@@ -212,7 +203,7 @@ func TestReconcileUnresolvedLinkDoesNotReserveInterface(t *testing.T) {
 		t.Fatalf("failed getting reconciled link: %s", err)
 	}
 
-	if actual.Status.Error != "" || actual.Status.TunnelID != 1 {
+	if rejectionMessage(actual) != "" || actual.Status.TunnelID != 1 {
 		t.Fatalf(
 			"expected valid Link to allocate despite unresolved conflict, got %+v",
 			actual.Status,
@@ -314,8 +305,8 @@ func TestReconcileBindsLinkAfterInitiallyMissingEndpointAppears(t *testing.T) {
 		)
 	}
 
-	if !strings.Contains(actual.Status.Error, "srl2") {
-		t.Fatalf("expected unresolved endpoint error, got %q", actual.Status.Error)
+	if !strings.Contains(rejectionMessage(actual), "srl2") {
+		t.Fatalf("expected unresolved endpoint rejection, got %q", rejectionMessage(actual))
 	}
 
 	srl2 := reconcileTestNode("srl2")
@@ -359,16 +350,8 @@ func TestReconcileBindsHostEndpointWithoutNodeUID(t *testing.T) {
 		)
 	}
 
-	if actual.Status.Error != "" || actual.Status.TunnelID != 0 {
+	if rejectionMessage(actual) != "" || actual.Status.TunnelID != 0 {
 		t.Fatalf("expected valid local host Link status, got %+v", actual.Status)
-	}
-
-	// Host Link state is Pod-namespace-scoped; no node-local finalizer may gate deletion.
-	if slices.Contains(
-		actual.GetFinalizers(),
-		clabernetesapisv1alpha1.LinkHostEndpointFinalizer,
-	) {
-		t.Fatalf("host Link carries a daemon-era finalizer: %v", actual.GetFinalizers())
 	}
 }
 
@@ -399,7 +382,7 @@ func TestReconcileUnrelatedNodeDeletionDoesNotAffectBoundLink(t *testing.T) {
 	if after.Status.ResolvedEndpoints == nil ||
 		!reflect.DeepEqual(*after.Status.ResolvedEndpoints, beforeResolved) ||
 		after.Status.TunnelID != before.Status.TunnelID ||
-		after.Status.Error != before.Status.Error {
+		rejectionMessage(after) != rejectionMessage(before) {
 		t.Fatalf(
 			"expected unrelated Node deletion not to affect Link status, before=%+v after=%+v",
 			before.Status,
@@ -465,11 +448,11 @@ func TestReconcilePreservesBindingAcrossEndpointConflict(t *testing.T) {
 		)
 	}
 
-	if !strings.Contains(after.Status.Error, winner.GetName()) {
+	if !strings.Contains(rejectionMessage(after), winner.GetName()) {
 		t.Fatalf(
-			"expected endpoint conflict error naming %q, got %q",
+			"expected endpoint conflict rejection naming %q, got %q",
 			winner.GetName(),
-			after.Status.Error,
+			rejectionMessage(after),
 		)
 	}
 }
@@ -571,11 +554,29 @@ func requireBoundLink(
 		)
 	}
 
-	if actual.Status.Error != "" {
-		t.Fatalf("expected bound Link %q to be valid, got error %q", name, actual.Status.Error)
+	if rejectionMessage(actual) != "" {
+		t.Fatalf(
+			"expected bound Link %q to be valid, got rejection %q",
+			name,
+			rejectionMessage(actual),
+		)
 	}
 
 	return actual
+}
+
+// rejectionMessage returns the Accepted=False condition message, or "" when the Link is not
+// rejected.
+func rejectionMessage(link *clabernetesapisv1alpha1.Link) string {
+	condition := apimachinerymeta.FindStatusCondition(
+		link.Status.Conditions,
+		clabernetesapisv1alpha1.LinkConditionAccepted,
+	)
+	if condition == nil || condition.Status != metav1.ConditionFalse {
+		return ""
+	}
+
+	return condition.Message
 }
 
 func reconcileTestNode(name string) clabernetesapisv1alpha1.Node {

@@ -385,7 +385,7 @@ func lastPrefixAddress(prefix netip.Prefix) netip.Addr {
 func directManagementError(field, message string) error {
 	return planInputError(
 		clabernetesinternaldeviceplan.ErrorInvalidInput,
-		"launcherProfile.mgmt."+field,
+		"nodeProfile.mgmt."+field,
 		message,
 	)
 }

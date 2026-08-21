@@ -13,11 +13,8 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
-	clabernetesinternalupgradepreflight "github.com/clabernetes/clabernetes/internal/upgradepreflight"
 	clabernetesmanager "github.com/clabernetes/clabernetes/manager"
 	"github.com/urfave/cli/v2"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -90,7 +87,6 @@ func Entrypoint() *cli.App {
 		Version: clabernetesconstants.Version,
 		Usage:   "run clabernetes manager",
 		Commands: []*cli.Command{
-			upgradePreflightCommand(runClusterUpgradePreflight),
 			devicePayloadWorkerCommand(),
 			deviceImageWorkerCommand(),
 			devicePlanWorkerCommand(),
@@ -162,48 +158,6 @@ func Entrypoint() *cli.App {
 			},
 		},
 	}
-}
-
-type upgradePreflightRunner func(context.Context, string, io.Writer) error
-
-func upgradePreflightCommand(run upgradePreflightRunner) *cli.Command {
-	return &cli.Command{
-		Name:  "upgrade-preflight",
-		Usage: "report stored fields that cannot survive the direct-runtime API upgrade",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name: "kubeconfig",
-				Usage: "path to kubeconfig; defaults to standard loading rules " +
-					"or in-cluster config",
-			},
-		},
-		Action: func(c *cli.Context) error {
-			ctx := c.Context
-			if ctx == nil {
-				ctx = context.Background()
-			}
-
-			return run(ctx, c.String("kubeconfig"), c.App.Writer)
-		},
-	}
-}
-
-func runClusterUpgradePreflight(
-	ctx context.Context,
-	kubeconfig string,
-	output io.Writer,
-) error {
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return fmt.Errorf("loading Kubernetes configuration for upgrade preflight: %w", err)
-	}
-
-	client, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return fmt.Errorf("creating Kubernetes client for upgrade preflight: %w", err)
-	}
-
-	return clabernetesinternalupgradepreflight.Run(ctx, client, output)
 }
 
 func devicePayloadWorkerCommand() *cli.Command {

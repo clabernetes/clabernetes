@@ -203,7 +203,7 @@ func topLevelMappingFieldLines(definition, fieldName string) (map[string]int, er
 // validateNodeNetworkModes mirrors the Node CRD's container:<primary> contract in the compiler
 // and additionally verifies references and cycles that the single-object CRD cannot see. This is
 // required for strict, API-free validation and dry-run: callers must not need to create a Node
-// before learning that a native host/none mode or an impossible launcher group is unsupported.
+// before learning that a native host/none mode or an impossible pod group is unsupported.
 func validateNodeNetworkModes(
 	nodes map[string]*clabernetesutilcontainerlab.NodeDefinition,
 	diagnostics *compileDiagnostics,
@@ -237,7 +237,7 @@ func validateNodeNetworkModes(
 				Code: "unknown-network-mode-primary",
 				Path: path,
 				Message: fmt.Sprintf(
-					"node %q shares a launcher with nonexistent primary node %q",
+					"node %q shares a pod with nonexistent primary node %q",
 					nodeName,
 					primary,
 				),
@@ -255,7 +255,7 @@ func validateNodeNetworkModes(
 					Code: "network-mode-cycle",
 					Path: path,
 					Message: fmt.Sprintf(
-						"node %q network-mode participates in a launcher-group cycle",
+						"node %q network-mode participates in a pod-group cycle",
 						nodeName,
 					),
 				})

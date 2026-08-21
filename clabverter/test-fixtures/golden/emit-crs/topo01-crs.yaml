@@ -1,6 +1,6 @@
 ---
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   labels:
     c9s.run/app: clabernetes
@@ -40,7 +40,7 @@ spec:
       startupSeconds: 0
 ---
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   labels:
     c9s.run/app: clabernetes
@@ -90,7 +90,6 @@ metadata:
   name: srl1-e1-1-srl2-e1-1
   namespace: notclabernetes
 spec:
-  connectivity: slurpeeth
   endpointA:
     interfaceName: e1-1
     nodeName: srl1
@@ -121,11 +120,11 @@ spec:
     mode: read
   image: ghcr.io/nokia/srlinux
   kind: srl
-  launcherProfileRef:
-    name: topo01
   license: taco/srl1.license
   ports:
   - 9273/tcp
+  profileRef:
+    name: topo01
   startup-config: srl1.cfg
 
 ---
@@ -163,9 +162,9 @@ spec:
     mode: read
   image: ghcr.io/nokia/srlinux
   kind: srl
-  launcherProfileRef:
-    name: topo01-srl2
   license: srl2.license
+  profileRef:
+    name: topo01-srl2
   startup-config: srl2.cfg
 
 ---
@@ -188,9 +187,9 @@ spec:
     mode: read
   image: nokia_sros:latest
   kind: nokia_sros
-  launcherProfileRef:
-    name: topo01
   license: taco/srl1.license
+  profileRef:
+    name: topo01
 
 ---
 apiVersion: c9s.run/v1alpha1
@@ -212,6 +211,6 @@ spec:
     mode: read
   image: nokia_sros:latest
   kind: nokia_sros
-  launcherProfileRef:
-    name: topo01
   license: srl2.license
+  profileRef:
+    name: topo01

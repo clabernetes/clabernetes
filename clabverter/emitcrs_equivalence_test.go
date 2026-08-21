@@ -68,7 +68,7 @@ func TestDirectManifestCanonicalPlanningInputMatchesTopologyCompilation(t *testi
 		t.Fatal(err)
 	}
 
-	controllerProfiles := clabernetescontrollerstopology.RenderLauncherProfiles(
+	controllerProfiles := clabernetescontrollerstopology.RenderNodeProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -276,7 +276,6 @@ func controllerTopology(
 		ObjectMeta: metav1.ObjectMeta{Name: config.Name, Namespace: "lab"},
 	}
 	topology.Spec.Definition.Containerlab = definition
-	topology.Spec.Connectivity = string(clabernetesapisv1alpha1.LinkConnectivityVXLAN)
 
 	return topology
 }
@@ -285,13 +284,13 @@ func decodeDirectManifestStream(
 	t *testing.T,
 	content []byte,
 ) (
-	[]*clabernetesapisv1alpha1.LauncherProfile,
+	[]*clabernetesapisv1alpha1.NodeProfile,
 	[]*clabernetesapisv1alpha1.Link,
 	[]*clabernetesapisv1alpha1.Node,
 ) {
 	t.Helper()
 
-	profiles := []*clabernetesapisv1alpha1.LauncherProfile{}
+	profiles := []*clabernetesapisv1alpha1.NodeProfile{}
 	links := []*clabernetesapisv1alpha1.Link{}
 	nodes := []*clabernetesapisv1alpha1.Node{}
 
@@ -308,8 +307,8 @@ func decodeDirectManifestStream(
 		}
 
 		switch header.Kind {
-		case "LauncherProfile":
-			profile := &clabernetesapisv1alpha1.LauncherProfile{}
+		case "NodeProfile":
+			profile := &clabernetesapisv1alpha1.NodeProfile{}
 
 			err = yaml.Unmarshal([]byte(document), profile)
 			if err != nil {
@@ -345,10 +344,10 @@ func decodeDirectManifestStream(
 
 func assertPrimitiveSpecsEqual(
 	t *testing.T,
-	directProfiles []*clabernetesapisv1alpha1.LauncherProfile,
+	directProfiles []*clabernetesapisv1alpha1.NodeProfile,
 	directLinks []*clabernetesapisv1alpha1.Link,
 	directNodes []*clabernetesapisv1alpha1.Node,
-	controllerProfiles []*clabernetesapisv1alpha1.LauncherProfile,
+	controllerProfiles []*clabernetesapisv1alpha1.NodeProfile,
 	controllerLinks []*clabernetesapisv1alpha1.Link,
 	controllerNodes []*clabernetesapisv1alpha1.Node,
 ) {
@@ -356,7 +355,7 @@ func assertPrimitiveSpecsEqual(
 
 	assertCanonicalJSONEqual(
 		t,
-		"LauncherProfile specs",
+		"NodeProfile specs",
 		profileSpecsByName(controllerProfiles),
 		profileSpecsByName(directProfiles),
 	)
@@ -399,9 +398,9 @@ func assertCanonicalJSONEqual(t *testing.T, subject string, expected, actual any
 }
 
 func profileSpecsByName(
-	profiles []*clabernetesapisv1alpha1.LauncherProfile,
-) map[string]clabernetesapisv1alpha1.LauncherProfileSpec {
-	result := make(map[string]clabernetesapisv1alpha1.LauncherProfileSpec, len(profiles))
+	profiles []*clabernetesapisv1alpha1.NodeProfile,
+) map[string]clabernetesapisv1alpha1.NodeProfileSpec {
+	result := make(map[string]clabernetesapisv1alpha1.NodeProfileSpec, len(profiles))
 	for _, profile := range profiles {
 		result[profile.GetName()] = profile.Spec
 	}
@@ -472,6 +471,12 @@ func canonicalPlanningInputs(
 			EndpointA: resolvedEndpoint(link.Spec.EndpointA, byName),
 			EndpointB: resolvedEndpoint(link.Spec.EndpointB, byName),
 		}
+		link.Status.Conditions = []metav1.Condition{{
+			Type:               clabernetesapisv1alpha1.LinkConditionAccepted,
+			Status:             metav1.ConditionTrue,
+			Reason:             "Accepted",
+			LastTransitionTime: metav1.Now(),
+		}}
 	}
 
 	names := make([]string, 0, len(nodes))
@@ -484,7 +489,7 @@ func canonicalPlanningInputs(
 	result := map[string]string{}
 
 	for _, name := range names {
-		if clabernetesutilcontainerlab.ResolveLauncherNode(byName, name) != name {
+		if clabernetesutilcontainerlab.ResolvePrimaryNode(byName, name) != name {
 			continue
 		}
 

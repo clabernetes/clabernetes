@@ -55,6 +55,7 @@ func TestCompilePlanInputTreatsKindsAsOpaqueAndCompilesUIDBoundInterfaces(t *tes
 						NodeName: clabernetesapisv1alpha1.LinkHostNodeName,
 					},
 				},
+				Conditions: acceptedLinkConditions(),
 			},
 		},
 	}
@@ -171,7 +172,6 @@ func planInputTestLink(
 			EndpointB: clabernetesapisv1alpha1.LinkEndpointSpec{
 				NodeName: right.GetName(), InterfaceName: rightInterface,
 			},
-			Connectivity: clabernetesapisv1alpha1.LinkConnectivityVXLAN,
 		},
 		Status: clabernetesapisv1alpha1.LinkStatus{
 			TunnelID: tunnelID,
@@ -183,8 +183,20 @@ func planInputTestLink(
 					NodeName: right.GetName(), UID: right.GetUID(),
 				},
 			},
+			Conditions: acceptedLinkConditions(),
 		},
 	}
+}
+
+// acceptedLinkConditions builds the Accepted=True condition set the Link controller stamps on
+// every realizable Link, which plan-input compilation requires.
+func acceptedLinkConditions() []metav1.Condition {
+	return []metav1.Condition{{
+		Type:               clabernetesapisv1alpha1.LinkConditionAccepted,
+		Status:             metav1.ConditionTrue,
+		Reason:             "Accepted",
+		LastTransitionTime: metav1.Now(),
+	}}
 }
 
 func planInputTestImage(

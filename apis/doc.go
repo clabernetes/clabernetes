@@ -15,7 +15,4 @@ const (
 
 	// Link is the Kind of the Link custom resource.
 	Link = "link"
-
-	// LauncherProfile is the Kind of the LauncherProfile custom resource.
-	LauncherProfile = "launcherProfile"
 )

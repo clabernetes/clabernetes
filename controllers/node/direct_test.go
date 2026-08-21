@@ -42,15 +42,15 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 		"registry.example/device:1",
 	)
 	affinity := &k8scorev1.Affinity{PodAntiAffinity: &k8scorev1.PodAntiAffinity{}}
-	profile := &clabernetesapisv1alpha1.LauncherProfile{
+	profile := &clabernetesapisv1alpha1.NodeProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "scheduled", Namespace: node.GetNamespace(), UID: "scheduled-uid",
 		},
-		Spec: clabernetesapisv1alpha1.LauncherProfileSpec{
+		Spec: clabernetesapisv1alpha1.NodeProfileSpec{
 			Scheduling: &clabernetesapisv1alpha1.Scheduling{Affinity: affinity},
 		},
 	}
-	node.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: profile.GetName()}
+	node.Spec.ProfileRef = &k8scorev1.LocalObjectReference{Name: profile.GetName()}
 
 	scheme := plannerTestScheme(t)
 	if err := k8sappsv1.AddToScheme(scheme); err != nil {
@@ -146,7 +146,7 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 			if err = client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(node), service); err != nil {
 				t.Fatalf("reading direct expose Service: %v", err)
 			}
-			// Auto expose keeps nested parity: the planned port plus the default NOS set.
+			// Auto expose keeps containerlab parity: the planned port plus the default NOS set.
 			planned := false
 
 			for _, port := range service.Spec.Ports {
@@ -181,134 +181,125 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 }
 
 func TestDirectReconcileCarriesRemotePeerDiscoveryIntoBothPodPlans(t *testing.T) {
-	for _, connectivity := range []clabernetesapisv1alpha1.LinkConnectivity{
-		clabernetesapisv1alpha1.LinkConnectivityVXLAN,
-		clabernetesapisv1alpha1.LinkConnectivitySlurpeeth,
+	ctx := context.Background()
+	left := planInputTestNode(
+		"future-a",
+		"uid-future-a",
+		"future-kind-known-only-to-imported-package",
+		"registry.example/device:1",
+	)
+	right := planInputTestNode(
+		"future-b",
+		"uid-future-b",
+		"another-kind-known-only-to-imported-package",
+		"registry.example/device:1",
+	)
+	link := planInputTestLink("wire", "uid-wire", left, "eth1", right, "eth2", 73)
+
+	scheme := plannerTestScheme(t)
+	if err := k8sappsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(
+		left,
+		right,
+		&link,
+	).Build()
+	reconciler := NewReconciler(
+		&claberneteslogging.FakeInstance{}, client, client, "clabernetes",
+		clabernetesconfig.GetFakeManager,
+	)
+	reconciler.DirectRuntimeImage = "example/c9s-manager@sha256:cccccccc"
+	reconciler.DirectCompatibility = func() (clabernetesinternaldeviceplan.Compatibility, error) {
+		return planInputTestCompatibility(), nil
+	}
+	reconciler.DirectPlatform = clabernetesinternalocimetadata.Platform{
+		OS: "linux", Architecture: "amd64",
+	}
+	reconciler.ImageMetadataResolver.Resolver = &fakeOCIMetadataResolver{
+		result: &clabernetesinternalocimetadata.Metadata{
+			SchemaVersion: clabernetesinternalocimetadata.SchemaVersion,
+			DigestReference: "registry.example/device@sha256:" +
+				strings.Repeat("a", 64),
+		},
+	}
+	reconciler.ImageDiscoveryReconciler.ReadLogs = directTestWorkerLogs(t, client)
+	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogs(t, client)
+
+	deployments := map[string]*k8sappsv1.Deployment{
+		left.GetName(): reconcileDirectTestDeployment(
+			ctx,
+			t,
+			reconciler,
+			client,
+			left,
+		),
+		right.GetName(): reconcileDirectTestDeployment(
+			ctx,
+			t,
+			reconciler,
+			client,
+			right,
+		),
+	}
+	for _, endpoint := range []struct {
+		node *clabernetesapisv1alpha1.Node
+		peer *clabernetesapisv1alpha1.Node
+	}{
+		{node: left, peer: right},
+		{node: right, peer: left},
 	} {
-		t.Run(string(connectivity), func(t *testing.T) {
-			ctx := context.Background()
-			left := planInputTestNode(
-				"future-a",
-				"uid-future-a",
-				"future-kind-known-only-to-imported-package",
-				"registry.example/device:1",
+		service := &k8scorev1.Service{}
+		if err := client.Get(ctx, ctrlruntimeclient.ObjectKey{
+			Namespace: endpoint.node.GetNamespace(),
+			Name:      FabricServiceName(endpoint.node.GetName()),
+		}, service); err != nil {
+			t.Fatal(err)
+		}
+
+		if service.Spec.ClusterIP != k8scorev1.ClusterIPNone ||
+			!service.Spec.PublishNotReadyAddresses {
+			t.Fatalf(
+				"direct fabric Service for %q = %#v",
+				endpoint.node.GetName(),
+				service.Spec,
 			)
-			right := planInputTestNode(
-				"future-b",
-				"uid-future-b",
-				"another-kind-known-only-to-imported-package",
-				"registry.example/device:1",
+		}
+
+		references, err := clabernetesinternaldirectpod.DeploymentPlanReferences(
+			deployments[endpoint.node.GetName()],
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		configMap := &k8scorev1.ConfigMap{}
+		if err = client.Get(ctx, ctrlruntimeclient.ObjectKey{
+			Namespace: endpoint.node.GetNamespace(), Name: references.PlanConfigMapName,
+		}, configMap); err != nil {
+			t.Fatal(err)
+		}
+
+		plan, err := clabernetesinternaldeviceplan.DecodePlan(
+			[]byte(configMap.Data[planDataKey]),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(plan.Interfaces) != 1 ||
+			plan.Interfaces[0].Connectivity != clabernetesinternaldeviceplan.ConnectivityVXLAN ||
+			plan.Interfaces[0].TunnelID != 73 ||
+			plan.Interfaces[0].PeerNodeID != string(endpoint.peer.GetUID()) ||
+			plan.Interfaces[0].PeerTransport != FabricServiceName(endpoint.peer.GetName()) {
+			t.Fatalf(
+				"vxlan plan for %q = %#v",
+				endpoint.node.GetName(),
+				plan.Interfaces,
 			)
-			link := planInputTestLink("wire", "uid-wire", left, "eth1", right, "eth2", 73)
-			link.Spec.Connectivity = connectivity
-
-			scheme := plannerTestScheme(t)
-			if err := k8sappsv1.AddToScheme(scheme); err != nil {
-				t.Fatal(err)
-			}
-
-			client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
-				WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(
-				left,
-				right,
-				&link,
-			).Build()
-			reconciler := NewReconciler(
-				&claberneteslogging.FakeInstance{}, client, client, "clabernetes",
-				clabernetesconfig.GetFakeManager,
-			)
-			reconciler.DirectRuntimeImage = "example/c9s-manager@sha256:cccccccc"
-			reconciler.DirectCompatibility = func() (clabernetesinternaldeviceplan.Compatibility, error) {
-				return planInputTestCompatibility(), nil
-			}
-			reconciler.DirectPlatform = clabernetesinternalocimetadata.Platform{
-				OS: "linux", Architecture: "amd64",
-			}
-			reconciler.ImageMetadataResolver.Resolver = &fakeOCIMetadataResolver{
-				result: &clabernetesinternalocimetadata.Metadata{
-					SchemaVersion: clabernetesinternalocimetadata.SchemaVersion,
-					DigestReference: "registry.example/device@sha256:" +
-						strings.Repeat("a", 64),
-				},
-			}
-			reconciler.ImageDiscoveryReconciler.ReadLogs = directTestWorkerLogs(t, client)
-			reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogs(t, client)
-
-			deployments := map[string]*k8sappsv1.Deployment{
-				left.GetName(): reconcileDirectTestDeployment(
-					ctx,
-					t,
-					reconciler,
-					client,
-					left,
-				),
-				right.GetName(): reconcileDirectTestDeployment(
-					ctx,
-					t,
-					reconciler,
-					client,
-					right,
-				),
-			}
-			for _, endpoint := range []struct {
-				node *clabernetesapisv1alpha1.Node
-				peer *clabernetesapisv1alpha1.Node
-			}{
-				{node: left, peer: right},
-				{node: right, peer: left},
-			} {
-				service := &k8scorev1.Service{}
-				if err := client.Get(ctx, ctrlruntimeclient.ObjectKey{
-					Namespace: endpoint.node.GetNamespace(),
-					Name:      FabricServiceName(endpoint.node.GetName()),
-				}, service); err != nil {
-					t.Fatal(err)
-				}
-
-				if service.Spec.ClusterIP != k8scorev1.ClusterIPNone ||
-					!service.Spec.PublishNotReadyAddresses {
-					t.Fatalf(
-						"direct fabric Service for %q = %#v",
-						endpoint.node.GetName(),
-						service.Spec,
-					)
-				}
-
-				references, err := clabernetesinternaldirectpod.DeploymentPlanReferences(
-					deployments[endpoint.node.GetName()],
-				)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				configMap := &k8scorev1.ConfigMap{}
-				if err = client.Get(ctx, ctrlruntimeclient.ObjectKey{
-					Namespace: endpoint.node.GetNamespace(), Name: references.PlanConfigMapName,
-				}, configMap); err != nil {
-					t.Fatal(err)
-				}
-
-				plan, err := clabernetesinternaldeviceplan.DecodePlan(
-					[]byte(configMap.Data[planDataKey]),
-				)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				if len(plan.Interfaces) != 1 ||
-					plan.Interfaces[0].Connectivity != string(connectivity) ||
-					plan.Interfaces[0].TunnelID != 73 ||
-					plan.Interfaces[0].PeerNodeID != string(endpoint.peer.GetUID()) ||
-					plan.Interfaces[0].PeerTransport != FabricServiceName(endpoint.peer.GetName()) {
-					t.Fatalf(
-						"%s plan for %q = %#v",
-						connectivity,
-						endpoint.node.GetName(),
-						plan.Interfaces,
-					)
-				}
-			}
-		})
+		}
 	}
 }
 
@@ -378,6 +369,7 @@ func TestDirectLiveLinkChangeUpdatesRevisionWithoutPodTemplateRollout(t *testing
 					NodeName: node.GetName(), UID: node.GetUID(),
 				},
 			},
+			Conditions: acceptedLinkConditions(),
 		},
 	}
 	if err = client.Create(ctx, link); err != nil {
@@ -653,6 +645,7 @@ func TestDirectNonLiveLinkChangePerformsDeclaredLifecycleMode(t *testing.T) {
 							NodeName: node.GetName(), UID: node.GetUID(),
 						},
 					},
+					Conditions: acceptedLinkConditions(),
 				},
 			}
 			if err = client.Create(ctx, link); err != nil {
@@ -1239,7 +1232,7 @@ func TestCompileDirectManagementRejectsNamespaceDuplicateOutsideCurrentGroup(t *
 	var planningErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &planningErr) ||
 		planningErr.Code != clabernetesinternaldeviceplan.ErrorInvalidInput ||
-		planningErr.Field != "launcherProfile.mgmt.addresses" ||
+		planningErr.Field != "nodeProfile.mgmt.addresses" ||
 		!strings.Contains(planningErr.Error(), "declared by both") {
 		t.Fatalf("compileDirectManagement() error = %#v", err)
 	}
@@ -1338,74 +1331,6 @@ func TestReconcileDirectPersistenceUsesOneClaimPerLogicalNode(t *testing.T) {
 	}
 }
 
-func TestReconcileDirectPersistenceAdoptsEachLogicalNodesLegacyClaim(t *testing.T) {
-	ctx := context.Background()
-	topologyUID := apimachinerytypes.UID("topology-uid")
-	node := planInputTestNode("device-a", "node-uid", "opaque-package-kind", "example/a:1")
-	node.Labels = map[string]string{clabernetesconstants.LabelTopologyOwner: "lab-a"}
-	node.OwnerReferences = []metav1.OwnerReference{{
-		APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(),
-		Kind:       topologyOwnerKind,
-		Name:       "lab-a",
-		UID:        "topology-uid",
-	}}
-	legacy := &k8scorev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "lab-a-device-a",
-			Namespace: node.GetNamespace(),
-			Labels: map[string]string{
-				clabernetesconstants.LabelTopologyNode: node.GetName(),
-			},
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(),
-				Kind:       topologyOwnerKind,
-				Name:       "lab-a",
-				UID:        topologyUID,
-			}},
-		},
-		Spec: k8scorev1.PersistentVolumeClaimSpec{
-			AccessModes: []k8scorev1.PersistentVolumeAccessMode{k8scorev1.ReadWriteOnce},
-			Resources: k8scorev1.VolumeResourceRequirements{Requests: k8scorev1.ResourceList{
-				k8scorev1.ResourceStorage: apiresource.MustParse("5Gi"),
-			}},
-			VolumeName: "existing-volume",
-		},
-	}
-	scheme := plannerTestScheme(t)
-	client := ctrlruntimefake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(node, legacy).
-		Build()
-	reconciler := NewReconciler(
-		&claberneteslogging.FakeInstance{}, client, client, "clabernetes",
-		clabernetesconfig.GetFakeManager,
-	)
-
-	claims, err := reconciler.reconcileDirectPersistentVolumeClaims(
-		ctx,
-		[]string{node.GetName()},
-		map[string]*clabernetesapisv1alpha1.Node{node.GetName(): node},
-		&ResolvedProfile{Persistence: clabernetesapisv1alpha1.Persistence{Enabled: true}},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if claims[string(node.GetUID())] != legacy.GetName() {
-		t.Fatalf("direct adopted claim map = %#v", claims)
-	}
-
-	actual := &k8scorev1.PersistentVolumeClaim{}
-	if err = client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(legacy), actual); err != nil {
-		t.Fatal(err)
-	}
-
-	if actual.Spec.VolumeName != "existing-volume" || !ownedByUID(actual, node.GetUID()) ||
-		ownedByUID(actual, topologyUID) {
-		t.Fatalf("direct adopted claim identity = %#v", actual)
-	}
-}
-
 func TestDirectSecondaryPrunesOnlyItsObsoleteStandaloneWorkload(t *testing.T) {
 	ctx := context.Background()
 	primary := planInputTestNode("primary", "primary-uid", "opaque-package-kind", "example/a:1")
@@ -1477,7 +1402,7 @@ func TestDirectSecondaryPrunesOnlyItsObsoleteStandaloneWorkload(t *testing.T) {
 func TestDirectProfileFailureReportsConditionWithoutMutatingWorkload(t *testing.T) {
 	ctx := context.Background()
 	node := planInputTestNode("device-a", "node-uid", "opaque-package-kind", "example/a:1")
-	node.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: "missing-profile"}
+	node.Spec.ProfileRef = &k8scorev1.LocalObjectReference{Name: "missing-profile"}
 	owner := *metav1.NewControllerRef(
 		node,
 		clabernetesapisv1alpha1.SchemeGroupVersion.WithKind("Node"),
@@ -1515,10 +1440,10 @@ func TestDirectProfileFailureReportsConditionWithoutMutatingWorkload(t *testing.
 
 	condition := apimachinerymeta.FindStatusCondition(
 		actualNode.Status.Conditions,
-		clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+		clabernetesapisv1alpha1.NodeConditionProfileResolved,
 	)
 	if condition == nil || condition.Status != metav1.ConditionFalse ||
-		condition.Reason != "LauncherProfileNotFound" {
+		condition.Reason != "NodeProfileNotFound" {
 		t.Fatalf("direct profile resolution condition = %#v", condition)
 	}
 
@@ -1540,14 +1465,14 @@ func TestDirectProfileFailureReportsConditionWithoutMutatingWorkload(t *testing.
 func TestDirectInvalidStaticManagementReportsDiagnosticWithoutMutatingWorkload(t *testing.T) {
 	ctx := context.Background()
 	node := planInputTestNode("device-a", "node-uid", "opaque-package-kind", "example/a:1")
-	node.Spec.LauncherProfileRef = &k8scorev1.LocalObjectReference{Name: "management-policy"}
+	node.Spec.ProfileRef = &k8scorev1.LocalObjectReference{Name: "management-policy"}
 	node.Spec.MgmtIPv4 = "192.0.2.0/29"
-	profile := &clabernetesapisv1alpha1.LauncherProfile{
+	profile := &clabernetesapisv1alpha1.NodeProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "management-policy", Namespace: node.GetNamespace(), UID: "profile-uid",
 			Generation: 3,
 		},
-		Spec: clabernetesapisv1alpha1.LauncherProfileSpec{
+		Spec: clabernetesapisv1alpha1.NodeProfileSpec{
 			Mgmt: &clabernetesapisv1alpha1.ManagementPolicy{IPv4Subnet: "192.0.2.0/29"},
 		},
 	}
@@ -1689,11 +1614,11 @@ func TestDirectPolicyUsesOpaqueImageSchedulingAndGenericResourceDefaults(t *test
 func TestDirectMetadataPreservesUserAndGlobalPolicyWithoutSelectorOverride(t *testing.T) {
 	node := planInputTestNode("device-a", "node-uid", "opaque-package-kind", "example/a:1")
 	node.Labels = map[string]string{
-		"team":                                       "node",
-		clabernetesconstants.LabelTopologyOwner:      "lab-a",
-		clabernetesconstants.LabelTopologyKind:       "must-not-propagate",
-		clabernetesconstants.LabelKubernetesName:     "must-not-propagate",
-		clabernetesconstants.LabelDisableDeployments: "must-not-propagate",
+		"team":                                    "node",
+		clabernetesconstants.LabelTopologyOwner:   "lab-a",
+		clabernetesconstants.LabelTopologyKind:    "must-not-propagate",
+		clabernetesconstants.LabelKubernetesName:  "must-not-propagate",
+		clabernetesconstants.LabelIgnoreReconcile: "must-not-propagate",
 	}
 	node.Annotations = map[string]string{"example.io/source": "node", "node-only": "yes"}
 	getter := func() clabernetesconfig.Manager {
@@ -1717,7 +1642,7 @@ func TestDirectMetadataPreservesUserAndGlobalPolicyWithoutSelectorOverride(t *te
 
 	for _, forbidden := range []string{
 		clabernetesconstants.LabelTopologyKind,
-		clabernetesconstants.LabelDisableDeployments,
+		clabernetesconstants.LabelIgnoreReconcile,
 	} {
 		if _, exists := labels[forbidden]; exists {
 			t.Fatalf("reserved Node label %q propagated to direct workload: %#v", forbidden, labels)
@@ -1783,7 +1708,7 @@ func TestCompileDirectExposedPortsKeepsAutoExposeParity(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Both planned ports are members of the default auto-expose set, so the union is exactly
-	// the default list -- nested parity without double entries.
+	// the default list -- containerlab parity without double entries.
 	if ports[node.GetName()] == nil ||
 		len(ports[node.GetName()].Ports) != len(defaultExposePorts()) {
 		t.Fatalf("direct exposed ports = %#v", ports)
@@ -1791,7 +1716,7 @@ func TestCompileDirectExposedPortsKeepsAutoExposeParity(t *testing.T) {
 
 	for _, port := range ports[node.GetName()].Ports {
 		if port.ExposePort != port.DestinationPort {
-			t.Fatalf("direct port retained nested publication allocation: %#v", port)
+			t.Fatalf("direct port retained an intermediate publication allocation: %#v", port)
 		}
 	}
 
@@ -1805,7 +1730,10 @@ func TestCompileDirectExposedPortsKeepsAutoExposeParity(t *testing.T) {
 
 	for _, port := range service.Spec.Ports {
 		if port.TargetPort.IntVal != port.Port {
-			t.Fatalf("direct Service port still targets launcher publication: %#v", port)
+			t.Fatalf(
+				"direct Service port still targets an intermediate publication port: %#v",
+				port,
+			)
 		}
 	}
 

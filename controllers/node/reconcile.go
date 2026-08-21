@@ -40,7 +40,7 @@ type DirectContainerExecutor func(
 ) error
 
 // Reconciler is the node reconciler -- it holds the sub-reconcilers for all the objects a
-// (launcher) Node projects into the cluster and orchestrates a full reconcile of a node group.
+// (primary) Node projects into the cluster and orchestrates a full reconcile of a node group.
 type Reconciler struct {
 	Log    claberneteslogging.Instance
 	Client ctrlruntimeclient.Client
@@ -280,9 +280,7 @@ func (r *Reconciler) reconcilePersistentVolumeClaim(
 	return rendered.GetName(), r.Client.Update(ctx, rendered)
 }
 
-// getExistingPersistentVolumeClaim first checks the node-native claim name, then the exact naming
-// convention used by the pre node/link controller. A legacy claim is eligible only when it and
-// the emitted Node share the same Topology owner UID and node label.
+// getExistingPersistentVolumeClaim fetches the node-native claim for the given Node.
 func (r *Reconciler) getExistingPersistentVolumeClaim(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
@@ -297,74 +295,19 @@ func (r *Reconciler) getExistingPersistentVolumeClaim(
 		},
 		existing,
 	)
-	if err == nil {
-		return existing, nil
-	}
-
-	if !apimachineryerrors.IsNotFound(err) {
-		return nil, err
-	}
-
-	topologyName, topologyUID := topologyOwnerIdentity(node)
-	if topologyName == "" || topologyUID == "" {
-		return nil, apimachineryerrors.NewNotFound(
-			k8scorev1.Resource("persistentvolumeclaims"),
-			node.GetName(),
-		)
-	}
-
-	legacy := &k8scorev1.PersistentVolumeClaim{}
-
-	err = r.Client.Get(
-		ctx,
-		apimachinerytypes.NamespacedName{
-			Namespace: node.GetNamespace(),
-			Name:      fmt.Sprintf("%s-%s", topologyName, node.GetName()),
-		},
-		legacy,
-	)
 	if err != nil {
-		if apimachineryerrors.IsNotFound(err) {
-			return nil, err
-		}
-
 		return nil, err
 	}
 
-	if legacy.GetLabels()[clabernetesconstants.LabelTopologyNode] != node.GetName() ||
-		!ownedByUID(legacy, topologyUID) {
-		return nil, apimachineryerrors.NewNotFound(
-			k8scorev1.Resource("persistentvolumeclaims"),
-			node.GetName(),
-		)
-	}
-
-	return legacy, nil
-}
-
-func topologyOwnerIdentity(
-	node *clabernetesapisv1alpha1.Node,
-) (string, apimachinerytypes.UID) {
-	topologyName := node.GetLabels()[clabernetesconstants.LabelTopologyOwner]
-	if topologyName == "" {
-		return "", ""
-	}
-
-	for _, ownerReference := range node.GetOwnerReferences() {
-		if ownerReference.Name == topologyName && ownerReference.Kind == topologyOwnerKind {
-			return topologyName, ownerReference.UID
-		}
-	}
-
-	return "", ""
+	return existing, nil
 }
 
 func (r *Reconciler) reconcileDirectFabricService(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
-	launcherNode string,
+	primaryNode string,
 ) error {
-	rendered := r.ServiceReconciler.RenderDirectFabricService(node, launcherNode)
+	rendered := r.ServiceReconciler.RenderDirectFabricService(node, primaryNode)
 
 	return r.reconcileRenderedFabricService(ctx, node, rendered)
 }
@@ -415,14 +358,14 @@ func (r *Reconciler) reconcileRenderedFabricService(
 func (r *Reconciler) reconcileDirectAliasServices(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
-	launcherNode string,
+	primaryNode string,
 ) error {
 	desired := make(map[string]bool, len(node.Spec.Aliases))
 
 	for _, alias := range node.Spec.Aliases {
 		desired[alias] = true
 
-		rendered := r.ServiceReconciler.RenderDirectAliasService(node, launcherNode, alias)
+		rendered := r.ServiceReconciler.RenderDirectAliasService(node, primaryNode, alias)
 
 		err := ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
 		if err != nil {
@@ -599,46 +542,46 @@ func (r *Reconciler) updateService(
 	return r.Client.Update(ctx, rendered)
 }
 
-func resolveGroupLauncherProfileReference(
-	launcherNodeName string,
+func resolveGroupProfileReference(
+	primaryNodeName string,
 	groupMembers []string,
 	nodesByName map[string]*clabernetesapisv1alpha1.Node,
 ) (string, error) {
-	launcherNode, ok := nodesByName[launcherNodeName]
+	primaryNode, ok := nodesByName[primaryNodeName]
 	if !ok {
 		return "", fmt.Errorf(
-			"%w: launcher Node %q is missing from its group",
+			"%w: primary Node %q is missing from its group",
 			claberneteserrors.ErrInvalidData,
-			launcherNodeName,
+			primaryNodeName,
 		)
 	}
 
 	profileName := ""
-	if launcherNode.Spec.LauncherProfileRef != nil {
-		profileName = launcherNode.Spec.LauncherProfileRef.Name
+	if primaryNode.Spec.ProfileRef != nil {
+		profileName = primaryNode.Spec.ProfileRef.Name
 		if profileName == "" {
 			return "", fmt.Errorf(
-				"%w: launcher Node %q has an empty LauncherProfile reference",
+				"%w: launcher Node %q has an empty NodeProfile reference",
 				claberneteserrors.ErrInvalidData,
-				launcherNodeName,
+				primaryNodeName,
 			)
 		}
 	}
 
 	for _, memberName := range groupMembers {
-		if memberName == launcherNodeName {
+		if memberName == primaryNodeName {
 			continue
 		}
 
 		member := nodesByName[memberName]
-		if member == nil || member.Spec.LauncherProfileRef == nil {
+		if member == nil || member.Spec.ProfileRef == nil {
 			continue
 		}
 
-		memberProfileName := member.Spec.LauncherProfileRef.Name
+		memberProfileName := member.Spec.ProfileRef.Name
 		if memberProfileName == "" {
 			return "", fmt.Errorf(
-				"%w: secondary Node %q has an empty LauncherProfile reference",
+				"%w: secondary Node %q has an empty NodeProfile reference",
 				claberneteserrors.ErrInvalidData,
 				memberName,
 			)
@@ -646,11 +589,11 @@ func resolveGroupLauncherProfileReference(
 
 		if profileName == "" || memberProfileName != profileName {
 			return "", fmt.Errorf(
-				"%w: secondary Node %q references LauncherProfile %q, but primary Node %q uses %q",
+				"%w: secondary Node %q references NodeProfile %q, but primary Node %q uses %q",
 				claberneteserrors.ErrInvalidData,
 				memberName,
 				memberProfileName,
-				launcherNodeName,
+				primaryNodeName,
 				profileName,
 			)
 		}
@@ -674,7 +617,7 @@ func (r *Reconciler) updateProfileResolutionFailure(
 
 		desiredStatus := *member.Status.DeepCopy()
 		apimachinerymeta.SetStatusCondition(&desiredStatus.Conditions, metav1.Condition{
-			Type:               clabernetesapisv1alpha1.NodeConditionLauncherProfileResolved,
+			Type:               clabernetesapisv1alpha1.NodeConditionProfileResolved,
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: member.GetGeneration(),
 			Reason:             reason,
@@ -690,9 +633,9 @@ func (r *Reconciler) updateProfileResolutionFailure(
 	return nil
 }
 
-func copyAppliedLauncherProfile(
-	applied *clabernetesapisv1alpha1.AppliedLauncherProfileStatus,
-) *clabernetesapisv1alpha1.AppliedLauncherProfileStatus {
+func copyAppliedProfile(
+	applied *clabernetesapisv1alpha1.AppliedProfileStatus,
+) *clabernetesapisv1alpha1.AppliedProfileStatus {
 	if applied == nil {
 		return nil
 	}
@@ -702,15 +645,15 @@ func copyAppliedLauncherProfile(
 	return &copied
 }
 
-func launcherProfileResolutionMessage(
-	applied *clabernetesapisv1alpha1.AppliedLauncherProfileStatus,
+func nodeProfileResolutionMessage(
+	applied *clabernetesapisv1alpha1.AppliedProfileStatus,
 ) string {
 	if applied == nil {
-		return "using global Config defaults without an explicit LauncherProfile"
+		return "using global Config defaults without an explicit NodeProfile"
 	}
 
 	return fmt.Sprintf(
-		"applied LauncherProfile %q at generation %d",
+		"applied NodeProfile %q at generation %d",
 		applied.Name,
 		applied.Generation,
 	)

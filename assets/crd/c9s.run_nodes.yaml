@@ -42,7 +42,7 @@ spec:
       name: Plan
       priority: 1
       type: string
-    - jsonPath: .status.appliedLauncherProfile.name
+    - jsonPath: .status.appliedProfile.name
       name: Profile
       priority: 1
       type: string
@@ -58,7 +58,7 @@ spec:
           the (optional) Topology compiler, or created by any other machinery (i.e. a containerlab
           runtime); the Node controller treats all of these identically. The object name is the
           containerlab Node name and the namespace is the topology boundary. The spec is the flattened
-          containerlab Node definition plus per-node payload and launcherProfileRef; wiring lives on Link
+          containerlab Node definition plus per-node payload and profileRef; wiring lives on Link
           objects and bounded allocations and observations live in status.
         properties:
           apiVersion:
@@ -82,11 +82,11 @@ spec:
             description: |-
               NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
               containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an
-              optional LauncherProfile reference. The definition must be self-contained: expanding topology
+              optional NodeProfile reference. The definition must be self-contained: expanding topology
               defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
               this for you). Anything that is deployment *policy* rather than node payload -- expose
               behavior, image pull defaults, generic resources, scheduling, and probes -- lives on
-              LauncherProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
+              NodeProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
               curated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and
               unknown fields are rejected rather than silently ignored.
             properties:
@@ -457,22 +457,6 @@ spec:
               kind:
                 description: Kind is the containerlab kind of the node -- i.e. nokia_srlinux.
                 type: string
-              launcherProfileRef:
-                description: |-
-                  LauncherProfileRef optionally names the same-namespace LauncherProfile supplying direct
-                  workload policy. When omitted, global Config defaults are used.
-                properties:
-                  name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               license:
                 description: License is the path to the license file for the node.
                 type: string
@@ -528,6 +512,22 @@ spec:
               privileged:
                 description: Privileged runs the node's container in privileged mode.
                 type: boolean
+              profileRef:
+                description: |-
+                  ProfileRef optionally names the same-namespace NodeProfile supplying direct
+                  workload policy. When omitted, global Config defaults are used.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               restart-policy:
                 description: |-
                   RestartPolicy is the container restart policy for the node. Only the values with a
@@ -589,17 +589,17 @@ spec:
               NodeStatus is the status for a Node resource. Everything in here is an *allocation* or an
               *observation* made by the controller -- user intent never lives in the status.
             properties:
-              appliedLauncherProfile:
+              appliedProfile:
                 description: |-
-                  AppliedLauncherProfile identifies the LauncherProfile revision successfully applied to the
+                  AppliedProfile identifies the NodeProfile revision successfully applied to the
                   direct workload. It is nil when the Node uses only global Config defaults.
                 properties:
                   generation:
-                    description: Generation is the applied LauncherProfile generation.
+                    description: Generation is the applied NodeProfile generation.
                     format: int64
                     type: integer
                   name:
-                    description: Name is the LauncherProfile name.
+                    description: Name is the NodeProfile name.
                     type: string
                   uid:
                     description: UID distinguishes replacement profiles that reuse
@@ -785,43 +785,6 @@ spec:
                 description: PlanDigest identifies the immutable direct device plan
                   observed by this status.
                 type: string
-              probeStatuses:
-                description: |-
-                  ProbeStatuses holds legacy nested-runtime probe observations during migration. Direct mode
-                  reports application and helper observations through Conditions and DirectContainers.
-                properties:
-                  livenessProbe:
-                    description: LivenessProbe is the status of the node's liveness
-                      probe.
-                    enum:
-                    - passing
-                    - failing
-                    - unknown
-                    - disabled
-                    type: string
-                  readinessProbe:
-                    description: ReadinessProbe is the status of the node's readiness
-                      probe.
-                    enum:
-                    - passing
-                    - failing
-                    - unknown
-                    - disabled
-                    type: string
-                  startupProbe:
-                    description: StartupProbe is the status of the node's startup
-                      probe.
-                    enum:
-                    - passing
-                    - failing
-                    - unknown
-                    - disabled
-                    type: string
-                required:
-                - livenessProbe
-                - readinessProbe
-                - startupProbe
-                type: object
               readiness:
                 description: |-
                   Readiness is the controller-observed readiness of this Node's active runtime -- one of

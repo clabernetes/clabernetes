@@ -76,21 +76,6 @@ kubectl create secret docker-registry my-registry-secret \
 - Air-gapped deployments
 - Custom/modified container images
 
-### slurpeeth-connectivity.yaml
-
-Declares `slurpeeth` connectivity on the Topology.
-
-Both accepted values map onto the controller-selected realization: the device always sees a
-plain veth, same-worker endpoint pairs are patched directly in the worker host namespace, and
-cross-worker pairs use a VXLAN tunnel keyed by the Link's allocated tunnel id. Wire semantics
-(L2 point-to-point, MTU intent, live rewires, cleanup) are identical for both values.
-
-**Connectivity options:**
-| Mode | Description |
-|------|-------------|
-| `vxlan` | Accepted intent (default) |
-| `slurpeeth` | Accepted intent; same realization |
-
 ## Combining Advanced Features
 
 Multiple features can be combined:
@@ -101,7 +86,6 @@ kind: Topology
 metadata:
   name: production-like
 spec:
-  connectivity: vxlan
   expose:
     exposeType: LoadBalancer
     disableAutoExpose: true

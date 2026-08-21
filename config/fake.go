@@ -26,15 +26,6 @@ type fakeManager struct {
 	registryMetadataTrust []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
 }
 
-// WithRegistryMetadataTrust configures controller-only OCI registry trust exceptions.
-func WithRegistryMetadataTrust(
-	entries []clabernetesapisv1alpha1.RegistryMetadataTrustEntry,
-) FakeOption {
-	return func(fm *fakeManager) {
-		fm.registryMetadataTrust = slices.Clone(entries)
-	}
-}
-
 // FakeOption defined type alias to be used below.
 type FakeOption func(*fakeManager)
 
@@ -49,13 +40,6 @@ func NewFakeManager(opts ...FakeOption) Manager {
 	}
 
 	return manager
-}
-
-// WithApplicationImagePullPolicy configures the generic application-container pull default.
-func WithApplicationImagePullPolicy(policy string) FakeOption {
-	return func(fm *fakeManager) {
-		fm.imagePullPolicy = policy
-	}
 }
 
 // WithImagePullSecrets configures global same-namespace Pod pull Secret names.

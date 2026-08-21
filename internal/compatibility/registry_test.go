@@ -216,7 +216,7 @@ func TestAPIFieldsAreInventoried(t *testing.T) {
 	}{
 		{prefix: "Node.spec.", typeOf: reflect.TypeFor[clabernetesapisv1alpha1.NodeSpec]()},
 		{prefix: "Link.spec.", typeOf: reflect.TypeFor[clabernetesapisv1alpha1.LinkSpec]()},
-		{prefix: "LauncherProfile.spec.", typeOf: reflect.TypeFor[clabernetesapisv1alpha1.LauncherProfileSpec]()},
+		{prefix: "NodeProfile.spec.", typeOf: reflect.TypeFor[clabernetesapisv1alpha1.NodeProfileSpec]()},
 		{prefix: "Config.spec.", typeOf: reflect.TypeFor[clabernetesapisv1alpha1.ConfigSpec]()},
 	} {
 		for _, field := range topLevelJSONFields(apiType.typeOf) {

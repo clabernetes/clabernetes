@@ -1,6 +1,6 @@
 # Shared Kubernetes and launcher policy for both nodes.
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: srl-multitool
   labels:

@@ -246,8 +246,6 @@ func TestDirectChartShipsNoNodeResidentConnectivityAgent(t *testing.T) {
 		"./clabernetes",
 		"--namespace",
 		"c9s-system",
-		"--set",
-		"manager.deviceRuntimeMode=direct",
 	)
 
 	if bytes.Contains(rendered, []byte("kind: DaemonSet")) ||
