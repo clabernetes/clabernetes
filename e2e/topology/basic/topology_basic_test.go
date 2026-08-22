@@ -1,4 +1,3 @@
-//nolint:gocyclo,nestif // dense fixture-driven tests exercise one boundary end to end.
 package basic_test
 
 import (
@@ -254,75 +253,74 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 
+	// The per-node fabric Service is headless, so Service DNS resolves directly to the remote
+	// device Pod instead of relying on the cluster's optional per-Pod DNS record mode.
+	remoteDNSName := fmt.Sprintf("%s-vx.%s.svc.cluster.local", remoteNode, namespace)
+
 	var lastOutput []byte
 
 	consecutive := 0
 
 	for {
-		remoteDNSName, err := getRemoteNodeDNSName(t, namespace, remoteNode)
-		if err != nil {
-			lastOutput = []byte(err.Error())
-		} else if remoteDNSName != "" {
-			podName, containerName, targetErr := getDevicePodTarget(t, namespace, sourceNode)
-			if targetErr != nil || podName == "" {
-				lastOutput = []byte("device Pod for " + sourceNode + " is not observable yet")
+		podName, containerName, targetErr := getDevicePodTarget(t, namespace, sourceNode)
+		if targetErr != nil || podName == "" {
+			lastOutput = []byte("device Pod for " + sourceNode + " is not observable yet")
 
-				select {
-				case <-t.Context().Done():
-					t.Fatalf("DNS lookup canceled: %s", strings.TrimSpace(string(lastOutput)))
-				case <-deadline.C:
-					t.Fatalf(
-						"timed out waiting for SR Linux DNS ping %s -> %s: %s",
-						sourceNode,
-						remoteNode,
-						strings.TrimSpace(string(lastOutput)),
-					)
-				case <-time.After(pollInterval):
-				}
-
-				continue
+			select {
+			case <-t.Context().Done():
+				t.Fatalf("DNS lookup canceled: %s", strings.TrimSpace(string(lastOutput)))
+			case <-deadline.C:
+				t.Fatalf(
+					"timed out waiting for SR Linux DNS ping %s -> %s: %s",
+					sourceNode,
+					remoteNode,
+					strings.TrimSpace(string(lastOutput)),
+				)
+			case <-time.After(pollInterval):
 			}
 
-			command := []string{
-				"exec",
-				"--namespace",
-				namespace,
-				podName,
-				"-c",
-				containerName,
-				"--",
-				"ip",
-				"netns",
-				"exec",
-				"srbase-mgmt",
-				"ping",
-				"-c",
-				"1",
-				"-W",
-				"5",
-				remoteDNSName,
-			}
-
-			cmd := exec.CommandContext( //nolint:gosec
-				t.Context(),
-				"kubectl",
-				command...,
-			)
-
-			output, pingErr := cmd.CombinedOutput()
-			if pingErr == nil && strings.TrimSpace(string(output)) != "" {
-				// A very early ping can win a race against the device populating its own
-				// management resolver state, so a single success is not steady-state proof.
-				consecutive++
-				if consecutive >= 2 {
-					return
-				}
-			} else {
-				consecutive = 0
-			}
-
-			lastOutput = output
+			continue
 		}
+
+		command := []string{
+			"exec",
+			"--namespace",
+			namespace,
+			podName,
+			"-c",
+			containerName,
+			"--",
+			"ip",
+			"netns",
+			"exec",
+			"srbase-mgmt",
+			"ping",
+			"-c",
+			"1",
+			"-W",
+			"5",
+			remoteDNSName,
+		}
+
+		cmd := exec.CommandContext( //nolint:gosec
+			t.Context(),
+			"kubectl",
+			command...,
+		)
+
+		output, pingErr := cmd.CombinedOutput()
+		if pingErr == nil && strings.TrimSpace(string(output)) != "" {
+			// A very early ping can win a race against the device populating its own
+			// management resolver state, so a single success is not steady-state proof.
+			consecutive++
+			if consecutive >= 2 {
+				return
+			}
+		} else {
+			consecutive = 0
+		}
+
+		lastOutput = output
 
 		wait := pollInterval
 		if consecutive == 1 {
@@ -403,51 +401,4 @@ func getDevicePodTarget(t *testing.T, namespace, nodeName string) (string, strin
 	}
 
 	return "", "", nil
-}
-
-func getRemoteNodeDNSName(t *testing.T, namespace, nodeName string) (string, error) {
-	t.Helper()
-
-	cmd := exec.CommandContext( //nolint:gosec
-		t.Context(),
-		"kubectl",
-		"get",
-		"pods",
-		"--namespace",
-		namespace,
-		"--selector",
-		"c9s.run/name="+nodeName,
-		"-o",
-		"json",
-	)
-
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	var podList struct {
-		Items []struct {
-			Status struct {
-				PodIP string `json:"podIP"`
-			} `json:"status"`
-		} `json:"items"`
-	}
-
-	err = json.Unmarshal(output, &podList)
-	if err != nil {
-		return "", err
-	}
-
-	if len(podList.Items) == 0 || podList.Items[0].Status.PodIP == "" {
-		return "", nil
-	}
-
-	podIP := strings.ReplaceAll(podList.Items[0].Status.PodIP, ".", "-")
-
-	return fmt.Sprintf(
-		"%s.%s.pod.cluster.local",
-		podIP,
-		namespace,
-	), nil
 }
