@@ -29,10 +29,9 @@ import (
 type C9sV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ConfigsGetter
-	ImageRequestsGetter
-	LauncherProfilesGetter
 	LinksGetter
 	NodesGetter
+	NodeProfilesGetter
 	TopologiesGetter
 }
 
@@ -45,20 +44,16 @@ func (c *C9sV1alpha1Client) Configs(namespace string) ConfigInterface {
 	return newConfigs(c, namespace)
 }
 
-func (c *C9sV1alpha1Client) ImageRequests(namespace string) ImageRequestInterface {
-	return newImageRequests(c, namespace)
-}
-
-func (c *C9sV1alpha1Client) LauncherProfiles(namespace string) LauncherProfileInterface {
-	return newLauncherProfiles(c, namespace)
-}
-
 func (c *C9sV1alpha1Client) Links(namespace string) LinkInterface {
 	return newLinks(c, namespace)
 }
 
 func (c *C9sV1alpha1Client) Nodes(namespace string) NodeInterface {
 	return newNodes(c, namespace)
+}
+
+func (c *C9sV1alpha1Client) NodeProfiles(namespace string) NodeProfileInterface {
+	return newNodeProfiles(c, namespace)
 }
 
 func (c *C9sV1alpha1Client) Topologies(namespace string) TopologyInterface {

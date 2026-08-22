@@ -10,6 +10,7 @@ import (
 	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
@@ -25,6 +26,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 		nodes     []clabernetesapisv1alpha1.Node
 		target    string
 		errorPart string
+		reason    string
 	}{
 		{
 			name: "invalid",
@@ -33,6 +35,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 			},
 			target:    "bad-link",
 			errorPart: "to itself",
+			reason:    "InvalidSpec",
 		},
 		{
 			name: "endpoint-conflict",
@@ -47,6 +50,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 			},
 			target:    "z-loser",
 			errorPart: "a-winner",
+			reason:    "EndpointConflict",
 		},
 		{
 			name: "unresolved-endpoint",
@@ -56,6 +60,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 			nodes:     []clabernetesapisv1alpha1.Node{reconcileTestNode("srl1")},
 			target:    "unresolved",
 			errorPart: "missing",
+			reason:    "EndpointsUnresolved",
 		},
 	}
 
@@ -83,6 +88,7 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 
 			client := ctrlruntimefake.NewClientBuilder().
 				WithScheme(scheme).
+				WithStatusSubresource(&clabernetesapisv1alpha1.Link{}).
 				WithObjects(objects...).
 				Build()
 
@@ -126,12 +132,14 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 				)
 			}
 
-			if !strings.Contains(actual.Status.Error, testCase.errorPart) {
-				t.Fatalf(
-					"expected status error containing %q, got %q",
-					testCase.errorPart,
-					actual.Status.Error,
-				)
+			condition := apimachinerymeta.FindStatusCondition(
+				actual.Status.Conditions,
+				clabernetesapisv1alpha1.LinkConditionAccepted,
+			)
+			if condition == nil || condition.Status != metav1.ConditionFalse ||
+				condition.Reason != testCase.reason ||
+				!strings.Contains(condition.Message, testCase.errorPart) {
+				t.Fatalf("rejected Link Accepted condition = %#v", condition)
 			}
 		})
 	}
@@ -159,6 +167,7 @@ func TestReconcileUnresolvedLinkDoesNotReserveInterface(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Link{}).
 		WithObjects(&unresolved, &valid, &srl1, &srl2).
 		Build()
 	controller := &Controller{
@@ -194,11 +203,20 @@ func TestReconcileUnresolvedLinkDoesNotReserveInterface(t *testing.T) {
 		t.Fatalf("failed getting reconciled link: %s", err)
 	}
 
-	if actual.Status.Error != "" || actual.Status.TunnelID != 1 {
+	if rejectionMessage(actual) != "" || actual.Status.TunnelID != 1 {
 		t.Fatalf(
 			"expected valid Link to allocate despite unresolved conflict, got %+v",
 			actual.Status,
 		)
+	}
+
+	condition := apimachinerymeta.FindStatusCondition(
+		actual.Status.Conditions,
+		clabernetesapisv1alpha1.LinkConditionAccepted,
+	)
+	if condition == nil || condition.Status != metav1.ConditionTrue ||
+		condition.Reason != "Accepted" || condition.ObservedGeneration != actual.GetGeneration() {
+		t.Fatalf("valid Link Accepted condition = %#v", condition)
 	}
 }
 
@@ -287,8 +305,8 @@ func TestReconcileBindsLinkAfterInitiallyMissingEndpointAppears(t *testing.T) {
 		)
 	}
 
-	if !strings.Contains(actual.Status.Error, "srl2") {
-		t.Fatalf("expected unresolved endpoint error, got %q", actual.Status.Error)
+	if !strings.Contains(rejectionMessage(actual), "srl2") {
+		t.Fatalf("expected unresolved endpoint rejection, got %q", rejectionMessage(actual))
 	}
 
 	srl2 := reconcileTestNode("srl2")
@@ -307,6 +325,7 @@ func TestReconcileBindsHostEndpointWithoutNodeUID(t *testing.T) {
 	srl1 := reconcileTestNode("srl1")
 	controller, client := newLifecycleTestController(t, &link, &srl1)
 
+	reconcileLifecycleLink(t, controller, link.GetName())
 	reconcileLifecycleLink(t, controller, link.GetName())
 
 	actual := getLifecycleTestLink(t, client, link.GetName())
@@ -331,7 +350,7 @@ func TestReconcileBindsHostEndpointWithoutNodeUID(t *testing.T) {
 		)
 	}
 
-	if actual.Status.Error != "" || actual.Status.TunnelID != 0 {
+	if rejectionMessage(actual) != "" || actual.Status.TunnelID != 0 {
 		t.Fatalf("expected valid local host Link status, got %+v", actual.Status)
 	}
 }
@@ -363,7 +382,7 @@ func TestReconcileUnrelatedNodeDeletionDoesNotAffectBoundLink(t *testing.T) {
 	if after.Status.ResolvedEndpoints == nil ||
 		!reflect.DeepEqual(*after.Status.ResolvedEndpoints, beforeResolved) ||
 		after.Status.TunnelID != before.Status.TunnelID ||
-		after.Status.Error != before.Status.Error {
+		rejectionMessage(after) != rejectionMessage(before) {
 		t.Fatalf(
 			"expected unrelated Node deletion not to affect Link status, before=%+v after=%+v",
 			before.Status,
@@ -429,11 +448,11 @@ func TestReconcilePreservesBindingAcrossEndpointConflict(t *testing.T) {
 		)
 	}
 
-	if !strings.Contains(after.Status.Error, winner.GetName()) {
+	if !strings.Contains(rejectionMessage(after), winner.GetName()) {
 		t.Fatalf(
-			"expected endpoint conflict error naming %q, got %q",
+			"expected endpoint conflict rejection naming %q, got %q",
 			winner.GetName(),
-			after.Status.Error,
+			rejectionMessage(after),
 		)
 	}
 }
@@ -453,6 +472,7 @@ func newLifecycleTestController(
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Link{}).
 		WithObjects(objects...).
 		Build()
 
@@ -534,11 +554,29 @@ func requireBoundLink(
 		)
 	}
 
-	if actual.Status.Error != "" {
-		t.Fatalf("expected bound Link %q to be valid, got error %q", name, actual.Status.Error)
+	if rejectionMessage(actual) != "" {
+		t.Fatalf(
+			"expected bound Link %q to be valid, got rejection %q",
+			name,
+			rejectionMessage(actual),
+		)
 	}
 
 	return actual
+}
+
+// rejectionMessage returns the Accepted=False condition message, or "" when the Link is not
+// rejected.
+func rejectionMessage(link *clabernetesapisv1alpha1.Link) string {
+	condition := apimachinerymeta.FindStatusCondition(
+		link.Status.Conditions,
+		clabernetesapisv1alpha1.LinkConditionAccepted,
+	)
+	if condition == nil || condition.Status != metav1.ConditionFalse {
+		return ""
+	}
+
+	return condition.Message
 }
 
 func reconcileTestNode(name string) clabernetesapisv1alpha1.Node {

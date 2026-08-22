@@ -23,10 +23,7 @@ spec:
       port: 14789
       protocol: UDP
       targetPort: 14789
-    - name: slurpeeth
-      port: 4799
-      protocol: TCP
-      targetPort: 4799
+  publishNotReadyAddresses: true
   selector:
     c9s.run/app: clabernetes
     c9s.run/name: srl2

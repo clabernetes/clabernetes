@@ -15,7 +15,7 @@ This is the canonical, vendor-neutral guidance for automated coding agents worki
 Clabernetes (c9s) is a Go Kubernetes controller that runs containerlab topologies in Kubernetes.
 
 - `apis/`: Kubernetes API types. Generated deepcopy files live beside their source types.
-- `controllers/`, `manager/`, `launcher/`: reconciliation and runtime behavior.
+- `controllers/`, `manager/`, `internal/`: reconciliation and runtime behavior.
 - `charts/`: Helm charts and generated CRDs.
 - `generated/` and `assets/crd/`: generated clients, OpenAPI output, and CRD copies.
 - `docs/`: repository-owned documentation content.

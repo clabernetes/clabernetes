@@ -17,9 +17,8 @@ const entries: Array<{
     { key: 'topology', src: 'assets/crd/c9s.run_topologies.yaml', showStatus: false },
     { key: 'node', src: 'assets/crd/c9s.run_nodes.yaml', showStatus: true },
     { key: 'link', src: 'assets/crd/c9s.run_links.yaml', showStatus: true },
-    { key: 'launcher-profile', src: 'assets/crd/c9s.run_launcherprofiles.yaml', showStatus: true },
+    { key: 'node-profile', src: 'assets/crd/c9s.run_nodeprofiles.yaml', showStatus: true },
     { key: 'config', src: 'assets/crd/c9s.run_configs.yaml', showStatus: true },
-    { key: 'image-request', src: 'assets/crd/c9s.run_imagerequests.yaml', showStatus: true },
   ];
 
 const views: Record<string, string> = {};

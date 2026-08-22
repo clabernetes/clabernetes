@@ -1,0 +1,44 @@
+---
+apiVersion: c9s.run/v1alpha1
+kind: NodeProfile
+metadata:
+  name: direct-linux
+spec:
+  expose:
+    disableAutoExpose: true
+---
+apiVersion: c9s.run/v1alpha1
+kind: Link
+metadata:
+  name: lin1-eth1-lin2-eth1
+spec:
+  endpointA:
+    nodeName: lin1
+    interfaceName: eth1
+  endpointB:
+    nodeName: lin2
+    interfaceName: eth1
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: lin1
+spec:
+  kind: linux
+  image: ghcr.io/srl-labs/network-multitool
+  profileRef:
+    name: direct-linux
+  exec:
+    - ip address add 192.168.1.0/31 dev eth1
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: lin2
+spec:
+  kind: linux
+  image: ghcr.io/srl-labs/network-multitool
+  profileRef:
+    name: direct-linux
+  exec:
+    - ip address add 192.168.1.1/31 dev eth1

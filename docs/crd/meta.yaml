@@ -7,6 +7,5 @@ pages:
   - topology
   - node
   - link
-  - launcher-profile
+  - node-profile
   - config
-  - image-request

@@ -4,7 +4,6 @@ metadata:
   name: topo01
   namespace: c9s-topo01
 spec:
-  connectivity: slurpeeth
   definition:
     containerlab: |-
       name: topo01
@@ -40,10 +39,6 @@ spec:
         links:
           - endpoints: ["srl1:e1-1", "srl2:e1-1"]
   deployment:
-    containerlabDebug: null
-    containerlabTimeout: ""
-    containerlabVersion: 0.51.0
-    extraEnv: null
     filesFromConfigMap:
       srl1:
       - configMapName: topo01-srl1-startup-config
@@ -84,7 +79,6 @@ spec:
     filesFromURL: null
     persistence:
       enabled: false
-    privilegedLauncher: null
     resources: null
     scheduling:
       tolerations: null
@@ -93,8 +87,6 @@ spec:
     disableExpose: true
     exposeType: LoadBalancer
   imagePull:
-    insecureRegistries:
-    - 1.2.3.4
     pullSecrets:
     - regcred
   naming: non-prefixed

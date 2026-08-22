@@ -18,57 +18,57 @@ metadata:
 spec:
   image: ghcr.io/nokia/srlinux
   kind: srl
-  launcherProfileRef:
-    name: topology-basic
   ports:
     - 9273/tcp
+  profileRef:
+    name: topology-basic
 status:
-  appliedLauncherProfile:
+  appliedProfile:
     name: topology-basic
   exposedPorts:
     ports:
       - destinationPort: 21
-        exposePort: 60000
+        exposePort: 21
         protocol: TCP
       - destinationPort: 22
-        exposePort: 60001
+        exposePort: 22
         protocol: TCP
       - destinationPort: 23
-        exposePort: 60002
+        exposePort: 23
         protocol: TCP
       - destinationPort: 80
-        exposePort: 60003
+        exposePort: 80
         protocol: TCP
       - destinationPort: 443
-        exposePort: 60004
+        exposePort: 443
         protocol: TCP
       - destinationPort: 830
-        exposePort: 60005
+        exposePort: 830
         protocol: TCP
       - destinationPort: 5000
-        exposePort: 60006
+        exposePort: 5000
         protocol: TCP
       - destinationPort: 5900
-        exposePort: 60007
+        exposePort: 5900
         protocol: TCP
       - destinationPort: 6030
-        exposePort: 60008
+        exposePort: 6030
         protocol: TCP
       - destinationPort: 9273
-        exposePort: 60009
+        exposePort: 9273
         protocol: TCP
       - destinationPort: 9339
-        exposePort: 60010
+        exposePort: 9339
         protocol: TCP
       - destinationPort: 9340
-        exposePort: 60011
+        exposePort: 9340
         protocol: TCP
       - destinationPort: 9559
-        exposePort: 60012
+        exposePort: 9559
         protocol: TCP
       - destinationPort: 57400
-        exposePort: 60013
+        exposePort: 57400
         protocol: TCP
       - destinationPort: 161
-        exposePort: 60000
+        exposePort: 161
         protocol: UDP

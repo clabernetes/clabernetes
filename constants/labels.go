@@ -23,6 +23,19 @@ const (
 
 	// LabelTopologyNode is the label indicating the node the deployment represents in a topology.
 	LabelTopologyNode = LabelPrefix + "/topologyNode"
+	// LabelTopologyGroup carries the containerlab group name of a node, when the topology
+	// declares one, purely as selectable metadata.
+	LabelTopologyGroup = LabelPrefix + "/topologyGroup"
+
+	// LabelDirectWorkload identifies the primary Node name of a direct device Pod.
+	LabelDirectWorkload = LabelPrefix + "/direct-workload"
+
+	// LabelDirectMeshMember marks a direct device Pod as a member of its namespace's management
+	// L2 mesh; the namespace mesh discovery Service selects on it.
+	LabelDirectMeshMember = LabelPrefix + "/mesh-member"
+
+	// DirectMeshMemberEnabled is the LabelDirectMeshMember value carried by mesh member Pods.
+	DirectMeshMemberEnabled = "enabled"
 
 	// LabelTopologyKind is the label indicating the resource *kind* the object is associated with.
 	// For example, a "containerlab" kind.
@@ -40,22 +53,6 @@ const (
 )
 
 const (
-	// AnnotationLinkAttachmentsDigest is the pod (template) annotation holding the digest of the
-	// set of link attachments (local interface + materialization mode) of the launcher's node
-	// group -- attachment set changes roll the pod (containerlab wiring is boot time), while
-	// remote-end-only changes ("rewires") keep the digest stable and are handled live by the
-	// launcher. The launcher reads the annotation via the downward api and compares it against
-	// the digest of the links it fetched to know its view is complete.
-	AnnotationLinkAttachmentsDigest = "clabernetes/linkAttachmentsDigest"
-
-	// AnnotationNodeConfigDigest is the pod (template) annotation holding the digest of the
-	// launcher-relevant node configuration (the node definitions of the launcher's group, the
-	// expose port allocations, and the management network settings) -- so config changes that
-	// are not otherwise visible in the deployment spec still roll the pod.
-	AnnotationNodeConfigDigest = "clabernetes/nodeConfigDigest"
-)
-
-const (
 	// TopologyServiceTypeFabric is one of the allowed values for the LabelTopologyServiceType label
 	// type -- this indicates that this service is of the type that facilitates the connectivity
 	// between containerlab devices in the cluster.
@@ -64,6 +61,10 @@ const (
 	// type -- this indicates that this service is of the type that is used for exposing ports on
 	// a containerlab node via a LoadBalancer service.
 	TopologyServiceTypeExpose = "expose"
+	// TopologyServiceTypeAlias is one of the allowed values for the LabelTopologyServiceType
+	// label type -- this indicates that this service realizes one containerlab network alias as
+	// an additional same-namespace name for a node's pod.
+	TopologyServiceTypeAlias = "alias"
 )
 
 const (
@@ -79,18 +80,4 @@ const (
 	// Note that this basically ignored during deletion since our controller doest do anything in
 	// the delete case (owner reference handles clean up).
 	LabelIgnoreReconcile = LabelPrefix + "/ignoreReconcile"
-
-	// LabelDisableDeployments indicates that controller should reconcile normally but not create
-	// update or delete any deployments.
-	LabelDisableDeployments = LabelPrefix + "/disableDeployments"
-)
-
-const (
-	// LabelPullerImageHash is a label that holds the (shortened) hash of the image tag that the
-	// puller is trying to pull onto a node.
-	LabelPullerImageHash = LabelPrefix + "/pullerImageHash"
-
-	// LabelPullerNodeTarget is a label that holds the node name that is being targeted by the
-	// puller pod.
-	LabelPullerNodeTarget = LabelPrefix + "/pullerNodeTarget"
 )

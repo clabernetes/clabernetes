@@ -8,8 +8,7 @@ import (
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
-// maxVXLANTunnelID is the ceiling retained from the Link status API. Slurpeeth uses a smaller
-// uint16 segment identifier, selected per Link below.
+// maxVXLANTunnelID is the ceiling retained from the Link status API.
 const maxVXLANTunnelID = 16_000_000
 
 // ValidateLink checks the parts of a link spec that the crd schema cannot express. A non-nil
@@ -51,15 +50,14 @@ func IsHostLink(link *clabernetesapisv1alpha1.Link) bool {
 		link.Spec.EndpointB.NodeName == clabernetesapisv1alpha1.LinkHostNodeName
 }
 
-// IsSameLauncherLink returns true if both endpoints of the link resolve to the same launcher
-// (pod) -- such links are materialized as direct containerlab links by that launcher and need
-// no tunnel id.
-func IsSameLauncherLink(
+// IsSamePodLink returns true if both endpoints of the link resolve to the same primary node
+// (pod) -- such links are materialized inside that pod and need no tunnel id.
+func IsSamePodLink(
 	link *clabernetesapisv1alpha1.Link,
 	nodes map[string]*clabernetesapisv1alpha1.Node,
 ) bool {
-	return clabernetesutilcontainerlab.ResolveLauncherNode(nodes, link.Spec.EndpointA.NodeName) ==
-		clabernetesutilcontainerlab.ResolveLauncherNode(nodes, link.Spec.EndpointB.NodeName)
+	return clabernetesutilcontainerlab.ResolvePrimaryNode(nodes, link.Spec.EndpointA.NodeName) ==
+		clabernetesutilcontainerlab.ResolvePrimaryNode(nodes, link.Spec.EndpointB.NodeName)
 }
 
 // FindEndpointConflict checks if any *other* link in the namespace claims an endpoint (node +
@@ -92,14 +90,15 @@ func LinksWithResolvedEndpoints(
 
 // ResolveDesiredTunnelID determines the tunnel id the given link should hold in its status:
 //
-//   - host links and same-launcher links need no tunnel -- 0.
-//   - a valid existing id is retained unless a lexically-smaller-named link claims the same id
+//   - host links and same-pod links need no tunnel -- 0.
+//   - a valid existing id is retained unless a lexically-smaller-keyed link claims the same id
 //     (retention is what keeps "rewires" -- endpoint changes on an existing link -- as live
 //     tunnel moves rather than re-allocations).
-//   - otherwise the lowest id not used by any other link in the namespace is allocated.
+//   - otherwise the lowest id not used by any other link in the cluster is allocated: tunnel
+//     ids are VXLAN VNIs in the shared worker host namespaces, one space for all namespaces.
 func ResolveDesiredTunnelID(
 	link *clabernetesapisv1alpha1.Link,
-	namespaceLinks []clabernetesapisv1alpha1.Link,
+	clusterLinks []clabernetesapisv1alpha1.Link,
 	namespaceNodes []clabernetesapisv1alpha1.Node,
 ) (int, error) {
 	if IsHostLink(link) {
@@ -112,23 +111,19 @@ func ResolveDesiredTunnelID(
 		nodes[namespaceNodes[idx].GetName()] = &namespaceNodes[idx]
 	}
 
-	if IsSameLauncherLink(link, nodes) {
+	if IsSamePodLink(link, nodes) {
 		return 0, nil
-	}
-
-	maxTunnelID := maxVXLANTunnelID
-	if link.Spec.NormalizedConnectivity() ==
-		clabernetesapisv1alpha1.LinkConnectivitySlurpeeth {
-		maxTunnelID = clabernetesapisv1alpha1.SlurpeethMaxSegmentID
 	}
 
 	usedIDs := map[int]bool{}
 	ownIDContested := false
+	linkKey := link.GetNamespace() + "/" + link.GetName()
 
-	for idx := range namespaceLinks {
-		other := &namespaceLinks[idx]
+	for idx := range clusterLinks {
+		other := &clusterLinks[idx]
+		otherKey := other.GetNamespace() + "/" + other.GetName()
 
-		if other.GetName() == link.GetName() {
+		if otherKey == linkKey {
 			continue
 		}
 
@@ -138,16 +133,16 @@ func ResolveDesiredTunnelID(
 
 		usedIDs[other.Status.TunnelID] = true
 
-		if other.Status.TunnelID == link.Status.TunnelID && other.GetName() < link.GetName() {
+		if other.Status.TunnelID == link.Status.TunnelID && otherKey < linkKey {
 			ownIDContested = true
 		}
 	}
 
-	if link.Status.TunnelID >= 1 && link.Status.TunnelID <= maxTunnelID && !ownIDContested {
+	if link.Status.TunnelID >= 1 && link.Status.TunnelID <= maxVXLANTunnelID && !ownIDContested {
 		return link.Status.TunnelID, nil
 	}
 
-	for candidate := 1; candidate <= maxTunnelID; candidate++ {
+	for candidate := 1; candidate <= maxVXLANTunnelID; candidate++ {
 		if !usedIDs[candidate] {
 			return candidate, nil
 		}
@@ -156,6 +151,6 @@ func ResolveDesiredTunnelID(
 	return 0, fmt.Errorf(
 		"%w: no tunnel ids remain in range 1-%d",
 		claberneteserrors.ErrInvalidData,
-		maxTunnelID,
+		maxVXLANTunnelID,
 	)
 }

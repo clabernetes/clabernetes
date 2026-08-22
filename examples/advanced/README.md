@@ -58,9 +58,9 @@ Using images from private container registries.
 
 **Features:**
 - Pull secrets for registry authentication
-- Image pull-through mode
-- Insecure registry configuration
-- Docker config secrets
+- Kubernetes-native pull policy
+- Cluster-runtime registry configuration
+- Separate controller metadata trust policy
 
 **Setup:**
 ```bash
@@ -76,26 +76,6 @@ kubectl create secret docker-registry my-registry-secret \
 - Air-gapped deployments
 - Custom/modified container images
 
-### slurpeeth-connectivity.yaml
-
-Experimental TCP tunnel mode instead of VXLAN.
-
-**Features:**
-- TCP-based tunneling
-- Avoids VXLAN MTU issues
-- Better performance in some CNI environments
-
-**When to use:**
-- VXLAN is blocked or unreliable
-- MTU/fragmentation issues with VXLAN
-- CNIs that don't handle VXLAN well
-
-**Connectivity options:**
-| Mode | Description |
-|------|-------------|
-| `vxlan` | VXLAN tunnels (default) |
-| `slurpeeth` | TCP tunnels (experimental) |
-
 ## Combining Advanced Features
 
 Multiple features can be combined:
@@ -106,7 +86,6 @@ kind: Topology
 metadata:
   name: production-like
 spec:
-  connectivity: vxlan
   expose:
     exposeType: LoadBalancer
     disableAutoExpose: true
@@ -129,7 +108,7 @@ spec:
         username: admin
         password: NokiaSrl1!
   imagePull:
-    pullThroughOverride: always
+    policy: IfNotPresent
     pullSecrets:
       - registry-credentials
   definition:

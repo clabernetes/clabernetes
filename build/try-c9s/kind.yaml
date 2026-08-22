@@ -9,3 +9,5 @@ nodes:
       - |
         kind: KubeletConfiguration
         streamingConnectionIdleTimeout: "96h0m0s"
+  - role: worker
+  - role: worker

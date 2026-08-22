@@ -6,7 +6,7 @@ metadata:
   labels:
     c9s.run/example: srl-multitool
 spec:
-  launcherProfileRef:
+  profileRef:
     name: srl-multitool
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux:26.3
@@ -27,7 +27,7 @@ metadata:
   labels:
     c9s.run/example: srl-multitool
 spec:
-  launcherProfileRef:
+  profileRef:
     name: srl-multitool
   kind: linux
   image: ghcr.io/srl-labs/network-multitool:latest

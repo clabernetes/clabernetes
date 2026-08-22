@@ -29,7 +29,7 @@ spec:
 
 ### with-resources.yaml
 
-Set resource requests and limits for launcher pods.
+Set resource requests and limits for the device application containers.
 
 ```yaml
 spec:
@@ -115,33 +115,6 @@ spec:
 - URL must be directly downloadable (raw file, not HTML page)
 - Useful for files larger than ConfigMap 1MB limit
 - Re-downloaded on pod restart
-
-### Containerlab Options
-
-```yaml
-spec:
-  deployment:
-    containerlabDebug: true        # Enable debug logging
-    containerlabTimeout: "30m"     # Deploy timeout
-    containerlabVersion: "0.78.0"  # Pin specific version (0.78.0 is the minimum)
-```
-
-`containerlabVersion` must be 0.78.0 or newer: the Node spec vocabulary includes fields (i.e.
-`privileged`, `tmpfs`, `security-opts`) that older containerlab releases reject outright.
-
-### Launcher Configuration
-
-```yaml
-spec:
-  deployment:
-    launcherImage: "my-registry/clabernetes-launcher:v1.0.0"
-    launcherImagePullPolicy: Always
-    launcherLogLevel: debug
-    privilegedLauncher: true       # Default is true
-    extraEnv:
-      - name: MY_VAR
-        value: "my-value"
-```
 
 ## Combining Options
 

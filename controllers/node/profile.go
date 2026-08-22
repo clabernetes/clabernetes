@@ -8,12 +8,12 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 )
 
-// ResolvedProfile holds the fully resolved launcher policy for a Node. Global Config values form
-// the base and, when present, one explicitly referenced LauncherProfile overrides them.
+// ResolvedProfile holds the fully resolved realization policy for a Node. Global Config values form
+// the base and, when present, one explicitly referenced NodeProfile overrides them.
 type ResolvedProfile struct {
-	// AppliedLauncherProfile identifies the explicit profile layered over Config. It is nil when
+	// AppliedProfile identifies the explicit profile layered over Config. It is nil when
 	// only Config defaults are used.
-	AppliedLauncherProfile *clabernetesapisv1alpha1.AppliedLauncherProfileStatus
+	AppliedProfile *clabernetesapisv1alpha1.AppliedProfileStatus
 
 	// expose policy
 	DisableExpose          bool
@@ -23,13 +23,10 @@ type ResolvedProfile struct {
 	UseNodeMgmtIpv6Address bool
 
 	// image pull policy
-	InsecureRegistries  []string
-	PullThroughOverride string
-	PullSecrets         []string
-	DockerDaemonConfig  string
-	DockerConfig        string
+	ImagePullPolicy string
+	PullSecrets     []string
 
-	// launcher Pod resources -- nil means use the Config by-containerlab-kind lookup
+	// device Pod resources -- nil means use the Config default resources
 	Resources *k8scorev1.ResourceRequirements
 
 	// scheduling
@@ -37,45 +34,28 @@ type ResolvedProfile struct {
 	Tolerations  []k8scorev1.Toleration
 	Affinity     *k8scorev1.Affinity
 
-	// launcher deployment settings
-	PrivilegedLauncher      bool
-	Persistence             clabernetesapisv1alpha1.Persistence
-	ContainerlabDebug       bool
-	ContainerlabTimeout     string
-	ContainerlabVersion     string
-	LauncherImage           string
-	LauncherImagePullPolicy string
-	LauncherLogLevel        string
-	ExtraEnv                []k8scorev1.EnvVar
+	// direct workload persistence settings
+	Persistence clabernetesapisv1alpha1.Persistence
 
 	// status probes
 	StatusProbes clabernetesapisv1alpha1.StatusProbes
 
-	// management network settings for the launcher's Pod-local Docker network
-	Mgmt *clabernetesapisv1alpha1.MgmtNet
+	// management-overlay allocation policy for the node's device Pod
+	Mgmt *clabernetesapisv1alpha1.ManagementPolicy
 }
 
-// ResolveProfile resolves Config defaults plus at most one explicitly selected LauncherProfile.
+// ResolveProfile resolves Config defaults plus at most one explicitly selected NodeProfile.
 func ResolveProfile(
 	_ *clabernetesapisv1alpha1.Node,
-	profile *clabernetesapisv1alpha1.LauncherProfile,
+	profile *clabernetesapisv1alpha1.NodeProfile,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) (*ResolvedProfile, error) {
 	configManager := configManagerGetter()
 
 	resolved := &ResolvedProfile{
-		ExposeType:              "LoadBalancer",
-		PullThroughOverride:     configManager.GetImagePullThroughMode(),
-		DockerDaemonConfig:      configManager.GetDockerDaemonConfig(),
-		DockerConfig:            configManager.GetDockerConfig(),
-		PrivilegedLauncher:      configManager.GetPrivilegedLauncher(),
-		ContainerlabDebug:       configManager.GetContainerlabDebug(),
-		ContainerlabTimeout:     configManager.GetContainerlabTimeout(),
-		ContainerlabVersion:     configManager.GetContainerlabVersion(),
-		LauncherImage:           configManager.GetLauncherImage(),
-		LauncherImagePullPolicy: configManager.GetLauncherImagePullPolicy(),
-		LauncherLogLevel:        configManager.GetLauncherLogLevel(),
-		ExtraEnv:                configManager.GetExtraEnv(),
+		ExposeType:      "LoadBalancer",
+		ImagePullPolicy: configManager.GetApplicationImagePullPolicy(),
+		PullSecrets:     configManager.GetImagePullSecrets(),
 	}
 
 	if profile == nil {
@@ -83,7 +63,7 @@ func ResolveProfile(
 	}
 
 	applyProfile(resolved, profile)
-	resolved.AppliedLauncherProfile = &clabernetesapisv1alpha1.AppliedLauncherProfileStatus{
+	resolved.AppliedProfile = &clabernetesapisv1alpha1.AppliedProfileStatus{
 		Name:       profile.GetName(),
 		UID:        profile.GetUID(),
 		Generation: profile.GetGeneration(),
@@ -94,7 +74,7 @@ func ResolveProfile(
 
 func applyProfile(
 	resolved *ResolvedProfile,
-	profile *clabernetesapisv1alpha1.LauncherProfile,
+	profile *clabernetesapisv1alpha1.NodeProfile,
 ) {
 	applyProfileExpose(resolved, profile.Spec.Expose)
 	applyProfileImagePull(resolved, profile.Spec.ImagePull)
@@ -132,7 +112,7 @@ func applyProfile(
 
 func applyProfileExpose(
 	resolved *ResolvedProfile,
-	expose *clabernetesapisv1alpha1.LauncherProfileExpose,
+	expose *clabernetesapisv1alpha1.NodeProfileExpose,
 ) {
 	if expose == nil {
 		return
@@ -161,75 +141,30 @@ func applyProfileExpose(
 
 func applyProfileImagePull(
 	resolved *ResolvedProfile,
-	imagePull *clabernetesapisv1alpha1.LauncherProfileImagePull,
+	imagePull *clabernetesapisv1alpha1.NodeProfileImagePull,
 ) {
 	if imagePull == nil {
 		return
 	}
 
-	// Nil means inherit; a non-nil empty collection means explicitly clear.
-	if imagePull.InsecureRegistries != nil {
-		resolved.InsecureRegistries = append([]string{}, imagePull.InsecureRegistries...)
-	}
-
-	if imagePull.PullThroughOverride != "" {
-		resolved.PullThroughOverride = imagePull.PullThroughOverride
+	if imagePull.Policy != "" {
+		resolved.ImagePullPolicy = imagePull.Policy
 	}
 
 	if imagePull.PullSecrets != nil {
 		resolved.PullSecrets = append([]string{}, imagePull.PullSecrets...)
 	}
-
-	if imagePull.DockerDaemonConfig != nil {
-		resolved.DockerDaemonConfig = *imagePull.DockerDaemonConfig
-	}
-
-	if imagePull.DockerConfig != nil {
-		resolved.DockerConfig = *imagePull.DockerConfig
-	}
 }
 
 func applyProfileDeployment(
 	resolved *ResolvedProfile,
-	deployment *clabernetesapisv1alpha1.LauncherProfileDeployment,
+	deployment *clabernetesapisv1alpha1.NodeProfileDeployment,
 ) {
 	if deployment == nil {
 		return
 	}
 
-	if deployment.PrivilegedLauncher != nil {
-		resolved.PrivilegedLauncher = *deployment.PrivilegedLauncher
-	}
-
 	if deployment.Persistence != nil {
 		resolved.Persistence = *deployment.Persistence.DeepCopy()
-	}
-
-	if deployment.ContainerlabDebug != nil {
-		resolved.ContainerlabDebug = *deployment.ContainerlabDebug
-	}
-
-	if deployment.ContainerlabTimeout != nil {
-		resolved.ContainerlabTimeout = *deployment.ContainerlabTimeout
-	}
-
-	if deployment.ContainerlabVersion != nil {
-		resolved.ContainerlabVersion = *deployment.ContainerlabVersion
-	}
-
-	if deployment.LauncherImage != "" {
-		resolved.LauncherImage = deployment.LauncherImage
-	}
-
-	if deployment.LauncherImagePullPolicy != "" {
-		resolved.LauncherImagePullPolicy = deployment.LauncherImagePullPolicy
-	}
-
-	if deployment.LauncherLogLevel != "" {
-		resolved.LauncherLogLevel = deployment.LauncherLogLevel
-	}
-
-	if deployment.ExtraEnv != nil {
-		resolved.ExtraEnv = append([]k8scorev1.EnvVar{}, deployment.ExtraEnv...)
 	}
 }

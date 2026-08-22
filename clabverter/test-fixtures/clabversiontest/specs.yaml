@@ -1,5 +1,4 @@
 ---
-connectivity: slurpeeth
 imagePull:
   pullSecrets:
     - regcred

@@ -33,16 +33,11 @@ data:
     requests:
       cpu: 200m
       memory: 512Mi
-  resourcesByContainerlabKind: |-
-    ---
-    {}
   nodeSelectorsByImage: |-
     {}
     ---
-  privilegedLauncher: "true"
-  containerlabDebug: "false"
   inClusterDNSSuffix: svc.cluster.local
-  imagePullThroughMode: auto
-  launcherImagePullPolicy: IfNotPresent
-  launcherLogLevel: info
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: |-
+    []
   naming: prefixed

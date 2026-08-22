@@ -3,14 +3,21 @@ title: File mounting
 description: Mount configuration, licenses, and other files into network nodes.
 ---
 
-This guide explains how to mount external files into Clabernetes topology nodes using ConfigMaps and URLs.
+This guide explains how to mount external files into Clabernetes topology nodes using ConfigMaps, Secrets, and URLs.
 
 ## Overview
 
-Clabernetes supports two methods for mounting files into launcher pods:
+Clabernetes supports three sources for placing files into device pods:
 
 1. **ConfigMaps**: Mount files from Kubernetes ConfigMaps
-2. **URLs**: Download files from HTTP/HTTPS endpoints
+2. **Secrets**: Mount sensitive files from Kubernetes Secrets
+3. **URLs**: Download files from HTTP/HTTPS endpoints
+
+Every declared file is a payload of the node's device plan: its content digest is recorded in
+the accepted plan, and the preparation init container stages it into plan-scoped volumes and
+verifies every path, mode, and digest before the device containers start. Changing a payload's
+content therefore produces a new plan and recreates the Pod. Arbitrary host binds are rejected
+before a workload is created.
 
 ## Mounting Files from ConfigMaps
 
@@ -64,7 +71,7 @@ spec:
 ```
 
 Topology remains a supported auxiliary input. The compiler moves each map entry onto the
-corresponding generated Node; it does not create a one-off LauncherProfile just to carry payload.
+corresponding generated Node; it does not create a one-off NodeProfile just to carry payload.
 
 ### Mounting on a Direct Node
 
@@ -86,9 +93,10 @@ spec:
   filesFromURL:
     - filePath: /tmp/bootstrap.json
       url: https://example.com/bootstrap/srl1.json
+      digest: sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
 
-LauncherProfile contains launcher policy only; it does not own per-node files.
+NodeProfile contains deployment policy only; it does not own per-node files.
 
 ### FileFromConfigMap Fields
 
@@ -136,6 +144,37 @@ filesFromConfigMap:
       configMapPath: license.key
 ```
 
+## Mounting Files from Secrets
+
+Sensitive payloads -- credentials, private keys, licenses under NDA -- belong in Secrets rather
+than ConfigMaps. Secret-backed payloads are marked sensitive: only their digest reaches the
+plan, and the bytes are projected straight into the preparation container.
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+spec:
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+  filesFromSecret:
+    - filePath: /opt/srlinux/etc/license.key
+      secretName: srl-license
+      secretPath: license.key
+```
+
+In a Topology, the equivalent map is `spec.deployment.filesFromSecret` keyed by node name.
+
+### FileFromSecret Fields
+
+| Field | Required | Description |
+| ------- | ---------- | ------------- |
+| `filePath` | Yes | Destination path, or destination directory when `secretPath` is omitted |
+| `secretName` | Yes | Name of the same-namespace Secret |
+| `secretPath` | No | Secret data key (all keys are projected beneath `filePath` if omitted) |
+| `mode` | No | `read` (0o444) or `execute` (0o555), default: `read` |
+
 ## Mounting Files from URLs
 
 ### Basic URL Mount
@@ -147,6 +186,7 @@ spec:
       srl1:
         - filePath: /tmp/config.json
           url: https://raw.githubusercontent.com/example/configs/main/srl1.json
+          digest: sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
 
 ### FileFromURL Fields
@@ -155,12 +195,20 @@ spec:
 |-------|----------|-------------|
 | `filePath` | Yes | Destination path inside the pod |
 | `url` | Yes | URL to download the file from |
+| `digest` | Yes | `sha256:<64 hex>` digest of the file bytes; a download that differs fails |
+
+The digest pins the payload: a mutable URL cannot change a device's content without a matching
+change to the accepted plan. Compute it with `sha256sum <file>`.
 
 ### URL Requirements
 
 - Must be a direct file download (not HTML page)
 - GitHub: Use "raw" URLs
-- Must be accessible from the launcher pod
+- Must be an absolute HTTP(S) URL without embedded credentials
+- Must be a publicly resolvable endpoint: the fetch runs from the planning worker and again from
+  the preparation init container, and hosts that resolve to private, loopback, or otherwise
+  non-public addresses are rejected
+- Downloads are capped at 64 MB
 
 **Good URLs:**
 
@@ -178,13 +226,9 @@ https://drive.google.com/file/d/xxx               # Requires auth
 
 ### Authentication
 
-For authenticated URLs, use ConfigMaps with secrets instead, or configure Docker credentials:
-
-```yaml
-spec:
-  imagePull:
-    dockerConfig: my-docker-config-secret  # Contains config.json with auth
-```
+URL payloads are fetched anonymously. For content behind authentication, load it into a
+ConfigMap or Secret and reference that instead -- registry credentials belong in Kubernetes
+`imagePull.pullSecrets`, not in file mounting.
 
 ## Common Use Cases
 
@@ -341,11 +385,11 @@ spec:
 
 | Aspect | ConfigMap | URL |
 | -------- | ----------- | ----- |
-| Size limit | 1 MB | No limit |
-| Updates | Requires CM update | Re-downloaded on restart |
-| Security | In-cluster secrets | External access needed |
+| Size limit | 1 MB | 64 MB |
+| Updates | New content = new plan, Pod recreated | Change file *and* `digest` together |
+| Security | In-cluster (use Secrets for sensitive bytes) | Public endpoint required |
 | Versioning | Via K8s | Via URL versioning |
-| Best for | Licenses, small configs | Large files, external sources |
+| Best for | Small configs | Large files, external sources |
 
 ## Troubleshooting
 
@@ -380,10 +424,12 @@ If exceeding 1MB:
 
 ### URL Download Failures
 
-Check launcher logs:
+A fetch or digest failure during planning is reported on the Node before any workload exists; a
+failure during staging shows up in the preparation init container:
 
 ```bash
-kubectl logs -l c9s.run/topologyNode=<node>
+kubectl describe nodes.c9s.run <node>
+kubectl logs deploy/<node> -c prepare-device-plan
 ```
 
 Verify URL accessibility:
@@ -394,8 +440,8 @@ kubectl run curl-test --rm -it --image=curlimages/curl -- curl -I <url>
 
 ## Best Practices
 
-1. **Use ConfigMaps for sensitive data**: Licenses, credentials, certificates
-2. **Use URLs for large files**: Disk images, large configurations
+1. **Use Secrets for sensitive data**: Licenses, credentials, certificates
+2. **Use URLs for large files**: Configurations beyond the ConfigMap limit (up to 64 MB)
 3. **Version your ConfigMaps**: Include version in name for traceability
 4. **Use descriptive paths**: Match vendor conventions for file locations
 5. **Test file accessibility**: Verify URLs work before deploying
@@ -404,4 +450,5 @@ kubectl run curl-test --rm -it --image=curlimages/curl -- curl -I <url>
 
 - [Example: with-configmap-files.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-configmap-files.yaml)
 - [CRD Reference: FilesFromConfigMap](/docs/crd/node)
+- [CRD Reference: FilesFromSecret](/docs/crd/node)
 - [CRD Reference: FilesFromURL](/docs/crd/node)

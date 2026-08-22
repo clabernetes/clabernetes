@@ -29,8 +29,6 @@ func TestClabverterBasic(t *testing.T) {
 		namespace,
 		"prefixed",
 		"",
-		"",
-		"",
 		false,
 		false,
 		false,

@@ -39,7 +39,7 @@ func WriteHTTPContentsFromPath(
 		return err
 	}
 
-	defer resp.Body.Close() //nolint
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf(
@@ -69,7 +69,8 @@ func GitHubNormalToRawLink(path string) string {
 	}
 
 	p := regexp.MustCompile(
-		`(?mi)https?:\/\/(?:www\.)?github\.com\/(?P<GroupRepo>.*?)(?:\/(?:blob\/)|(?:tree\/))(?P<Path>.*)`, //nolint:lll
+		`(?mi)https?:\/\/(?:www\.)?github\.com\/` +
+			`(?P<GroupRepo>.*?)(?:\/(?:blob\/)|(?:tree\/))(?P<Path>.*)`,
 	)
 
 	paramsMap := RegexStringSubMatchToMap(p, path)

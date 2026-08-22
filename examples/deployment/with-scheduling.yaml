@@ -20,7 +20,7 @@ spec:
         - key: "nvidia.com/gpu"
           operator: "Exists"
           effect: "NoSchedule"
-      # Affinity and anti-affinity rules for launcher Pods.
+      # Affinity and anti-affinity rules for device Pods.
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

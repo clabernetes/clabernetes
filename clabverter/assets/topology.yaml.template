@@ -5,26 +5,15 @@ metadata:
   name: {{ .Name }}
   namespace: {{ .Namespace }}
 spec:
-  {{- if or (gt (len .InsecureRegistries) 0) (gt (len .ImagePullSecrets) 0) }}
+  {{- if gt (len .ImagePullSecrets) 0 }}
   imagePull:
-    {{- if gt (len .InsecureRegistries) 0 }}
-    insecureRegistries:
-      {{- range $registry := .InsecureRegistries }}
-      - {{ $registry }}
-      {{- end }}
-    {{- end }}
-    {{- if gt (len .ImagePullSecrets) 0 }}
     pullSecrets:
       {{- range $secret := .ImagePullSecrets }}
       - {{ $secret }}
       {{- end }}
-    {{- end }}
   {{- end }}
-  {{- if or (gt (len .Files) 0) (gt (len .FilesFromURL) 0) (.ContainerlabVersion) }}
+  {{- if or (gt (len .Files) 0) (gt (len .FilesFromURL) 0) }}
   deployment:
-    {{- if .ContainerlabVersion }}
-    containerlabVersion: {{ .ContainerlabVersion }}
-    {{- end }}
     {{- if or (gt (len .Files) 0) }}
     filesFromConfigMap:
       {{- range $nodeName, $nodeFiles := .Files }}

@@ -21,19 +21,19 @@ kind: Node
 metadata:
   name: srl1
 spec:
-  launcherProfileRef:
+  profileRef:
     name: lab-policy
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux:26.3
 ```
 
 A Node can reference one same-namespace
-[LauncherProfile](/docs/concepts/launcher-profiles). If the reference is omitted, global `Config`
+[NodeProfile](/docs/concepts/node-profiles). If the reference is omitted, global `Config`
 defaults apply. An explicit reference that does not exist prevents the Node from being realized.
 
 ## Link
 
-A Link declares exactly two endpoints and the connectivity mechanism used to join them.
+A Link declares exactly two endpoints -- one wire, nothing else.
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -47,12 +47,12 @@ spec:
   endpointB:
     nodeName: multitool
     interfaceName: eth1
-  connectivity: vxlan
 ```
 
 Wiring belongs only to Link objects; interfaces are not embedded into Node specifications. The
-link controller validates endpoints and records tunnel allocation in status, while each launcher
-watches only the Links terminating on its Nodes.
+link controller validates endpoints and records a cluster-wide tunnel allocation in status, while
+each device Pod's connectivity sidecar watches only the Links terminating on its own Nodes and
+realizes each cross-Pod wire as an in-Pod VXLAN tunnel carrying the Link's allocated tunnel id.
 
 ## Why direct resources?
 
@@ -67,7 +67,7 @@ and the total object count still matter.
 
 The
 [individual-resource SR Linux and multitool example](https://github.com/clabernetes/clabernetes/tree/main/examples/basic/individual-resources/srl-multitool)
-contains a LauncherProfile, two Nodes, and one Link.
+contains a NodeProfile, two Nodes, and one Link.
 
 See the [Node reference](/docs/crd/node) and
 [Link reference](/docs/crd/link) for all fields.

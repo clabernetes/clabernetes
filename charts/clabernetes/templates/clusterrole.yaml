@@ -91,6 +91,48 @@ rules:
       - watch
     {{- end }}
   - apiGroups:
+      - networking.k8s.io
+    resources:
+      - networkpolicies
+    verbs:
+    {{- if .Values.manager.restrictedRBAC.enabled }}
+      - list
+      - watch
+    {{- else }}
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - patch
+      - watch
+    {{- end }}
+  {{- if not .Values.manager.restrictedRBAC.enabled }}
+  {{- /* restricted installs grant pods/log, pods/exec, and events per namespace via the
+         namespaced Roles; a cluster-wide exec grant would defeat restricted RBAC. */}}
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - pods/exec
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+  {{- end }}
+  - apiGroups:
       - rbac.authorization.k8s.io
     resources:
       - rolebindings
@@ -118,8 +160,8 @@ metadata:
     heritage: {{ .Release.Service }}
     revision: "{{ .Release.Revision }}"
     c9s.run/app: {{ .Values.appName }}
-    c9s.run/name: "{{ .Values.appName }}-launcher-role"
-    c9s.run/component: launcher-role
+    c9s.run/name: "{{ .Values.appName }}-direct-runtime-role"
+    c9s.run/component: direct-runtime-role
     {{- if .Values.globalLabels }}
 {{ .Values.globalLabels | toYaml | indent 4 }}
     {{- end }}
@@ -127,21 +169,20 @@ metadata:
   annotations:
 {{ .Values.globalAnnotations | toYaml | indent 4 }}
   {{- end }}
-  name: "{{ .Values.appName }}-launcher-role"
+  name: "{{ .Values.appName }}-direct-runtime-role"
 rules:
   - apiGroups:
       - c9s.run
     resources:
-      - imagerequests
-    verbs:
-      - get
-      - create
-  - apiGroups:
-      - c9s.run
-    resources:
-      - nodes
       - links
     verbs:
       - get
       - list
       - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+    verbs:
+      - get

@@ -23,7 +23,7 @@ import (
 )
 
 // Reconciler is the topology reconciler -- it *compiles* a Topology definition into the
-// primitive Node/Link/LauncherProfile objects (all actual reconciliation of those happens in their
+// primitive Node/Link/NodeProfile objects (all actual reconciliation of those happens in their
 // own controllers, identically for compiled and hand written objects), prunes emitted objects
 // that fell out of the definition, protects them from drift, and aggregates their statuses back
 // into the Topology status.
@@ -104,7 +104,7 @@ func (r *Reconciler) Reconcile(
 	}
 
 	rendered := renderedChildren{
-		launcherProfiles: RenderLauncherProfiles(
+		nodeProfiles: RenderNodeProfiles(
 			topology,
 			compiled,
 			r.configManagerGetter,
@@ -132,20 +132,13 @@ func (r *Reconciler) Reconcile(
 		return ctrlruntime.Result{RequeueAfter: topologyChildConflictRequeueAfter}, nil
 	}
 
-	err = r.legacyCleanup(ctx, topology)
-	if err != nil {
-		r.Log.Criticalf("failed cleaning up legacy (pre node/link) objects, err: %s", err)
-
-		return ctrlruntime.Result{}, err
-	}
-
 	// profiles carry the deployment/expose policy for the emitted nodes and links wire them --
 	// emit both *before* the nodes so the node controller never renders a node against default
 	// policy (i.e. creating expose load balancers the user explicitly disabled) or a partial
 	// wiring view while the rest of the compilation is still landing
-	err = r.reconcileLauncherProfiles(ctx, topology, rendered.launcherProfiles)
+	err = r.reconcileNodeProfiles(ctx, topology, rendered.nodeProfiles)
 	if err != nil {
-		r.logEmittedReconcileFailure("launcher profiles", err)
+		r.logEmittedReconcileFailure("node profiles", err)
 
 		return ctrlruntime.Result{}, err
 	}
@@ -170,9 +163,9 @@ func (r *Reconciler) Reconcile(
 const topologyChildConflictRequeueAfter = 10 * time.Second
 
 type renderedChildren struct {
-	launcherProfiles []*clabernetesapisv1alpha1.LauncherProfile
-	links            []*clabernetesapisv1alpha1.Link
-	nodes            []*clabernetesapisv1alpha1.Node
+	nodeProfiles []*clabernetesapisv1alpha1.NodeProfile
+	links        []*clabernetesapisv1alpha1.Link
+	nodes        []*clabernetesapisv1alpha1.Node
 }
 
 type renderedChild struct {
@@ -183,11 +176,11 @@ type renderedChild struct {
 var errRenderedChildNotObject = errors.New("rendered child is not a Kubernetes object")
 
 func (c renderedChildren) all() []renderedChild {
-	children := make([]renderedChild, 0, len(c.launcherProfiles)+len(c.links)+len(c.nodes))
+	children := make([]renderedChild, 0, len(c.nodeProfiles)+len(c.links)+len(c.nodes))
 
-	for _, profile := range c.launcherProfiles {
+	for _, profile := range c.nodeProfiles {
 		children = append(children, renderedChild{
-			kind:   "launcherprofile",
+			kind:   "nodeprofile",
 			object: profile,
 		})
 	}
@@ -456,12 +449,12 @@ func (r *Reconciler) reconcileLinks(
 	)
 }
 
-func (r *Reconciler) reconcileLauncherProfiles(
+func (r *Reconciler) reconcileNodeProfiles(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
-	rendered []*clabernetesapisv1alpha1.LauncherProfile,
+	rendered []*clabernetesapisv1alpha1.NodeProfile,
 ) error {
-	ownedProfiles := &clabernetesapisv1alpha1.LauncherProfileList{}
+	ownedProfiles := &clabernetesapisv1alpha1.NodeProfileList{}
 
 	err := r.Client.List(
 		ctx,
@@ -473,7 +466,7 @@ func (r *Reconciler) reconcileLauncherProfiles(
 	}
 
 	existing := make(
-		map[string]*clabernetesapisv1alpha1.LauncherProfile,
+		map[string]*clabernetesapisv1alpha1.NodeProfile,
 		len(ownedProfiles.Items),
 	)
 
@@ -489,11 +482,11 @@ func (r *Reconciler) reconcileLauncherProfiles(
 		ctx,
 		r,
 		topology,
-		"launcher profile",
+		"node profile",
 		rendered,
 		existing,
-		emittedObjectConforms[*clabernetesapisv1alpha1.LauncherProfile],
-		func(_, _ *clabernetesapisv1alpha1.LauncherProfile) {},
+		emittedObjectConforms[*clabernetesapisv1alpha1.NodeProfile],
+		func(_, _ *clabernetesapisv1alpha1.NodeProfile) {},
 	)
 }
 

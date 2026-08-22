@@ -35,53 +35,43 @@ func TestClabvert(t *testing.T) {
 		topologyFile         string
 		topologySpecFile     string
 		destinationNamespace string
-		insecureRegistries   string
 		imagePullSecrets     string
 		disableExpose        bool
 		emitCRs              bool
 		naming               string
-		containerlabVersion  string
 	}{
 		{
 			name:                 "simple",
 			topologyFile:         "test-fixtures/clabversiontest/clab.yaml",
 			topologySpecFile:     "",
 			destinationNamespace: "notclabernetes",
-			insecureRegistries:   "1.2.3.4",
 			imagePullSecrets:     "regcred",
 			naming:               "prefixed",
-			containerlabVersion:  "",
 		},
 		{
-			name:                "simple-no-explicit-namespace",
-			topologyFile:        "test-fixtures/clabversiontest/clab.yaml",
-			topologySpecFile:    "test-fixtures/clabversiontest/specs.yaml",
-			insecureRegistries:  "1.2.3.4",
-			imagePullSecrets:    "",
-			disableExpose:       true,
-			naming:              "non-prefixed",
-			containerlabVersion: "0.51.0",
+			name:             "simple-no-explicit-namespace",
+			topologyFile:     "test-fixtures/clabversiontest/clab.yaml",
+			topologySpecFile: "test-fixtures/clabversiontest/specs.yaml",
+			imagePullSecrets: "",
+			disableExpose:    true,
+			naming:           "non-prefixed",
 		},
 		{
 			name:                 "emit-crs",
 			topologyFile:         "test-fixtures/clabversiontest/clab.yaml",
 			topologySpecFile:     "test-fixtures/clabversiontest/emit-crs-specs.yaml",
 			destinationNamespace: "notclabernetes",
-			insecureRegistries:   "1.2.3.4",
 			imagePullSecrets:     "regcred",
 			emitCRs:              true,
 			naming:               "prefixed",
-			containerlabVersion:  "",
 		},
 		{
 			name:                 "inline-startup-config",
 			topologyFile:         "test-fixtures/inline-startup-config/clab.yaml",
 			topologySpecFile:     "",
 			destinationNamespace: "inline-test",
-			insecureRegistries:   "",
 			imagePullSecrets:     "",
 			naming:               "prefixed",
-			containerlabVersion:  "",
 		},
 	}
 
@@ -127,8 +117,6 @@ func TestClabvert(t *testing.T) {
 					actualDir,
 					testCase.destinationNamespace,
 					testCase.naming,
-					testCase.containerlabVersion,
-					testCase.insecureRegistries,
 					testCase.imagePullSecrets,
 					testCase.disableExpose,
 					testCase.emitCRs,
@@ -215,18 +203,18 @@ func assertPrimitiveManifestSemantics(t *testing.T, content []byte) {
 		kinds = append(kinds, header.Kind)
 
 		switch header.Kind {
-		case "LauncherProfile":
-			profile := &clabernetesapisv1alpha1.LauncherProfile{}
+		case "NodeProfile":
+			profile := &clabernetesapisv1alpha1.NodeProfile{}
 
 			err = yaml.Unmarshal([]byte(doc), profile)
 			if err != nil {
-				t.Fatalf("failed unmarshaling direct LauncherProfile: %s", err)
+				t.Fatalf("failed unmarshaling direct NodeProfile: %s", err)
 			}
 
 			profileCount++
 
 			if len(profile.OwnerReferences) != 0 {
-				t.Fatalf("direct LauncherProfile must not have owner references: %+v", profile)
+				t.Fatalf("direct NodeProfile must not have owner references: %+v", profile)
 			}
 
 			if profile.GetName() == "topo01-srl2" {
@@ -235,7 +223,7 @@ func assertPrimitiveManifestSemantics(t *testing.T, content []byte) {
 					profile.Spec.Expose == nil ||
 					profile.Spec.StatusProbes == nil {
 					t.Fatalf(
-						"expected complete dedicated direct LauncherProfile, got %+v",
+						"expected complete dedicated direct NodeProfile, got %+v",
 						profile.Spec,
 					)
 				}
@@ -251,13 +239,6 @@ func assertPrimitiveManifestSemantics(t *testing.T, content []byte) {
 			}
 
 			linkCount++
-
-			if link.Spec.Connectivity != clabernetesapisv1alpha1.LinkConnectivitySlurpeeth {
-				t.Fatalf(
-					"expected direct Link connectivity slurpeeth, got %q",
-					link.Spec.Connectivity,
-				)
-			}
 
 			if len(link.OwnerReferences) != 0 {
 				t.Fatalf("direct Link must not have owner references: %+v", link)
@@ -290,9 +271,9 @@ func assertPrimitiveManifestSemantics(t *testing.T, content []byte) {
 				expectedProfileName = "topo01-srl2"
 			}
 
-			if node.Spec.LauncherProfileRef == nil ||
-				node.Spec.LauncherProfileRef.Name != expectedProfileName {
-				t.Fatalf("expected explicit LauncherProfile ref on Node: %+v", node.Spec)
+			if node.Spec.ProfileRef == nil ||
+				node.Spec.ProfileRef.Name != expectedProfileName {
+				t.Fatalf("expected explicit NodeProfile ref on Node: %+v", node.Spec)
 			}
 
 			if len(node.Spec.FilesFromConfigMap) > 0 || len(node.Spec.FilesFromURL) > 0 {
@@ -320,7 +301,7 @@ func assertPrimitiveManifestSemantics(t *testing.T, content []byte) {
 		)
 	}
 
-	if kinds[0] != "LauncherProfile" || kinds[1] != "LauncherProfile" || kinds[2] != "Link" {
+	if kinds[0] != "NodeProfile" || kinds[1] != "NodeProfile" || kinds[2] != "Link" {
 		t.Fatalf("dependencies must precede Nodes in direct output, got kinds %v", kinds)
 	}
 
@@ -367,7 +348,7 @@ func normalizeManifest(t *testing.T, b []byte) []byte {
 		return normalizeConfigMapPaths(t, b)
 	case bytes.Contains(b, []byte("kind: Topology")):
 		return normalizeFromFileFilePaths(t, b)
-	case bytes.Contains(b, []byte("kind: LauncherProfile")):
+	case bytes.Contains(b, []byte("kind: NodeProfile")):
 		return normalizeCRManifestPaths(t, b)
 	default:
 		return b

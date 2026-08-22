@@ -2,7 +2,9 @@ package config
 
 import (
 	"maps"
+	"slices"
 
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	k8scorev1 "k8s.io/api/core/v1"
 )
@@ -15,9 +17,13 @@ func GetFakeManager() Manager {
 
 // fakeManager defined type alias to be used below.
 type fakeManager struct {
-	nodeSelectorsByImage map[string]map[string]string
-	criHostsDir          string
-	criKindOverride      string
+	nodeSelectorsByImage  map[string]map[string]string
+	defaultResources      *k8scorev1.ResourceRequirements
+	imagePullPolicy       string
+	imagePullSecrets      []string
+	globalAnnotations     map[string]string
+	globalLabels          map[string]string
+	registryMetadataTrust []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
 }
 
 // FakeOption defined type alias to be used below.
@@ -27,12 +33,20 @@ type FakeOption func(*fakeManager)
 func NewFakeManager(opts ...FakeOption) Manager {
 	manager := &fakeManager{
 		nodeSelectorsByImage: make(map[string]map[string]string),
+		imagePullPolicy:      clabernetesconstants.KubernetesImagePullIfNotPresent,
 	}
 	for _, opt := range opts {
 		opt(manager)
 	}
 
 	return manager
+}
+
+// WithImagePullSecrets configures global same-namespace Pod pull Secret names.
+func WithImagePullSecrets(secrets []string) FakeOption {
+	return func(fm *fakeManager) {
+		fm.imagePullSecrets = slices.Clone(secrets)
+	}
 }
 
 // WithNodeSelectors returns a fake manager to support nodeSelectorByImage.
@@ -48,17 +62,18 @@ func WithNodeSelectors(selectors map[string]map[string]string) FakeOption {
 	}
 }
 
-// WithCRIHostsDir configures a CRI registry hosts directory on the fake manager.
-func WithCRIHostsDir(path string) FakeOption {
+// WithDefaultResources configures generic default application resources on the fake manager.
+func WithDefaultResources(resources *k8scorev1.ResourceRequirements) FakeOption {
 	return func(fm *fakeManager) {
-		fm.criHostsDir = path
+		fm.defaultResources = resources.DeepCopy()
 	}
 }
 
-// WithCRIKindOverride configures a CRI kind override on the fake manager.
-func WithCRIKindOverride(kind string) FakeOption {
+// WithMetadata configures global annotations and labels on the fake manager.
+func WithMetadata(annotations, labels map[string]string) FakeOption {
 	return func(fm *fakeManager) {
-		fm.criKindOverride = kind
+		fm.globalAnnotations = maps.Clone(annotations)
+		fm.globalLabels = maps.Clone(labels)
 	}
 }
 
@@ -67,24 +82,33 @@ func (f fakeManager) Start() error {
 }
 
 func (f fakeManager) GetGlobalAnnotations() map[string]string {
-	return make(map[string]string)
+	annotations := map[string]string{}
+	maps.Copy(annotations, f.globalAnnotations)
+
+	return annotations
 }
 
 func (f fakeManager) GetGlobalLabels() map[string]string {
-	return make(map[string]string)
+	labels := map[string]string{}
+	maps.Copy(labels, f.globalLabels)
+
+	return labels
 }
 
 func (f fakeManager) GetAllMetadata() (annotations, labels map[string]string) {
 	return f.GetGlobalAnnotations(), f.GetGlobalLabels()
 }
 
-func (f fakeManager) GetResourcesForContainerlabKind(
-	containerlabKind string,
-	containerlabType string,
-) *k8scorev1.ResourceRequirements {
-	_, _ = containerlabKind, containerlabType
+func (f fakeManager) GetDefaultResources() *k8scorev1.ResourceRequirements {
+	return f.defaultResources.DeepCopy()
+}
 
-	return nil
+func (f fakeManager) GetApplicationImagePullPolicy() string {
+	return f.imagePullPolicy
+}
+
+func (f fakeManager) GetImagePullSecrets() []string {
+	return slices.Clone(f.imagePullSecrets)
 }
 
 func (f fakeManager) GetNodeSelectorsByImage(
@@ -93,66 +117,16 @@ func (f fakeManager) GetNodeSelectorsByImage(
 	return GetNodeSelectorsByImage(imageName, f.nodeSelectorsByImage)
 }
 
-func (f fakeManager) GetPrivilegedLauncher() bool {
-	return true
-}
-
-func (f fakeManager) GetContainerlabDebug() bool {
-	return false
-}
-
-func (f fakeManager) GetContainerlabTimeout() string {
-	return ""
-}
-
 func (f fakeManager) GetInClusterDNSSuffix() string {
 	return "svc.cluster.local"
 }
 
-func (f fakeManager) GetImagePullThroughMode() string {
-	return "auto"
-}
-
-func (f fakeManager) GetLauncherImage() string {
-	return "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:latest"
-}
-
-func (f fakeManager) GetImagePullCriSockOverride() string {
-	return ""
-}
-
-func (f fakeManager) GetImagePullCriKindOverride() string {
-	return f.criKindOverride
-}
-
-func (f fakeManager) GetImagePullCriHostsDir() string {
-	return f.criHostsDir
-}
-
-func (f fakeManager) GetDockerDaemonConfig() string {
-	return ""
-}
-
-func (f fakeManager) GetDockerConfig() string {
-	return ""
-}
-
-func (f fakeManager) GetLauncherImagePullPolicy() string {
-	return clabernetesconstants.KubernetesImagePullIfNotPresent
-}
-
-func (f fakeManager) GetLauncherLogLevel() string {
-	return clabernetesconstants.Info
-}
-
-func (f fakeManager) GetExtraEnv() []k8scorev1.EnvVar {
-	return nil
+func (f fakeManager) GetRegistryMetadataTrust() (
+	result []clabernetesapisv1alpha1.RegistryMetadataTrustEntry,
+) {
+	return slices.Clone(f.registryMetadataTrust)
 }
 
 func (f fakeManager) GetRemoveTopologyPrefix() bool {
 	return false
-}
-
-func (f fakeManager) GetContainerlabVersion() string {
-	return ""
 }

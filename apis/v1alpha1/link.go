@@ -5,23 +5,14 @@ import (
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 )
 
-// LinkHostNodeName is the reserved endpoint node name representing "the launcher pod itself" --
-// links with a `host` endpoint are materialized verbatim by the launcher owning the other
-// endpoint (this mirrors containerlab's own host link syntax).
+// LinkHostNodeName is the reserved endpoint node name representing a worker-host endpoint. The
+// connectivity sidecar of the Pod owning the other endpoint materializes it.
 const LinkHostNodeName = "host"
 
-// LinkConnectivity is the connectivity flavor used to realize a cross-launcher Link.
-// +kubebuilder:validation:Enum=vxlan;slurpeeth
-type LinkConnectivity string
-
 const (
-	// LinkConnectivityVXLAN realizes a Link with a VXLAN tunnel.
-	LinkConnectivityVXLAN LinkConnectivity = "vxlan"
-	// LinkConnectivitySlurpeeth realizes a Link with a slurpeeth TCP segment.
-	LinkConnectivitySlurpeeth LinkConnectivity = "slurpeeth"
-
-	// SlurpeethMaxSegmentID is the largest segment identifier slurpeeth can represent.
-	SlurpeethMaxSegmentID = 1<<16 - 1
+	// LinkConditionAccepted reports whether both endpoint identities and any required direct
+	// connectivity allocation are valid and current.
+	LinkConditionAccepted = "Accepted"
 )
 
 // +genclient
@@ -30,15 +21,11 @@ const (
 // Link represents a single point-to-point "wire" between two (containerlab) nodes. Links are a
 // primary clabernetes API -- like Nodes they can be created by users directly or emitted by the
 // (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints
-// (Node object names in the same namespace plus interface names), connectivity flavor, and an
-// optional mtu. The link controller allocates a tunnel id into the status for links that cross
-// launcher pods; links between nodes co-located in one launcher pod and links to the reserved
-// `host` node need no tunnel and are materialized directly by the owning launcher. Launchers
-// select only the links terminating on their nodes with *field selectors* on the endpoint node
-// names (which requires kubernetes 1.31+) -- no labels are required, ever, and no launcher
-// watches more than its own
-// links. Storing one object per wire keeps every persisted object O(1) regardless of topology
-// size.
+// (Node object names in the same namespace plus interface names) and an optional MTU. The Link
+// controller allocates a tunnel ID into status for cross-Pod transports; same-Pod, loopback, and
+// host Links need no tunnel allocation. Direct connectivity reconcilers select only Links
+// terminating on their Nodes with endpoint field selectors. Storing one object per wire keeps
+// every persisted object O(1) regardless of topology size.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path="links",shortName="c9slink"
 // +kubebuilder:selectablefield:JSONPath=`.spec.endpointA.nodeName`
@@ -48,6 +35,9 @@ const (
 // +kubebuilder:printcolumn:JSONPath=".spec.endpointB.nodeName",name=Node-B,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.endpointB.interfaceName",name=Interface-B,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.tunnelID",name=Tunnel-ID,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='Accepted')].status",name=Accepted,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='Accepted')].message",name=Message,type=string,priority=1
+// +kubebuilder:subresource:status
 type Link struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -68,40 +58,24 @@ type LinkEndpointSpec struct {
 }
 
 // LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.
-// Anything operational (the allocated tunnel id) lives in the status, and anything derivable
-// (i.e. the remote launcher's fabric service) is derived by the launchers.
+// Anything operational (the allocated tunnel ID and resolved identities) lives in status, and
+// current peer transport identity is derived by direct connectivity reconcilers.
 type LinkSpec struct {
 	// EndpointA is the "a" side of this link.
 	EndpointA LinkEndpointSpec `json:"endpointA"`
 	// EndpointB is the "b" side of this link.
 	EndpointB LinkEndpointSpec `json:"endpointB"`
-	// MTU is the mtu for the link -- launchers apply this to the (node side of the) link
-	// termination they create; zero means "unset" (use the containerlab default).
+	// MTU is the MTU for both direct endpoint interfaces; zero means unset.
 	// +optional
 	MTU int `json:"mtu,omitempty"`
-	// Connectivity is the flavor used to realize this Link across launcher Pods. Empty values on
-	// objects stored before API defaulting was introduced are normalized to VXLAN by consumers.
-	// +kubebuilder:default=vxlan
-	// +optional
-	Connectivity LinkConnectivity `json:"connectivity,omitempty"`
-}
-
-// NormalizedConnectivity returns the effective connectivity flavor, including the VXLAN default
-// for objects stored before API defaulting was introduced.
-func (s *LinkSpec) NormalizedConnectivity() LinkConnectivity {
-	if s.Connectivity == "" {
-		return LinkConnectivityVXLAN
-	}
-
-	return s.Connectivity
 }
 
 // LinkStatus is the status for a Link resource.
 type LinkStatus struct {
-	// TunnelID is the id number of the tunnel (vxlan vnid or slurpeeth segment id) the controller
-	// allocated for this link -- both sides of the link use the same id. This is an allocation
-	// rather than user intent, hence it living in the status; zero means "not allocated (yet)"
-	// (launchers skip such links until the controller has filled the id in).
+	// TunnelID is the id number of the tunnel (the VXLAN VNI) the controller allocated for this
+	// link -- both sides of the link use the same id. This is an allocation rather than user
+	// intent, hence it living in the status; zero means "not allocated (yet)" (direct
+	// connectivity reconcilers wait until the controller has filled the ID in).
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=16000000
 	// +optional
@@ -111,12 +85,12 @@ type LinkStatus struct {
 	// recorded by name with an empty UID because it does not refer to a Node object.
 	// +optional
 	ResolvedEndpoints *LinkResolvedEndpointsStatus `json:"resolvedEndpoints,omitempty"`
-	// Error holds the reason this link cannot currently be realized. An empty value means the
-	// link is eligible for materialization (a cross-launcher link can still be waiting for its
-	// tunnel id); invalid links and deterministic endpoint-conflict losers carry an error and are
-	// ignored by node controllers and launchers until their spec or conflicting links change.
+	// Conditions contains bounded controller observations for this Link. It does not claim
+	// dataplane readiness, which remains observable through endpoint Node connectivity status.
+	// +listType=map
+	// +listMapKey=type
 	// +optional
-	Error string `json:"error,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // LinkResolvedEndpointsStatus identifies both endpoint Node identities observed by the Link

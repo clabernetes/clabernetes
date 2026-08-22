@@ -1,8 +1,12 @@
+//nolint:err113 // diagnostics are structured one-off errors carrying typed classification.
 package node
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 
 	clabernetesapis "github.com/clabernetes/clabernetes/apis"
@@ -14,7 +18,12 @@ import (
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
+	k8snetworkingv1 "k8s.io/api/networking/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	clientgorest "k8s.io/client-go/rest"
+	clientgoremotecommand "k8s.io/client-go/tools/remotecommand"
 	clientgoworkqueue "k8s.io/client-go/util/workqueue"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,9 +33,9 @@ import (
 	ctrlruntimereconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const launcherProfileReferenceField = "spec.launcherProfileRef.name"
+const profileReferenceField = "spec.profileRef.name"
 
-// Controller is the clabernetes Node controller -- it turns each (launcher) Node into a
+// Controller is the clabernetes Node controller -- it turns each (primary) Node into a
 // deployment (plus services/pvc) and stamps observations/allocations into the Node status.
 type Controller struct {
 	*clabernetescontrollers.BaseController
@@ -46,17 +55,87 @@ func NewController(
 		clabernetes.GetCtrlRuntimeClient(),
 	)
 
+	reconciler := NewReconciler(
+		baseController.Log,
+		baseController.Client,
+		clabernetes.GetCtrlRuntimeMgr().GetAPIReader(),
+		clabernetes.GetAppName(),
+		clabernetesconfig.GetManager,
+	)
+	reconciler.DirectRuntimeImage = clabernetes.GetDeviceRuntimeImage()
+	reconciler.DirectContainerExecutor = newDirectContainerExecutor(
+		clabernetes.GetKubeConfig(),
+		clabernetes.GetKubeClient(),
+	)
+	readLogs := PlannerLogReader(func(
+		ctx context.Context,
+		namespace,
+		podName,
+		containerName string,
+	) ([]byte, error) {
+		return clabernetes.GetKubeClient().CoreV1().Pods(namespace).GetLogs(
+			podName,
+			&k8scorev1.PodLogOptions{Container: containerName},
+		).DoRaw(ctx)
+	})
+	reconciler.ImageDiscoveryReconciler.ReadLogs = readLogs
+	reconciler.PlannerReconciler.ReadLogs = readLogs
+
 	return &Controller{
 		BaseController: baseController,
-		reconciler: NewReconciler(
-			baseController.Log,
-			baseController.Client,
-			clabernetes.GetCtrlRuntimeMgr().GetAPIReader(),
-			clabernetes.GetAppName(),
-			clabernetes.GetNamespace(),
-			clabernetes.GetClusterCRIKind(),
-			clabernetesconfig.GetManager,
-		),
+		reconciler:     reconciler,
+	}
+}
+
+func newDirectContainerExecutor(
+	config *clientgorest.Config,
+	client *kubernetes.Clientset,
+) DirectContainerExecutor {
+	return func(
+		ctx context.Context,
+		namespace,
+		podName,
+		containerName string,
+		command []string,
+	) error {
+		if config == nil || client == nil || namespace == "" || podName == "" ||
+			containerName == "" || len(command) == 0 {
+			return errors.New("direct container exec identity is incomplete")
+		}
+
+		request := client.CoreV1().RESTClient().Post().
+			Namespace(namespace).
+			Resource("pods").
+			Name(podName).
+			SubResource("exec").
+			VersionedParams(&k8scorev1.PodExecOptions{
+				Container: containerName,
+				Command:   command,
+				Stdout:    true,
+				Stderr:    true,
+			}, clientgoscheme.ParameterCodec)
+
+		executor, err := clientgoremotecommand.NewSPDYExecutor(
+			config,
+			http.MethodPost,
+			request.URL(),
+		)
+		if err != nil {
+			return fmt.Errorf("creating direct container executor: %w", err)
+		}
+
+		var stderr bytes.Buffer
+		if err = executor.StreamWithContext(ctx, clientgoremotecommand.StreamOptions{
+			Stdout: &bytes.Buffer{}, Stderr: &stderr,
+		}); err != nil {
+			return fmt.Errorf(
+				"executing direct container command: %w: %s",
+				err,
+				stderr.String(),
+			)
+		}
+
+		return nil
 	}
 }
 
@@ -66,15 +145,16 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		"setting up %s controller with manager",
 		clabernetesapis.Node,
 	)
+	c.reconciler.EventRecorder = mgr.GetEventRecorder("clabernetes-node-controller")
 
 	err := mgr.GetFieldIndexer().IndexField(
 		c.Ctx,
 		&clabernetesapisv1alpha1.Node{},
-		launcherProfileReferenceField,
-		launcherProfileReferenceIndex,
+		profileReferenceField,
+		profileReferenceIndex,
 	)
 	if err != nil {
-		return fmt.Errorf("indexing Nodes by LauncherProfile reference: %w", err)
+		return fmt.Errorf("indexing Nodes by NodeProfile reference: %w", err)
 	}
 
 	return ctrlruntime.NewControllerManagedBy(mgr).
@@ -84,20 +164,20 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 			},
 		).
 		For(&clabernetesapisv1alpha1.Node{}).
-		// group co-members: a (grouped) node's launcher renders that node's services, status
-		// and the shared pod, so events on any node also enqueue its (old and new) launcher
+		// group co-members: a (grouped) node's primary renders that node's services, status
+		// and the shared pod, so events on any node also enqueue its (old and new) primary
 		Watches(
 			&clabernetesapisv1alpha1.Node{},
-			c.launcherEnqueueHandler(),
+			c.primaryEnqueueHandler(),
 		).
-		// LauncherProfile changes enqueue only groups with explicit references to that profile.
+		// NodeProfile changes enqueue only groups with explicit references to that profile.
 		Watches(
-			&clabernetesapisv1alpha1.LauncherProfile{},
+			&clabernetesapisv1alpha1.NodeProfile{},
 			ctrlruntimehandler.EnqueueRequestsFromMapFunc(
-				c.enqueueLaunchersForLauncherProfile,
+				c.enqueuePrimariesForNodeProfile,
 			),
 		).
-		// links feed the attachment digest of the launchers terminating them
+		// links feed the connectivity plans of the primaries terminating them
 		Watches(
 			&clabernetesapisv1alpha1.Link{},
 			c.linkEnqueueHandler(),
@@ -110,6 +190,40 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// owned objects
 		Watches(
 			&k8sappsv1.Deployment{},
+			ctrlruntimehandler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&clabernetesapisv1alpha1.Node{},
+			),
+		).
+		Watches(
+			&k8scorev1.ConfigMap{},
+			ctrlruntimehandler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&clabernetesapisv1alpha1.Node{},
+			),
+		).
+		// referenced payload objects are not Node-owned; changes must still re-plan the
+		// pod group that consumes them.
+		Watches(
+			&k8scorev1.ConfigMap{},
+			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueuePrimariesForPayloadObject),
+		).
+		Watches(
+			&k8scorev1.Secret{},
+			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueuePrimariesForPayloadObject),
+		).
+		Watches(
+			&k8scorev1.Secret{},
+			ctrlruntimehandler.EnqueueRequestForOwner(
+				mgr.GetScheme(),
+				mgr.GetRESTMapper(),
+				&clabernetesapisv1alpha1.Node{},
+			),
+		).
+		Watches(
+			&k8snetworkingv1.NetworkPolicy{},
 			ctrlruntimehandler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
@@ -140,10 +254,10 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		Complete(c)
 }
 
-// enqueueLauncherFor resolves the launcher node hosting the given node object and returns a
+// enqueuePrimaryFor resolves the primary node hosting the given node object and returns a
 // request for it -- the object itself is included in the resolution view so deletes/updates
 // resolve sensibly even when the cache no longer holds the object.
-func (c *Controller) enqueueLauncherFor(
+func (c *Controller) enqueuePrimaryFor(
 	ctx context.Context,
 	obj ctrlruntimeclient.Object,
 ) []ctrlruntimereconcile.Request {
@@ -156,7 +270,7 @@ func (c *Controller) enqueueLauncherFor(
 
 	err := c.Client.List(ctx, nodes, ctrlruntimeclient.InNamespace(obj.GetNamespace()))
 	if err != nil {
-		c.Log.Criticalf("failed listing nodes for launcher enqueue, err: %s", err)
+		c.Log.Criticalf("failed listing nodes for primary enqueue, err: %s", err)
 
 		return nil
 	}
@@ -164,30 +278,30 @@ func (c *Controller) enqueueLauncherFor(
 	byName := clabernetesutilcontainerlab.NodesByName(nodes.Items)
 	byName[node.GetName()] = node
 
-	launcher := clabernetesutilcontainerlab.ResolveLauncherNode(byName, node.GetName())
-	if launcher == node.GetName() {
-		// the node is its own launcher; the For() watch already enqueued it
+	primary := clabernetesutilcontainerlab.ResolvePrimaryNode(byName, node.GetName())
+	if primary == node.GetName() {
+		// the node is its own primary; the For() watch already enqueued it
 		return nil
 	}
 
 	return []ctrlruntimereconcile.Request{{
 		NamespacedName: apimachinerytypes.NamespacedName{
 			Namespace: obj.GetNamespace(),
-			Name:      launcher,
+			Name:      primary,
 		},
 	}}
 }
 
-// launcherEnqueueHandler enqueues the launcher of a node on create/delete, and on update the
-// launchers per both the old and the new object -- so a node moving between groups re-renders
-// both affected launcher pods.
-func (c *Controller) launcherEnqueueHandler() ctrlruntimehandler.EventHandler {
+// primaryEnqueueHandler enqueues the primary of a node on create/delete, and on update the
+// primaries per both the old and the new object -- so a node moving between groups re-renders
+// both affected device pods.
+func (c *Controller) primaryEnqueueHandler() ctrlruntimehandler.EventHandler {
 	enqueue := func(
 		ctx context.Context,
 		obj ctrlruntimeclient.Object,
 		queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
 	) {
-		for _, request := range c.enqueueLauncherFor(ctx, obj) {
+		for _, request := range c.enqueuePrimaryFor(ctx, obj) {
 			queue.Add(request)
 		}
 	}
@@ -214,7 +328,7 @@ func (c *Controller) launcherEnqueueHandler() ctrlruntimehandler.EventHandler {
 			queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
 		) {
 			c.Log.Infof(
-				"observed Node deletion event for %q; reconciling its launcher group",
+				"observed Node deletion event for %q; reconciling its pod group",
 				apimachinerytypes.NamespacedName{
 					Namespace: event.Object.GetNamespace(),
 					Name:      event.Object.GetName(),
@@ -225,16 +339,16 @@ func (c *Controller) launcherEnqueueHandler() ctrlruntimehandler.EventHandler {
 	}
 }
 
-// linkEnqueueHandler enqueues launchers for both snapshots of a Link update. This is required for
-// endpoint rewires (the former launcher must remove the old termination), while connectivity-only
-// changes still enqueue the unchanged terminating launchers for live flavor reconciliation.
+// linkEnqueueHandler enqueues primaries for both snapshots of a Link update. This is required for
+// endpoint rewires (the former primary must remove the old termination), while spec-only
+// changes still enqueue the unchanged terminating primaries for live reconciliation.
 func (c *Controller) linkEnqueueHandler() ctrlruntimehandler.EventHandler {
 	enqueue := func(
 		ctx context.Context,
 		queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
 		objects ...ctrlruntimeclient.Object,
 	) {
-		for _, request := range c.enqueueLaunchersForLinkObjects(ctx, objects...) {
+		for _, request := range c.enqueuePrimariesForLinkObjects(ctx, objects...) {
 			queue.Add(request)
 		}
 	}
@@ -264,23 +378,23 @@ func (c *Controller) linkEnqueueHandler() ctrlruntimehandler.EventHandler {
 	}
 }
 
-func launcherProfileReferenceIndex(obj ctrlruntimeclient.Object) []string {
+func profileReferenceIndex(obj ctrlruntimeclient.Object) []string {
 	node, ok := obj.(*clabernetesapisv1alpha1.Node)
-	if !ok || node.Spec.LauncherProfileRef == nil ||
-		node.Spec.LauncherProfileRef.Name == "" {
+	if !ok || node.Spec.ProfileRef == nil ||
+		node.Spec.ProfileRef.Name == "" {
 		return nil
 	}
 
-	return []string{node.Spec.LauncherProfileRef.Name}
+	return []string{node.Spec.ProfileRef.Name}
 }
 
-// enqueueLaunchersForLauncherProfile maps a profile event to only the launcher group primaries
+// enqueuePrimariesForNodeProfile maps a profile event to only the launcher group primaries
 // containing Nodes that explicitly reference it.
-func (c *Controller) enqueueLaunchersForLauncherProfile(
+func (c *Controller) enqueuePrimariesForNodeProfile(
 	ctx context.Context,
 	obj ctrlruntimeclient.Object,
 ) []ctrlruntimereconcile.Request {
-	profile, ok := obj.(*clabernetesapisv1alpha1.LauncherProfile)
+	profile, ok := obj.(*clabernetesapisv1alpha1.NodeProfile)
 	if !ok {
 		return nil
 	}
@@ -292,11 +406,11 @@ func (c *Controller) enqueueLaunchersForLauncherProfile(
 		referencingNodes,
 		ctrlruntimeclient.InNamespace(profile.GetNamespace()),
 		ctrlruntimeclient.MatchingFields{
-			launcherProfileReferenceField: profile.GetName(),
+			profileReferenceField: profile.GetName(),
 		},
 	)
 	if err != nil {
-		c.Log.Criticalf("failed listing Nodes referencing LauncherProfile, err: %s", err)
+		c.Log.Criticalf("failed listing Nodes referencing NodeProfile, err: %s", err)
 
 		return nil
 	}
@@ -313,30 +427,30 @@ func (c *Controller) enqueueLaunchersForLauncherProfile(
 		ctrlruntimeclient.InNamespace(profile.GetNamespace()),
 	)
 	if err != nil {
-		c.Log.Criticalf("failed listing Nodes for LauncherProfile group mapping, err: %s", err)
+		c.Log.Criticalf("failed listing Nodes for NodeProfile group mapping, err: %s", err)
 
 		return nil
 	}
 
 	nodesByName := clabernetesutilcontainerlab.NodesByName(namespaceNodes.Items)
-	launcherNames := make(map[string]bool, len(referencingNodes.Items))
+	primaryNames := make(map[string]bool, len(referencingNodes.Items))
 
 	for idx := range referencingNodes.Items {
 		referencingNode := &referencingNodes.Items[idx]
 		nodesByName[referencingNode.GetName()] = referencingNode
-		launcherNames[clabernetesutilcontainerlab.ResolveLauncherNode(
+		primaryNames[clabernetesutilcontainerlab.ResolvePrimaryNode(
 			nodesByName,
 			referencingNode.GetName(),
 		)] = true
 	}
 
-	requests := make([]ctrlruntimereconcile.Request, 0, len(launcherNames))
+	requests := make([]ctrlruntimereconcile.Request, 0, len(primaryNames))
 
-	for launcherName := range launcherNames {
+	for primaryName := range primaryNames {
 		requests = append(requests, ctrlruntimereconcile.Request{
 			NamespacedName: apimachinerytypes.NamespacedName{
 				Namespace: profile.GetNamespace(),
-				Name:      launcherName,
+				Name:      primaryName,
 			},
 		})
 	}
@@ -372,9 +486,87 @@ func (c *Controller) enqueueAllNodes(
 	return requests
 }
 
-// enqueueLaunchersForLink enqueues the launcher nodes terminating each side of a link -- link
-// changes can change the launchers' attachment digests.
-func (c *Controller) enqueueLaunchersForLink(
+// enqueuePrimariesForPayloadObject maps a same-namespace ConfigMap or Secret change to every
+// pod group whose Node declarations reference that object. Payload objects are deliberately
+// not owned by Nodes, so owner watches cannot provide this invalidation path.
+func (c *Controller) enqueuePrimariesForPayloadObject(
+	ctx context.Context,
+	obj ctrlruntimeclient.Object,
+) []ctrlruntimereconcile.Request {
+	var references func(*clabernetesapisv1alpha1.Node) bool
+
+	switch payloadObject := obj.(type) {
+	case *k8scorev1.ConfigMap:
+		references = func(node *clabernetesapisv1alpha1.Node) bool {
+			for _, declaration := range node.Spec.FilesFromConfigMap {
+				if declaration.ConfigMapName == payloadObject.GetName() {
+					return true
+				}
+			}
+
+			return false
+		}
+	case *k8scorev1.Secret:
+		references = func(node *clabernetesapisv1alpha1.Node) bool {
+			for _, declaration := range node.Spec.FilesFromSecret {
+				if declaration.SecretName == payloadObject.GetName() {
+					return true
+				}
+			}
+
+			return false
+		}
+	default:
+		return nil
+	}
+
+	nodes := &clabernetesapisv1alpha1.NodeList{}
+	if err := c.Client.List(
+		ctx,
+		nodes,
+		ctrlruntimeclient.InNamespace(obj.GetNamespace()),
+	); err != nil {
+		c.Log.Criticalf("failed listing Nodes for payload object enqueue, err: %s", err)
+
+		return nil
+	}
+
+	nodesByName := clabernetesutilcontainerlab.NodesByName(nodes.Items)
+	primaryNames := map[string]bool{}
+
+	for idx := range nodes.Items {
+		node := &nodes.Items[idx]
+		if references(node) {
+			primaryNames[clabernetesutilcontainerlab.ResolvePrimaryNode(
+				nodesByName,
+				node.GetName(),
+			)] = true
+		}
+	}
+
+	names := make([]string, 0, len(primaryNames))
+	for name := range primaryNames {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+
+	requests := make([]ctrlruntimereconcile.Request, 0, len(names))
+	for _, name := range names {
+		requests = append(requests, ctrlruntimereconcile.Request{
+			NamespacedName: apimachinerytypes.NamespacedName{
+				Namespace: obj.GetNamespace(),
+				Name:      name,
+			},
+		})
+	}
+
+	return requests
+}
+
+// enqueuePrimariesForLink enqueues the primary nodes terminating each side of a link -- link
+// changes can change the primaries' connectivity plans.
+func (c *Controller) enqueuePrimariesForLink(
 	ctx context.Context,
 	obj ctrlruntimeclient.Object,
 ) []ctrlruntimereconcile.Request {
@@ -394,7 +586,7 @@ func (c *Controller) enqueueLaunchersForLink(
 
 	byName := clabernetesutilcontainerlab.NodesByName(nodes.Items)
 
-	launchers := map[string]bool{}
+	primaries := map[string]bool{}
 
 	for _, endpointNode := range []string{
 		link.Spec.EndpointA.NodeName,
@@ -404,16 +596,16 @@ func (c *Controller) enqueueLaunchersForLink(
 			continue
 		}
 
-		launchers[clabernetesutilcontainerlab.ResolveLauncherNode(byName, endpointNode)] = true
+		primaries[clabernetesutilcontainerlab.ResolvePrimaryNode(byName, endpointNode)] = true
 	}
 
-	requests := make([]ctrlruntimereconcile.Request, 0, len(launchers))
+	requests := make([]ctrlruntimereconcile.Request, 0, len(primaries))
 
-	for launcher := range launchers {
+	for primary := range primaries {
 		requests = append(requests, ctrlruntimereconcile.Request{
 			NamespacedName: apimachinerytypes.NamespacedName{
 				Namespace: obj.GetNamespace(),
-				Name:      launcher,
+				Name:      primary,
 			},
 		})
 	}
@@ -421,14 +613,14 @@ func (c *Controller) enqueueLaunchersForLink(
 	return requests
 }
 
-func (c *Controller) enqueueLaunchersForLinkObjects(
+func (c *Controller) enqueuePrimariesForLinkObjects(
 	ctx context.Context,
 	objects ...ctrlruntimeclient.Object,
 ) []ctrlruntimereconcile.Request {
 	requestsByName := make(map[apimachinerytypes.NamespacedName]ctrlruntimereconcile.Request)
 
 	for _, obj := range objects {
-		for _, request := range c.enqueueLaunchersForLink(ctx, obj) {
+		for _, request := range c.enqueuePrimariesForLink(ctx, obj) {
 			requestsByName[request.NamespacedName] = request
 		}
 	}
@@ -454,7 +646,7 @@ func (c *Controller) enqueueLaunchersForLinkObjects(
 	return requests
 }
 
-// enqueueNodeForPod enqueues the (launcher) Node a launcher pod belongs to (via the topology
+// enqueueNodeForPod enqueues the (primary) Node a device pod belongs to (via the topology
 // node label) so pod/probe state lands in the node statuses.
 func (c *Controller) enqueueNodeForPod(
 	_ context.Context,

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultSRSimImage   = "ghcr.io/clabernetes/nokia_srsim:26.7.R1"
+	defaultSRSimImage   = "ghcr.io/clab-labs/nokia_srsim:26.7.R1"
 	srsimRegistrySecret = "srsim-registry" //nolint:gosec // resource name, not a credential.
 	deploymentWait      = 10 * time.Minute
 	datapathWait        = 5 * time.Minute
@@ -29,6 +29,9 @@ func TestMain(m *testing.M) {
 
 func TestSRSimBootsAndReachesLinux(t *testing.T) {
 	t.Parallel()
+
+	// The fixtures authenticate through imagePull.pullSecrets, which only the direct runtime
+	// realizes as Kubernetes imagePullSecrets consumed only by the kubelet.
 
 	license := os.Getenv("SRSIM_LICENSE")
 	if strings.TrimSpace(license) == "" {
@@ -105,7 +108,8 @@ spec:
   statusProbes:
     enabled: true
   imagePull:
-    dockerConfig: %s
+    pullSecrets:
+      - %s
   deployment:
     filesFromConfigMap:
       sros:
@@ -164,19 +168,30 @@ spec:
 func assertExpandedSRSimComponents(t *testing.T, namespace string) {
 	t.Helper()
 
-	runKubectl(
+	// Direct runtime: each planned chassis component is a first-class application container in
+	// the sros workload Pod, so the Pod must carry at least two device containers.
+	output := runKubectl(
 		t,
-		"exec",
+		"get",
+		"pods",
 		"--namespace",
 		namespace,
-		"deployment/sros",
-		"-c",
-		"sros",
-		"--",
-		"sh",
-		"-ec",
-		`test "$(docker ps --quiet --filter "label=clab-root-node-name=sros" | wc -l)" -ge 2`,
+		"--selector",
+		"c9s.run/direct-workload=sros",
+		"-o",
+		`jsonpath={range .items[0].spec.containers[*]}{.name}{"\n"}{end}`,
 	)
+	deviceContainers := 0
+
+	for name := range strings.SplitSeq(string(output), "\n") {
+		if strings.HasPrefix(name, "device-") {
+			deviceContainers++
+		}
+	}
+
+	if deviceContainers < 2 {
+		t.Fatalf("sros Pod has %d device containers, want at least 2: %s", deviceContainers, output)
+	}
 }
 
 func createSRSimRegistrySecret(t *testing.T, namespace string) {
@@ -231,7 +246,8 @@ func createSRSimRegistrySecret(t *testing.T, namespace string) {
 		srsimRegistrySecret,
 		"--namespace",
 		namespace,
-		"--from-file=config.json="+minimalConfigPath,
+		"--type=kubernetes.io/dockerconfigjson",
+		"--from-file=.dockerconfigjson="+minimalConfigPath,
 	)
 }
 
@@ -267,13 +283,14 @@ func waitForDatapath(t *testing.T, namespace string) {
 			namespace,
 			"deployment/l1",
 			"-c",
-			"l1",
+			deviceContainerName(t, namespace, "l1"),
 			"--",
-			"sh",
-			"-ec",
-			`container_id="$(docker ps --quiet --filter "label=clab-node-name=l1")"
-test -n "${container_id}"
-docker exec "${container_id}" ping -c 2 -W 3 10.0.0.2`,
+			"ping",
+			"-c",
+			"2",
+			"-W",
+			"3",
+			"10.0.0.2",
 		)
 
 		output, err := cmd.CombinedOutput()
@@ -294,6 +311,32 @@ docker exec "${container_id}" ping -c 2 -W 3 10.0.0.2`,
 		case <-time.After(datapathPollPeriod):
 		}
 	}
+}
+
+// deviceContainerName resolves the direct device application container of a workload Pod.
+func deviceContainerName(t *testing.T, namespace, workload string) string {
+	t.Helper()
+
+	output := runKubectl(
+		t,
+		"get",
+		"pods",
+		"--namespace",
+		namespace,
+		"--selector",
+		"c9s.run/direct-workload="+workload,
+		"-o",
+		`jsonpath={range .items[0].spec.containers[*]}{.name}{"\n"}{end}`,
+	)
+	for name := range strings.SplitSeq(string(output), "\n") {
+		if strings.HasPrefix(name, "device-") {
+			return name
+		}
+	}
+
+	t.Fatalf("workload %q has no device application container: %s", workload, output)
+
+	return ""
 }
 
 func runKubectl(t *testing.T, args ...string) []byte {

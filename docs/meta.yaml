@@ -3,8 +3,9 @@ pages:
   - index
   - quickstart
   - installation
-  # - upgrading
+  - upgrading
   - architecture
+  - compatibility
   - concepts
   - guides
   - examples

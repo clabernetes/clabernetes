@@ -25,30 +25,6 @@ const (
 )
 
 const (
-	// KubernetesCRIUnknown is a const for when we dont know what the CRI type is in a cluster.
-	KubernetesCRIUnknown = "unknown"
-	// KubernetesCRIContainerd is a const for the "containerd" type of CRI in a cluster.
-	KubernetesCRIContainerd = "containerd"
-	// KubernetesCRICrio is a const for the "cri-o" type of CRI in a cluster.
-	KubernetesCRICrio = "crio"
-)
-
-const (
-	// KubernetesCRISockContainerdPath is the path where the containerd sock lives.
-	KubernetesCRISockContainerdPath = "/run/containerd"
-	// KubernetesCRISockContainerd is the containerd sock filename.
-	KubernetesCRISockContainerd = "containerd.sock"
-	// ContainerdCertsDir is the conventional registry hosts directory used by containerd clients.
-	ContainerdCertsDir = "/etc/containerd/certs.d"
-)
-
-const (
-	// LauncherCRISockPath is the path where, if configured, the CRI sock is mounted in launcher
-	// pods.
-	LauncherCRISockPath = "/clabernetes/.node"
-)
-
-const (
 	// TopologyReadyStatus a const for the ready status, for consistency.
 	TopologyReadyStatus = "TopologyReady"
 

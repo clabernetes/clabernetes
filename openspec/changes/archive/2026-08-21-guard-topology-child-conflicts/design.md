@@ -1,6 +1,6 @@
 ## Context
 
-The Topology controller compiles one high-level resource into LauncherProfiles, Links, and
+The Topology controller compiles one high-level resource into NodeProfiles, Links, and
 Nodes. It currently creates those resources in dependency order and discovers a name collision only
 when the API server rejects one of the creates. The reconcile then returns the raw `AlreadyExists`
 error, so the Topology has no actionable status and the manager repeatedly logs the same failure.
@@ -12,7 +12,7 @@ field remains outside this work, and no prefixing or name-disambiguation behavio
 
 **Goals:**
 
-- Detect occupied generated Node, Link, and LauncherProfile names before child reconciliation.
+- Detect occupied generated Node, Link, and NodeProfile names before child reconciliation.
 - Distinguish children already generated for the current Topology from unrelated occupants.
 - Report all conflicts deterministically in bounded Topology status.
 - Avoid partially applying a compiled topology when any child name is blocked.
@@ -32,8 +32,8 @@ field remains outside this work, and no prefixing or name-disambiguation behavio
 
 ### Render the desired child set before mutating resources
 
-Compilation and rendering will produce the complete desired LauncherProfile, Link, and Node
-objects before any legacy cleanup or child reconciliation mutates the namespace. A shared rendered
+Compilation and rendering will produce the complete desired NodeProfile, Link, and Node
+objects before child reconciliation mutates the namespace. A shared rendered
 set will be passed to the preflight and subsequent reconciliation stages so conflict detection
 examines exactly the objects that would be applied.
 
@@ -42,9 +42,9 @@ The resulting flow becomes:
 ```text
 fetch Topology
   → compile and render children
-  → preflight Node/Link/LauncherProfile names
+  → preflight Node/Link/NodeProfile names
   → on conflict: update status and requeue
-  → otherwise: legacy cleanup, profiles, links, nodes, aggregate status
+  → otherwise: profiles, links, nodes, aggregate status
 ```
 
 ### Use uncached reads and current-Topology ownership
@@ -64,7 +64,7 @@ stable across map iteration order.
 the value will be exactly:
 
 ```text
-duplicate resources found in the <namespace> namespace: node/<name>, link/<name>, launcherprofile/<name>
+duplicate resources found in the <namespace> namespace: link/<name>, node/<name>, nodeprofile/<name>
 create the topology in a different namespace or disambiguate node names.
 ```
 

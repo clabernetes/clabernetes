@@ -25,59 +25,59 @@ spec:
     - name: port-21-tcp
       port: 21
       protocol: TCP
-      targetPort: 60000
+      targetPort: 21
     - name: port-22-tcp
       port: 22
       protocol: TCP
-      targetPort: 60001
+      targetPort: 22
     - name: port-23-tcp
       port: 23
       protocol: TCP
-      targetPort: 60002
+      targetPort: 23
     - name: port-80-tcp
       port: 80
       protocol: TCP
-      targetPort: 60003
+      targetPort: 80
     - name: port-443-tcp
       port: 443
       protocol: TCP
-      targetPort: 60004
+      targetPort: 443
     - name: port-830-tcp
       port: 830
       protocol: TCP
-      targetPort: 60005
+      targetPort: 830
     - name: port-5000-tcp
       port: 5000
       protocol: TCP
-      targetPort: 60006
+      targetPort: 5000
     - name: port-5900-tcp
       port: 5900
       protocol: TCP
-      targetPort: 60007
+      targetPort: 5900
     - name: port-6030-tcp
       port: 6030
       protocol: TCP
-      targetPort: 60008
+      targetPort: 6030
     - name: port-9339-tcp
       port: 9339
       protocol: TCP
-      targetPort: 60009
+      targetPort: 9339
     - name: port-9340-tcp
       port: 9340
       protocol: TCP
-      targetPort: 60010
+      targetPort: 9340
     - name: port-9559-tcp
       port: 9559
       protocol: TCP
-      targetPort: 60011
+      targetPort: 9559
     - name: port-57400-tcp
       port: 57400
       protocol: TCP
-      targetPort: 60012
+      targetPort: 57400
     - name: port-161-udp
       port: 161
       protocol: UDP
-      targetPort: 60000
+      targetPort: 161
   selector:
     c9s.run/app: clabernetes
     c9s.run/name: srl1

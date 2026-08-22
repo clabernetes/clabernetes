@@ -5,7 +5,6 @@ metadata:
   name: topology-basic
   namespace: NAMESPACE
 spec:
-  connectivity: vxlan
   definition:
     containerlab: |-
       name: topology-basic
@@ -18,7 +17,6 @@ spec:
             labels:
               c9s.run/exposePorts: "9273/tcp"
   deployment:
-    containerlabTimeout: ""
     persistence:
       enabled: false
     scheduling: {}

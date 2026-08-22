@@ -20,12 +20,10 @@ package v1alpha1
 
 type ConfigExpansion interface{}
 
-type ImageRequestExpansion interface{}
-
-type LauncherProfileExpansion interface{}
-
 type LinkExpansion interface{}
 
 type NodeExpansion interface{}
+
+type NodeProfileExpansion interface{}
 
 type TopologyExpansion interface{}

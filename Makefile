@@ -23,18 +23,20 @@ C9S_IMAGE_INPUT_PATHS := \
 	controllers \
 	generated \
 	http \
-	launcher \
+	internal \
 	logging \
 	manager \
 	util \
-	build/launcher \
 	build/manager.Dockerfile \
-	build/launcher.Dockerfile \
 	build/clabverter.Dockerfile
 C9S_IMAGE_INPUT_STATUS := $(shell for path in $(C9S_IMAGE_INPUT_PATHS); do git status --porcelain -- "$$path"; done)
-C9S_WORKTREE_HASH := $(shell { for path in $(C9S_IMAGE_INPUT_PATHS); do git ls-files --cached --others --exclude-standard -- "$$path"; done | sort -u | while IFS= read -r file; do printf '%s\t' "$$file"; git hash-object "$$file"; done; } | sha256sum | cut -c1-12)
+C9S_WORKTREE_HASH := $(shell { for path in $(C9S_IMAGE_INPUT_PATHS); do git ls-files --cached --others --exclude-standard -- "$$path"; done | sort -u | while IFS= read -r file; do if [ ! -e "$$file" ]; then continue; fi; printf '%s\t' "$$file"; git hash-object "$$file"; done; } | sha256sum | cut -c1-12)
 C9S_DIRTY_SUFFIX := $(if $(C9S_IMAGE_INPUT_STATUS),-dirty-$(C9S_WORKTREE_HASH),)
 C9S_LOCAL_BUILD_ID ?= local-$(C9S_GIT_SHA)$(C9S_DIRTY_SUFFIX)
+# c9s validates and builds against its declared module graph even when a developer keeps a parent
+# go.work containing a sibling containerlab checkout. This prevents unpublished sibling changes
+# from becoming an accidental requirement.
+C9S_GO_ENV := GOWORK=off
 
 ifeq ($(USE_UV),true)
 CRDS_TO_OPENAPI_PYTHON = $(UV) run --with-requirements $(CRDS_TO_OPENAPI_REQUIREMENTS)
@@ -59,7 +61,6 @@ include .mk/e2e.mk
 IMAGE_TAG ?= latest
 IMAGE_BASE ?= ghcr.io/clabernetes/clabernetes
 MANAGER_IMAGE ?= $(IMAGE_BASE)/clabernetes-manager
-LAUNCHER_IMAGE ?= $(IMAGE_BASE)/clabernetes-launcher
 CLABVERTER_IMAGE ?= $(IMAGE_BASE)/clabverter
 TARGET_PLATFORM ?= linux/$(ARCH)
 
@@ -157,15 +158,15 @@ fmt: ## Run formatters
 	golines --base-formatter="gofmt" --no-reformat-tags -w .
 
 lint: fmt ## Run linters
-	golangci-lint run
+	$(C9S_GO_ENV) golangci-lint run
 	helm lint --quiet charts/clabernetes
 	helm lint --quiet charts/clicker
 
 test: ## Run unit tests
-	gotestsum --format testname --hide-summary=skipped -- -coverprofile=cover.out `go list ./... | grep -v e2e`
+	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -coverprofile=cover.out `$(C9S_GO_ENV) go list ./... | grep -v e2e`
 
 test-race: ## Run unit tests with race flag
-	gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out `go list ./... | grep -v e2e`
+	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out `$(C9S_GO_ENV) go list ./... | grep -v e2e`
 
 C9S_NAMESPACE ?= $(NS)
 C9S_HELM_RELEASE ?= clabernetes
@@ -237,8 +238,10 @@ run-client-gen: ## Run client-gen
 	--output-pkg github.com/clabernetes/clabernetes/generated \
 	--clientset-name clientset
 
+# allowDangerousTypes admits the float64 Node cpu field -- the containerlab vocabulary defines
+# cpu as a fractional vcpu count, so the CRD mirrors it as an OpenAPI number
 run-generate-crds: ## Run controller-gen for crds
-	controller-gen crd paths=./apis/... output:crd:dir=./charts/clabernetes/crds/
+	controller-gen crd:allowDangerousTypes=true paths=./apis/... output:crd:dir=./charts/clabernetes/crds/
 	cp charts/clabernetes/crds/*.yaml assets/crd/
 
 # note: crds must be generated (and synced into assets/crd/, which is what crds-to-openapi
@@ -252,7 +255,13 @@ VERIFY_GENERATED_PATHS := \
 	charts/clabernetes/crds \
 	generated
 
-verify-generated: run-generate ## Regenerate all API artifacts and fail if generated outputs change
+verify-containerlab-compatibility: ## Verify the pinned module identity and discover its live registry
+	$(C9S_GO_ENV) go run ./cmd/compatibility -mode verify
+
+generate-containerlab-compatibility: ## Regenerate the containerlab compatibility documentation
+	$(C9S_GO_ENV) go run ./cmd/compatibility -mode render-doc > docs/compatibility.mdx
+
+verify-generated: run-generate verify-containerlab-compatibility ## Regenerate all API artifacts and fail if generated outputs change
 	git diff --exit-code -- $(VERIFY_GENERATED_PATHS)
 
 delete-generated: ## Deletes all zz_*.go (generated) files, and crds
@@ -263,9 +272,6 @@ delete-generated: ## Deletes all zz_*.go (generated) files, and crds
 
 build-manager: ## Builds the clabernetes manager container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
 	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(MANAGER_IMAGE):$(IMAGE_TAG) -f ./build/manager.Dockerfile .
-
-build-launcher: ## Builds the clabernetes launcher container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(LAUNCHER_IMAGE):$(IMAGE_TAG) -f ./build/launcher.Dockerfile .
 
 build-clabverter: ## Builds the clabverter container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
 	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(CLABVERTER_IMAGE):$(IMAGE_TAG) -f ./build/clabverter.Dockerfile .

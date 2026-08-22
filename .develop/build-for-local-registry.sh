@@ -73,7 +73,7 @@ done
 
 # Mirror the VERSION build-arg used by the standard DevSpace image definitions.
 case "$(basename "${dockerfile}")" in
-    manager.Dockerfile|launcher.Dockerfile|clabverter.Dockerfile)
+    manager.Dockerfile|clabverter.Dockerfile)
         commit_hash=$(git -C "${repo_root}" describe --always --abbrev=8 2>/dev/null || true)
         if [[ -n "${commit_hash}" ]]; then
             build_args+=(--build-arg "VERSION=0.0.0-${commit_hash}")
@@ -83,9 +83,6 @@ esac
 
 secret_args=()
 secret_path="${LOCAL_REGISTRY_BUILD_SECRET:-}"
-if [[ -z "${secret_path}" && "$(basename "${dockerfile}")" == "launcher.Dockerfile" ]]; then
-    secret_path=/etc/ssl/certs/ca-certificates.crt
-fi
 if [[ -n "${secret_path}" && -f "${secret_path}" ]]; then
     secret_args+=(--secret "id=host_ca,src=${secret_path}")
 fi
@@ -112,9 +109,9 @@ fi
 
 docker push "${image}:${tag}"
 
-# Manager, launcher, and dev images also publish a dev-latest tag in the default DevSpace config.
+# Manager and dev images also publish a dev-latest tag in the default DevSpace config.
 case "$(basename "${dockerfile}")" in
-    manager.Dockerfile|launcher.Dockerfile|dev.Dockerfile)
+    manager.Dockerfile|dev.Dockerfile)
         docker tag "${image}:${tag}" "${image}:dev-latest"
         docker push "${image}:dev-latest"
         ;;

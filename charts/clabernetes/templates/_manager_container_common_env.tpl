@@ -15,12 +15,12 @@
   value: {{ .Values.manager.managerLogLevel }}
 - name: CONTROLLER_LOGGER_LEVEL
   value: {{ .Values.manager.controllerLogLevel }}
-- name: LAUNCHER_IMAGE
-  {{- if .Values.globalConfig.deployment.launcherImage }}
-  value: {{ .Values.globalConfig.deployment.launcherImage }}
+- name: DEVICE_RUNTIME_IMAGE
+  {{- if .Values.manager.image }}
+  value: {{ .Values.manager.image }}
   {{- else if eq .Chart.Version "0.0.0" }}
-  value: "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:dev-latest"
+  value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
   {{- else }}
-  value: "ghcr.io/clabernetes/clabernetes/clabernetes-launcher:{{ .Chart.Version }}"
+  value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:{{ .Chart.Version }}"
   {{- end }}
 {{- end -}}
