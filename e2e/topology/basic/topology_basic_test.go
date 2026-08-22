@@ -332,6 +332,7 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 		case <-t.Context().Done():
 			t.Fatalf("DNS lookup canceled: %s", strings.TrimSpace(string(lastOutput)))
 		case <-deadline.C:
+			dumpSRLinuxDNSDiagnostics(t, namespace, sourceNode)
 			t.Fatalf(
 				"timed out waiting for SR Linux DNS ping %s -> %s: %s",
 				sourceNode,
@@ -340,6 +341,67 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 			)
 		case <-time.After(wait):
 		}
+	}
+}
+
+// dumpSRLinuxDNSDiagnostics logs the management resolver chain of one SR Linux node so a CI-only
+// resolution failure is diagnosable from the job log: the dnsmasq forwarder config SR Linux
+// renders from its `system dns` state, the management netns routing tables, raw TCP reachability
+// of both the local forwarder and the cluster DNS Service, and the Pod resolver the runtime
+// completed the device DNS from.
+func dumpSRLinuxDNSDiagnostics(t *testing.T, namespace, nodeName string) {
+	t.Helper()
+
+	podName, containerName, err := getDevicePodTarget(t, namespace, nodeName)
+	if err != nil || podName == "" {
+		t.Logf("DNS diagnostics skipped: device Pod for %s is not observable: %v", nodeName, err)
+
+		return
+	}
+
+	diagnostics := [][]string{
+		{"pod resolv.conf", "cat", "/etc/resolv.conf"},
+		{"dnsmasq forwarder config", "cat", "/etc/dnsmasq-clab-default.conf"},
+		{"dnsmasq process", "pgrep", "-a", "dnsmasq"},
+		{
+			"management netns resolv.conf",
+			"ip", "netns", "exec", "srbase-mgmt", "cat", "/etc/resolv.conf",
+		},
+		{
+			"management netns v4 routes",
+			"ip", "netns", "exec", "srbase-mgmt", "ip", "-4", "route", "show", "table", "all",
+		},
+		{
+			"lookup via local dnsmasq forwarder",
+			"ip", "netns", "exec", "srbase-mgmt",
+			"timeout", "5", "nslookup", "kubernetes.default.svc.cluster.local", "127.0.0.1",
+		},
+		{
+			"lookup direct against cluster DNS",
+			"ip", "netns", "exec", "srbase-mgmt",
+			"timeout", "5", "nslookup", "kubernetes.default.svc.cluster.local", "10.96.0.10",
+		},
+		{
+			"lookup direct against cluster DNS from Pod namespace",
+			"timeout", "5", "nslookup", "kubernetes.default.svc.cluster.local", "10.96.0.10",
+		},
+	}
+
+	for _, diagnostic := range diagnostics {
+		command := append(
+			[]string{"exec", "--namespace", namespace, podName, "-c", containerName, "--"},
+			diagnostic[1:]...,
+		)
+
+		cmd := exec.CommandContext(t.Context(), "kubectl", command...) //nolint:gosec
+
+		output, diagErr := cmd.CombinedOutput()
+		t.Logf(
+			"DNS diagnostic [%s] (err: %v):\n%s",
+			diagnostic[0],
+			diagErr,
+			strings.TrimSpace(string(output)),
+		)
 	}
 }
 

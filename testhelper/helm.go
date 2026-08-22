@@ -47,11 +47,9 @@ func HelmTest(t *testing.T, chartName, testName, namespace, valuesFileName, char
 
 	defer func() {
 		if !*SkipCleanup {
-			err = os.Chdir(chartsDir) //nolint: usetesting
-			if err != nil {
-				t.Logf("failed changing to a directory, error: %s", err)
-			}
-
+			// actualDir is absolute, so no chdir is needed here -- os.Chdir would change the
+			// working directory process-wide and race with parallel tests reading fixtures
+			// through relative paths.
 			err = os.RemoveAll(actualDir)
 			if err != nil {
 				t.Logf("failed cleaning up actual output directory, error: %s", err)
