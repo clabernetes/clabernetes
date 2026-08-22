@@ -505,6 +505,13 @@ func applyInterpositionSysctls(spec InterpositionSpec) error {
 	settings := [][2]string{
 		{"net.ipv4.ip_forward", "1"},
 		{"net.ipv4.conf.all.rp_filter", "0"},
+		// A new network namespace copies the init namespace's IPv4 devconf template, so hosts
+		// that set rp_filter (Ubuntu ships 2) poison conf/default here -- and every interface a
+		// device creates later (SR Linux's internal management-gateway leg, for one) inherits
+		// that value at creation, where the effective filter is max(all, interface). Management
+		// egress rides an asymmetric internal-gateway path that reverse-path validation then
+		// drops, so the template must be cleared before the device boots.
+		{"net.ipv4.conf.default.rp_filter", "0"},
 		{"net.ipv4.conf." + spec.RouterInterface + ".rp_filter", "0"},
 		{"net.ipv4.conf." + spec.RouterInterface + ".accept_local", "1"},
 		{"net.ipv4.conf." + spec.RouterInterface + ".forwarding", "1"},
@@ -562,6 +569,34 @@ func applyInterpositionSysctls(spec InterpositionSpec) error {
 	for _, setting := range settings {
 		if err := operations.EnsureSysctl(setting[0], setting[1]); err != nil {
 			return fmt.Errorf("applying %s=%s: %w", setting[0], setting[1], err)
+		}
+	}
+
+	return clearExistingReversePathFilters()
+}
+
+// clearExistingReversePathFilters zeroes rp_filter on every interface already present in the Pod
+// namespace: interfaces created before the interposition baseline ran (the CNI transport, the
+// mesh elements) captured the inherited conf/default template, and conf/all cannot mask them
+// because the kernel takes the maximum of the two. Direct writes are used because interface
+// names may contain dots. A concurrently removed interface is not an error.
+func clearExistingReversePathFilters() error {
+	const confRoot = "/proc/sys/net/ipv4/conf"
+
+	entries, err := os.ReadDir(confRoot)
+	if err != nil {
+		return fmt.Errorf("listing IPv4 interface configuration: %w", err)
+	}
+
+	for _, entry := range entries {
+		path := filepath.Join(confRoot, entry.Name(), "rp_filter")
+
+		if err := os.WriteFile(path, []byte("0"), 0o644); err != nil { //nolint:gosec // kernel-owned sysctl file.
+			if os.IsNotExist(err) {
+				continue
+			}
+
+			return fmt.Errorf("clearing reverse-path filter for %q: %w", entry.Name(), err)
 		}
 	}
 

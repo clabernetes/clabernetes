@@ -165,6 +165,19 @@ func testEnsureInterpositionConverges(t *testing.T) {
 
 	defer runtime.UnlockOSThread()
 
+	// Model a host whose init namespace sets rp_filter (Ubuntu ships 2): the namespace template
+	// is poisoned before any interface exists, exactly as an inherited devconf looks on such
+	// hosts, so interfaces created from here capture the poisoned value.
+	for _, name := range []string{"default", "all"} {
+		if err := os.WriteFile(
+			"/proc/sys/net/ipv4/conf/"+name+"/rp_filter",
+			[]byte("2"),
+			0o600,
+		); err != nil {
+			t.Fatalf("seeding inherited rp_filter template: %v", err)
+		}
+	}
+
 	// Fake the CNI state: an interface carrying the Pod address with a default route, exactly
 	// as a sandbox looks before the sidecar runs.
 	if err := netlink.LinkAdd(&netlink.Veth{
@@ -401,6 +414,8 @@ func testEnsureInterpositionConverges(t *testing.T) {
 
 	assertInterposedState("cold pass")
 
+	assertReversePathFiltersCleared(t)
+
 	assertMeshPeerReconciliation(t)
 
 	// Second pass must be idempotent.
@@ -438,4 +453,48 @@ func testEnsureInterpositionConverges(t *testing.T) {
 	}
 
 	assertInterposedState("re-assertion after device strip")
+}
+
+// assertReversePathFiltersCleared verifies the interposition cleared the inherited rp_filter
+// state: the namespace template (so interfaces a device creates after boot, like SR Linux's
+// internal management-gateway leg, start unfiltered) and every pre-existing interface (which
+// captured the poisoned template at creation).
+func assertReversePathFiltersCleared(t *testing.T) {
+	t.Helper()
+
+	for _, name := range []string{"default", "all", TransportInterfaceName, RouterInterfaceName} {
+		raw, err := os.ReadFile( //nolint:gosec // fixed sysctl tree, package-owned names.
+			"/proc/sys/net/ipv4/conf/" + name + "/rp_filter",
+		)
+		if err != nil {
+			t.Fatalf("reading rp_filter for %q: %v", name, err)
+		}
+
+		if value := strings.TrimSpace(string(raw)); value != "0" {
+			t.Fatalf("rp_filter for %q = %s, want 0", name, value)
+		}
+	}
+
+	// An interface born after the interposition baseline must start unfiltered purely through
+	// the cleared template -- this is the device-created interface case.
+	if err := netlink.LinkAdd(&netlink.Dummy{
+		LinkAttrs: netlink.LinkAttrs{Name: "post0"},
+	}); err != nil {
+		t.Fatalf("creating post-interposition interface: %v", err)
+	}
+
+	raw, err := os.ReadFile("/proc/sys/net/ipv4/conf/post0/rp_filter")
+	if err != nil {
+		t.Fatalf("reading rp_filter for post-interposition interface: %v", err)
+	}
+
+	if value := strings.TrimSpace(string(raw)); value != "0" {
+		t.Fatalf("post-interposition interface rp_filter = %s, want 0", value)
+	}
+
+	if err = netlink.LinkDel(&netlink.Dummy{
+		LinkAttrs: netlink.LinkAttrs{Name: "post0"},
+	}); err != nil {
+		t.Fatalf("removing post-interposition interface: %v", err)
+	}
 }
