@@ -1496,10 +1496,13 @@ func reconcileEndpointTransports(
 		nodes[node.ID] = node
 	}
 
-	ready := true
-	desiredOwners := []string{}
+	type desiredEndpoint struct {
+		intf  clabernetesinternaldeviceplan.InterfacePlan
+		owner string
+	}
 
-	var reconcileErr error
+	desired := []desiredEndpoint{}
+	desiredOwners := []string{}
 
 	for _, intf := range plan.Interfaces {
 		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityHost &&
@@ -1523,6 +1526,25 @@ func reconcileEndpointTransports(
 			intf.PeerNodeID,
 		)
 		desiredOwners = append(desiredOwners, owner)
+		desired = append(desired, desiredEndpoint{intf: intf, owner: owner})
+	}
+
+	// A recable keeps the Linux interface name but changes the Link UID and therefore its
+	// ownership marker. Remove transports from the previous plan before realizing the desired
+	// endpoints so their application-facing names can be reused safely.
+	reconcileErr := operations.SweepTransportState(
+		directLinkPodOwnerPrefix(options.PodUID, directTransportOwnerType),
+		desiredOwners,
+	)
+	ready := reconcileErr == nil
+
+	for _, endpoint := range desired {
+		if reconcileErr != nil {
+			break
+		}
+
+		intf := endpoint.intf
+		owner := endpoint.owner
 
 		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityHost {
 			if err := operations.EnsureHostInterface(HostInterfaceSpec{
@@ -1558,13 +1580,6 @@ func reconcileEndpointTransports(
 		if !result.Ready {
 			ready = false
 		}
-	}
-
-	if reconcileErr == nil {
-		reconcileErr = operations.SweepTransportState(
-			directLinkPodOwnerPrefix(options.PodUID, directTransportOwnerType),
-			desiredOwners,
-		)
 	}
 
 	if reconcileErr != nil {

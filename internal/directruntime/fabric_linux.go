@@ -647,7 +647,7 @@ func (netlinkOperations) SweepTransportState(ownerPrefix string, keepOwners []st
 			continue
 		}
 
-		if err = netlink.LinkDel(link); err != nil {
+		if err = deleteStaleTransportLink(link); err != nil {
 			return fmt.Errorf(
 				"sweeping stale transport link %q: %w",
 				link.Attrs().Name,
@@ -657,4 +657,13 @@ func (netlinkOperations) SweepTransportState(ownerPrefix string, keepOwners []st
 	}
 
 	return nil
+}
+
+func deleteStaleTransportLink(link netlink.Link) error {
+	err := netlink.LinkDel(link)
+	if errors.Is(err, unix.ENODEV) {
+		return nil
+	}
+
+	return err
 }
