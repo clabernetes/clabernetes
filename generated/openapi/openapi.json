@@ -4116,6 +4116,10 @@
                                 "type": "array",
                                 "x-kubernetes-list-type": "atomic"
                             },
+                            "error": {
+                                "description": "Error holds a bounded controller error that prevents the Topology from realizing its desired\nchild resources. An empty value means no such error is currently reported.",
+                                "type": "string"
+                            },
                             "kind": {
                                 "description": "Kind is the topology kind this CR represents -- \"containerlab\".",
                                 "enum": [

@@ -12,13 +12,22 @@ import (
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// reconcileStatus aggregates the emitted Node statuses into the Topology status -- counts and a
-// ready condition only; all per-node/per-link detail lives on the Node and Link objects
-// themselves so the Topology never grows with topology size.
+// reconcileStatus aggregates the emitted Node statuses into the Topology status -- counts, a ready
+// condition, and any bounded controller error; all per-node/per-link detail lives on the Node and
+// Link objects themselves so the Topology never grows with topology size.
 func (r *Reconciler) reconcileStatus(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
+) error {
+	return r.reconcileStatusWithError(ctx, topology, compiled, "")
+}
+
+func (r *Reconciler) reconcileStatusWithError(
+	ctx context.Context,
+	topology *clabernetesapisv1alpha1.Topology,
+	compiled *CompiledTopology,
+	topologyError string,
 ) error {
 	ownedNodes := &clabernetesapisv1alpha1.NodeList{}
 
@@ -51,20 +60,31 @@ func (r *Reconciler) reconcileStatus(
 		NodeCount:      len(compiled.Nodes),
 		ReadyNodeCount: readyNodeCount,
 		LinkCount:      len(compiled.Links),
-		TopologyReady:  len(compiled.Nodes) > 0 && readyNodeCount == len(compiled.Nodes),
-		Conditions:     topology.Status.Conditions,
+		TopologyReady: topologyError == "" &&
+			len(compiled.Nodes) > 0 &&
+			readyNodeCount == len(compiled.Nodes),
+		Error:      topologyError,
+		Conditions: topology.Status.Conditions,
 	}
 
 	desiredStatus.TopologyState = resolveTopologyState(topology, &desiredStatus)
 
-	if desiredStatus.TopologyReady {
+	switch {
+	case topologyError != "":
+		apimachinerymeta.SetStatusCondition(&desiredStatus.Conditions, metav1.Condition{
+			Type:    clabernetesconstants.TopologyReadyStatus,
+			Status:  "False",
+			Reason:  clabernetesconstants.TopologyChildResourceConflictReason,
+			Message: topologyError,
+		})
+	case desiredStatus.TopologyReady:
 		apimachinerymeta.SetStatusCondition(&desiredStatus.Conditions, metav1.Condition{
 			Type:    clabernetesconstants.TopologyReadyStatus,
 			Status:  "True",
 			Reason:  clabernetesconstants.NodeStatusReady,
 			Message: "all nodes report ready",
 		})
-	} else {
+	default:
 		apimachinerymeta.SetStatusCondition(&desiredStatus.Conditions, metav1.Condition{
 			Type:   clabernetesconstants.TopologyReadyStatus,
 			Status: "False",

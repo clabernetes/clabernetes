@@ -3862,6 +3862,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyStatus(
 							Format:      "",
 						},
 					},
+					"error": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Error holds a bounded controller error that prevents the Topology from realizing its desired child resources. An empty value means no such error is currently reported.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"conditions": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{

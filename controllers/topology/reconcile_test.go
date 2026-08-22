@@ -56,7 +56,7 @@ topology:
 	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(legacy).Build()
 	reconciler := &Reconciler{Log: &claberneteslogging.FakeInstance{}, Client: client}
 
-	err := reconciler.Reconcile(context.Background(), topology)
+	_, err := reconciler.Reconcile(context.Background(), topology)
 
 	unsupported := &UnsupportedFeaturesError{}
 	if !errors.As(err, &unsupported) {

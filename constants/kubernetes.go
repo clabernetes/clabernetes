@@ -27,4 +27,7 @@ const (
 const (
 	// TopologyReadyStatus a const for the ready status, for consistency.
 	TopologyReadyStatus = "TopologyReady"
+
+	// TopologyChildResourceConflictReason identifies a Topology blocked by occupied child names.
+	TopologyChildResourceConflictReason = "ChildResourceConflict"
 )

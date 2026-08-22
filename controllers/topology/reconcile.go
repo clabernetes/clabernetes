@@ -4,7 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"reflect"
+	"sort"
+	"strings"
+	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
@@ -76,54 +81,193 @@ func (c *Controller) Reconcile(
 		return ctrlruntime.Result{}, nil
 	}
 
-	err = c.reconciler.Reconcile(ctx, topology)
+	result, err := c.reconciler.Reconcile(ctx, topology)
 	if err != nil {
-		return ctrlruntime.Result{}, err
+		return result, err
 	}
 
 	c.BaseController.LogReconcileCompleteSuccess(req)
 
-	return ctrlruntime.Result{}, nil
+	return result, nil
 }
 
 // Reconcile compiles the given Topology and enforces the compiled objects.
 func (r *Reconciler) Reconcile(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
-) error {
+) (ctrlruntime.Result, error) {
 	compiled, err := CompileTopology(r.Log, topology)
 	if err != nil {
 		r.Log.Criticalf("failed compiling topology definition, err: %s", err)
 
-		return err
+		return ctrlruntime.Result{}, err
+	}
+
+	rendered := renderedChildren{
+		nodeProfiles: RenderNodeProfiles(
+			topology,
+			compiled,
+			r.configManagerGetter,
+		),
+		links: RenderLinks(topology, compiled, r.configManagerGetter),
+		nodes: RenderNodes(topology, compiled, r.configManagerGetter),
+	}
+
+	conflicts, err := r.findChildResourceConflicts(ctx, topology, rendered)
+	if err != nil {
+		return ctrlruntime.Result{}, err
+	}
+
+	if len(conflicts) > 0 {
+		err = r.reconcileStatusWithError(
+			ctx,
+			topology,
+			compiled,
+			formatChildResourceConflicts(topology.GetNamespace(), conflicts),
+		)
+		if err != nil {
+			return ctrlruntime.Result{}, err
+		}
+
+		return ctrlruntime.Result{RequeueAfter: topologyChildConflictRequeueAfter}, nil
 	}
 
 	// profiles carry the deployment/expose policy for the emitted nodes and links wire them --
 	// emit both *before* the nodes so the node controller never renders a node against default
 	// policy (i.e. creating expose load balancers the user explicitly disabled) or a partial
 	// wiring view while the rest of the compilation is still landing
-	err = r.reconcileNodeProfiles(ctx, topology, compiled)
+	err = r.reconcileNodeProfiles(ctx, topology, rendered.nodeProfiles)
 	if err != nil {
 		r.logEmittedReconcileFailure("node profiles", err)
 
-		return err
+		return ctrlruntime.Result{}, err
 	}
 
-	err = r.reconcileLinks(ctx, topology, compiled)
+	err = r.reconcileLinks(ctx, topology, rendered.links)
 	if err != nil {
 		r.logEmittedReconcileFailure("links", err)
 
-		return err
+		return ctrlruntime.Result{}, err
 	}
 
-	err = r.reconcileNodes(ctx, topology, compiled)
+	err = r.reconcileNodes(ctx, topology, rendered.nodes)
 	if err != nil {
 		r.logEmittedReconcileFailure("nodes", err)
 
-		return err
+		return ctrlruntime.Result{}, err
 	}
 
-	return r.reconcileStatus(ctx, topology, compiled)
+	return ctrlruntime.Result{}, r.reconcileStatus(ctx, topology, compiled)
+}
+
+const topologyChildConflictRequeueAfter = 10 * time.Second
+
+type renderedChildren struct {
+	nodeProfiles []*clabernetesapisv1alpha1.NodeProfile
+	links        []*clabernetesapisv1alpha1.Link
+	nodes        []*clabernetesapisv1alpha1.Node
+}
+
+type renderedChild struct {
+	kind   string
+	object ctrlruntimeclient.Object
+}
+
+var errRenderedChildNotObject = errors.New("rendered child is not a Kubernetes object")
+
+func (c renderedChildren) all() []renderedChild {
+	children := make([]renderedChild, 0, len(c.nodeProfiles)+len(c.links)+len(c.nodes))
+
+	for _, profile := range c.nodeProfiles {
+		children = append(children, renderedChild{
+			kind:   "nodeprofile",
+			object: profile,
+		})
+	}
+
+	for _, link := range c.links {
+		children = append(children, renderedChild{
+			kind:   "link",
+			object: link,
+		})
+	}
+
+	for _, node := range c.nodes {
+		children = append(children, renderedChild{
+			kind:   "node",
+			object: node,
+		})
+	}
+
+	return children
+}
+
+func (r *Reconciler) findChildResourceConflicts(
+	ctx context.Context,
+	topology *clabernetesapisv1alpha1.Topology,
+	rendered renderedChildren,
+) ([]string, error) {
+	reader := r.apiReader
+	if reader == nil {
+		reader = r.Client
+	}
+
+	seen := make(map[string]struct{})
+	conflictSet := make(map[string]struct{})
+
+	for _, child := range rendered.all() {
+		conflictName := fmt.Sprintf("%s/%s", child.kind, child.object.GetName())
+		if _, alreadySeen := seen[conflictName]; alreadySeen {
+			conflictSet[conflictName] = struct{}{}
+
+			continue
+		}
+
+		seen[conflictName] = struct{}{}
+
+		existing, ok := child.object.DeepCopyObject().(ctrlruntimeclient.Object)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", errRenderedChildNotObject, conflictName)
+		}
+
+		err := reader.Get(
+			ctx,
+			ctrlruntimeclient.ObjectKey{
+				Namespace: topology.GetNamespace(),
+				Name:      child.object.GetName(),
+			},
+			existing,
+		)
+		if err != nil {
+			if apimachineryerrors.IsNotFound(err) {
+				continue
+			}
+
+			return nil, err
+		}
+
+		if !generatedForTopology(existing, topology) {
+			conflictSet[conflictName] = struct{}{}
+		}
+	}
+
+	conflicts := make([]string, 0, len(conflictSet))
+	for conflict := range conflictSet {
+		conflicts = append(conflicts, conflict)
+	}
+
+	sort.Strings(conflicts)
+
+	return conflicts, nil
+}
+
+func formatChildResourceConflicts(namespace string, conflicts []string) string {
+	return fmt.Sprintf(
+		"duplicate resources found in the %s namespace: %s\n"+
+			"create the topology in a different namespace or disambiguate node names.",
+		namespace,
+		strings.Join(conflicts, ", "),
+	)
 }
 
 // logEmittedReconcileFailure logs a failed emitted-object reconcile pass -- conflicts are just
@@ -165,13 +309,11 @@ func generatedForTopology(
 		obj.GetLabels()[clabernetesconstants.LabelTopologyOwner] == topology.GetName()
 }
 
-func (r *Reconciler) reconcileNodes( //nolint:dupl
+func (r *Reconciler) reconcileNodes(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
+	rendered []*clabernetesapisv1alpha1.Node,
 ) error {
-	rendered := RenderNodes(topology, compiled, r.configManagerGetter)
-
 	ownedNodes := &clabernetesapisv1alpha1.NodeList{}
 
 	err := r.Client.List(
@@ -266,13 +408,11 @@ func specConforms(existingSpec, renderedSpec any) bool {
 	return bytes.Equal(existingJSON, renderedJSON)
 }
 
-func (r *Reconciler) reconcileLinks( //nolint:dupl
+func (r *Reconciler) reconcileLinks(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
+	rendered []*clabernetesapisv1alpha1.Link,
 ) error {
-	rendered := RenderLinks(topology, compiled, r.configManagerGetter)
-
 	ownedLinks := &clabernetesapisv1alpha1.LinkList{}
 
 	err := r.Client.List(
@@ -312,10 +452,8 @@ func (r *Reconciler) reconcileLinks( //nolint:dupl
 func (r *Reconciler) reconcileNodeProfiles(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
+	rendered []*clabernetesapisv1alpha1.NodeProfile,
 ) error {
-	rendered := RenderNodeProfiles(topology, compiled, r.configManagerGetter)
-
 	ownedProfiles := &clabernetesapisv1alpha1.NodeProfileList{}
 
 	err := r.Client.List(
