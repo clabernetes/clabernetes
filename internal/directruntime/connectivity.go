@@ -1529,14 +1529,10 @@ func reconcileEndpointTransports(
 		desired = append(desired, desiredEndpoint{intf: intf, owner: owner})
 	}
 
-	// A recable keeps the Linux interface name but changes the Link UID and therefore its
-	// ownership marker. Remove transports from the previous plan before realizing the desired
-	// endpoints so their application-facing names can be reused safely.
-	reconcileErr := operations.SweepTransportState(
-		directLinkPodOwnerPrefix(options.PodUID, directTransportOwnerType),
-		desiredOwners,
-	)
-	ready := reconcileErr == nil
+	ownerPrefix := directLinkPodOwnerPrefix(options.PodUID, directTransportOwnerType)
+	ready := true
+
+	var reconcileErr error
 
 	for _, endpoint := range desired {
 		if reconcileErr != nil {
@@ -1552,6 +1548,7 @@ func reconcileEndpointTransports(
 				InterfaceName: intf.Name,
 				HostInterface: intf.PeerInterface,
 				Owner:         owner,
+				OwnerPrefix:   ownerPrefix,
 				MTU:           intf.MTU,
 			}); err != nil {
 				reconcileErr = fmt.Errorf("realizing host Link %q: %w", intf.LinkID, err)
@@ -1566,6 +1563,7 @@ func reconcileEndpointTransports(
 			InterfaceID:   intf.ID,
 			InterfaceName: intf.Name,
 			Owner:         owner,
+			OwnerPrefix:   ownerPrefix,
 			TunnelID:      intf.TunnelID,
 			MTU:           intf.MTU,
 			PeerTransport: intf.PeerTransport,
@@ -1580,6 +1578,10 @@ func reconcileEndpointTransports(
 		if !result.Ready {
 			ready = false
 		}
+	}
+
+	if reconcileErr == nil {
+		reconcileErr = operations.SweepTransportState(ownerPrefix, desiredOwners)
 	}
 
 	if reconcileErr != nil {

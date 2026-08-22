@@ -32,8 +32,6 @@ type fakeLinkOperations struct {
 	hostSpecs           []clabernetesinternaldirectruntime.HostInterfaceSpec
 	hostError           error
 	sweepKeepCounts     chan int
-	requireSweep        bool
-	transportSwept      bool
 	podTransport        string
 	pairSignal          chan struct{}
 	ensurePairError     error
@@ -60,11 +58,6 @@ func (f *fakeLinkOperations) EnsureInterposition(
 func (f *fakeLinkOperations) EnsureFabricEndpoint(
 	spec clabernetesinternaldirectruntime.FabricEndpointSpec,
 ) (clabernetesinternaldirectruntime.FabricEndpointResult, error) {
-	if f.requireSweep && !f.transportSwept {
-		return clabernetesinternaldirectruntime.FabricEndpointResult{},
-			errors.New("stale fabric transport was not swept")
-	}
-
 	if f.fabricError != nil {
 		return clabernetesinternaldirectruntime.FabricEndpointResult{}, f.fabricError
 	}
@@ -83,10 +76,6 @@ func (f *fakeLinkOperations) EnsureFabricEndpoint(
 func (f *fakeLinkOperations) EnsureHostInterface(
 	spec clabernetesinternaldirectruntime.HostInterfaceSpec,
 ) error {
-	if f.requireSweep && !f.transportSwept {
-		return errors.New("stale host transport was not swept")
-	}
-
 	if f.hostError != nil {
 		return f.hostError
 	}
@@ -97,8 +86,6 @@ func (f *fakeLinkOperations) EnsureHostInterface(
 }
 
 func (f *fakeLinkOperations) SweepTransportState(_ string, keepOwners []string) error {
-	f.transportSwept = true
-
 	if f.sweepKeepCounts != nil {
 		select {
 		case f.sweepKeepCounts <- len(keepOwners):
@@ -418,7 +405,7 @@ func TestHostConnectivityRealizesWorkerLegBeforeReadiness(t *testing.T) {
 
 	spec := operations.hostSpecs[0]
 	if spec.InterfaceName != "eth1" || spec.HostInterface != "c9s-host-a" || spec.MTU != 1450 ||
-		!strings.HasPrefix(spec.Owner, "c9s:direct:v1:") {
+		spec.OwnerPrefix == "" || !strings.HasPrefix(spec.Owner, spec.OwnerPrefix) {
 		t.Fatalf("host Link spec = %#v", spec)
 	}
 
@@ -455,62 +442,6 @@ func TestHostConnectivityFailurePreventsReadiness(t *testing.T) {
 
 	if err = clabernetesinternaldirectruntime.ConnectivityReady(plan, state); err == nil {
 		t.Fatal("failed host endpoint published connectivity readiness")
-	}
-}
-
-func TestEndpointConnectivitySweepsStaleStateBeforeReusingInterfaceNames(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name      string
-		configure func(
-			*testing.T,
-			*clabernetesinternaldeviceplan.Input,
-			*clabernetesinternaldeviceplan.Plan,
-		)
-	}{
-		{
-			name: "vxlan",
-			configure: func(
-				t *testing.T,
-				input *clabernetesinternaldeviceplan.Input,
-				plan *clabernetesinternaldeviceplan.Plan,
-			) {
-				t.Helper()
-				setVXLANLink(t, input, plan, "peer-node-uid", "peer-vx", 73, 1450)
-			},
-		},
-		{name: "host", configure: setHostLink},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			input, plan := connectivityTestInputAndPlan(t)
-			testCase.configure(t, &input, &plan)
-
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-
-			operations := &fakeLinkOperations{requireSweep: true}
-			if err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
-				ctx,
-				input,
-				plan,
-				clabernetesinternaldirectruntime.ConnectivityOptions{
-					StateDirectory: t.TempDir(),
-					PodNamespace:   "lab",
-					PodName:        "router-pod",
-					PodUID:         "pod-uid-a",
-					PodAddress:     "10.244.0.12",
-				},
-				operations,
-				nil,
-			); err != nil {
-				t.Fatal(err)
-			}
-		})
 	}
 }
 
@@ -786,7 +717,7 @@ func TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness(t *testing.T)
 	spec := operations.fabricSpecs[0]
 	if spec.InterfaceName == "" || spec.TunnelID != 73 || spec.MTU != 1450 ||
 		spec.PeerTransport != "peer-vx" || spec.PodAddress != "10.244.0.12" ||
-		!strings.HasPrefix(spec.Owner, "c9s:direct:v1:") {
+		spec.OwnerPrefix == "" || !strings.HasPrefix(spec.Owner, spec.OwnerPrefix) {
 		t.Fatalf("fabric endpoint spec = %#v", spec)
 	}
 

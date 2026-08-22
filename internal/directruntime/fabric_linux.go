@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"strings"
 	"time"
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
@@ -67,7 +68,8 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 	}
 
 	if spec.TunnelID <= 0 || spec.InterfaceID == "" || spec.InterfaceName == "" ||
-		spec.Owner == "" {
+		spec.Owner == "" || spec.OwnerPrefix == "" ||
+		!strings.HasPrefix(spec.Owner, spec.OwnerPrefix) {
 		return result, errors.New("fabric endpoint spec is incomplete")
 	}
 
@@ -142,9 +144,19 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
 		return err
 	}
 
+	device, devicePresent, err := lookupLink(spec.InterfaceName)
+	if err != nil {
+		return err
+	}
+
 	if legPresent {
-		if leg.Attrs().Alias != spec.Owner {
-			return fmt.Errorf("fabric leg %q collides with unrelated state", legName)
+		if leg.Attrs().Alias != spec.Owner ||
+			(devicePresent && device.Attrs().Alias != spec.Owner) {
+			if !devicePresent {
+				return fmt.Errorf("fabric leg %q collides with unrelated state", legName)
+			}
+
+			return adoptFabricPair(spec, device, legName)
 		}
 
 		if leg.Attrs().Flags&net.FlagUp == 0 {
@@ -153,8 +165,7 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
 			}
 		}
 
-		if device, devicePresent, deviceErr := lookupLink(spec.InterfaceName); deviceErr == nil &&
-			devicePresent && device.Attrs().Alias == spec.Owner {
+		if devicePresent {
 			if device.Attrs().Flags&net.FlagUp == 0 {
 				if err = netlink.LinkSetUp(device); err != nil {
 					return fmt.Errorf("bringing fabric device leg up: %w", err)
@@ -163,11 +174,6 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
 		}
 
 		return nil
-	}
-
-	device, devicePresent, err := lookupLink(spec.InterfaceName)
-	if err != nil {
-		return err
 	}
 
 	if devicePresent {
@@ -179,10 +185,7 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
 			)
 		}
 
-		return fmt.Errorf(
-			"fabric device leg name %q collides with unrelated state",
-			spec.InterfaceName,
-		)
+		return adoptFabricPair(spec, device, legName)
 	}
 
 	attributes := netlink.NewLinkAttrs()
@@ -219,6 +222,77 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
 
 		if err = netlink.LinkSetUp(link); err != nil {
 			return fmt.Errorf("bringing fabric link up: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func adoptFabricPair(spec FabricEndpointSpec, device netlink.Link, legName string) error {
+	if device.Type() != vethLinkType ||
+		!strings.HasPrefix(device.Attrs().Alias, spec.OwnerPrefix) {
+		return fmt.Errorf(
+			"fabric device leg name %q collides with unrelated state",
+			spec.InterfaceName,
+		)
+	}
+
+	peerIndex, err := netlink.VethPeerIndex(&netlink.Veth{LinkAttrs: *device.Attrs()})
+	if err != nil {
+		return fmt.Errorf("reading fabric peer for %q: %w", spec.InterfaceName, err)
+	}
+
+	leg, err := netlink.LinkByIndex(peerIndex)
+	if err != nil {
+		return fmt.Errorf("reading fabric peer for %q: %w", spec.InterfaceName, err)
+	}
+
+	if leg.Type() != vethLinkType || !strings.HasPrefix(leg.Attrs().Name, "c9ss") ||
+		!strings.HasPrefix(leg.Attrs().Alias, spec.OwnerPrefix) ||
+		(device.Attrs().Alias != leg.Attrs().Alias && device.Attrs().Alias != spec.Owner &&
+			leg.Attrs().Alias != spec.Owner) {
+		return fmt.Errorf("fabric peer for %q has unrelated state", spec.InterfaceName)
+	}
+
+	if existing, present, lookupErr := lookupLink(legName); lookupErr != nil {
+		return lookupErr
+	} else if present && existing.Attrs().Index != leg.Attrs().Index {
+		return fmt.Errorf("fabric leg %q collides with unrelated state", legName)
+	}
+
+	if leg.Attrs().Name != legName {
+		if err = netlink.LinkSetName(leg, legName); err != nil {
+			return fmt.Errorf("renaming adopted fabric leg to %q: %w", legName, err)
+		}
+
+		var present bool
+
+		leg, present, err = lookupLink(legName)
+		if err != nil || !present {
+			return errors.Join(
+				fmt.Errorf("renamed fabric leg %q is unavailable", legName),
+				err,
+			)
+		}
+	}
+
+	for _, link := range []netlink.Link{leg, device} {
+		if link.Attrs().Alias != spec.Owner {
+			if err = netlink.LinkSetAlias(link, spec.Owner); err != nil {
+				return fmt.Errorf("adopting fabric pair ownership: %w", err)
+			}
+		}
+
+		if spec.MTU > 0 && link.Attrs().MTU != spec.MTU {
+			if err = netlink.LinkSetMTU(link, spec.MTU); err != nil {
+				return fmt.Errorf("setting adopted fabric pair MTU: %w", err)
+			}
+		}
+
+		if link.Attrs().Flags&net.FlagUp == 0 {
+			if err = netlink.LinkSetUp(link); err != nil {
+				return fmt.Errorf("bringing adopted fabric pair up: %w", err)
+			}
 		}
 	}
 
@@ -468,7 +542,8 @@ func ensurePodFabricRedirect(from, to netlink.Link) error {
 //nolint:funlen // one linear create-mark-move-name pass with explicit rollback.
 func (o netlinkOperations) EnsureHostInterface(spec HostInterfaceSpec) error {
 	if spec.InterfaceID == "" || spec.InterfaceName == "" || spec.HostInterface == "" ||
-		spec.Owner == "" {
+		spec.Owner == "" || spec.OwnerPrefix == "" ||
+		!strings.HasPrefix(spec.Owner, spec.OwnerPrefix) {
 		return errors.New("host interface spec is incomplete")
 	}
 
@@ -483,10 +558,7 @@ func (o netlinkOperations) EnsureHostInterface(spec HostInterfaceSpec) error {
 
 	if present {
 		if pod.Attrs().Alias != spec.Owner {
-			return fmt.Errorf(
-				"host Link Pod interface %q collides with unrelated state",
-				spec.InterfaceName,
-			)
+			return o.adoptHostInterface(spec, pod)
 		}
 
 		if pod.Attrs().Flags&net.FlagUp == 0 {
@@ -613,6 +685,114 @@ func (o netlinkOperations) EnsureHostInterface(spec HostInterfaceSpec) error {
 
 	if err = netlink.LinkSetUp(pod); err != nil {
 		return fmt.Errorf("bringing host Link Pod leg up: %w", err)
+	}
+
+	return nil
+}
+
+func (o netlinkOperations) adoptHostInterface(spec HostInterfaceSpec, pod netlink.Link) error {
+	if pod.Type() != vethLinkType || !strings.HasPrefix(pod.Attrs().Alias, spec.OwnerPrefix) {
+		return fmt.Errorf(
+			"host Link Pod interface %q collides with unrelated state",
+			spec.InterfaceName,
+		)
+	}
+
+	peerIndex, err := netlink.VethPeerIndex(&netlink.Veth{LinkAttrs: *pod.Attrs()})
+	if err != nil {
+		return fmt.Errorf("reading host Link peer for %q: %w", spec.InterfaceName, err)
+	}
+
+	err = o.namespace.Execute(func() error {
+		handle, handleErr := netlink.NewHandle()
+		if handleErr != nil {
+			return fmt.Errorf("opening worker namespace netlink handle: %w", handleErr)
+		}
+
+		defer handle.Close()
+
+		worker, lookupErr := handle.LinkByIndex(peerIndex)
+		if lookupErr != nil {
+			return fmt.Errorf("reading host Link worker peer: %w", lookupErr)
+		}
+
+		if worker.Type() != vethLinkType ||
+			!strings.HasPrefix(worker.Attrs().Alias, spec.OwnerPrefix) ||
+			(pod.Attrs().Alias != worker.Attrs().Alias && pod.Attrs().Alias != spec.Owner &&
+				worker.Attrs().Alias != spec.Owner) {
+			return fmt.Errorf(
+				"host Link worker peer for %q has unrelated state",
+				spec.InterfaceName,
+			)
+		}
+
+		existing, existingErr := handle.LinkByName(spec.HostInterface)
+		if existingErr == nil && existing.Attrs().Index != worker.Attrs().Index {
+			return fmt.Errorf(
+				"host Link worker interface %q collides with unrelated state",
+				spec.HostInterface,
+			)
+		}
+
+		if existingErr != nil && !errors.As(existingErr, &netlink.LinkNotFoundError{}) {
+			return fmt.Errorf("checking host Link worker interface: %w", existingErr)
+		}
+
+		if worker.Attrs().Name != spec.HostInterface {
+			if renameErr := handle.LinkSetName(worker, spec.HostInterface); renameErr != nil {
+				return fmt.Errorf(
+					"renaming adopted worker interface %q: %w",
+					spec.HostInterface,
+					renameErr,
+				)
+			}
+
+			worker, lookupErr = handle.LinkByName(spec.HostInterface)
+			if lookupErr != nil {
+				return fmt.Errorf("reading renamed worker interface: %w", lookupErr)
+			}
+		}
+
+		if worker.Attrs().Alias != spec.Owner {
+			if aliasErr := handle.LinkSetAlias(worker, spec.Owner); aliasErr != nil {
+				return fmt.Errorf("adopting worker interface ownership: %w", aliasErr)
+			}
+		}
+
+		if spec.MTU > 0 && worker.Attrs().MTU != spec.MTU {
+			if mtuErr := handle.LinkSetMTU(worker, spec.MTU); mtuErr != nil {
+				return fmt.Errorf("setting adopted worker interface MTU: %w", mtuErr)
+			}
+		}
+
+		if worker.Attrs().Flags&net.FlagUp == 0 {
+			if upErr := handle.LinkSetUp(worker); upErr != nil {
+				return fmt.Errorf("bringing adopted worker interface up: %w", upErr)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	if pod.Attrs().Alias != spec.Owner {
+		if err = netlink.LinkSetAlias(pod, spec.Owner); err != nil {
+			return fmt.Errorf("adopting host Link Pod interface ownership: %w", err)
+		}
+	}
+
+	if spec.MTU > 0 && pod.Attrs().MTU != spec.MTU {
+		if err = netlink.LinkSetMTU(pod, spec.MTU); err != nil {
+			return fmt.Errorf("setting adopted host Link Pod interface MTU: %w", err)
+		}
+	}
+
+	if pod.Attrs().Flags&net.FlagUp == 0 {
+		if err = netlink.LinkSetUp(pod); err != nil {
+			return fmt.Errorf("bringing adopted host Link Pod interface up: %w", err)
+		}
 	}
 
 	return nil

@@ -11,6 +11,8 @@ type FabricEndpointSpec struct {
 	InterfaceName string
 	// Owner is the ownership marker for every link this endpoint creates.
 	Owner string
+	// OwnerPrefix identifies transport state owned by this Pod across Link revisions.
+	OwnerPrefix string
 	// TunnelID is the VXLAN network identifier shared by both Link ends.
 	TunnelID int
 	// MTU is the requested endpoint MTU; the realization clamps it to what the underlay can
@@ -43,6 +45,8 @@ type HostInterfaceSpec struct {
 	HostInterface string
 	// Owner is the ownership marker for the created links.
 	Owner string
+	// OwnerPrefix identifies transport state owned by this Pod across Link revisions.
+	OwnerPrefix string
 	// MTU is the requested MTU for both ends.
 	MTU int
 }
