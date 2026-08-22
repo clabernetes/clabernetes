@@ -27,4 +27,3 @@ status:
       nodeName: srl1
     endpointB:
       nodeName: srl2
-  tunnelID: 1

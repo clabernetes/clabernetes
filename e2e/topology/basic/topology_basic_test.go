@@ -161,6 +161,15 @@ func TestSRLinuxDNSFromManagementNamespace(t *testing.T) {
 		namespace,
 		"test-fixtures/20-apply.yaml",
 	)
+	for _, nodeName := range []string{"srl1", "srl2"} {
+		clabernetestesthelper.KubectlWaitForCreate(
+			t,
+			"nodes.c9s.run",
+			namespace,
+			nodeName,
+		)
+		waitForNodeReady(t, namespace, nodeName)
+	}
 
 	srLinuxNodes := getSRLinuxNodeNames(t, namespace)
 	if len(srLinuxNodes) < 2 {
@@ -168,6 +177,23 @@ func TestSRLinuxDNSFromManagementNamespace(t *testing.T) {
 	}
 
 	waitForSRLinuxRemotePing(t, namespace, srLinuxNodes[0], srLinuxNodes[1])
+}
+
+func waitForNodeReady(t *testing.T, namespace, nodeName string) {
+	t.Helper()
+
+	cmd := exec.CommandContext( //nolint:gosec
+		t.Context(),
+		"kubectl",
+		"wait",
+		"--for=jsonpath={.status.readiness}=ready",
+		"--timeout=12m",
+		"--namespace",
+		namespace,
+		"node.c9s.run/"+nodeName,
+	)
+
+	clabernetestesthelper.Execute(t, cmd)
 }
 
 func getSRLinuxNodeNames(t *testing.T, namespace string) []string {
