@@ -161,6 +161,7 @@ func TestSRLinuxDNSFromManagementNamespace(t *testing.T) {
 		namespace,
 		"test-fixtures/20-apply.yaml",
 	)
+
 	for _, nodeName := range []string{"srl1", "srl2"} {
 		clabernetestesthelper.KubectlWaitForCreate(
 			t,
