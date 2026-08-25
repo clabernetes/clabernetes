@@ -146,8 +146,6 @@ type devicePodObservation struct {
 // each other across the fabric wire from inside the actual device containers, at the full
 // advertised interface MTU, with carrier propagating across the wire for both the graceful
 // interface-down case and the endpoint-loss case.
-//
-//nolint:funlen // one sequential dataplane story against a single deployed lab.
 func TestLinuxDataplaneDirect(t *testing.T) {
 	t.Parallel()
 
@@ -244,11 +242,14 @@ func TestLinuxDataplaneDirect(t *testing.T) {
 	// recovery.
 	carrierWatch := startDeviceCarrierWatch(t, namespace, peer, "eth1")
 
-	clabernetestesthelper.Execute(t, exec.CommandContext(
-		t.Context(),
-		"kubectl",
-		"delete", "pod", "--namespace", namespace, device.podName, "--wait=false",
-	))
+	clabernetestesthelper.Execute(
+		t,
+		exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
+			t.Context(),
+			"kubectl",
+			"delete", "pod", "--namespace", namespace, device.podName, "--wait=false",
+		),
+	)
 
 	if output := carrierWatch(); !strings.Contains(output, "WIRE-CARRIER-LOST") {
 		t.Fatalf("peer never observed carrier loss after endpoint Pod death: %s", output)
