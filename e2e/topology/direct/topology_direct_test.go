@@ -544,7 +544,7 @@ func observeDevicePod(t *testing.T, namespace, nodeName string) devicePodObserva
 	containerName := ""
 
 	for _, container := range pod.Spec.Containers {
-		if strings.HasPrefix(container.Name, "device-") {
+		if strings.HasPrefix(container.Name, "node-") {
 			image = container.Image
 			containerName = container.Name
 		}
@@ -574,7 +574,7 @@ func waitForWorkerArtifactCollection(t *testing.T, namespace string) {
 		pods := listPods(
 			t,
 			namespace,
-			"app.kubernetes.io/name=clabernetes-device-planner",
+			"app.kubernetes.io/name=clabernetes-planner",
 		)
 
 		remaining = len(pods.Items)

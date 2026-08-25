@@ -64,9 +64,9 @@ func StartClabernetes(initializer bool) {
 			clabernetesconstants.AppNameEnv,
 			clabernetesconstants.AppNameDefault,
 		),
-		initializer:        initializer,
-		logger:             clabernetesLogger,
-		deviceRuntimeImage: os.Getenv(clabernetesconstants.DeviceRuntimeImageEnv),
+		initializer:      initializer,
+		logger:           clabernetesLogger,
+		nodeRuntimeImage: os.Getenv(clabernetesconstants.NodeRuntimeImageEnv),
 	}
 
 	clabernetesInstance.start()
@@ -91,7 +91,7 @@ type clabernetes struct {
 	kubeClient            *kubernetes.Clientset
 	kubeClabernetesClient *clabernetesgeneratedclientset.Clientset
 
-	deviceRuntimeImage string
+	nodeRuntimeImage string
 
 	scheme *apimachineryruntime.Scheme
 	mgr    ctrlruntime.Manager
@@ -122,8 +122,8 @@ func (c *clabernetes) GetNamespace() string {
 	return c.namespace
 }
 
-func (c *clabernetes) GetDeviceRuntimeImage() string {
-	return c.deviceRuntimeImage
+func (c *clabernetes) GetNodeRuntimeImage() string {
+	return c.nodeRuntimeImage
 }
 
 func (c *clabernetes) IsInitializer() bool {

@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	workerOutputComponentLabelValue = "device-worker-output"
+	workerOutputComponentLabelValue = "planner-output"
 	workerOutputDataKey             = "output"
 	workerCommandAnnotation         = clabernetesconstants.LabelPrefix + "/workerCommand"
 )
@@ -187,7 +187,7 @@ func (r *Reconciler) garbageCollectWorkerArtifacts(
 	keepNames map[string]bool,
 ) error {
 	podSelector := ctrlruntimeclient.MatchingLabels{
-		clabernetesconstants.LabelKubernetesName: "clabernetes-device-planner",
+		clabernetesconstants.LabelKubernetesName: "clabernetes-planner",
 		clabernetesconstants.LabelTopologyNode:   node.GetName(),
 	}
 	pods := &k8scorev1.PodList{}

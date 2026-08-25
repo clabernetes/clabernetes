@@ -29,7 +29,7 @@ const (
 	kubernetesNameLimit  = 63
 
 	planDataKey               = "plan.json"
-	planComponentLabelValue   = "device-plan"
+	planComponentLabelValue   = "node-plan"
 	planOwnerUIDLabel         = clabernetesconstants.LabelPrefix + "/planOwnerUID"
 	planDigestAnnotation      = clabernetesconstants.LabelPrefix + "/planDigest"
 	planInputDigestAnnotation = clabernetesconstants.LabelPrefix + "/planInputDigest"

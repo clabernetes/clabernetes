@@ -15,7 +15,7 @@
   value: {{ .Values.manager.managerLogLevel }}
 - name: CONTROLLER_LOGGER_LEVEL
   value: {{ .Values.manager.controllerLogLevel }}
-- name: DEVICE_RUNTIME_IMAGE
+- name: NODE_RUNTIME_IMAGE
   {{- if .Values.manager.image }}
   value: {{ .Values.manager.image }}
   {{- else if eq .Chart.Version "0.0.0" }}

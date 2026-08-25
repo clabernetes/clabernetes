@@ -78,7 +78,7 @@ per-link drop counters classified by cause (reassembly expiry, memory cap, stale
 generation, oversize, send-queue full):
 
 ```
-kubectl logs <device pod> -c device-connectivity
+kubectl logs <device pod> -c clabwire
 ```
 
 Links inside one Pod (same-Pod, loopback) and host links are plain kernel interfaces and do not

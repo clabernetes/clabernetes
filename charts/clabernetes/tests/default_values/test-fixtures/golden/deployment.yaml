@@ -81,7 +81,7 @@ spec:
               value: info
             - name: CONTROLLER_LOGGER_LEVEL
               value: info
-            - name: DEVICE_RUNTIME_IMAGE
+            - name: NODE_RUNTIME_IMAGE
               value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
           resources:
             requests:
@@ -109,7 +109,7 @@ spec:
               value: info
             - name: CONTROLLER_LOGGER_LEVEL
               value: info
-            - name: DEVICE_RUNTIME_IMAGE
+            - name: NODE_RUNTIME_IMAGE
               value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
           resources:
             requests:

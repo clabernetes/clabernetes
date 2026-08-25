@@ -25,7 +25,7 @@ import (
 
 const (
 	connectivityRevisionDataKey             = "revision.json"
-	connectivityRevisionComponentLabelValue = "device-connectivity-revision"
+	connectivityRevisionComponentLabelValue = "clabwire-revision"
 	connectivityRevisionBaseAnnotation      = clabernetesconstants.LabelPrefix +
 		"/connectivityBasePlanDigest"
 	connectivityRevisionDesiredAnnotation = clabernetesconstants.LabelPrefix +

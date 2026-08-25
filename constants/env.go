@@ -14,9 +14,9 @@ const (
 	// clabernetes controllers logger level.
 	ControllerLoggerLevelEnv = "CONTROLLER_LOGGER_LEVEL"
 
-	// DeviceRuntimeImageEnv is the manager image used for isolated planning and thin direct-Pod
+	// NodeRuntimeImageEnv is the manager image used for isolated planning and thin direct-Pod
 	// helpers. It contains the c9s integration binary, not containerlab kind knowledge.
-	DeviceRuntimeImageEnv = "DEVICE_RUNTIME_IMAGE"
+	NodeRuntimeImageEnv = "NODE_RUNTIME_IMAGE"
 
 	// ClientOperationTimeoutMultiplierEnv is the multiplier applied to the default client
 	// operation timeout.

@@ -23,11 +23,11 @@ const (
 	plannerInputKey        = "input.json"
 	plannerInputMountPath  = "/var/run/clabernetes/planner/input"
 	plannerScratchPath     = "/var/run/clabernetes/planner/scratch"
-	plannerContainerName   = "device-planner"
-	plannerLabel           = "c9s.run/device-planner"
-	plannerInputDigest     = "c9s.run/device-plan-input-digest"
-	plannerWorkerPlan      = "device-plan"
-	plannerWorkerImages    = "device-images"
+	plannerContainerName   = "planner"
+	plannerLabel           = "c9s.run/planner"
+	plannerInputDigest     = "c9s.run/node-plan-input-digest"
+	plannerWorkerPlan      = "node-plan"
+	plannerWorkerImages    = "node-images"
 	plannerURLFetcherName  = "fetch-url-payloads"
 	plannerURLPayloadName  = "planner-url-payloads"
 	plannerCertificateName = "planner-certificates"
@@ -135,7 +135,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 	blockOwnerDeletion := true
 	labels := map[string]string{
 		clabernetesconstants.LabelApp:            clabernetesconstants.Clabernetes,
-		clabernetesconstants.LabelKubernetesName: "clabernetes-device-planner",
+		clabernetesconstants.LabelKubernetesName: "clabernetes-planner",
 		clabernetesconstants.LabelTopologyNode:   input.Node.GetName(),
 		plannerLabel:                             plannerDigestLabelValue(input.InputDigest),
 	}
@@ -158,7 +158,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 			ImagePullPolicy: k8scorev1.PullIfNotPresent,
 			Command:         []string{"/clabernetes/manager"},
 			Args: []string{
-				"device-payloads",
+				"node-payloads",
 				"--input", plannerInputMountPath + "/" + plannerInputKey,
 				"--maxInputBytes", strconv.FormatInt(input.MaxInputBytes, 10),
 				"--payloads", plannerPayloadRootPath,

@@ -234,8 +234,8 @@ func TestRenderCreatesDirectApplicationContainersFromGenericPlan(t *testing.T) {
 		t.Fatalf("kubectl default application container = %q, want %q", got, want)
 	}
 
-	if pod.InitContainers[0].Name != "prepare-device-plan" ||
-		pod.InitContainers[1].Name != "device-connectivity" ||
+	if pod.InitContainers[0].Name != "planner" ||
+		pod.InitContainers[1].Name != "clabwire" ||
 		pod.InitContainers[1].RestartPolicy == nil ||
 		*pod.InitContainers[1].RestartPolicy != k8scorev1.ContainerRestartPolicyAlways {
 		t.Fatalf("ordered native helpers = %#v", pod.InitContainers)
@@ -1143,7 +1143,7 @@ func TestRenderProjectsOnlyNodeCertificateMaterialIntoImportedLifecycleTarget(t 
 	foundProjectedCredential := false
 
 	for _, volume := range pod.Volumes {
-		if volume.Name != "device-runtime-credentials" {
+		if volume.Name != "node-runtime-credentials" {
 			continue
 		}
 
@@ -1309,7 +1309,7 @@ func TestRenderMapsGenericPostStartActionsIntoTargetApplicationContainer(t *test
 	foundLifecycleVolume := false
 
 	for _, volume := range pod.Volumes {
-		if volume.Name == "device-lifecycle-manager" && volume.EmptyDir != nil {
+		if volume.Name == "node-lifecycle-manager" && volume.EmptyDir != nil {
 			foundLifecycleVolume = true
 		}
 	}

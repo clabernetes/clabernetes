@@ -145,7 +145,7 @@ func (r *Reconciler) updateDirectStatuses(
 		if !exists || logicalNode.Name != member.GetName() {
 			return planInputError(
 				clabernetesinternaldeviceplan.ErrorInvariant,
-				"devicePlan.nodes",
+				"nodePlan.nodes",
 				"applied plan does not identify every workload Node by UID and name",
 			)
 		}
@@ -413,7 +413,7 @@ func observeDirectContainers(
 		if !exists || planned.NodeID != node.ID {
 			return nil, false, "", planInputError(
 				clabernetesinternaldeviceplan.ErrorInvariant,
-				"devicePlan.containers",
+				"nodePlan.containers",
 				"logical Node references an unknown application container",
 			)
 		}

@@ -148,7 +148,7 @@ func TestDirectPacketCaptureOperation(t *testing.T) {
 		connectivityContainerName(t, namespace, device),
 		"--",
 		"/clabernetes/manager",
-		"device-runtime",
+		"node-runtime",
 		"packet-capture",
 		"--plan",
 		"/var/run/clabernetes/plan/plan.json",

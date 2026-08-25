@@ -62,7 +62,7 @@ func NewController(
 		clabernetes.GetAppName(),
 		clabernetesconfig.GetManager,
 	)
-	reconciler.DirectRuntimeImage = clabernetes.GetDeviceRuntimeImage()
+	reconciler.DirectRuntimeImage = clabernetes.GetNodeRuntimeImage()
 	reconciler.DirectContainerExecutor = newDirectContainerExecutor(
 		clabernetes.GetKubeConfig(),
 		clabernetes.GetKubeClient(),

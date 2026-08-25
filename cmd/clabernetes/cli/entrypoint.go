@@ -162,7 +162,7 @@ func Entrypoint() *cli.App {
 
 func devicePayloadWorkerCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "device-payloads",
+		Name:  "node-payloads",
 		Usage: "fetch digest-pinned URL payloads and seal the planner network",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: devicePlanInput, Required: true},
@@ -209,7 +209,7 @@ func devicePayloadWorkerCommand() *cli.Command {
 
 func deviceImageWorkerCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "device-images",
+		Name:  "node-images",
 		Usage: "run isolated imported image-role discovery",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: devicePlanInput, Value: "-"},
@@ -245,8 +245,8 @@ func deviceImageWorkerCommand() *cli.Command {
 
 func deviceRuntimeCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "device-runtime",
-		Usage: "run a generic direct-device helper",
+		Name:  "node-runtime",
+		Usage: "run a generic direct-node helper",
 		Subcommands: []*cli.Command{
 			{
 				Name:  "prepare",
@@ -608,8 +608,8 @@ func readRuntimePlanInput(
 
 func devicePlanWorkerCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "device-plan",
-		Usage: "run the isolated direct-device planning worker",
+		Name:  "node-plan",
+		Usage: "run the isolated direct-node planning worker",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: devicePlanInput, Value: "-"},
 			&cli.StringFlag{Name: devicePlanRevision, Required: true},
@@ -653,7 +653,7 @@ func openDevicePlanInput(path string) (io.Reader, func(), error) {
 		path,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("opening device-plan input: %w", err)
+		return nil, nil, fmt.Errorf("opening node-plan input: %w", err)
 	}
 
 	return file, func() { _ = file.Close() }, nil

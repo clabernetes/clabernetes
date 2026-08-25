@@ -29,8 +29,8 @@ type Clabernetes interface { //nolint: interfacebloat
 	// GetNamespace returns the namespace the clabernetes instance is running in.
 	GetNamespace() string
 
-	// GetDeviceRuntimeImage returns the c9s manager image used by direct-runtime workers/helpers.
-	GetDeviceRuntimeImage() string
+	// GetNodeRuntimeImage returns the c9s manager image used by direct-runtime workers/helpers.
+	GetNodeRuntimeImage() string
 
 	// IsInitializer returns true if the clabernetes instance is an initializer instance -- if true
 	// this means that this instance should update crds, webhook configurations, and other

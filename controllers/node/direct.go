@@ -71,7 +71,7 @@ func (r *Reconciler) reconcileDirect(
 	node *clabernetesapisv1alpha1.Node,
 ) error {
 	if strings.TrimSpace(r.DirectRuntimeImage) == "" {
-		return r.directUnavailable(node, "DEVICE_RUNTIME_IMAGE is empty")
+		return r.directUnavailable(node, "NODE_RUNTIME_IMAGE is empty")
 	}
 	if r.directInitializationError != nil || r.ImageDiscoveryReconciler == nil ||
 		r.ImageMetadataResolver == nil || r.PlannerReconciler == nil ||
@@ -324,7 +324,7 @@ func (r *Reconciler) reconcileDirect(
 	if planningResult.Plan == nil {
 		return planInputError(
 			clabernetesinternaldeviceplan.ErrorInvariant,
-			"devicePlan",
+			"nodePlan",
 			"successful planning worker returned no plan",
 		)
 	}
@@ -702,7 +702,7 @@ func compileDirectExposedPorts(
 		if nodesByID[container.NodeID] == nil {
 			return nil, planInputError(
 				clabernetesinternaldeviceplan.ErrorInvariant,
-				"devicePlan.containers",
+				"nodePlan.containers",
 				"planned container belongs to an unknown workload Node",
 			)
 		}

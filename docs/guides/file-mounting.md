@@ -429,7 +429,7 @@ failure during staging shows up in the preparation init container:
 
 ```bash
 kubectl describe nodes.c9s.run <node>
-kubectl logs deploy/<node> -c prepare-device-plan
+kubectl logs deploy/<node> -c planner
 ```
 
 Verify URL accessibility:

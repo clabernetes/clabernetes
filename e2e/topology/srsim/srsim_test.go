@@ -184,7 +184,7 @@ func assertExpandedSRSimComponents(t *testing.T, namespace string) {
 	deviceContainers := 0
 
 	for name := range strings.SplitSeq(string(output), "\n") {
-		if strings.HasPrefix(name, "device-") {
+		if strings.HasPrefix(name, "node-") {
 			deviceContainers++
 		}
 	}
@@ -329,7 +329,7 @@ func deviceContainerName(t *testing.T, namespace, workload string) string {
 		`jsonpath={range .items[0].spec.containers[*]}{.name}{"\n"}{end}`,
 	)
 	for name := range strings.SplitSeq(string(output), "\n") {
-		if strings.HasPrefix(name, "device-") {
+		if strings.HasPrefix(name, "node-") {
 			return name
 		}
 	}

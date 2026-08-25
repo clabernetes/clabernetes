@@ -30,27 +30,27 @@ import (
 )
 
 const (
-	planVolumeName                   = "device-plan"
+	planVolumeName                   = "node-plan"
 	planMountPath                    = "/var/run/clabernetes/plan"
-	inputVolumeName                  = "device-plan-input"
+	inputVolumeName                  = "node-plan-input"
 	inputMountPath                   = "/var/run/clabernetes/input"
 	artifactRootPath                 = "/var/run/clabernetes/artifacts"
 	payloadRootPath                  = "/var/run/clabernetes/payloads"
-	certificateVolumeName            = "device-certificates"
+	certificateVolumeName            = "node-certificates"
 	certificateRootPath              = "/var/run/clabernetes/certificates"
-	entropyVolumeName                = "device-entropy"
+	entropyVolumeName                = "node-entropy"
 	entropyRootPath                  = "/var/run/clabernetes/entropy"
-	endpointCertificateName          = "device-endpoint-certificates"
-	preparationScratchName           = "device-preparation-scratch"
+	endpointCertificateName          = "node-endpoint-certificates"
+	preparationScratchName           = "node-preparation-scratch"
 	preparationScratchPath           = "/tmp"
-	connectivityStateName            = "device-connectivity-state"
+	connectivityStateName            = "clabwire-state"
 	connectivityStatePath            = "/var/run/clabernetes/connectivity"
-	connectivityRevisionVolumeName   = "device-connectivity-revision"
+	connectivityRevisionVolumeName   = "clabwire-revision"
 	connectivityRevisionMountPath    = "/var/run/clabernetes/connectivity-revision"
 	hostNetworkNamespaceName         = "worker-host-network-namespace"
 	hostNetworkNamespaceSourcePath   = "/proc/1/ns"
 	hostNetworkNamespaceMountPath    = "/var/run/clabernetes/host-network-namespaces"
-	lifecycleVolumeName              = "device-lifecycle-manager"
+	lifecycleVolumeName              = "node-lifecycle-manager"
 	lifecycleBinaryRoot              = "/var/lib/clabernetes/lifecycle-bin"
 	lifecycleBinaryPath              = lifecycleBinaryRoot + "/manager"
 	runtimeBinaryPath                = "/clabernetes/manager"
@@ -59,19 +59,19 @@ const (
 	lifecycleArtifactRoot            = "/var/lib/clabernetes/lifecycle-artifacts"
 	lifecycleCertificateRoot         = "/var/lib/clabernetes/lifecycle-certificates"
 	lifecycleEntropyRoot             = "/var/lib/clabernetes/lifecycle-entropy"
-	lifecycleScratchName             = "device-lifecycle-scratch"
+	lifecycleScratchName             = "node-lifecycle-scratch"
 	lifecycleScratchRoot             = "/var/lib/clabernetes/lifecycle-scratch"
-	applicationRuntimeAPIName        = "device-runtime-api"
+	applicationRuntimeAPIName        = "node-runtime-api"
 	applicationRuntimeAPIRoot        = "/var/lib/clabernetes/runtime-api"
-	applicationRuntimeCredentialName = "device-runtime-credentials"
+	applicationRuntimeCredentialName = "node-runtime-credentials"                      //nolint:gosec // identifier or path, not a credential.
 	applicationRuntimeCredentialRoot = "/var/run/secrets/kubernetes.io/serviceaccount" //nolint:gosec // identifier or path, not a credential.
-	probeSecretVolumeName            = "device-probe-secrets"
-	probePasswordPath                = "/var/lib/clabernetes/probe-secret/password" //nolint:gosec // identifier or path, not a credential.
-	preparationName                  = "prepare-device-plan"
-	connectivityName                 = "device-connectivity"
+	probeSecretVolumeName            = "node-probe-secrets"                            //nolint:gosec // identifier or path, not a credential.
+	probePasswordPath                = "/var/lib/clabernetes/probe-secret/password"    //nolint:gosec // identifier or path, not a credential.
+	preparationName                  = "planner"
+	connectivityName                 = "clabwire"
 	directWorkloadLabel              = clabernetesconstants.LabelDirectWorkload
 	directMeshMemberLabel            = clabernetesconstants.LabelDirectMeshMember
-	planDigestAnnotation             = "c9s.run/device-plan-digest"
+	planDigestAnnotation             = "c9s.run/node-plan-digest"
 )
 
 // Stable direct workload identities consumed by the status reconciler.
@@ -195,7 +195,7 @@ func validateNormalizedPlan(plan clabernetesinternaldeviceplan.Plan) error {
 		}
 
 		return &clabernetesinternaldeviceplan.Error{
-			Code: clabernetesinternaldeviceplan.ErrorUnsupported, Field: "devicePlan",
+			Code: clabernetesinternaldeviceplan.ErrorUnsupported, Field: "nodePlan",
 			Behavior: "direct-runtime-capability", Message: err.Error(),
 		}
 	}
@@ -946,7 +946,7 @@ func renderLifecycleCertificateVolumes(
 			continue
 		}
 
-		name := dnsName("device-lifecycle-cert", node.ID)
+		name := dnsName("node-lifecycle-cert", node.ID)
 		byNode[node.ID] = name
 		result = append(result, k8scorev1.Volume{
 			Name: name,
@@ -1346,7 +1346,7 @@ func renderApplicationLifecycle(
 		// packages assume before exec-ing the image's real process.
 		container.Command = []string{
 			lifecycleBinaryPath,
-			"device-runtime",
+			"node-runtime",
 			"launch",
 			"--plan",
 			lifecyclePlanRoot + "/plan.json",
@@ -1363,7 +1363,7 @@ func renderApplicationLifecycle(
 			container.Lifecycle.PostStart = &k8scorev1.LifecycleHandler{
 				Exec: &k8scorev1.ExecAction{Command: []string{
 					lifecycleBinaryPath,
-					"device-runtime",
+					"node-runtime",
 					"lifecycle",
 					"--plan",
 					lifecyclePlanRoot + "/plan.json",
@@ -1404,7 +1404,7 @@ func renderApplicationLifecycle(
 
 			command := []string{
 				lifecycleBinaryPath,
-				"device-runtime",
+				"node-runtime",
 				"readiness",
 				"--plan",
 				lifecyclePlanRoot + "/plan.json",
@@ -1470,7 +1470,7 @@ func ApplicationRestartCommand(
 
 	command := []string{
 		lifecycleBinaryPath,
-		"device-runtime",
+		"node-runtime",
 		"restart",
 		"--request",
 		requestDigest,
@@ -1545,7 +1545,7 @@ func ApplicationSaveCommand(
 
 	return []string{
 		lifecycleBinaryPath,
-		"device-runtime",
+		"node-runtime",
 		"lifecycle",
 		"--plan",
 		lifecyclePlanRoot + "/plan.json",
@@ -1589,7 +1589,7 @@ func PacketCaptureCommand(
 
 	command := []string{
 		runtimeBinaryPath,
-		"device-runtime",
+		"node-runtime",
 		"packet-capture",
 		"--plan",
 		planMountPath + "/plan.json",
@@ -2332,7 +2332,7 @@ func renderHelpers(
 		"--podAddress", "$(C9S_POD_ADDRESS)",
 	}
 	connectivityReadyCommand := []string{
-		"/clabernetes/manager", "device-runtime", "connectivity-ready",
+		"/clabernetes/manager", "node-runtime", "connectivity-ready",
 		"--plan", planMountPath + "/plan.json",
 		"--state", connectivityStatePath,
 	}
@@ -2451,7 +2451,7 @@ func renderHelpers(
 	return []k8scorev1.Container{
 		{
 			Name: preparationName, Image: options.PreparationImage,
-			Command: []string{"/clabernetes/manager", "device-runtime", "prepare"},
+			Command: []string{"/clabernetes/manager", "node-runtime", "prepare"},
 			Args:    preparationArgs,
 			// Preparation records the Pod's prefixed management identity while the primary
 			// interface is still pristine; devices may strip it at boot.
@@ -2476,7 +2476,7 @@ func renderHelpers(
 		},
 		{
 			Name: connectivityName, Image: options.ConnectivityImage,
-			Command:       []string{"/clabernetes/manager", "device-runtime", "connectivity"},
+			Command:       []string{"/clabernetes/manager", "node-runtime", "connectivity"},
 			Args:          connectivityArgs,
 			Env:           connectivityEnvironment,
 			RestartPolicy: &always,
@@ -2683,7 +2683,7 @@ func dnsName(prefix, identity string) string {
 
 // ApplicationContainerName maps a runtime-neutral container ID to its Kubernetes container name.
 func ApplicationContainerName(identity string) string {
-	return dnsName("device", identity)
+	return dnsName("node", identity)
 }
 
 func optionalBool(value bool) *bool {

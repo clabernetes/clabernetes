@@ -20,7 +20,7 @@ import (
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const plannerInputComponentLabelValue = "device-plan-input"
+const plannerInputComponentLabelValue = "node-plan-input"
 
 var (
 	// ErrInvalidPlannerInput classifies malformed, non-canonical, oversized, or sensitive input.

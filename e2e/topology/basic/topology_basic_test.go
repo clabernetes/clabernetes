@@ -456,7 +456,7 @@ func getDevicePodTarget(t *testing.T, namespace, nodeName string) (string, strin
 		}
 
 		for _, container := range pod.Spec.Containers {
-			if strings.HasPrefix(container.Name, "device-") {
+			if strings.HasPrefix(container.Name, "node-") {
 				return pod.Metadata.Name, container.Name, nil
 			}
 		}
