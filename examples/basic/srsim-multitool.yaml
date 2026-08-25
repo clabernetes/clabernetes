@@ -1,0 +1,73 @@
+# One Nokia SR-SIM node connected to a network multitool host.
+#
+# Before applying this Topology, create the required license ConfigMap:
+#   kubectl create -n srsim-multitool configmap srsim-license \
+#     --from-file=license.txt=/path/to/license.txt
+#
+# Create the image pull secret named srsim-registry in the same namespace if it
+# does not already exist; the SR-SIM image is access-controlled.
+#   kubectl create -n srsim-multitool secret docker-registry regcred \
+#     --docker-server=ghcr.io \
+#     --docker-username=<your-username> \
+#     --docker-password=<your-password>
+#
+
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: srsim-multitool
+  namespace: srsim-multitool
+spec:
+  statusProbes:
+    enabled: true
+    nodeProbeConfigurations:
+      srsim:
+        startupSeconds: 30
+        sshProbeConfiguration:
+          username: admin
+          password: NokiaSros1!
+          port: 22
+      multitool:
+        startupSeconds: 15
+        sshProbeConfiguration:
+          username: admin
+          password: multit00l
+          port: 22
+  imagePull:
+    pullSecrets:
+      - regcred
+  deployment:
+    filesFromConfigMap:
+      srsim:
+        - filePath: /opt/nokia/sros/license.txt
+          configMapName: srsim-license
+          configMapPath: license.txt
+  definition:
+    containerlab: |
+      name: srl-multitool
+      topology:
+        nodes:
+          srsim:
+            kind: nokia_srsim
+            image: ghcr.io/clab-labs/nokia_srsim:26.7.R1
+            type: sr-1
+            license: /opt/nokia/sros/license.txt
+            startup-config: |
+              /configure card 1 card-type iom-1
+              /configure card 1 mda 1 mda-type me6-100gb-qsfp28
+              /configure port 1/1/c1 connector breakout c1-100g
+              /configure port 1/1/c1 admin-state enable
+              /configure port 1/1/c1/1 ethernet mode hybrid
+              /configure port 1/1/c1/1 admin-state enable
+              /configure router "Base" interface "to-multitool" port 1/1/c1/1:0
+              /configure router "Base" interface "to-multitool" ipv4 primary address 192.0.2.0
+              /configure router "Base" interface "to-multitool" ipv4 primary prefix-length 31
+
+          multitool:
+            kind: linux
+            image: ghcr.io/srl-labs/network-multitool:latest
+            exec:
+              - ip addr add 192.0.2.1/31 dev eth1
+
+        links:
+          - endpoints: ["srsim:1/1/c1/1", "multitool:eth1"]
