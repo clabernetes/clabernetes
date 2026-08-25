@@ -19,6 +19,7 @@ import (
 	"time"
 
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabconstants "github.com/srl-labs/containerlab/constants"
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -86,9 +87,9 @@ type LinkOperations interface {
 	// preserved CNI transport, synthetic device pair, hardening baseline, and the sidecar-owned
 	// transport policy table. It is idempotent and never mutates device-owned state.
 	EnsureInterposition(spec InterpositionSpec) error
-	// EnsureFabricEndpoint realizes one cross-Pod endpoint inside the Pod namespace on the
-	// preserved underlay: device leg, sidecar leg, VTEP, and stitch. An unresolved peer is
-	// unready, not an error.
+	// EnsureFabricEndpoint realizes one cross-Pod endpoint inside the Pod namespace: the
+	// device leg + sidecar leg pair and the leg's registration with the Pod's fabric wire on
+	// the preserved underlay. An unresolved peer is unready, not an error.
 	EnsureFabricEndpoint(spec FabricEndpointSpec) (FabricEndpointResult, error)
 	// EnsureHostInterface realizes one host Link by placing the worker-side veth end into the
 	// worker namespace through the read-only namespace handle.
@@ -877,9 +878,6 @@ type ConnectivityOptions struct {
 	// hostEndpointPacer rate-limits steady-state host endpoint re-assertion; the sidecar owns
 	// drift correction, so unchanged ticks do not need a per-second reconcile fan-out.
 	hostEndpointPacer *hostEndpointPacer
-
-	// mtuClampNotices deduplicates realized-MTU clamp diagnostics across re-assertion passes.
-	mtuClampNotices *mtuClampNotices
 }
 
 // hostEndpointReassertInterval bounds how often an unchanged revision re-asserts host
@@ -940,67 +938,6 @@ func (p *hostEndpointPacer) lastKnownReady() bool {
 	defer p.mutex.Unlock()
 
 	return p.lastSucceeded && p.lastReady
-}
-
-// mtuClampNotices deduplicates realized-MTU clamp diagnostics: steady-state re-assertion runs
-// the same realization every pass, so an unchanged clamp must surface exactly once.
-type mtuClampNotices struct {
-	mutex    sync.Mutex
-	reported map[string]int
-}
-
-// shouldReport records one interface's realized MTU and reports whether it changed since the
-// last notice. A nil receiver always reports, degrading to unpaced diagnostics.
-func (n *mtuClampNotices) shouldReport(interfaceID string, effective int) bool {
-	if n == nil {
-		return true
-	}
-
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
-
-	if n.reported == nil {
-		n.reported = map[string]int{}
-	}
-
-	if n.reported[interfaceID] == effective {
-		return false
-	}
-
-	n.reported[interfaceID] = effective
-
-	return true
-}
-
-// noticeFabricMTUClamp surfaces an explicitly requested MTU the underlay cannot carry
-// encapsulated: the realization already bounded every interface to the effective value, so this
-// is the one place the gap between topology intent and cluster capability becomes visible.
-func noticeFabricMTUClamp(
-	notices *mtuClampNotices,
-	intf clabernetesinternaldeviceplan.InterfacePlan,
-	result FabricEndpointResult,
-) {
-	if intf.MTU <= 0 || result.EffectiveMTU <= 0 || result.EffectiveMTU >= intf.MTU {
-		return
-	}
-
-	if !notices.shouldReport(intf.ID, result.EffectiveMTU) {
-		return
-	}
-
-	fmt.Fprintf(
-		os.Stderr,
-		"connectivity: Link %q interface %q requests MTU %d but the Pod underlay (MTU %d) "+
-			"carries at most %d encapsulated; realizing MTU %d on every endpoint interface -- "+
-			"raise the cluster Pod network MTU to at least %d to honor the request\n",
-		intf.LinkID,
-		intf.Name,
-		intf.MTU,
-		result.UnderlayMTU,
-		result.EffectiveMTU,
-		result.EffectiveMTU,
-		intf.MTU+fabricEncapsulationOverhead,
-	)
 }
 
 // EndpointNamespace keeps a target Pod namespace handle open while one imported endpoint hook
@@ -1117,7 +1054,6 @@ func runConnectivity(
 	}
 
 	options.hostEndpointPacer = &hostEndpointPacer{}
-	options.mtuClampNotices = &mtuClampNotices{}
 
 	if options.NATOperations == nil {
 		options.NATOperations = newNATOperations()
@@ -1639,8 +1575,6 @@ func reconcileEndpointTransports(
 
 			break
 		}
-
-		noticeFabricMTUClamp(options.mtuClampNotices, intf, result)
 
 		if !result.Ready {
 			ready = false
@@ -2572,6 +2506,12 @@ func desiredLocalVethPairs(
 		mtu := endpoints[0].MTU
 		if mtu == 0 {
 			mtu = endpoints[1].MTU
+		}
+
+		if mtu == 0 {
+			// Local Links default to the containerlab link MTU, matching the fabric
+			// realization so a Link's MTU never depends on Pod placement.
+			mtu = clabconstants.DefaultLinkMTU
 		}
 
 		owner := directLinkOwner(

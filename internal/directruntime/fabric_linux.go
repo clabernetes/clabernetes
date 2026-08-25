@@ -1,6 +1,6 @@
 //go:build linux
 
-//nolint:err113,gocognit,gocyclo,mnd,nestif // single-pass boundary logic with structured one-off diagnostics and protocol literals.
+//nolint:err113,gocognit,gocyclo,nestif // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	clabconstants "github.com/srl-labs/containerlab/constants"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -67,16 +68,21 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, errors.New("fabric endpoint spec is incomplete")
 	}
 
-	// The MTU bound depends only on the Pod underlay, so it is computed before any link
-	// exists: the device-facing leg must be born with its final MTU because a device may
-	// adopt and move it where the sidecar can never adjust it again.
-	mtu, underlay, err := clampPodFabricMTU(spec.MTU, podAddress)
+	// The requested MTU is honored exactly, containerlab-default when unset: the wire
+	// fragments to the underlay, so the underlay never bounds a Link. The device-facing leg
+	// must be born with its final MTU because a device may adopt and move it where the
+	// sidecar can never adjust it again.
+	mtu := spec.MTU
+	if mtu <= 0 {
+		mtu = clabconstants.DefaultLinkMTU
+	}
+
+	// The underlay MTU only sizes wire fragments; it is discovered locally and never
+	// coordinated with peers.
+	underlay, err := podFabricUnderlayMTU(podAddress)
 	if err != nil {
 		return result, err
 	}
-
-	result.EffectiveMTU = mtu
-	result.UnderlayMTU = underlay
 
 	legName := fabricSidecarLegName(spec.InterfaceID)
 
@@ -86,10 +92,6 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 
 	if _, present, lookupErr := lookupLink(legName); lookupErr != nil || !present {
 		return result, errors.Join(errors.New("fabric sidecar leg is unavailable"), lookupErr)
-	}
-
-	if err = (netlinkOperations{}).DisableTxChecksumOffload(legName); err != nil {
-		return result, err
 	}
 
 	// The device-side stack must materialize checksums in software: the wire captures raw
@@ -110,13 +112,6 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, err
 	}
 
-	deliveryMTU := mtu
-	if deliveryMTU < 1 {
-		// An unidentifiable underlay passes the requested MTU through unbounded; the wire
-		// then bounds delivery only by the protocol's representable frame size.
-		deliveryMTU = fabricWireMaximumFrameSize
-	}
-
 	// The link is registered even while the peer is unresolvable so the wire holds the
 	// device leg carrier-down: an unplugged far end must look like a dead cable, not a live
 	// one.
@@ -126,7 +121,7 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		LegName:       legName,
 		PeerTransport: spec.PeerTransport,
 		PeerAddress:   remote,
-		MTU:           deliveryMTU,
+		MTU:           mtu,
 	}); err != nil {
 		return result, err
 	}
@@ -381,16 +376,16 @@ func podBoundResolver(podAddress string) *net.Resolver {
 	}
 }
 
-// clampPodFabricMTU bounds the requested MTU to what the Pod underlay can carry encapsulated,
-// reporting the observed underlay MTU alongside; a zero underlay means the underlay interface
-// was not identifiable and the requested value passes through unbounded.
-func clampPodFabricMTU(requested int, podAddress netip.Addr) (int, int, error) {
-	underlay := 0
-
+// podFabricUnderlayMTU observes the MTU of the interface carrying the Pod address. A zero
+// result means the underlay interface was not identifiable; consumers fall back to their
+// conservative defaults.
+func podFabricUnderlayMTU(podAddress netip.Addr) (int, error) {
 	links, err := netlink.LinkList()
 	if err != nil {
-		return 0, 0, fmt.Errorf("listing Pod interfaces: %w", err)
+		return 0, fmt.Errorf("listing Pod interfaces: %w", err)
 	}
+
+	underlay := 0
 
 	for _, link := range links {
 		addresses, addressErr := netlink.AddrList(link, netlink.FAMILY_V4)
@@ -405,23 +400,7 @@ func clampPodFabricMTU(requested int, podAddress netip.Addr) (int, int, error) {
 		}
 	}
 
-	if underlay == 0 {
-		return requested, 0, nil
-	}
-
-	transport := underlay - fabricEncapsulationOverhead
-	if transport < 68 {
-		return 0, underlay, fmt.Errorf(
-			"fabric underlay MTU %d cannot carry encapsulation",
-			underlay,
-		)
-	}
-
-	if requested == 0 || requested > transport {
-		return transport, underlay, nil
-	}
-
-	return requested, underlay, nil
+	return underlay, nil
 }
 
 // EnsureHostInterface realizes one host Link: the device-facing leg stays in the Pod namespace

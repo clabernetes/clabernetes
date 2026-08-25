@@ -210,9 +210,9 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 	// state was pristine is the durable truth for re-assertion.
 	capturedRoutes = rememberTransportRoutes(spec.StateDirectory, capturedRoutes)
 
-	// Mesh frames cross the Pod underlay encapsulated; every mesh element carries the clamped
-	// MTU so device-derived segment sizes fit the cross-Pod path.
-	meshMTU, _, err := clampPodFabricMTU(0, podAddress)
+	// Mesh frames cross the Pod underlay kernel-encapsulated; every mesh element carries the
+	// underlay-bounded MTU so device-derived segment sizes fit the cross-Pod path.
+	meshMTU, err := podManagementMeshMTU(podAddress)
 	if err != nil {
 		return err
 	}
@@ -356,6 +356,26 @@ func linkByAddress(address netip.Addr) (netlink.Link, error) {
 	}
 
 	return nil, fmt.Errorf("no interface carries the Pod address %q", address)
+}
+
+// podManagementMeshMTU bounds the management mesh MTU to what the Pod underlay can carry
+// kernel-encapsulated; a zero result means the underlay was not identifiable and mesh elements
+// keep their defaults.
+func podManagementMeshMTU(podAddress netip.Addr) (int, error) {
+	underlay, err := podFabricUnderlayMTU(podAddress)
+	if err != nil || underlay == 0 {
+		return 0, err
+	}
+
+	meshMTU := underlay - fabricEncapsulationOverhead
+	if meshMTU < 68 {
+		return 0, fmt.Errorf(
+			"management mesh underlay MTU %d cannot carry encapsulation",
+			underlay,
+		)
+	}
+
+	return meshMTU, nil
 }
 
 // ensureSyntheticPair creates the device pair (device leg + Pod-side mesh port) and the gateway
