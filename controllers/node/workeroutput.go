@@ -179,8 +179,12 @@ func deleteWorkerAttemptArtifacts(
 
 // garbageCollectWorkerArtifacts removes every worker Pod, NetworkPolicy, input ConfigMap, and
 // worker output ConfigMap owned by this Node that the current reconcile did not reference.
-// Prompt per-attempt deletion handles the common case; this sweep collects strays left by
-// interrupted reconciles, superseded inputs, and releases that predate prompt deletion.
+//
+// keepNames is the controller's small statement of current work: it contains in-flight attempts
+// and the one converged attempt needed by the Deployment or the next cached lookup. Everything
+// else is a superseded attempt and can be deleted. Prompt per-attempt deletion handles the common
+// case; this owner-scoped sweep also collects strays left by interrupted reconciles, superseded
+// inputs, and releases that predate prompt deletion without touching another Node's artifacts.
 func (r *Reconciler) garbageCollectWorkerArtifacts(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,

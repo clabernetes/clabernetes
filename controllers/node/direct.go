@@ -199,7 +199,15 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	resolvedImages := seedImageInputs(declaredMetadata.Images)
+	resolvedImages, err := r.resolveImagesForDiscovery(
+		ctx,
+		node,
+		baseRequest,
+		declaredMetadata.Images,
+	)
+	if err != nil {
+		return err
+	}
 	sensitiveValues := append(
 		slices.Clone(declaredMetadata.SensitiveValues),
 		entropyResolution.SensitiveValues...,
@@ -208,9 +216,8 @@ func (r *Reconciler) reconcileDirect(
 	planInput := clabernetesinternaldeviceplan.Input{}
 	var convergedDiscovery *clabernetesinternaldeviceplan.ImageDiscovery
 	imageDiscoveryConverged := false
-	// keepWorkerArtifacts names every worker Pod, NetworkPolicy, input ConfigMap, and output
-	// ConfigMap this reconcile referenced; the sweep at the end removes everything else the
-	// Node owns.
+	// keepWorkerArtifacts names the converged worker attempt and any in-flight worker Pods;
+	// superseded discovery rounds and completed non-current attempts are eligible for GC.
 	keepWorkerArtifacts := map[string]bool{}
 	for range maxDirectImageDiscoveryRounds {
 		baseRequest.Images = resolvedImages
@@ -230,9 +237,13 @@ func (r *Reconciler) reconcileDirect(
 		if reconcileErr != nil {
 			return reconcileErr
 		}
-		keepWorkerArtifacts[discoveryResult.PodName] = true
-		keepWorkerArtifacts[discoveryResult.InputConfigMapName] = true
 		if discoveryResult.State != PlannerStateSucceeded {
+			keepPendingWorkerAttempt(
+				keepWorkerArtifacts,
+				discoveryResult.PodName,
+				discoveryResult.InputConfigMapName,
+			)
+
 			return nil
 		}
 		if discoveryResult.Discovery == nil {
@@ -272,6 +283,11 @@ func (r *Reconciler) reconcileDirect(
 			planInput = nextInput
 			convergedDiscovery = discoveryResult.Discovery
 			imageDiscoveryConverged = true
+			keepConvergedWorkerAttempt(
+				keepWorkerArtifacts,
+				discoveryResult.PodName,
+				discoveryResult.InputConfigMapName,
+			)
 
 			break
 		}
@@ -316,11 +332,20 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	keepWorkerArtifacts[planningResult.PodName] = true
-	keepWorkerArtifacts[planningResult.InputConfigMapName] = true
 	if planningResult.State != PlannerStateSucceeded {
+		keepPendingWorkerAttempt(
+			keepWorkerArtifacts,
+			planningResult.PodName,
+			planningResult.InputConfigMapName,
+		)
+
 		return nil
 	}
+	keepConvergedWorkerAttempt(
+		keepWorkerArtifacts,
+		planningResult.PodName,
+		planningResult.InputConfigMapName,
+	)
 	if planningResult.Plan == nil {
 		return planInputError(
 			clabernetesinternaldeviceplan.ErrorInvariant,

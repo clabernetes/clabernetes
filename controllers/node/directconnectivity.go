@@ -340,6 +340,35 @@ func (r *Reconciler) currentOwnedDirectDeployment(
 	return existing, nil
 }
 
+// optionalOwnedDirectDeployment returns the Node-owned direct Deployment when present.
+//
+// This helper is used only for the cold-input optimization. A same-named Deployment owned by
+// another Node UID is treated as absent, so discovery can fall back to topology-declared input
+// without failing an otherwise unrelated reconcile or accidentally adopting the Deployment.
+// The normal workload path uses currentOwnedDirectDeployment, which remains strict and reports
+// the ownership conflict.
+func (r *Reconciler) optionalOwnedDirectDeployment(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+) (*k8sappsv1.Deployment, error) {
+	existing := &k8sappsv1.Deployment{}
+
+	err := r.Client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(node), existing)
+	if apimachineryerrors.IsNotFound(err) {
+		return nil, nil //nolint:nilnil // an absent workload is a valid observation, not an error.
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("reading direct device Deployment: %w", err)
+	}
+
+	if !ownedByUID(existing, node.GetUID()) {
+		return nil, nil
+	}
+
+	return existing, nil
+}
+
 func (r *Reconciler) directConnectivityRevision(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
