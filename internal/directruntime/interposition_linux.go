@@ -23,6 +23,9 @@ import (
 // distinguish them from device- and CNI-owned links.
 const interpositionOwnerAlias = "c9s:interposition:v1"
 
+// meshVTEPLinkType is the kernel link type of the management mesh VTEP.
+const meshVTEPLinkType = "vxlan"
+
 // capturedRoute is one CNI-installed IPv4 route snapshotted before the transport rename. The
 // exact set must be replayed: CNIs like kindnet route the Pod subnet via the gateway with a
 // scope-link /32 for the gateway itself, and the kernel auto-connected prefix route the rename
@@ -949,7 +952,7 @@ func ensureMeshVTEP(
 	}
 
 	if exists {
-		if existing.Type() != fabricVTEPLinkType ||
+		if existing.Type() != meshVTEPLinkType ||
 			existing.Attrs().Alias != interpositionOwnerAlias {
 			return nil, fmt.Errorf(
 				"mesh VTEP name %q collides with unrelated state",
@@ -961,7 +964,7 @@ func ensureMeshVTEP(
 
 		conforms := isVXLAN && vxlan.VxlanId == spec.MeshTunnelID &&
 			vxlan.SrcAddr.Equal(localIP) &&
-			vxlan.Port == clabernetesconstants.VXLANServicePort && vxlan.Learning &&
+			vxlan.Port == clabernetesconstants.ManagementMeshVXLANPort && vxlan.Learning &&
 			(meshMTU == 0 || vxlan.Attrs().MTU == meshMTU)
 		if conforms {
 			return existing, nil
@@ -983,7 +986,7 @@ func ensureMeshVTEP(
 		LinkAttrs: attributes,
 		VxlanId:   spec.MeshTunnelID,
 		SrcAddr:   localIP,
-		Port:      clabernetesconstants.VXLANServicePort,
+		Port:      clabernetesconstants.ManagementMeshVXLANPort,
 		Learning:  true,
 	}
 	if err = netlink.LinkAdd(vtep); err != nil {

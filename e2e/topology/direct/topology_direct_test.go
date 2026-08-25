@@ -204,6 +204,62 @@ func TestLinuxDataplaneDirect(t *testing.T) {
 
 	peer := observeDevicePod(t, namespace, "lin2")
 
+	// VLAN transparency: kernel-tagged frames must cross the wire with their tags intact --
+	// the kernel RX path strips the outer tag into skb metadata before the wire's capture
+	// runs, so this black-holes unless the capture reinserts it. A single 802.1Q tag must
+	// carry the full link MTU; stacked 802.1Q (QinQ) shares the one-tag headroom budget most
+	// physical NICs reserve, so its full-MTU proof rides 4 bytes below the parent MTU.
+	for index, endpoint := range []devicePodObservation{device, peer} {
+		host := strconv.Itoa(index)
+
+		deviceCommand(t, namespace, endpoint,
+			[]string{
+				"ip", "link", "add", "link", "eth1", "name", "eth1.100",
+				"type", "vlan", "id", "100",
+			})
+		deviceCommand(t, namespace, endpoint,
+			[]string{"ip", "addr", "add", "192.168.100." + host + "/31", "dev", "eth1.100"})
+		deviceCommand(t, namespace, endpoint, []string{"ip", "link", "set", "eth1.100", "up"})
+		deviceCommand(t, namespace, endpoint,
+			[]string{
+				"ip", "link", "add", "link", "eth1.100", "name", "eth1.100.200",
+				"type", "vlan", "id", "200",
+			})
+		deviceCommand(t, namespace, endpoint,
+			[]string{"ip", "addr", "add", "192.168.200." + host + "/31", "dev", "eth1.100.200"})
+		deviceCommand(t, namespace, endpoint, []string{"ip", "link", "set", "eth1.100.200", "up"})
+	}
+
+	waitForDeviceCommand(
+		t,
+		namespace,
+		device,
+		[]string{
+			"ping",
+			"-M", "do",
+			"-s", strconv.Itoa(linkMTU - 28),
+			"-c", "2",
+			"-W", "2",
+			"192.168.100.1",
+		},
+		" 0% packet loss",
+	)
+
+	waitForDeviceCommand(
+		t,
+		namespace,
+		device,
+		[]string{
+			"ping",
+			"-M", "do",
+			"-s", strconv.Itoa(linkMTU - 28 - 4),
+			"-c", "2",
+			"-W", "2",
+			"192.168.200.1",
+		},
+		" 0% packet loss",
+	)
+
 	// Graceful carrier propagation: taking one device leg down must show as loss of carrier on
 	// the peer device's interface, which itself stays administratively up -- and recovery must
 	// follow the same path.

@@ -134,8 +134,8 @@ func TestMultiWorkerRecoveryDirect(t *testing.T) {
 }
 
 // recoveryManifest renders the recovery lab: two standalone linux Nodes pinned to distinct
-// workers, one grouped pair, and one Link of every flavor (vxlan, loopback, same-Pod, host) --
-// plus a second cross-worker vxlan Link so recovery covers multiple allocated VNIs.
+// workers, one grouped pair, and one Link of every flavor (wire, loopback, same-Pod, host) --
+// plus a second cross-worker wire Link so recovery covers multiple allocated wire ids.
 func recoveryManifest(workerA, workerB string) string {
 	return fmt.Sprintf(`---
 apiVersion: c9s.run/v1alpha1
@@ -228,7 +228,7 @@ spec:
 apiVersion: c9s.run/v1alpha1
 kind: Link
 metadata:
-  name: recovery-vxlan
+  name: recovery-wire
 spec:
   endpointA:
     nodeName: lin1
@@ -240,7 +240,7 @@ spec:
 apiVersion: c9s.run/v1alpha1
 kind: Link
 metadata:
-  name: recovery-vxlan-b
+  name: recovery-wire-b
 spec:
   endpointA:
     nodeName: lin1

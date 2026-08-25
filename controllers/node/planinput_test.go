@@ -103,7 +103,7 @@ func TestCompilePlanInputTreatsKindsAsOpaqueAndCompilesUIDBoundInterfaces(t *tes
 	}
 
 	assertCompiledInterface(t, input.Interfaces, "eth1", connectivitySamePod, 0, "")
-	assertCompiledInterface(t, input.Interfaces, "eth2", "vxlan", 42, "remote-vx")
+	assertCompiledInterface(t, input.Interfaces, "eth2", "wire", 42, "remote-wire")
 	assertCompiledInterface(t, input.Interfaces, "eth3", connectivityHost, 0, "")
 
 	if input.Management[0].InterfaceName != "" {
@@ -161,7 +161,7 @@ func planInputTestLink(
 	leftInterface string,
 	right *clabernetesapisv1alpha1.Node,
 	rightInterface string,
-	tunnelID int,
+	wireID int,
 ) clabernetesapisv1alpha1.Link {
 	return clabernetesapisv1alpha1.Link{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "lab", UID: uid},
@@ -174,7 +174,7 @@ func planInputTestLink(
 			},
 		},
 		Status: clabernetesapisv1alpha1.LinkStatus{
-			TunnelID: tunnelID,
+			WireID: wireID,
 			ResolvedEndpoints: &clabernetesapisv1alpha1.LinkResolvedEndpointsStatus{
 				EndpointA: clabernetesapisv1alpha1.LinkResolvedEndpointStatus{
 					NodeName: left.GetName(), UID: left.GetUID(),
@@ -223,14 +223,14 @@ func assertCompiledInterface(
 	interfaces []clabernetesinternaldeviceplan.InterfaceInput,
 	name,
 	connectivity string,
-	tunnelID int,
+	wireID int,
 	peerTransport string,
 ) {
 	t.Helper()
 
 	for _, intf := range interfaces {
 		if intf.Name == name {
-			if intf.Connectivity != connectivity || intf.TunnelID != tunnelID ||
+			if intf.Connectivity != connectivity || intf.WireID != wireID ||
 				intf.PeerTransport != peerTransport {
 				t.Fatalf("interface %q = %#v", name, intf)
 			}

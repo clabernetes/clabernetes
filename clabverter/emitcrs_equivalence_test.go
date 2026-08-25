@@ -466,7 +466,7 @@ func canonicalPlanningInputs(
 
 	for index, link := range links {
 		link.UID = apimachinerytypes.UID("uid-link-" + link.GetName())
-		link.Status.TunnelID = index + 100
+		link.Status.WireID = index + 100
 		link.Status.ResolvedEndpoints = &clabernetesapisv1alpha1.LinkResolvedEndpointsStatus{
 			EndpointA: resolvedEndpoint(link.Spec.EndpointA, byName),
 			EndpointB: resolvedEndpoint(link.Spec.EndpointB, byName),

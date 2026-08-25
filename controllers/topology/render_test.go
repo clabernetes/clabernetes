@@ -370,8 +370,8 @@ func TestRenderLinks(t *testing.T) {
 		t.Fatalf("expected link mtu to be rendered, got %d", links[0].Spec.MTU)
 	}
 
-	if links[0].Status.TunnelID != 0 {
-		t.Fatal("the compiler must never allocate tunnel ids -- that is the link controller's job")
+	if links[0].Status.WireID != 0 {
+		t.Fatal("the compiler must never allocate wire ids -- that is the link controller's job")
 	}
 }
 

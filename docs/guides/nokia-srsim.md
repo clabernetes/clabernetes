@@ -277,7 +277,7 @@ spec:
 
 2. **Secondary cards**: Cards with `network-mode: container:<primary>` (CPM-B, IOMs) are grouped with their primary and deployed in the same pod.
 
-3. **Links**: Links between cards in the same chassis stay inside the Pod's shared network namespace. Links to other chassis or external nodes cross the cluster fabric: veth legs stitched by each Pod's connectivity sidecar to in-Pod VXLAN tunnels riding the cluster network.
+3. **Links**: Links between cards in the same chassis stay inside the Pod's shared network namespace. Links to other chassis or external nodes cross the cluster fabric: veth legs whose sidecar side feeds the Pod's fabric wire riding the cluster network.
 
 4. **Service names**: Every card Node receives its own services, all selecting the shared chassis pod; the primary card name always works when connecting from other pods.
 

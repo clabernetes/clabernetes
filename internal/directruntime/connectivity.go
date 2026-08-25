@@ -1462,7 +1462,7 @@ func waitForConnectivityRevisions(
 
 func hasRemoteInterfaces(plan clabernetesinternaldeviceplan.Plan) bool {
 	for _, intf := range plan.Interfaces {
-		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityVXLAN {
+		if intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityWire {
 			return true
 		}
 	}
@@ -1507,7 +1507,7 @@ func reconcileEndpointTransports(
 
 	for _, intf := range plan.Interfaces {
 		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityHost &&
-			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityVXLAN {
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityWire {
 			continue
 		}
 
@@ -1565,7 +1565,7 @@ func reconcileEndpointTransports(
 			InterfaceName: intf.Name,
 			Owner:         owner,
 			OwnerPrefix:   ownerPrefix,
-			TunnelID:      intf.TunnelID,
+			WireID:        intf.WireID,
 			MTU:           intf.MTU,
 			PeerTransport: intf.PeerTransport,
 			PodAddress:    options.PodAddress,
@@ -2037,7 +2037,7 @@ func ValidatePlanCapabilities(plan clabernetesinternaldeviceplan.Plan) error {
 	for _, intf := range normalized.Interfaces {
 		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivitySamePod &&
 			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityLoopback &&
-			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityVXLAN &&
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityWire &&
 			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityHost {
 			return fmt.Errorf(
 				"direct connectivity operation %q is not yet implemented",
@@ -2085,18 +2085,18 @@ func ValidatePlanCapabilities(plan clabernetesinternaldeviceplan.Plan) error {
 					endpoints[0].NodeID == endpoints[1].NodeID) {
 				return fmt.Errorf("local Link %q has inconsistent connectivity semantics", linkID)
 			}
-		case "vxlan":
+		case "wire":
 			endpoint := endpoints[0]
 			if len(endpoints) != 1 || endpoint.PeerNodeID == "" ||
 				endpoint.PeerInterface == "" || !validPeerTransport(endpoint.PeerTransport) ||
-				endpoint.TunnelID < 1 || endpoint.TunnelID > 16_000_000 {
-				return fmt.Errorf("VXLAN Link %q has incomplete remote endpoint identity", linkID)
+				endpoint.WireID < 1 || endpoint.WireID > 16_000_000 {
+				return fmt.Errorf("wire Link %q has incomplete remote endpoint identity", linkID)
 			}
 		case "host":
 			endpoint := endpoints[0]
 			if len(endpoints) != 1 || endpoint.LinkName == "" ||
 				!validLinuxInterfaceName(endpoint.PeerInterface) || endpoint.PeerNodeID != "" ||
-				endpoint.PeerTransport != "" || endpoint.TunnelID != 0 {
+				endpoint.PeerTransport != "" || endpoint.WireID != 0 {
 				return fmt.Errorf("host Link %q has incomplete endpoint identity", linkID)
 			}
 		}
@@ -2741,7 +2741,7 @@ func validateIdentity(
 			supplied.PeerInterface != planned.PeerInterface ||
 			supplied.PeerTransport != planned.PeerTransport ||
 			supplied.Connectivity != planned.Connectivity ||
-			supplied.TunnelID != planned.TunnelID ||
+			supplied.WireID != planned.WireID ||
 			supplied.MTU != planned.MTU {
 			return fmt.Errorf(
 				"connectivity plan interface %q differs from accepted input",

@@ -140,10 +140,10 @@ type ManagementInput struct {
 	Mesh *ManagementMesh `json:"mesh,omitempty"`
 }
 
-// Connectivity vocabulary for accepted Link endpoints. The values are containerlab's own link
-// flavor identifiers carried verbatim through the plan.
+// Connectivity vocabulary for accepted Link endpoints, carried verbatim through the plan:
+// c9s realization flavors resolved from endpoint shape alone.
 const (
-	ConnectivityVXLAN    = "vxlan"
+	ConnectivityWire     = "wire"
 	ConnectivityHost     = "host"
 	ConnectivitySamePod  = "same-pod"
 	ConnectivityLoopback = "loopback"
@@ -160,7 +160,7 @@ type InterfaceInput struct {
 	PeerInterface string `json:"peerInterface,omitempty"`
 	PeerTransport string `json:"peerTransport,omitempty"`
 	Connectivity  string `json:"connectivity"`
-	TunnelID      int    `json:"tunnelID,omitempty"`
+	WireID        int    `json:"wireID,omitempty"`
 	MTU           int    `json:"mtu,omitempty"`
 }
 
@@ -589,8 +589,8 @@ type ManagementPortMap struct {
 // ManagementMesh is controller-allocated membership in the management L2 domain shared by a
 // namespace's interposed Pods.
 type ManagementMesh struct {
-	// TunnelID is the VNI of the management mesh; it is derived above the Link tunnel-ID
-	// ceiling so no Link can collide with it.
+	// TunnelID is the VNI of the management mesh, derived deterministically from the
+	// namespace; Link wire ids travel a different port and plane and cannot reach the mesh.
 	TunnelID int `json:"tunnelID"`
 	// GatewayMAC is the deterministic gateway link-layer identity shared by every Pod of the
 	// namespace.
@@ -632,7 +632,7 @@ type InterfacePlan struct {
 	PeerInterface    string        `json:"peerInterface,omitempty"`
 	PeerTransport    string        `json:"peerTransport,omitempty"`
 	Connectivity     string        `json:"connectivity"`
-	TunnelID         int           `json:"tunnelID,omitempty"`
+	WireID           int           `json:"wireID,omitempty"`
 	MTU              int           `json:"mtu,omitempty"`
 	LinkApplyMode    LinkApplyMode `json:"linkApplyMode"`
 	RequiredAtStart  bool          `json:"requiredAtStart,omitempty"`

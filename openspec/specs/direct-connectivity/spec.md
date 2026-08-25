@@ -36,9 +36,18 @@ nested network-device container and no Link flavor MAY require a node-resident a
 Cross-Pod Link frames SHALL cross the Pod network through one sidecar-owned datagram wire that
 segments each frame to the locally observed underlay MTU and reassembles it at the peer
 sidecar; segment sizing SHALL be a purely local decision so mixed-MTU worker sets need no
-coordination. A frame missing any segment SHALL be dropped whole within a bounded reassembly
-window and MUST NOT be retransmitted or acknowledged, so the loss devices observe on an
-emulated Link reflects loss on the path. Reassembly state MUST be memory-bounded per Link.
+coordination. The wire SHALL enforce a minimum segment size so an unidentifiable or implausibly
+small underlay still yields a functional wire; on an underlay smaller than that minimum plus
+the wire's transport overhead, the wire SHALL keep functioning through outer IP-layer
+fragmentation rather than failing. A frame missing any segment SHALL be dropped whole within a
+bounded reassembly window and MUST NOT be retransmitted or acknowledged, so the loss devices
+observe on an emulated Link reflects loss on the path. Reassembly state MUST be memory-bounded
+per Link.
+
+The wire SHALL forward frames transparently regardless of source and destination MAC,
+EtherType, and VLAN tagging: single-tagged frames SHALL cross at the full Link MTU, and
+double-tagged (QinQ) frames SHALL share the endpoint legs' single-tag headroom budget above
+the Link MTU, matching common physical NIC behavior.
 
 Endpoint carrier state and peer liveness SHALL share the wire's socket and path with the data
 they describe. Each sidecar SHALL advertise its local endpoint state on change and
@@ -66,6 +75,18 @@ a superseded peer process generation MUST be rejected.
 - **WHEN** the Pod network drops one segment of a frame the wire fragmented
 - **THEN** the whole frame is dropped, nothing is retransmitted, and subsequent frames are
   unaffected
+
+#### Scenario: Underlay is smaller than the wire's minimum segment
+
+- **WHEN** the Pod network MTU is below the wire's minimum segment plus transport overhead
+- **THEN** frames still cross the Link correctly, with the outer datagrams fragmented at the
+  IP layer instead of sized to the observed underlay
+
+#### Scenario: Devices exchange VLAN-tagged frames
+
+- **WHEN** the endpoint devices exchange 802.1Q single-tagged frames at the Link MTU or
+  double-tagged frames within the single-tag headroom budget
+- **THEN** the frames arrive at the peer device with their tags intact
 
 
 ### Requirement: Required interfaces exist before device boot
@@ -159,10 +180,10 @@ and gateway convention. The runtime MUST NOT use the Pod address as a management
 Pod's connectivity sidecar SHALL interpose a synthetic management interface carrying the allocated
 address before any device container starts, and management configuration SHALL render at plan time
 through each kind's own imported templates using the allocated address, prefix, and sidecar
-gateway. The interposed management interface SHALL be a member of the topology's management L2
-mesh, so the allocated identity is reachable from every peer device by address, and the sidecar
-SHALL maintain mesh peer state on the same reconciliation tick that re-asserts its other owned
-state.
+gateway. The interposed management interface SHALL be a member of its namespace's management L2
+mesh, so the allocated identity is reachable from every peer device in the namespace by
+address, and the sidecar SHALL maintain mesh peer state on the same reconciliation tick that
+re-asserts its other owned state.
 
 #### Scenario: Imported hook dials the management address
 
@@ -191,7 +212,7 @@ state.
 
 #### Scenario: Peer device dials the allocated identity
 
-- **WHEN** a peer device in the same topology dials the allocated management address from its own
+- **WHEN** a peer device in the same namespace dials the allocated management address from its own
   Pod
 - **THEN** the dial reaches this device over the management mesh without translation, and the
   reply returns the same way
@@ -219,7 +240,7 @@ Kubernetes transport — Pod IP reachability, default egress, cluster CIDR routi
 
 ### Requirement: Interposed management traffic is translated at the Pod boundary
 
-The sidecar SHALL translate between the device management identity and the Pod's Kubernetes identity: outbound device-originated management traffic SHALL be source-translated to the Pod IP for both traffic shapes — flows forwarded from a device-internal network context and locally-originated flows that hairpin through the synthetic interface pair — and declared management ports SHALL be reachable at the Pod IP through destination translation so existing Service exposure keeps working. Translation MUST NOT alter management traffic between the device and its own management subnet, and translation state MUST take precedence over any packet-translation state a device programs in the shared namespace.
+The sidecar SHALL translate between the device management identity and the Pod's Kubernetes identity: outbound device-originated management traffic SHALL be source-translated to the Pod IP for both traffic shapes — flows forwarded from a device-internal network context and locally-originated flows that hairpin through the synthetic interface pair — and declared management ports SHALL be reachable at the Pod IP through destination translation so existing Service exposure keeps working. Inbound destination-translated connections SHALL also be source-translated to the Pod-local management gateway, so the device answers an on-subnet peer over its connected management route and MUST NOT need any off-subnet management route for declared-port reachability — matching the source identity containerlab's Docker port publishing presents. Translation MUST NOT alter management traffic between the device and its own management subnet, and translation state MUST take precedence over any packet-translation state a device programs in the shared namespace.
 
 The sidecar SHALL ensure transport-protocol integrity across the synthetic interface pair (including checksum-offload handling).
 
@@ -232,6 +253,11 @@ The sidecar SHALL ensure transport-protocol integrity across the synthetic inter
 
 - **WHEN** a cluster client connects to a declared management port on the Pod IP or through a Service targeting it
 - **THEN** the connection terminates on the device's management plane at the allocated management address, and transport protocols work end to end
+
+#### Scenario: Device holds only its connected management route
+
+- **WHEN** the device's management stack carries no route beyond the connected management subnet and an off-subnet client connects through a declared port
+- **THEN** the connection succeeds, with the device observing the Pod-local management gateway as the client address
 
 #### Scenario: Pod identity changes on recreation
 

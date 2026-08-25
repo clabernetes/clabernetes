@@ -21,10 +21,6 @@ import (
 )
 
 const (
-	// fabricVTEPLinkType names the kernel link type of the VXLAN fabric this transport
-	// replaced; the sweep still recognizes it so stale pre-wire VTEPs are removed on the
-	// first convergence after an upgrade.
-	fabricVTEPLinkType = "vxlan"
 	// fabricPeerResolveTimeout bounds one peer transport name resolution.
 	fabricPeerResolveTimeout = 3 * time.Second
 )
@@ -62,7 +58,7 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, fmt.Errorf("fabric endpoint Pod address %q is invalid", spec.PodAddress)
 	}
 
-	if spec.TunnelID <= 0 || spec.InterfaceID == "" || spec.InterfaceName == "" ||
+	if spec.WireID <= 0 || spec.InterfaceID == "" || spec.InterfaceName == "" ||
 		spec.Owner == "" || spec.OwnerPrefix == "" ||
 		!strings.HasPrefix(spec.Owner, spec.OwnerPrefix) {
 		return result, errors.New("fabric endpoint spec is incomplete")
@@ -116,7 +112,7 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 	// device leg carrier-down: an unplugged far end must look like a dead cable, not a live
 	// one.
 	if err = wire.EnsureLink(fabricWireLinkSpec{
-		LinkID:        uint32(spec.TunnelID), //nolint:gosec // positive bound checked.
+		LinkID:        uint32(spec.WireID), //nolint:gosec // positive bound checked.
 		Owner:         spec.Owner,
 		LegName:       legName,
 		PeerTransport: spec.PeerTransport,
@@ -171,7 +167,7 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string, mtu int) error {
 			}
 		}
 
-		if leg.Attrs().Flags&net.FlagUp == 0 && !podFabricWireHoldsLegDown(spec.TunnelID) {
+		if leg.Attrs().Flags&net.FlagUp == 0 && !podFabricWireHoldsLegDown(spec.WireID) {
 			if err = netlink.LinkSetUp(leg); err != nil {
 				return fmt.Errorf("bringing fabric leg up: %w", err)
 			}
@@ -309,7 +305,7 @@ func adoptFabricPair(spec FabricEndpointSpec, device netlink.Link, legName strin
 		// An adopted pair was live before this pass: the device leg's admin state belongs to
 		// the device, and the sidecar leg's belongs to the wire once it holds the leg down.
 		if !isDevice && link.Attrs().Flags&net.FlagUp == 0 &&
-			!podFabricWireHoldsLegDown(spec.TunnelID) {
+			!podFabricWireHoldsLegDown(spec.WireID) {
 			if err = netlink.LinkSetUp(link); err != nil {
 				return fmt.Errorf("bringing adopted fabric pair up: %w", err)
 			}
@@ -666,8 +662,7 @@ func (o netlinkOperations) adoptHostInterface(spec HostInterfaceSpec, pod netlin
 	return nil
 }
 
-// SweepTransportState deletes sidecar-owned transport links (fabric pairs, host legs, and
-// stale pre-wire VTEPs)
+// SweepTransportState deletes sidecar-owned transport links (fabric pairs and host legs)
 // whose owners are no longer part of the desired plan. Deleting either veth end removes both,
 // including a host Link's worker-side end.
 func (netlinkOperations) SweepTransportState(ownerPrefix string, keepOwners []string) error {
@@ -694,7 +689,7 @@ func (netlinkOperations) SweepTransportState(ownerPrefix string, keepOwners []st
 			continue
 		}
 
-		if link.Type() != "veth" && link.Type() != fabricVTEPLinkType {
+		if link.Type() != "veth" {
 			continue
 		}
 

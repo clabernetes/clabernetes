@@ -125,10 +125,10 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 				t.Fatalf("failed getting reconciled link: %s", err)
 			}
 
-			if actual.Status.TunnelID != 0 {
+			if actual.Status.WireID != 0 {
 				t.Fatalf(
 					"expected rejected link allocation cleared, got %d",
-					actual.Status.TunnelID,
+					actual.Status.WireID,
 				)
 			}
 
@@ -203,7 +203,7 @@ func TestReconcileUnresolvedLinkDoesNotReserveInterface(t *testing.T) {
 		t.Fatalf("failed getting reconciled link: %s", err)
 	}
 
-	if rejectionMessage(actual) != "" || actual.Status.TunnelID != 1 {
+	if rejectionMessage(actual) != "" || actual.Status.WireID != 1 {
 		t.Fatalf(
 			"expected valid Link to allocate despite unresolved conflict, got %+v",
 			actual.Status,
@@ -350,7 +350,7 @@ func TestReconcileBindsHostEndpointWithoutNodeUID(t *testing.T) {
 		)
 	}
 
-	if rejectionMessage(actual) != "" || actual.Status.TunnelID != 0 {
+	if rejectionMessage(actual) != "" || actual.Status.WireID != 0 {
 		t.Fatalf("expected valid local host Link status, got %+v", actual.Status)
 	}
 }
@@ -381,7 +381,7 @@ func TestReconcileUnrelatedNodeDeletionDoesNotAffectBoundLink(t *testing.T) {
 	after := getLifecycleTestLink(t, client, link.GetName())
 	if after.Status.ResolvedEndpoints == nil ||
 		!reflect.DeepEqual(*after.Status.ResolvedEndpoints, beforeResolved) ||
-		after.Status.TunnelID != before.Status.TunnelID ||
+		after.Status.WireID != before.Status.WireID ||
 		rejectionMessage(after) != rejectionMessage(before) {
 		t.Fatalf(
 			"expected unrelated Node deletion not to affect Link status, before=%+v after=%+v",
@@ -595,7 +595,7 @@ func reconcileTestLink(
 	interfaceA,
 	nodeB,
 	interfaceB string,
-	tunnelID int,
+	wireID int,
 ) clabernetesapisv1alpha1.Link {
 	return clabernetesapisv1alpha1.Link{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "clabernetes"},
@@ -609,6 +609,6 @@ func reconcileTestLink(
 				InterfaceName: interfaceB,
 			},
 		},
-		Status: clabernetesapisv1alpha1.LinkStatus{TunnelID: tunnelID},
+		Status: clabernetesapisv1alpha1.LinkStatus{WireID: wireID},
 	}
 }

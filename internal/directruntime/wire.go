@@ -9,10 +9,10 @@ import (
 
 // The fabric wire is the c9s-owned cross-Pod link transport: sidecar-to-sidecar UDP datagrams
 // that segment whole Ethernet frames, carry link carrier-state, and detect peer loss. Control
-// and data share one socket and path so the carrier signal can never disagree with the wire it
-// describes, and the datagram semantics deliberately preserve loss: a frame missing any
-// fragment is dropped whole, never retransmitted, so loss testing, BFD, and convergence
-// measurements against emulated links stay meaningful.
+// and data share one socket and one path, so the carrier signal cannot diverge from the
+// datapath in endpoint or route, and the datagram semantics deliberately preserve loss: a
+// frame missing any fragment is dropped whole, never retransmitted, so loss testing, BFD, and
+// convergence measurements against emulated links stay meaningful.
 const (
 	// fabricWireVersion is the accepted wire format revision; datagrams carrying any other
 	// version are dropped whole.
@@ -55,7 +55,13 @@ const (
 // flap an emulated link.
 const (
 	// fabricWireHeartbeatInterval paces per-peer heartbeats and periodic link-state
-	// re-advertisement.
+	// re-advertisement. Both messages go to every peer each tick (in one sendmmsg batch), and
+	// a link-state datagram refreshes the session exactly like a heartbeat -- the standalone
+	// heartbeat is kept because it is fixed-size: link-state grows with the per-peer link
+	// count (5 bytes per link, unchunked), so past roughly 230 links per Pod pair it can
+	// exceed one underlay MTU and ride outer IP fragmentation, while the heartbeat stays a
+	// single small datagram that keeps liveness robust. Chunking link-state is the upgrade
+	// path if per-pair link counts ever make that ceiling real.
 	fabricWireHeartbeatInterval = time.Second
 	// fabricWireHeartbeatMissLimit is how many silent heartbeat intervals mark a peer session
 	// dead, taking every link to that peer carrier-down.

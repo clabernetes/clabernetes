@@ -65,7 +65,7 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 					{
-						Name: "srl1-vx",
+						Name: "srl1-wire",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeFabricService,
 						},
@@ -122,13 +122,13 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 					{
-						Name: "srl1-vx",
+						Name: "srl1-wire",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeFabricService,
 						},
 					},
 					{
-						Name: "srl2-vx",
+						Name: "srl2-wire",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeFabricService,
 						},
@@ -255,7 +255,7 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 
 	// The per-node fabric Service is headless, so Service DNS resolves directly to the remote
 	// device Pod instead of relying on the cluster's optional per-Pod DNS record mode.
-	remoteDNSName := fmt.Sprintf("%s-vx.%s.svc.cluster.local", remoteNode, namespace)
+	remoteDNSName := fmt.Sprintf("%s-wire.%s.svc.cluster.local", remoteNode, namespace)
 
 	var lastOutput []byte
 

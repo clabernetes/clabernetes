@@ -17,7 +17,7 @@ import (
 	"github.com/vishvananda/netns"
 )
 
-const vxlanNetlinkChild = "C9S_VXLAN_NETLINK_TEST_CHILD"
+const managementNetlinkChild = "C9S_MANAGEMENT_NETLINK_TEST_CHILD"
 
 func TestValidLinuxSysctlName(t *testing.T) {
 	t.Parallel()
@@ -46,8 +46,8 @@ func TestValidLinuxSysctlName(t *testing.T) {
 	}
 }
 
-func TestNetlinkOperationsReconcileVXLANInIsolatedNamespace(t *testing.T) {
-	if os.Getenv(vxlanNetlinkChild) == "1" {
+func TestNetlinkOperationsReconcileManagementInIsolatedNamespace(t *testing.T) {
+	if os.Getenv(managementNetlinkChild) == "1" {
 		testManagementAddressPreservesPodTransport(t)
 		testManagementDualStackReachability(t)
 
@@ -67,7 +67,7 @@ func TestNetlinkOperationsReconcileVXLANInIsolatedNamespace(t *testing.T) {
 	unshareArguments := []string{
 		"-Urn",
 		executable,
-		"-test.run=^TestNetlinkOperationsReconcileVXLANInIsolatedNamespace$",
+		"-test.run=^TestNetlinkOperationsReconcileManagementInIsolatedNamespace$",
 	}
 	if os.Geteuid() == 0 {
 		unshareArguments[0] = "-n"
@@ -79,7 +79,7 @@ func TestNetlinkOperationsReconcileVXLANInIsolatedNamespace(t *testing.T) {
 		unshareArguments...,
 	)
 
-	command.Env = append(os.Environ(), vxlanNetlinkChild+"=1")
+	command.Env = append(os.Environ(), managementNetlinkChild+"=1")
 
 	output, err := command.CombinedOutput()
 	if err != nil {
@@ -89,7 +89,7 @@ func TestNetlinkOperationsReconcileVXLANInIsolatedNamespace(t *testing.T) {
 			)
 		}
 
-		t.Fatalf("isolated VXLAN netlink test failed: %v\n%s", err, output)
+		t.Fatalf("isolated management netlink test failed: %v\n%s", err, output)
 	}
 }
 

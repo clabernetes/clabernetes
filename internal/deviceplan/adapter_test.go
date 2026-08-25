@@ -1463,8 +1463,8 @@ func TestImportedEndpointLifecycleRetainsTopologyMetadataWithoutRedeployingLink(
 	})
 	input.Interfaces = []clabernetesinternaldeviceplan.InterfaceInput{{
 		ID: "interface-a", NodeID: input.Nodes[0].ID, Name: "eth1", LinkID: "link-a",
-		PeerNodeID: "peer-a", PeerInterface: "eth1", Connectivity: "vxlan",
-		PeerTransport: "peer-a-vx", TunnelID: 101, MTU: 9000,
+		PeerNodeID: "peer-a", PeerInterface: "eth1", Connectivity: "wire",
+		PeerTransport: "peer-a-wire", WireID: 101, MTU: 9000,
 	}}
 	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-pre-realized-endpoint-v1",

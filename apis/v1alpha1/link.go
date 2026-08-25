@@ -22,8 +22,8 @@ const (
 // primary clabernetes API -- like Nodes they can be created by users directly or emitted by the
 // (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints
 // (Node object names in the same namespace plus interface names) and an optional MTU. The Link
-// controller allocates a tunnel ID into status for cross-Pod transports; same-Pod, loopback, and
-// host Links need no tunnel allocation. Direct connectivity reconcilers select only Links
+// controller allocates a wire ID into status for cross-Pod transports; same-Pod, loopback, and
+// host Links need no wire allocation. Direct connectivity reconcilers select only Links
 // terminating on their Nodes with endpoint field selectors. Storing one object per wire keeps
 // every persisted object O(1) regardless of topology size.
 // +k8s:openapi-gen=true
@@ -34,7 +34,7 @@ const (
 // +kubebuilder:printcolumn:JSONPath=".spec.endpointA.interfaceName",name=Interface-A,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.endpointB.nodeName",name=Node-B,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.endpointB.interfaceName",name=Interface-B,type=string
-// +kubebuilder:printcolumn:JSONPath=".status.tunnelID",name=Tunnel-ID,type=integer
+// +kubebuilder:printcolumn:JSONPath=".status.wireID",name=Wire-ID,type=integer
 // +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='Accepted')].status",name=Accepted,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='Accepted')].message",name=Message,type=string,priority=1
 // +kubebuilder:subresource:status
@@ -58,7 +58,7 @@ type LinkEndpointSpec struct {
 }
 
 // LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.
-// Anything operational (the allocated tunnel ID and resolved identities) lives in status, and
+// Anything operational (the allocated wire ID and resolved identities) lives in status, and
 // current peer transport identity is derived by direct connectivity reconcilers.
 type LinkSpec struct {
 	// EndpointA is the "a" side of this link.
@@ -72,14 +72,16 @@ type LinkSpec struct {
 
 // LinkStatus is the status for a Link resource.
 type LinkStatus struct {
-	// TunnelID is the id number of the tunnel (the VXLAN VNI) the controller allocated for this
-	// link -- both sides of the link use the same id. This is an allocation rather than user
-	// intent, hence it living in the status; zero means "not allocated (yet)" (direct
+	// WireID is the identity this link carries on the fabric wire between its two endpoint
+	// sidecars -- both sides of the link use the same id, and it is unique among the Links of
+	// this namespace (wire datagrams dispatch inside one receiving sidecar from a validated
+	// source, so cross-namespace uniqueness is meaningless). This is an allocation rather than
+	// user intent, hence it living in the status; zero means "not allocated (yet)" (direct
 	// connectivity reconcilers wait until the controller has filled the ID in).
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=16000000
 	// +optional
-	TunnelID int `json:"tunnelID,omitempty"`
+	WireID int `json:"wireID,omitempty"`
 	// ResolvedEndpoints identifies the exact Nodes to which this Link is bound. The controller
 	// sets both endpoints atomically after every non-host endpoint resolves. A host endpoint is
 	// recorded by name with an empty UID because it does not refer to a Node object.

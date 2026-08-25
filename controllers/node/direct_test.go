@@ -290,12 +290,12 @@ func TestDirectReconcileCarriesRemotePeerDiscoveryIntoBothPodPlans(t *testing.T)
 		}
 
 		if len(plan.Interfaces) != 1 ||
-			plan.Interfaces[0].Connectivity != clabernetesinternaldeviceplan.ConnectivityVXLAN ||
-			plan.Interfaces[0].TunnelID != 73 ||
+			plan.Interfaces[0].Connectivity != clabernetesinternaldeviceplan.ConnectivityWire ||
+			plan.Interfaces[0].WireID != 73 ||
 			plan.Interfaces[0].PeerNodeID != string(endpoint.peer.GetUID()) ||
 			plan.Interfaces[0].PeerTransport != FabricServiceName(endpoint.peer.GetName()) {
 			t.Fatalf(
-				"vxlan plan for %q = %#v",
+				"wire plan for %q = %#v",
 				endpoint.node.GetName(),
 				plan.Interfaces,
 			)
@@ -1150,7 +1150,7 @@ func TestCompileDirectManagementCarriesInboundPorts(t *testing.T) {
 
 	mesh := management[0].Mesh
 	if mesh == nil || mesh.PeerService != clabernetesconstants.ManagementMeshServiceName ||
-		mesh.TunnelID <= 16_000_000 || mesh.TunnelID >= 1<<24 || mesh.GatewayMAC == "" {
+		mesh.TunnelID <= 0 || mesh.TunnelID >= 1<<24 || mesh.GatewayMAC == "" {
 		t.Fatalf("management mesh = %#v, want namespace-derived mesh above Link ceiling", mesh)
 	}
 
@@ -1915,7 +1915,7 @@ func directTestWorkerLogsWithMode(
 				PeerNodeID:    intf.PeerNodeID,
 				PeerInterface: intf.PeerInterface, PeerTransport: intf.PeerTransport,
 				Connectivity: intf.Connectivity,
-				TunnelID:     intf.TunnelID, MTU: intf.MTU,
+				WireID:       intf.WireID, MTU: intf.MTU,
 				LinkApplyMode: linkApplyMode, RequiredAtStart: true,
 			})
 			actions = append(actions, clabernetesinternaldeviceplan.Action{

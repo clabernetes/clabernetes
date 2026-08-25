@@ -632,7 +632,7 @@
                 }
             },
             "c9s-run.link.v1alpha1": {
-                "description": "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a\nprimary clabernetes API -- like Nodes they can be created by users directly or emitted by the\n(optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints\n(Node object names in the same namespace plus interface names) and an optional MTU. The Link\ncontroller allocates a tunnel ID into status for cross-Pod transports; same-Pod, loopback, and\nhost Links need no tunnel allocation. Direct connectivity reconcilers select only Links\nterminating on their Nodes with endpoint field selectors. Storing one object per wire keeps\nevery persisted object O(1) regardless of topology size.",
+                "description": "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a\nprimary clabernetes API -- like Nodes they can be created by users directly or emitted by the\n(optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints\n(Node object names in the same namespace plus interface names) and an optional MTU. The Link\ncontroller allocates a wire ID into status for cross-Pod transports; same-Pod, loopback, and\nhost Links need no wire allocation. Direct connectivity reconcilers select only Links\nterminating on their Nodes with endpoint field selectors. Storing one object per wire keeps\nevery persisted object O(1) regardless of topology size.",
                 "properties": {
                     "apiVersion": {
                         "description": "APIVersion defines the versioned schema of this representation of an object.\nServers should convert recognized schemas to the latest internal value, and\nmay reject unrecognized values.\nMore info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources",
@@ -646,7 +646,7 @@
                         "type": "object"
                     },
                     "spec": {
-                        "description": "LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.\nAnything operational (the allocated tunnel ID and resolved identities) lives in status, and\ncurrent peer transport identity is derived by direct connectivity reconcilers.",
+                        "description": "LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.\nAnything operational (the allocated wire ID and resolved identities) lives in status, and\ncurrent peer transport identity is derived by direct connectivity reconcilers.",
                         "properties": {
                             "endpointA": {
                                 "description": "EndpointA is the \"a\" side of this link.",
@@ -805,8 +805,8 @@
                                 ],
                                 "type": "object"
                             },
-                            "tunnelID": {
-                                "description": "TunnelID is the id number of the tunnel (the VXLAN VNI) the controller allocated for this\nlink -- both sides of the link use the same id. This is an allocation rather than user\nintent, hence it living in the status; zero means \"not allocated (yet)\" (direct\nconnectivity reconcilers wait until the controller has filled the ID in).",
+                            "wireID": {
+                                "description": "WireID is the identity this link carries on the fabric wire between its two endpoint\nsidecars -- both sides of the link use the same id, and it is unique among the Links of\nthis namespace (wire datagrams dispatch inside one receiving sidecar from a validated\nsource, so cross-namespace uniqueness is meaningless). This is an allocation rather than\nuser intent, hence it living in the status; zero means \"not allocated (yet)\" (direct\nconnectivity reconcilers wait until the controller has filled the ID in).",
                                 "maximum": 16000000,
                                 "minimum": 0,
                                 "type": "integer"

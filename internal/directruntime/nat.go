@@ -21,6 +21,11 @@ type InterpositionNATSpec struct {
 	ManagementAddress string
 	// ManagementSubnet is the management prefix in CIDR form.
 	ManagementSubnet string
+	// GatewayAddress is the bare Pod-local management gateway IPv4 address. Inbound translated
+	// connections are source-translated to it, so a device whose management stack holds only
+	// the connected management route (SR OS reads its routes from a Docker-shaped environment
+	// c9s does not have) can always reply.
+	GatewayAddress string
 	// TransportInterface is the sidecar-owned preserved CNI interface name.
 	TransportInterface string
 	// DeviceInterface is the device-facing synthetic interface name.
@@ -37,8 +42,9 @@ type NATOperations interface {
 	// EnsureInterpositionNAT reconciles the sidecar-owned translation table to the spec:
 	// masquerade for management-sourced flows forwarded out the transport interface,
 	// first-traversal source translation for locally-originated hairpin flows leaving the device
-	// interface for destinations outside the management subnet, and destination translation for
-	// each declared inbound port.
+	// interface for destinations outside the management subnet, destination translation for
+	// each declared inbound port, and gateway source translation for those inbound flows so the
+	// device sees an on-subnet peer it can always answer.
 	EnsureInterpositionNAT(spec InterpositionNATSpec) error
 	// DeleteInterpositionNAT removes the sidecar-owned translation table entirely.
 	DeleteInterpositionNAT() error

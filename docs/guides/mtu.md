@@ -52,6 +52,10 @@ therefore an optional performance improvement, never a correctness requirement.
 Mixed worker MTUs need no special handling: each sender fragments to its own Pod network MTU,
 and reassembly does not care what size the fragments were.
 
+One floor applies: the wire never sizes fragments below 1200 bytes of payload, so on a Pod
+network smaller than roughly 1250 bytes the outer datagrams fall back to ordinary IP
+fragmentation. Links still work there — the wire just stops adapting below that point.
+
 ## Links that never cross the Pod network
 
 Links with both endpoints in the same Pod, loopbacks, and host links are plain kernel

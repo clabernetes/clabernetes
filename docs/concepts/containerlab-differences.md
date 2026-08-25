@@ -13,8 +13,9 @@ nothing is silently dropped.
 ## Networking
 
 - **Cross-node wires are sidecar-realized.** The transport is an implementation detail: each
-  endpoint feeds a sidecar-to-sidecar wire keyed by the Link's cluster-wide tunnel id, which
-  carries any link MTU over any cluster and propagates carrier state between the ends. The
+  endpoint feeds a sidecar-to-sidecar wire keyed by the Link's allocated wire id, which
+  carries any link MTU without underlay coordination and propagates carrier state between the
+  ends. The
   device always sees a plain veth; wire semantics (L2 point-to-point, MTU intent, carrier on
   peer loss, live rewires, cleanup) are preserved.
 - **The management network keeps containerlab semantics.** There is no Docker management

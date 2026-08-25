@@ -180,6 +180,7 @@ func interpositionSpecForEntry(
 		PodAddress:         spec.PodAddress,
 		ManagementAddress:  managementPrefix.Addr().String(),
 		ManagementSubnet:   managementPrefix.Masked().String(),
+		GatewayAddress:     entry.IPv4Gateway,
 		TransportInterface: spec.TransportInterface,
 		DeviceInterface:    spec.DeviceInterface,
 	}

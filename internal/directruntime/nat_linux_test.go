@@ -26,6 +26,7 @@ func validInterpositionNATSpec() InterpositionNATSpec {
 		PodAddress:         "172.30.30.2",
 		ManagementAddress:  "172.80.80.31",
 		ManagementSubnet:   "172.80.80.0/24",
+		GatewayAddress:     "172.80.80.1",
 		TransportInterface: "c9s0",
 		DeviceInterface:    "eth0",
 		InboundPorts: []InterpositionPortMap{
@@ -42,6 +43,9 @@ func TestParseInterpositionNATSpecRejectsInvalidInput(t *testing.T) {
 		"bad management address":     func(s *InterpositionNATSpec) { s.ManagementAddress = "not-an-ip" },
 		"bad subnet":                 func(s *InterpositionNATSpec) { s.ManagementSubnet = "172.80.80.0" },
 		"address outside subnet":     func(s *InterpositionNATSpec) { s.ManagementAddress = "172.81.0.1" },
+		"bad gateway":                func(s *InterpositionNATSpec) { s.GatewayAddress = "not-an-ip" },
+		"gateway outside subnet":     func(s *InterpositionNATSpec) { s.GatewayAddress = "172.81.0.1" },
+		"gateway equals management":  func(s *InterpositionNATSpec) { s.GatewayAddress = "172.80.80.31" },
 		"ipv6 address":               func(s *InterpositionNATSpec) { s.PodAddress = "fd00::1" },
 		"empty transport interface":  func(s *InterpositionNATSpec) { s.TransportInterface = "" },
 		"over-long device interface": func(s *InterpositionNATSpec) { s.DeviceInterface = "interface-name-far-too-long" },
@@ -187,8 +191,8 @@ func testInterpositionNATProgramsOwnedTable(t *testing.T) {
 		t.Fatalf("listing srcnat rules: %v", err)
 	}
 
-	if len(sourceRules) != 2 {
-		t.Fatalf("expected 2 srcnat rules (both shapes), got %d", len(sourceRules))
+	if len(sourceRules) != 3 {
+		t.Fatalf("expected 3 srcnat rules (all shapes), got %d", len(sourceRules))
 	}
 
 	destinationRules, err := conn.GetRules(owned, destination)

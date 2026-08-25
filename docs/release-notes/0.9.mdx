@@ -34,15 +34,16 @@ and nested container discovery are gone. What this changes in practice:
 ## Connectivity realization
 
 Each device Pod's privileged connectivity sidecar realizes its own links; no node-resident agent
-is installed. Cross-Pod wires terminate on in-Pod VXLAN VTEPs keyed by the Link's cluster-wide
-tunnel id, while same-Pod, loopback, and local veth state stays inside the Pod sandbox. The device
-always sees a plain veth interface. Wire semantics -- L2 point-to-point, MTU intent, live rewires,
-cleanup, rescheduling -- are unchanged. The `connectivity` field is removed from Topology and Link
+is installed. Cross-Pod frames ride the fabric wire -- a sidecar-to-sidecar UDP transport keyed
+by the Link's namespace-unique wire id -- while same-Pod, loopback, and local veth state stays
+inside the Pod sandbox. The device always sees a plain veth interface. Wire semantics -- L2
+point-to-point, MTU intent, carrier propagation, live rewires, cleanup, rescheduling -- are
+preserved. The `connectivity` field is removed from Topology and Link
 specs (there is exactly one realization; the experimental slurpeeth transport is retired).
 
 ## The management network is one L2 domain
 
-The management subnet spans the whole topology as a single broadcast domain, matching
+The management subnet spans the namespace as a single broadcast domain, matching
 containerlab's management network: devices reach each other's *management addresses*
 device-to-device -- hardcoded telemetry targets, syslog collectors, and plain ping across Pods
 all work -- while the management gateway stays strictly Pod-local with one deterministic

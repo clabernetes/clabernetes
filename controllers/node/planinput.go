@@ -17,7 +17,7 @@ const (
 	connectivitySamePod  = "same-pod"
 	connectivityLoopback = "loopback"
 	connectivityHost     = "host"
-	connectivityVXLAN    = "vxlan"
+	connectivityWire     = "wire"
 )
 
 // PlanInputCompileRequest contains only resolved API identities and generic planning inputs.
@@ -176,11 +176,11 @@ func compileAcceptedInterfaces(
 				endpoints[peerSide],
 				members,
 			)
-			if connectivity == connectivityVXLAN &&
-				link.Status.TunnelID == 0 {
+			if connectivity == connectivityWire &&
+				link.Status.WireID == 0 {
 				return nil, planInputError(
 					clabernetesinternaldeviceplan.ErrorMissingInput,
-					"links."+link.GetName()+".status.tunnelID",
+					"links."+link.GetName()+".status.wireID",
 					"cross-Pod Link allocation is not ready",
 				)
 			}
@@ -189,7 +189,7 @@ func compileAcceptedInterfaces(
 				peerNodeID = string(resolved[peerSide].UID)
 			}
 			peerTransport := ""
-			if connectivity == connectivityVXLAN {
+			if connectivity == connectivityWire {
 				peerTransport = FabricServiceName(endpoints[peerSide].NodeName)
 			}
 			result = append(result, clabernetesinternaldeviceplan.InterfaceInput{
@@ -198,7 +198,7 @@ func compileAcceptedInterfaces(
 				LinkID: string(link.GetUID()), LinkName: link.GetName(), PeerNodeID: peerNodeID,
 				PeerInterface: endpoints[peerSide].InterfaceName,
 				PeerTransport: peerTransport, Connectivity: connectivity,
-				TunnelID: link.Status.TunnelID, MTU: link.Spec.MTU,
+				WireID: link.Status.WireID, MTU: link.Spec.MTU,
 			})
 		}
 	}
@@ -265,7 +265,7 @@ func interfaceConnectivity(
 	case members[peer.NodeName] != nil:
 		return connectivitySamePod
 	default:
-		return connectivityVXLAN
+		return connectivityWire
 	}
 }
 

@@ -18,9 +18,9 @@ type FabricEndpointSpec struct {
 	Owner string
 	// OwnerPrefix identifies transport state owned by this Pod across Link revisions.
 	OwnerPrefix string
-	// TunnelID is the Link's stable numeric identity shared by both ends; it addresses the
+	// WireID is the Link's stable numeric identity shared by both ends; it addresses the
 	// Link on the wire.
-	TunnelID int
+	WireID int
 	// MTU is the requested endpoint MTU, honored exactly; unset means the containerlab
 	// default link MTU. The underlay MTU never bounds it -- the wire fragments to the
 	// underlay.

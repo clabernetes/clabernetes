@@ -1225,13 +1225,10 @@ func appendDirectPayload(
 	return nil
 }
 
-const (
-	// managementMeshTunnelBase sits above the Link tunnel-ID ceiling (maxVXLANTunnelID in the
-	// Link controller), so a mesh VNI can never collide with any allocated Link.
-	managementMeshTunnelBase = 16_000_001
-	// managementMeshTunnelSpan keeps the derived VNI inside the 24-bit VXLAN identifier space.
-	managementMeshTunnelSpan = 777_000
-)
+// managementMeshTunnelSpan is the usable kernel VXLAN identifier space (1 .. 2^24-1; VNI 0 is
+// reserved). Link wire ids need no carve-out: they travel the userspace wire on its own port
+// and can never reach the mesh VTEP.
+const managementMeshTunnelSpan = 1<<24 - 1
 
 // managementMeshIdentity derives the namespace's management mesh VNI and its deterministic
 // gateway MAC. Every Pod of a namespace derives the same values, making the namespace one
@@ -1239,8 +1236,7 @@ const (
 func managementMeshIdentity(namespace string) (int, string) {
 	sum := sha256.Sum256([]byte("c9s-management-mesh/" + namespace))
 
-	tunnelID := managementMeshTunnelBase +
-		int(binary.BigEndian.Uint32(sum[0:4]))%managementMeshTunnelSpan
+	tunnelID := 1 + int(binary.BigEndian.Uint32(sum[0:4]))%managementMeshTunnelSpan
 	gatewayMAC := fmt.Sprintf("02:c9:%02x:%02x:%02x:%02x", sum[4], sum[5], sum[6], sum[7])
 
 	return tunnelID, gatewayMAC

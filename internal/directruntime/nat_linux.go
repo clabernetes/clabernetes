@@ -9,6 +9,7 @@ import (
 	"net/netip"
 
 	"github.com/google/nftables"
+	"github.com/google/nftables/binaryutil"
 	"github.com/google/nftables/expr"
 	"golang.org/x/sys/unix"
 )
@@ -44,10 +45,15 @@ func newNATOperations() NATOperations {
 	return nftablesOperations{}
 }
 
+// conntrackStatusDstNAT is IPS_DST_NAT from linux/netfilter/nf_conntrack_common.h: the flow's
+// destination was rewritten by our dstnat chain.
+const conntrackStatusDstNAT = 1 << 5
+
 type parsedInterpositionNATSpec struct {
 	podAddress        netip.Addr
 	managementAddress netip.Addr
 	managementSubnet  netip.Prefix
+	gatewayAddress    netip.Addr
 	transportName     string
 	deviceName        string
 	inbound           []InterpositionPortMap
@@ -106,6 +112,22 @@ func parseInterpositionNATSpec(spec InterpositionNATSpec) (parsedInterpositionNA
 		return parsed, fmt.Errorf(
 			"%w: management address %q is outside subnet %q",
 			errInterpositionNAT, spec.ManagementAddress, spec.ManagementSubnet,
+		)
+	}
+
+	parsed.gatewayAddress, err = netip.ParseAddr(spec.GatewayAddress)
+	if err != nil {
+		return parsed, fmt.Errorf(
+			"%w: gateway address %q: %w", errInterpositionNAT, spec.GatewayAddress, err,
+		)
+	}
+
+	if !parsed.gatewayAddress.Is4() ||
+		!parsed.managementSubnet.Contains(parsed.gatewayAddress) ||
+		parsed.gatewayAddress == parsed.managementAddress {
+		return parsed, fmt.Errorf(
+			"%w: gateway address %q is invalid for subnet %q",
+			errInterpositionNAT, spec.GatewayAddress, spec.ManagementSubnet,
 		)
 	}
 
@@ -230,6 +252,8 @@ func (nftablesOperations) EnsureInterpositionNAT(spec InterpositionNATSpec) erro
 		},
 	})
 
+	addInboundGatewaySourceRule(conn, table, sourceChain, parsed)
+
 	for _, port := range parsed.inbound {
 		protocol := byte(unix.IPPROTO_TCP)
 		if port.Protocol == "udp" {
@@ -273,6 +297,51 @@ func (nftablesOperations) EnsureInterpositionNAT(spec InterpositionNATSpec) erro
 	}
 
 	return nil
+}
+
+// addInboundGatewaySourceRule renders the inbound translated shape: a flow the dstnat chain
+// pointed at the management address is also source-translated to the Pod-local gateway. The
+// device then answers an on-subnet peer over its connected management route -- required for
+// management stacks that never learn an off-subnet route (SR OS derives its routes from a
+// Docker-shaped environment that a Pod does not present), and matching how containerlab's
+// Docker port publishing presents the bridge address as the client.
+func addInboundGatewaySourceRule(
+	conn *nftables.Conn,
+	table *nftables.Table,
+	chain *nftables.Chain,
+	parsed parsedInterpositionNATSpec,
+) {
+	managementAddress := parsed.managementAddress.As4()
+	gatewayAddress := parsed.gatewayAddress.As4()
+
+	conn.AddRule(&nftables.Rule{
+		Table: table,
+		Chain: chain,
+		Exprs: []expr.Any{
+			&expr.Payload{
+				DestRegister: 1,
+				Base:         expr.PayloadBaseNetworkHeader,
+				Offset:       ipv4DestinationOffset,
+				Len:          ipv4AddressLength,
+			},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: managementAddress[:]},
+			&expr.Ct{Register: 1, Key: expr.CtKeySTATUS},
+			&expr.Bitwise{
+				SourceRegister: 1,
+				DestRegister:   1,
+				Len:            ipv4AddressLength,
+				Mask:           binaryutil.NativeEndian.PutUint32(conntrackStatusDstNAT),
+				Xor:            make([]byte, ipv4AddressLength),
+			},
+			&expr.Cmp{Op: expr.CmpOpNeq, Register: 1, Data: make([]byte, ipv4AddressLength)},
+			&expr.Immediate{Register: 1, Data: gatewayAddress[:]},
+			&expr.NAT{
+				Type:       expr.NATTypeSourceNAT,
+				Family:     unix.NFPROTO_IPV4,
+				RegAddrMin: 1,
+			},
+		},
+	})
 }
 
 // DeleteInterpositionNAT removes the owned table; a missing table is success.

@@ -1310,7 +1310,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Link(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a primary clabernetes API -- like Nodes they can be created by users directly or emitted by the (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints (Node object names in the same namespace plus interface names) and an optional MTU. The Link controller allocates a tunnel ID into status for cross-Pod transports; same-Pod, loopback, and host Links need no tunnel allocation. Direct connectivity reconcilers select only Links terminating on their Nodes with endpoint field selectors. Storing one object per wire keeps every persisted object O(1) regardless of topology size.",
+				Description: "Link represents a single point-to-point \"wire\" between two (containerlab) nodes. Links are a primary clabernetes API -- like Nodes they can be created by users directly or emitted by the (optional) Topology compiler. The spec holds only the wire as the user drew it: two endpoints (Node object names in the same namespace plus interface names) and an optional MTU. The Link controller allocates a wire ID into status for cross-Pod transports; same-Pod, loopback, and host Links need no wire allocation. Direct connectivity reconcilers select only Links terminating on their Nodes with endpoint field selectors. Storing one object per wire keeps every persisted object O(1) regardless of topology size.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -1514,7 +1514,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkSpec(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else. Anything operational (the allocated tunnel ID and resolved identities) lives in status, and current peer transport identity is derived by direct connectivity reconcilers.",
+				Description: "LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else. Anything operational (the allocated wire ID and resolved identities) lives in status, and current peer transport identity is derived by direct connectivity reconcilers.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"endpointA": {
@@ -1560,9 +1560,9 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkStatus(
 				Description: "LinkStatus is the status for a Link resource.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"tunnelID": {
+					"wireID": {
 						SchemaProps: spec.SchemaProps{
-							Description: "TunnelID is the id number of the tunnel (the VXLAN VNI) the controller allocated for this link -- both sides of the link use the same id. This is an allocation rather than user intent, hence it living in the status; zero means \"not allocated (yet)\" (direct connectivity reconcilers wait until the controller has filled the ID in).",
+							Description: "WireID is the identity this link carries on the fabric wire between its two endpoint sidecars -- both sides of the link use the same id, and it is unique among the Links of this namespace (wire datagrams dispatch inside one receiving sidecar from a validated source, so cross-namespace uniqueness is meaningless). This is an allocation rather than user intent, hence it living in the status; zero means \"not allocated (yet)\" (direct connectivity reconcilers wait until the controller has filled the ID in).",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},

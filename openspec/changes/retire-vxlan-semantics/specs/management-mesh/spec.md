@@ -1,10 +1,11 @@
-# management-mesh Specification
+# management-mesh Delta
 
-## Purpose
-Present the management subnet as one shared L2 domain across every interposed Pod of the namespace, matching containerlab's management network semantics, with strictly Pod-local gateway behavior.
+## RENAMED Requirements
 
-## Requirements
+- FROM: `### Requirement: The management subnet is one L2 domain across the topology`
+- TO: `### Requirement: The management subnet is one L2 domain across the namespace`
 
+## MODIFIED Requirements
 
 ### Requirement: The management subnet is one L2 domain across the namespace
 

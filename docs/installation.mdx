@@ -19,8 +19,9 @@ A typical installation method uses the [c9s Helm chart](https://github.com/clabe
   pod-locally. No node-resident agent is installed. Device containers themselves receive only
   the privilege their imported kind plan declares.
 - **VXLAN and nftables support in the worker kernel** (standard in distribution kernels):
-  cross-worker wires terminate as VTEPs inside the Pods on the CNI network, and management
-  translation uses an nftables table inside each Pod's namespace.
+  the namespace-wide management mesh is kernel VXLAN inside the Pods on the CNI network, and
+  management translation uses an nftables table inside each Pod's namespace. Cross-worker
+  Link wires need nothing special -- they are plain UDP between the connectivity sidecars.
 - **`/dev/kvm` on workers** only when running VM-backed (vrnetlab) kinds; the plan requests the
   device through ordinary Kubernetes device semantics.
 - **Registry access is cluster administration**: private device images use ordinary

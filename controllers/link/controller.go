@@ -20,11 +20,11 @@ import (
 )
 
 // Controller is the clabernetes Link controller -- it validates Link resources and allocates
-// (into the status) the tunnel ids that cross-pod links use.
+// (into the status) the wire ids that cross-pod links use.
 type Controller struct {
 	*clabernetescontrollers.BaseController
 
-	// apiReader is a live (uncached) reader -- tunnel id allocation reads the namespace's links
+	// apiReader is a live (uncached) reader -- wire id allocation reads the namespace's links
 	// through it so that, combined with the single reconcile worker, allocation decisions are
 	// serialized over up-to-date state rather than possibly stale cache content.
 	apiReader ctrlruntimeclient.Reader
@@ -65,14 +65,14 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		).
 		For(&clabernetesapisv1alpha1.Link{}).
 		// a Link spec change can make another Link gain or lose a deterministic endpoint conflict;
-		// enqueue the namespace so stale rejection state and tunnel allocations always converge
+		// enqueue the namespace so stale rejection state and wire allocations always converge
 		Watches(
 			&clabernetesapisv1alpha1.Link{},
 			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueLinksInNamespace),
 			ctrlruntimebuilder.WithPredicates(ctrlruntimepredicate.GenerationChangedPredicate{}),
 		).
 		// watch nodes (spec changes only) since node grouping (network-mode) decides which links
-		// are same-pod links (and those need no tunnel id)
+		// are same-pod links (and those need no wire id)
 		Watches(
 			&clabernetesapisv1alpha1.Node{},
 			c.nodeEnqueueHandler(),

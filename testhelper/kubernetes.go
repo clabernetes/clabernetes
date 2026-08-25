@@ -163,7 +163,7 @@ func NormalizeNode(t *testing.T, objectData []byte) []byte {
 	return objectData
 }
 
-// NormalizeLink removes cluster-assigned endpoint UIDs and the cluster-wide tunnel allocation
+// NormalizeLink removes cluster-assigned endpoint UIDs and the namespace-scoped wire allocation
 // while preserving the endpoint names that demonstrate the Link controller has bound the Link to
 // both Node identities.
 func NormalizeLink(t *testing.T, objectData []byte) []byte {
@@ -171,7 +171,7 @@ func NormalizeLink(t *testing.T, objectData []byte) []byte {
 
 	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointA.uid)")
 	objectData = YQCommand(t, objectData, "del(.status.resolvedEndpoints.endpointB.uid)")
-	objectData = YQCommand(t, objectData, "del(.status.tunnelID)")
+	objectData = YQCommand(t, objectData, "del(.status.wireID)")
 	objectData = YQCommand(t, objectData, "del(.metadata.annotations | select(length == 0))")
 
 	return objectData

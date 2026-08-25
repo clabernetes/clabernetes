@@ -36,8 +36,11 @@ const (
 	// fabricWireCountersInterval paces the periodic per-link drop diagnostics.
 	fabricWireCountersInterval = 30 * time.Second
 	// fabricWireFrameHeadroom is the non-MTU-counted Ethernet overhead one delivered frame may
-	// carry over the interface MTU: header(14) + one 802.1Q tag(4).
-	fabricWireFrameHeadroom = 18
+	// carry over the interface MTU: header(14) + two 802.1Q tags(8). The reassembly bound is
+	// deliberately not the tightest constraint -- the legs' own transmit path admits one
+	// in-band tag above MTU (the kernel's, and most NICs', single-tag budget), and that
+	// constraint should surface at the injection counter, not as a reassembly drop.
+	fabricWireFrameHeadroom = 22
 	// fabricWireCarrierSettleWindow suppresses local carrier-down observations right after the
 	// wire raised a leg: linkwatch reports the pre-raise oper state asynchronously, and
 	// advertising that echo as genuine local loss would force the peer down and oscillate. A
@@ -424,7 +427,55 @@ func openFabricWireCapture(legIndex int) (int, error) {
 		return -1, fmt.Errorf("binding fabric wire capture socket: %w", err)
 	}
 
+	// The kernel RX path moves an outer 802.1Q/802.1ad tag into skb metadata before packet
+	// taps run, so a plain read silently delivers tagged frames untagged. Auxdata carries the
+	// stripped tag so the capture can put it back in-band.
+	if err = unix.SetsockoptInt(fd, unix.SOL_PACKET, unix.PACKET_AUXDATA, 1); err != nil {
+		_ = unix.Close(fd)
+
+		return -1, fmt.Errorf("enabling fabric wire capture VLAN auxdata: %w", err)
+	}
+
 	return fd, nil
+}
+
+// vlanTagSize is one in-band 802.1Q tag: TPID(2) + TCI(2).
+const vlanTagSize = 4
+
+// vlanEthernetHeaderPrefix is the destination+source MAC prefix preceding the tag insertion
+// point of an Ethernet header.
+const vlanEthernetHeaderPrefix = 12
+
+// capturedVLANTag extracts the kernel-stripped outer VLAN tag of one captured frame from its
+// packet-socket control messages; ok reports that a tag must be reinserted.
+func capturedVLANTag(oob []byte) (tpid, tci uint16, ok bool) {
+	controls, err := unix.ParseSocketControlMessage(oob)
+	if err != nil {
+		return 0, 0, false
+	}
+
+	for _, control := range controls {
+		if control.Header.Level != unix.SOL_PACKET ||
+			control.Header.Type != unix.PACKET_AUXDATA ||
+			len(control.Data) < int(unsafe.Sizeof(unix.TpacketAuxdata{})) {
+			continue
+		}
+
+		//nolint:gosec // fixed-layout kernel ABI struct.
+		aux := (*unix.TpacketAuxdata)(unsafe.Pointer(&control.Data[0]))
+		if aux.Status&unix.TP_STATUS_VLAN_VALID == 0 {
+			continue
+		}
+
+		tpid = uint16(unix.ETH_P_8021Q)
+		if aux.Status&unix.TP_STATUS_VLAN_TPID_VALID != 0 {
+			tpid = aux.Vlan_tpid
+		}
+
+		return tpid, aux.Vlan_tci, true
+	}
+
+	return 0, 0, false
 }
 
 // captureLoop pumps one link's device-originated frames onto the wire. It owns the packet
@@ -435,7 +486,10 @@ func (w *fabricWire) captureLoop(link *fabricWireLink, packetFD int, stop <-chan
 	defer w.workers.Done()
 	defer func() { _ = unix.Close(packetFD) }()
 
-	buffer := make([]byte, fabricWireMaximumFrameSize+1)
+	// Frames are read at a tag-sized offset so a kernel-stripped outer VLAN tag can be put
+	// back in-band by shifting only the MAC prefix, never the payload.
+	buffer := make([]byte, fabricWireMaximumFrameSize+1+vlanTagSize)
+	oob := make([]byte, unix.CmsgSpace(int(unsafe.Sizeof(unix.TpacketAuxdata{}))))
 
 	for {
 		select {
@@ -444,7 +498,12 @@ func (w *fabricWire) captureLoop(link *fabricWireLink, packetFD int, stop <-chan
 		default:
 		}
 
-		n, from, err := unix.Recvfrom(packetFD, buffer, unix.MSG_DONTWAIT)
+		n, oobn, _, from, err := unix.Recvmsg(
+			packetFD,
+			buffer[vlanTagSize:],
+			oob,
+			unix.MSG_DONTWAIT,
+		)
 		if err != nil {
 			if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EWOULDBLOCK) ||
 				errors.Is(err, unix.EINTR) || errors.Is(err, unix.ENETDOWN) {
@@ -461,7 +520,17 @@ func (w *fabricWire) captureLoop(link *fabricWireLink, packetFD int, stop <-chan
 			continue
 		}
 
-		w.transmitFrame(link, buffer[:n])
+		frame := buffer[vlanTagSize : vlanTagSize+n]
+
+		if tpid, tci, tagged := capturedVLANTag(oob[:oobn]); tagged &&
+			n >= vlanEthernetHeaderPrefix {
+			copy(buffer[:vlanEthernetHeaderPrefix], frame[:vlanEthernetHeaderPrefix])
+			binary.BigEndian.PutUint16(buffer[vlanEthernetHeaderPrefix:], tpid)
+			binary.BigEndian.PutUint16(buffer[vlanEthernetHeaderPrefix+2:], tci)
+			frame = buffer[:n+vlanTagSize]
+		}
+
+		w.transmitFrame(link, frame)
 	}
 }
 
@@ -1123,7 +1192,9 @@ func injectFabricWireFrame(packetFD int, frame []byte) error {
 	return err
 }
 
-// fabricWireMmsgHdr is the kernel's struct mmsghdr for 64-bit Linux.
+// fabricWireMmsgHdr is the kernel's struct mmsghdr for 64-bit Linux. The layout (trailing
+// 4-byte pad after the message length) assumes a 64-bit ABI -- every published c9s image is
+// amd64 or arm64 -- and would need its own build tags before any 32-bit port.
 type fabricWireMmsgHdr struct {
 	hdr    unix.Msghdr
 	length uint32
@@ -1315,16 +1386,16 @@ func ensurePodFabricWire(localAddress netip.Addr, underlayMTU int) (*fabricWire,
 
 // podFabricWireHoldsLegDown reports whether the process-wide wire currently owns an
 // administrative down on the given link's sidecar leg.
-func podFabricWireHoldsLegDown(tunnelID int) bool {
+func podFabricWireHoldsLegDown(wireID int) bool {
 	podFabricWireMutex.Lock()
 	wire := podFabricWire
 	podFabricWireMutex.Unlock()
 
-	if wire == nil || tunnelID <= 0 {
+	if wire == nil || wireID <= 0 {
 		return false
 	}
 
-	known, forced := wire.ForcesLegDown(uint32(tunnelID)) //nolint:gosec // positive bound checked.
+	known, forced := wire.ForcesLegDown(uint32(wireID)) //nolint:gosec // positive bound checked.
 
 	return known && forced
 }

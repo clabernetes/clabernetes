@@ -454,7 +454,7 @@ func validateInput(input Input) error {
 	for index, intf := range input.Interfaces {
 		field := fmt.Sprintf("interfaces[%d]", index)
 		if intf.ID == "" || !nodes[intf.NodeID] || intf.Name == "" || intf.LinkID == "" ||
-			intf.Connectivity == "" || intf.TunnelID < 0 || intf.MTU < 0 {
+			intf.Connectivity == "" || intf.WireID < 0 || intf.MTU < 0 {
 			return planningError(ErrorInvalidInput, field, "interface input is incomplete", nil)
 		}
 
@@ -836,7 +836,7 @@ func validatePlan(plan Plan) error {
 	for index, intf := range plan.Interfaces {
 		field := fmt.Sprintf("interfaces[%d]", index)
 		if intf.ID == "" || intf.Name == "" || intf.NamespaceOwnerID == "" ||
-			intf.LinkID == "" || intf.Connectivity == "" || intf.TunnelID < 0 || intf.MTU < 0 ||
+			intf.LinkID == "" || intf.Connectivity == "" || intf.WireID < 0 || intf.MTU < 0 ||
 			!validLinkApplyMode(intf.LinkApplyMode) {
 			return planningError(ErrorInvalidInput, field, "interface plan is incomplete", nil)
 		}

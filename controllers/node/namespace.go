@@ -109,7 +109,7 @@ func (r *NamespaceResourcesReconciler) renderMeshService(namespace string) *k8sc
 				{
 					Name:     "vxlan",
 					Protocol: clabernetesconstants.UDP,
-					Port:     clabernetesconstants.VXLANServicePort,
+					Port:     clabernetesconstants.ManagementMeshVXLANPort,
 				},
 			},
 		},

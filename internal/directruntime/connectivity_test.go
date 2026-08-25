@@ -349,7 +349,7 @@ func TestConnectivityFailsClosedForUnimplementedInterfaces(t *testing.T) {
 	input, plan := connectivityTestInputAndPlan(t)
 	input.Interfaces = []clabernetesinternaldeviceplan.InterfaceInput{{
 		ID: "interface-a", NodeID: "node-a", Name: "eth1", LinkID: "link-a",
-		Connectivity: "unknown-transport", TunnelID: 1,
+		Connectivity: "unknown-transport", WireID: 1,
 	}}
 
 	inputDigest, err := input.Digest()
@@ -360,7 +360,7 @@ func TestConnectivityFailsClosedForUnimplementedInterfaces(t *testing.T) {
 	plan.InputDigest = inputDigest
 	plan.Interfaces = []clabernetesinternaldeviceplan.InterfacePlan{{
 		ID: "interface-a", NodeID: "node-a", NamespaceOwnerID: "container-a",
-		Name: "eth1", LinkID: "link-a", Connectivity: "unknown-transport", TunnelID: 1,
+		Name: "eth1", LinkID: "link-a", Connectivity: "unknown-transport", WireID: 1,
 		LinkApplyMode: clabernetesinternaldeviceplan.LinkApplyLive,
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -578,14 +578,14 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 			},
 		},
 		{
-			name: "vxlan", flavor: "fabric",
+			name: "wire", flavor: "fabric",
 			configure: func(
 				t *testing.T,
 				input *clabernetesinternaldeviceplan.Input,
 				plan *clabernetesinternaldeviceplan.Plan,
 			) {
 				t.Helper()
-				setVXLANLink(t, input, plan, "peer-node-uid", "peer-vx", 73, 1450)
+				setWireLink(t, input, plan, "peer-node-uid", "peer-wire", 73, 1450)
 			},
 		},
 		{name: "host", flavor: "host", configure: setHostLink},
@@ -680,12 +680,12 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 
 // TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness proves cross-Pod endpoints are
 // realized inside the Pod on the preserved underlay: the spec must carry the plan interface
-// name, the allocated tunnel id, and the peer transport identity.
+// name, the allocated wire id, and the peer transport identity.
 func TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness(t *testing.T) {
 	t.Parallel()
 
 	input, plan := connectivityTestInputAndPlan(t)
-	setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
+	setWireLink(t, &input, &plan, "peer-node-uid", "peer-wire", 73, 1450)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -715,8 +715,8 @@ func TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness(t *testing.T)
 	}
 
 	spec := operations.fabricSpecs[0]
-	if spec.InterfaceName == "" || spec.TunnelID != 73 || spec.MTU != 1450 ||
-		spec.PeerTransport != "peer-vx" || spec.PodAddress != "10.244.0.12" ||
+	if spec.InterfaceName == "" || spec.WireID != 73 || spec.MTU != 1450 ||
+		spec.PeerTransport != "peer-wire" || spec.PodAddress != "10.244.0.12" ||
 		spec.OwnerPrefix == "" || !strings.HasPrefix(spec.Owner, spec.OwnerPrefix) {
 		t.Fatalf("fabric endpoint spec = %#v", spec)
 	}
@@ -732,7 +732,7 @@ func TestFabricConnectivityStaysUnreadyUntilPeerResolves(t *testing.T) {
 	t.Parallel()
 
 	input, plan := connectivityTestInputAndPlan(t)
-	setVXLANLink(t, &input, &plan, "peer-node-uid", "peer-vx", 73, 1450)
+	setWireLink(t, &input, &plan, "peer-node-uid", "peer-wire", 73, 1450)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -1939,13 +1939,13 @@ func writeConnectivityRevisionFile(t *testing.T, destination string, raw []byte)
 	}
 }
 
-func setVXLANLink(
+func setWireLink(
 	t *testing.T,
 	input *clabernetesinternaldeviceplan.Input,
 	plan *clabernetesinternaldeviceplan.Plan,
 	peerNodeID,
 	peerTransport string,
-	tunnelID,
+	wireID,
 	mtu int,
 ) {
 	t.Helper()
@@ -1953,7 +1953,7 @@ func setVXLANLink(
 	input.Interfaces = []clabernetesinternaldeviceplan.InterfaceInput{{
 		ID: "link-a/a", NodeID: "node-a", Name: "requested-a", LinkID: "link-uid-a",
 		PeerNodeID: peerNodeID, PeerInterface: "requested-b", PeerTransport: peerTransport,
-		Connectivity: "vxlan", TunnelID: tunnelID, MTU: mtu,
+		Connectivity: "wire", WireID: wireID, MTU: mtu,
 	}}
 
 	digest, err := input.Digest()
@@ -1966,7 +1966,7 @@ func setVXLANLink(
 		ID: "link-a/a", NodeID: "node-a", NamespaceOwnerID: "container-a",
 		Name: "package-a", LinkID: "link-uid-a", PeerNodeID: peerNodeID,
 		PeerInterface: "requested-b", PeerTransport: peerTransport,
-		Connectivity: "vxlan", TunnelID: tunnelID, MTU: mtu,
+		Connectivity: "wire", WireID: wireID, MTU: mtu,
 		LinkApplyMode: clabernetesinternaldeviceplan.LinkApplyLive, RequiredAtStart: true,
 	}}
 	plan.Actions = []clabernetesinternaldeviceplan.Action{{

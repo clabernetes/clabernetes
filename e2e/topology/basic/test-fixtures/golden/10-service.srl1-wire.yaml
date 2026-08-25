@@ -3,11 +3,11 @@ kind: Service
 metadata:
   labels:
     c9s.run/app: clabernetes
-    c9s.run/name: srl1-vx
+    c9s.run/name: srl1-wire
     c9s.run/topologyNode: srl1
     c9s.run/topologyOwner: topology-basic
     c9s.run/topologyServiceType: fabric
-  name: srl1-vx
+  name: srl1-wire
   namespace: NAMESPACE
   ownerReferences:
     - apiVersion: c9s.run/v1alpha1

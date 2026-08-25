@@ -22,9 +22,11 @@ The same applies to endpoint loss: if a device Pod dies, every link terminating 
 carrier-down at its peers within the wire's heartbeat timeout (a few seconds). When the Pod is
 rescheduled and converges, carrier restores without any manual action.
 
-The signal cannot lie about the datapath: carrier advertisements, liveness heartbeats, and the
-link frames themselves share one socket and one network path, so a link never shows carrier
-while its frames have no way through.
+The signal shares the datapath's fate: carrier advertisements, liveness heartbeats, and the
+link frames themselves share one socket and one network path, so control and data cannot
+diverge in endpoint or route. (Pathologies that drop only large datagrams -- a size-selective
+filter, an underlay MTU black-hole -- can still pass small control messages while data
+suffers, exactly as a degraded physical path would.)
 
 ### Loss
 
@@ -44,13 +46,18 @@ measuring loss with large packets over a lossy underlay.
 
 Frames up to the link MTU — containerlab's 9500-byte default included — cross any cluster
 regardless of the Pod network MTU, because the wire fragments to whatever the local underlay
-carries. See the [Link MTU](/docs/guides/mtu) guide.
+carries. One floor applies: fragments are never sized below 1200 bytes of payload, so on an
+underlay smaller than roughly 1250 bytes the outer datagrams fall back to ordinary IP
+fragmentation — the wire still works, it just stops adapting below that point. See the
+[Link MTU](/docs/guides/mtu) guide.
 
 ### Transparency
 
 The wire is a transparent L2 pipe: it forwards frames with arbitrary source and destination
-MACs, VLAN tags, and EtherTypes, so bridging, LACP-free bonds, and tagged sub-interfaces behave
-as on a direct cable.
+MACs, VLAN tags, and EtherTypes, so bridging, LACP-free bonds, and tagged sub-interfaces
+behave as on a direct cable. Single-tagged frames cross at the full link MTU; double-tagged
+(QinQ) frames have the same one-tag headroom budget most physical NICs reserve, so give a
+link 4 extra bytes of MTU when full-size payloads must carry two tags.
 
 ## What the wire does not emulate
 

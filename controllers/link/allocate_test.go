@@ -14,7 +14,7 @@ func testLink(
 	interfaceA,
 	nodeB,
 	interfaceB string,
-	tunnelID int,
+	wireID int,
 ) clabernetesapisv1alpha1.Link {
 	return clabernetesapisv1alpha1.Link{
 		ObjectMeta: metav1.ObjectMeta{
@@ -32,7 +32,7 @@ func testLink(
 			},
 		},
 		Status: clabernetesapisv1alpha1.LinkStatus{
-			TunnelID: tunnelID,
+			WireID: wireID,
 		},
 	}
 }
@@ -158,7 +158,7 @@ func TestFindEndpointConflict(t *testing.T) {
 	}
 }
 
-func TestResolveDesiredTunnelID(t *testing.T) {
+func TestResolveDesiredWireID(t *testing.T) {
 	cases := []struct {
 		name           string
 		link           clabernetesapisv1alpha1.Link
@@ -236,7 +236,7 @@ func TestResolveDesiredTunnelID(t *testing.T) {
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			actual, err := clabernetescontrollerslink.ResolveDesiredTunnelID(
+			actual, err := clabernetescontrollerslink.ResolveDesiredWireID(
 				&testCase.link,
 				testCase.namespaceLinks,
 				testCase.namespaceNodes,
@@ -246,25 +246,27 @@ func TestResolveDesiredTunnelID(t *testing.T) {
 			}
 
 			if actual != testCase.expected {
-				t.Fatalf("expected tunnel id %d, got %d", testCase.expected, actual)
+				t.Fatalf("expected wire id %d, got %d", testCase.expected, actual)
 			}
 		})
 	}
 }
 
-func TestResolveDesiredTunnelIDIsClusterWide(t *testing.T) {
+func TestResolveDesiredWireIDIsNamespaceScoped(t *testing.T) {
 	t.Parallel()
 
-	// A same-named Link in another namespace holding tunnel ID 1 must block reuse: tunnel IDs
-	// are VXLAN VNIs in the shared worker host namespaces.
-	foreign := testLink("a-link", "srl1", "e1-1", "srl2", "e1-1", 1)
-	foreign.Namespace = "other-namespace"
+	// Allocation reads only the Link's own namespace: wire ids dispatch inside one receiving
+	// sidecar from a validated source, so a Link in another namespace holding the same id is
+	// simply not part of the input and can never block allocation.
 	local := testLink("a-link", "srl1", "e1-1", "srl2", "e1-1", 0)
 	local.Namespace = "lab-a"
 
-	got, err := clabernetescontrollerslink.ResolveDesiredTunnelID(
+	sibling := testLink("b-link", "srl1", "e1-2", "srl2", "e1-2", 1)
+	sibling.Namespace = "lab-a"
+
+	got, err := clabernetescontrollerslink.ResolveDesiredWireID(
 		&local,
-		[]clabernetesapisv1alpha1.Link{foreign},
+		[]clabernetesapisv1alpha1.Link{local, sibling},
 		nil,
 	)
 	if err != nil {
@@ -272,18 +274,18 @@ func TestResolveDesiredTunnelIDIsClusterWide(t *testing.T) {
 	}
 
 	if got != 2 {
-		t.Fatalf("cross-namespace tunnel allocation = %d, want 2", got)
+		t.Fatalf("namespace wire allocation = %d, want 2", got)
 	}
 
-	// Retention still works when this Link already holds a cluster-unique ID.
-	local.Status.TunnelID = 5
+	// Retention holds against namespace state only.
+	local.Status.WireID = 5
 
-	got, err = clabernetescontrollerslink.ResolveDesiredTunnelID(
+	got, err = clabernetescontrollerslink.ResolveDesiredWireID(
 		&local,
-		[]clabernetesapisv1alpha1.Link{foreign},
+		[]clabernetesapisv1alpha1.Link{local, sibling},
 		nil,
 	)
 	if err != nil || got != 5 {
-		t.Fatalf("retention across namespaces = %d err=%v, want 5", got, err)
+		t.Fatalf("namespace retention = %d err=%v, want 5", got, err)
 	}
 }

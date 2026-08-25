@@ -5,11 +5,13 @@ package directruntime
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"net"
 	"net/netip"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -45,6 +47,7 @@ func TestFabricWirePumpInIsolatedNamespace(t *testing.T) {
 
 		testWireCarrierEstablishes(t, harness)
 		testWireRoundTripsFrames(t, harness)
+		testWireRoundTripsVLANTaggedFrames(t, harness)
 		testWireDropsFrameOnFragmentLoss(t, harness)
 		testWireSurvivesMalformedDatagrams(t, harness)
 		testWireRejectsStaleGenerations(t, harness)
@@ -381,6 +384,118 @@ func testWireRoundTripsFrames(t *testing.T, _ *wireTestHarness) {
 
 		if !expectWireTestFrame(t, capture, frame, wireTestDeliverTimeout) {
 			t.Fatalf("%d-byte frame did not cross the wire", size)
+		}
+	}
+}
+
+// buildWireTestTaggedFrame renders one Ethernet frame of exactly size bytes carrying the given
+// in-band VLAN tag stack (TPID+TCI pairs) ahead of a recognizable payload.
+func buildWireTestTaggedFrame(size int, tags [][2]uint16) []byte {
+	frame := make([]byte, size)
+	copy(frame, []byte{
+		0x02, 0xc9, 0x00, 0x00, 0x00, 0x7a, // destination
+		0x02, 0xc9, 0x00, 0x00, 0x01, 0x7a, // source
+	})
+
+	offset := 12
+	for _, tag := range tags {
+		binary.BigEndian.PutUint16(frame[offset:], tag[0])
+		binary.BigEndian.PutUint16(frame[offset+2:], tag[1])
+		offset += 4
+	}
+
+	frame[offset] = 0x88
+	frame[offset+1] = 0xb5 // local experimental EtherType
+
+	for index := offset + 2; index < size; index++ {
+		frame[index] = byte(index * 31 % 256)
+	}
+
+	return frame
+}
+
+// expectWireTestTaggedFrame reports whether the wanted frame arrives on the packet socket
+// before the timeout, reinserting any kernel-stripped outer VLAN tag from auxdata exactly the
+// way the wire capture does -- a plain read would silently compare untagged bytes.
+func expectWireTestTaggedFrame(t *testing.T, fd int, want []byte, timeout time.Duration) bool {
+	t.Helper()
+
+	buffer := make([]byte, fabricWireMaximumFrameSize+1+vlanTagSize)
+	oob := make([]byte, unix.CmsgSpace(int(unsafe.Sizeof(unix.TpacketAuxdata{}))))
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		n, oobn, _, from, err := unix.Recvmsg(
+			fd,
+			buffer[vlanTagSize:],
+			oob,
+			unix.MSG_DONTWAIT,
+		)
+		if err != nil {
+			if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EWOULDBLOCK) {
+				pollFabricWireFD(fd)
+
+				continue
+			}
+
+			t.Fatalf("reading wire test packet socket: %v", err)
+		}
+
+		source, isLinkLayer := from.(*unix.SockaddrLinklayer)
+		if isLinkLayer && source.Pkttype == unix.PACKET_OUTGOING {
+			continue
+		}
+
+		frame := buffer[vlanTagSize : vlanTagSize+n]
+
+		if tpid, tci, tagged := capturedVLANTag(oob[:oobn]); tagged &&
+			n >= vlanEthernetHeaderPrefix {
+			copy(buffer[:vlanEthernetHeaderPrefix], frame[:vlanEthernetHeaderPrefix])
+			binary.BigEndian.PutUint16(buffer[vlanEthernetHeaderPrefix:], tpid)
+			binary.BigEndian.PutUint16(buffer[vlanEthernetHeaderPrefix+2:], tci)
+			frame = buffer[:n+vlanTagSize]
+		}
+
+		if bytes.Equal(frame, want) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// testWireRoundTripsVLANTaggedFrames proves the wire's L2 transparency for tagged traffic: the
+// kernel RX path moves an outer 802.1Q/802.1ad tag into skb metadata before packet taps run,
+// so the capture must reinsert it or every tagged frame crosses the wire untagged. Covers a
+// single 802.1Q tag and a stacked-802.1Q QinQ frame at the legs' transmit budget -- the
+// kernel admits one 802.1Q tag of in-band headroom above the interface MTU, the same
+// single-tag budget most physical NICs reserve.
+func testWireRoundTripsVLANTaggedFrames(t *testing.T, _ *wireTestHarness) {
+	t.Helper()
+
+	injector := openWireTestPacketSocket(t, "devA")
+
+	defer func() { _ = unix.Close(injector) }()
+
+	capture := openWireTestPacketSocket(t, "devB")
+
+	defer func() { _ = unix.Close(capture) }()
+
+	for name, frame := range map[string][]byte{
+		"single-802.1q": buildWireTestTaggedFrame(256, [][2]uint16{
+			{uint16(unix.ETH_P_8021Q), 100},
+		}),
+		"qinq-at-tag-budget": buildWireTestTaggedFrame(
+			wireTestJumboMTU+14+vlanTagSize,
+			[][2]uint16{{uint16(unix.ETH_P_8021Q), 100}, {uint16(unix.ETH_P_8021Q), 200}},
+		),
+	} {
+		if _, err := unix.Write(injector, frame); err != nil {
+			t.Fatalf("injecting %s wire test frame: %v", name, err)
+		}
+
+		if !expectWireTestTaggedFrame(t, capture, frame, wireTestDeliverTimeout) {
+			t.Fatalf("%s frame did not cross the wire with its tags intact", name)
 		}
 	}
 }

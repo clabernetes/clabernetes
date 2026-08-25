@@ -24,10 +24,10 @@ const (
 )
 
 // FabricServiceName returns the name of the fabric (cross-Pod connectivity) service of the
-// given (containerlab) node -- tunnels to the node are pointed at
-// `<name>.<namespace>.<dns-suffix>` by the remote connectivity sidecars.
+// given (containerlab) node -- wire peers resolve the node at
+// `<name>.<namespace>.<dns-suffix>` from the remote connectivity sidecars.
 func FabricServiceName(nodeName string) string {
-	return fmt.Sprintf("%s-vx", nodeName)
+	return fmt.Sprintf("%s-wire", nodeName)
 }
 
 func exposeTypeToServiceType(exposeType string) k8scorev1.ServiceType {

@@ -118,38 +118,31 @@ func (c *Controller) Reconcile(
 		)
 	}
 
-	// Tunnel IDs are VXLAN VNIs terminating in the shared worker host namespaces, so the
-	// allocation space is cluster-wide: two Links in different namespaces with one VNI would
-	// collide on any worker hosting endpoints of both.
-	clusterLinks := &clabernetesapisv1alpha1.LinkList{}
-	if err = c.apiReader.List(ctx, clusterLinks); err != nil {
-		c.BaseController.Log.Criticalf("failed listing cluster Links, err: %s", err)
-
-		return ctrlruntime.Result{}, err
-	}
-
-	desiredTunnelID, err := ResolveDesiredTunnelID(
+	// Wire ids dispatch inside one receiving sidecar from a validated source, so the namespace
+	// is the whole allocation domain -- the namespace Links fetched above (uncached) are all
+	// the state allocation needs.
+	desiredWireID, err := ResolveDesiredWireID(
 		link,
-		clusterLinks.Items,
+		namespaceLinks.Items,
 		namespaceNodes.Items,
 	)
 	if err != nil {
-		c.BaseController.Log.Criticalf("failed resolving tunnel id for link, err: %s", err)
+		c.BaseController.Log.Criticalf("failed resolving wire id for link, err: %s", err)
 
 		return ctrlruntime.Result{}, err
 	}
 
 	acceptedMessage := "Link endpoints and direct connectivity policy are accepted"
-	if desiredTunnelID != 0 {
+	if desiredWireID != 0 {
 		acceptedMessage = fmt.Sprintf(
-			"Link endpoints are resolved and direct tunnel ID %d is allocated",
-			desiredTunnelID,
+			"Link endpoints are resolved and direct wire ID %d is allocated",
+			desiredWireID,
 		)
 	}
 
 	desiredStatus := desiredLinkStatus(
 		link,
-		desiredTunnelID,
+		desiredWireID,
 		resolvedEndpoints,
 		metav1.ConditionTrue,
 		"Accepted",
@@ -163,11 +156,11 @@ func (c *Controller) Reconcile(
 	}
 
 	c.BaseController.Log.Infof(
-		"allocating tunnel id %d to link '%s/%s' (was %d)",
-		desiredTunnelID,
+		"allocating wire id %d to link '%s/%s' (was %d)",
+		desiredWireID,
 		link.GetNamespace(),
 		link.GetName(),
-		link.Status.TunnelID,
+		link.Status.WireID,
 	)
 
 	err = c.updateLinkStatus(ctx, link, desiredStatus)
@@ -189,14 +182,14 @@ func (c *Controller) Reconcile(
 
 func desiredLinkStatus(
 	link *clabernetesapisv1alpha1.Link,
-	tunnelID int,
+	wireID int,
 	resolvedEndpoints *clabernetesapisv1alpha1.LinkResolvedEndpointsStatus,
 	conditionStatus metav1.ConditionStatus,
 	reason,
 	message string,
 ) clabernetesapisv1alpha1.LinkStatus {
 	status := clabernetesapisv1alpha1.LinkStatus{
-		TunnelID:          tunnelID,
+		WireID:            wireID,
 		ResolvedEndpoints: resolvedEndpoints,
 		Conditions:        slices.Clone(link.Status.Conditions),
 	}
@@ -232,7 +225,7 @@ func (c *Controller) prepareReconcile(
 	err := reader.Get(ctx, req.NamespacedName, link)
 	if err != nil {
 		if apimachineryerrors.IsNotFound(err) {
-			// Absence of the Link is what frees its tunnel id.
+			// Absence of the Link is what frees its wire id.
 			c.BaseController.LogReconcileCompleteObjectNotExist(req)
 
 			return nil, true, nil

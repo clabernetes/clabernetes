@@ -1264,7 +1264,7 @@ func appendInterfacePlans(
 			PeerInterface:    intf.Input.PeerInterface,
 			PeerTransport:    intf.Input.PeerTransport,
 			Connectivity:     intf.Input.Connectivity,
-			TunnelID:         intf.Input.TunnelID,
+			WireID:           intf.Input.WireID,
 			MTU:              intf.Input.MTU,
 			LinkApplyMode:    node.LinkApplyMode,
 			RequiredAtStart:  true,

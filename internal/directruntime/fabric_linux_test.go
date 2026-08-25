@@ -416,14 +416,14 @@ func realizeFabricTestEndpoint(
 
 func fabricTestEndpointSpec(
 	interfaceID, interfaceName string,
-	mtu, tunnelID int,
+	mtu, wireID int,
 ) FabricEndpointSpec {
 	return FabricEndpointSpec{
 		InterfaceID:   interfaceID,
 		InterfaceName: interfaceName,
 		Owner:         fabricTestMTUOwnerPrefix + interfaceID,
 		OwnerPrefix:   fabricTestMTUOwnerPrefix,
-		TunnelID:      tunnelID,
+		WireID:        wireID,
 		MTU:           mtu,
 		PeerTransport: fabricTestPeerAddress,
 		PodAddress:    fabricTestPodAddress,

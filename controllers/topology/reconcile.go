@@ -443,7 +443,7 @@ func (r *Reconciler) reconcileLinks(
 		existing,
 		emittedObjectConforms[*clabernetesapisv1alpha1.Link],
 		func(existingLink, renderedLink *clabernetesapisv1alpha1.Link) {
-			// the link controller owns the status (tunnel id allocation) -- carry it over
+			// the link controller owns the status (wire id allocation) -- carry it over
 			renderedLink.Status = existingLink.Status
 		},
 	)
