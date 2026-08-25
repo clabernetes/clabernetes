@@ -19,10 +19,10 @@ spec:
     - IPv4
   ipFamilyPolicy: SingleStack
   ports:
-    - name: vxlan
-      port: 14789
+    - name: wire
+      port: 14790
       protocol: UDP
-      targetPort: 14789
+      targetPort: 14790
   publishNotReadyAddresses: true
   selector:
     c9s.run/app: clabernetes

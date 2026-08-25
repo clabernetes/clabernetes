@@ -15,15 +15,15 @@ import (
 	"strings"
 	"time"
 
-	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
 
 const (
+	// fabricVTEPLinkType names the kernel link type of the VXLAN fabric this transport
+	// replaced; the sweep still recognizes it so stale pre-wire VTEPs are removed on the
+	// first convergence after an upgrade.
 	fabricVTEPLinkType = "vxlan"
-	// fabricFilterPriority is the fixed tc filter priority used for fabric redirects.
-	fabricFilterPriority = 42
 	// fabricPeerResolveTimeout bounds one peer transport name resolution.
 	fabricPeerResolveTimeout = 3 * time.Second
 )
@@ -34,12 +34,7 @@ func fabricShortHash(identity string) string {
 	return hex.EncodeToString(digest[:])[:8]
 }
 
-// fabricVTEPName derives the sidecar-owned VTEP name for one plan interface.
-func fabricVTEPName(interfaceID string) string {
-	return "c9sx" + fabricShortHash(interfaceID)
-}
-
-// fabricSidecarLegName derives the sidecar-side stitch leg name for one plan interface.
+// fabricSidecarLegName derives the sidecar-side wire leg name for one plan interface.
 func fabricSidecarLegName(interfaceID string) string {
 	return "c9ss" + fabricShortHash(interfaceID)
 }
@@ -51,11 +46,11 @@ func hostTransferLegName(interfaceID string) string {
 }
 
 // EnsureFabricEndpoint realizes one cross-Pod endpoint entirely inside the Pod namespace: the
-// device leg + sidecar leg pair, the VTEP on the preserved underlay, and the tc stitch between
-// them. Every interface in that chain carries one effective MTU -- the requested MTU bounded to
-// what the underlay can carry encapsulated -- so the device can never emit a frame the tunnel
-// silently drops. A device may adopt, rename, or move the device leg after boot; the sidecar
-// leg and VTEP remain sidecar-owned and are converged idempotently.
+// device leg + sidecar leg pair and the leg's registration with the Pod's fabric wire, the
+// userspace UDP transport that segments frames to the underlay and propagates carrier state.
+// A device may adopt, rename, or move the device leg after boot; the sidecar leg remains
+// sidecar-owned and is converged idempotently, and once registered its admin state belongs to
+// the wire's carrier state machine.
 func (o netlinkOperations) EnsureFabricEndpoint(
 	spec FabricEndpointSpec,
 ) (FabricEndpointResult, error) {
@@ -72,9 +67,9 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, errors.New("fabric endpoint spec is incomplete")
 	}
 
-	// The encapsulation bound depends only on the Pod underlay, so it is computed before any
-	// link exists: the device-facing leg must be born with the effective MTU because a device
-	// may adopt and move it where the sidecar can never adjust it again.
+	// The MTU bound depends only on the Pod underlay, so it is computed before any link
+	// exists: the device-facing leg must be born with its final MTU because a device may
+	// adopt and move it where the sidecar can never adjust it again.
 	mtu, underlay, err := clampPodFabricMTU(spec.MTU, podAddress)
 	if err != nil {
 		return result, err
@@ -89,23 +84,50 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, err
 	}
 
-	leg, present, err := lookupLink(legName)
-	if err != nil || !present {
-		return result, errors.Join(errors.New("fabric sidecar leg is unavailable"), err)
+	if _, present, lookupErr := lookupLink(legName); lookupErr != nil || !present {
+		return result, errors.Join(errors.New("fabric sidecar leg is unavailable"), lookupErr)
 	}
 
 	if err = (netlinkOperations{}).DisableTxChecksumOffload(legName); err != nil {
 		return result, err
 	}
 
+	// The device-side stack must materialize checksums in software: the wire captures raw
+	// frames off the veth, and an offloaded transmit leaves them incomplete for the far end.
 	if _, present, lookupErr := lookupLink(spec.InterfaceName); lookupErr == nil && present {
 		if err = (netlinkOperations{}).DisableTxChecksumOffload(spec.InterfaceName); err != nil {
 			return result, err
 		}
 	}
 
+	wire, err := ensurePodFabricWire(podAddress, underlay)
+	if err != nil {
+		return result, err
+	}
+
 	remote, resolved, err := o.resolveFabricPeer(spec.PeerTransport, spec.PodAddress)
 	if err != nil {
+		return result, err
+	}
+
+	deliveryMTU := mtu
+	if deliveryMTU < 1 {
+		// An unidentifiable underlay passes the requested MTU through unbounded; the wire
+		// then bounds delivery only by the protocol's representable frame size.
+		deliveryMTU = fabricWireMaximumFrameSize
+	}
+
+	// The link is registered even while the peer is unresolvable so the wire holds the
+	// device leg carrier-down: an unplugged far end must look like a dead cable, not a live
+	// one.
+	if err = wire.EnsureLink(fabricWireLinkSpec{
+		LinkID:        uint32(spec.TunnelID), //nolint:gosec // positive bound checked.
+		Owner:         spec.Owner,
+		LegName:       legName,
+		PeerTransport: spec.PeerTransport,
+		PeerAddress:   remote,
+		MTU:           deliveryMTU,
+	}); err != nil {
 		return result, err
 	}
 
@@ -115,36 +137,18 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, nil
 	}
 
-	vtep, err := ensurePodFabricVTEP(
-		fabricVTEPName(spec.InterfaceID),
-		spec.Owner,
-		spec.TunnelID,
-		mtu,
-		podAddress,
-		remote,
-	)
-	if err != nil {
-		return result, err
-	}
-
-	if err = ensurePodFabricRedirect(leg, vtep); err != nil {
-		return result, err
-	}
-
-	if err = ensurePodFabricRedirect(vtep, leg); err != nil {
-		return result, err
-	}
-
 	result.Ready = true
 
 	return result, nil
 }
 
-// ensureFabricPair converges the device/sidecar veth pair on the effective MTU, tolerating a
+// ensureFabricPair converges the device/sidecar veth pair on the endpoint MTU, tolerating a
 // device that adopted and moved the device leg out of the root namespace: an existing
 // sidecar-owned leg without a visible device leg is accepted state, never an error and never
-// recreated. The sidecar leg converges to the effective MTU exactly; a visible device leg is
+// recreated. The sidecar leg converges to the endpoint MTU exactly; a visible device leg is
 // only ever clamped down so a device that deliberately lowered its own MTU is not fought.
+// Admin state is raised only at creation: a registered leg's admin state belongs to the wire's
+// carrier state machine, and a device leg's admin state belongs to the device.
 func ensureFabricPair(spec FabricEndpointSpec, legName string, mtu int) error {
 	leg, legPresent, err := lookupLink(legName)
 	if err != nil {
@@ -172,23 +176,15 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string, mtu int) error {
 			}
 		}
 
-		if leg.Attrs().Flags&net.FlagUp == 0 {
+		if leg.Attrs().Flags&net.FlagUp == 0 && !podFabricWireHoldsLegDown(spec.TunnelID) {
 			if err = netlink.LinkSetUp(leg); err != nil {
 				return fmt.Errorf("bringing fabric leg up: %w", err)
 			}
 		}
 
-		if devicePresent {
-			if mtu > 0 && device.Attrs().MTU > mtu {
-				if err = netlink.LinkSetMTU(device, mtu); err != nil {
-					return fmt.Errorf("clamping fabric device leg MTU: %w", err)
-				}
-			}
-
-			if device.Attrs().Flags&net.FlagUp == 0 {
-				if err = netlink.LinkSetUp(device); err != nil {
-					return fmt.Errorf("bringing fabric device leg up: %w", err)
-				}
+		if devicePresent && mtu > 0 && device.Attrs().MTU > mtu {
+			if err = netlink.LinkSetMTU(device, mtu); err != nil {
+				return fmt.Errorf("clamping fabric device leg MTU: %w", err)
 			}
 		}
 
@@ -302,8 +298,10 @@ func adoptFabricPair(spec FabricEndpointSpec, device netlink.Link, legName strin
 			}
 		}
 
+		isDevice := link.Attrs().Index == device.Attrs().Index
+
 		converge := mtu > 0 && link.Attrs().MTU != mtu
-		if link.Attrs().Index == device.Attrs().Index {
+		if isDevice {
 			converge = mtu > 0 && link.Attrs().MTU > mtu
 		}
 
@@ -313,7 +311,10 @@ func adoptFabricPair(spec FabricEndpointSpec, device netlink.Link, legName strin
 			}
 		}
 
-		if link.Attrs().Flags&net.FlagUp == 0 {
+		// An adopted pair was live before this pass: the device leg's admin state belongs to
+		// the device, and the sidecar leg's belongs to the wire once it holds the leg down.
+		if !isDevice && link.Attrs().Flags&net.FlagUp == 0 &&
+			!podFabricWireHoldsLegDown(spec.TunnelID) {
 			if err = netlink.LinkSetUp(link); err != nil {
 				return fmt.Errorf("bringing adopted fabric pair up: %w", err)
 			}
@@ -421,147 +422,6 @@ func clampPodFabricMTU(requested int, podAddress netip.Addr) (int, int, error) {
 	}
 
 	return requested, underlay, nil
-}
-
-// ensurePodFabricVTEP converges the sidecar-owned VTEP terminating on the Pod underlay.
-func ensurePodFabricVTEP(
-	name, owner string,
-	tunnelID, mtu int,
-	localAddress, remoteAddress netip.Addr,
-) (netlink.Link, error) {
-	localIP := net.IP(localAddress.AsSlice())
-	remoteIP := net.IP(remoteAddress.AsSlice())
-
-	existing, exists, err := lookupLink(name)
-	if err != nil {
-		return nil, err
-	}
-
-	if exists {
-		if existing.Type() != fabricVTEPLinkType || existing.Attrs().Alias != owner {
-			return nil, fmt.Errorf("VTEP name %q collides with unrelated state", name)
-		}
-
-		vxlan, isVXLAN := existing.(*netlink.Vxlan)
-
-		conforms := isVXLAN && vxlan.VxlanId == tunnelID &&
-			vxlan.SrcAddr.Equal(localIP) && vxlan.Group.Equal(remoteIP) &&
-			vxlan.Port == clabernetesconstants.VXLANServicePort && !vxlan.Learning &&
-			(mtu == 0 || vxlan.Attrs().MTU == mtu)
-		if conforms {
-			if existing.Attrs().Flags&net.FlagUp == 0 {
-				if err = netlink.LinkSetUp(existing); err != nil {
-					return nil, fmt.Errorf("bringing VTEP up: %w", err)
-				}
-			}
-
-			return existing, nil
-		}
-
-		if err = netlink.LinkDel(existing); err != nil {
-			return nil, fmt.Errorf("replacing stale VTEP %q: %w", name, err)
-		}
-	}
-
-	attributes := netlink.NewLinkAttrs()
-	attributes.Name = name
-
-	if mtu != 0 {
-		attributes.MTU = mtu
-	}
-
-	vtep := &netlink.Vxlan{
-		LinkAttrs: attributes,
-		VxlanId:   tunnelID,
-		SrcAddr:   localIP,
-		Group:     remoteIP,
-		Port:      clabernetesconstants.VXLANServicePort,
-		Learning:  false,
-	}
-	if err = netlink.LinkAdd(vtep); err != nil {
-		return nil, fmt.Errorf("creating fabric VTEP %q: %w", name, err)
-	}
-
-	created, exists, err := lookupLink(name)
-	if err != nil || !exists {
-		return nil, errors.Join(errors.New("fabric VTEP vanished after creation"), err)
-	}
-
-	if err = netlink.LinkSetAlias(created, owner); err != nil {
-		return nil, errors.Join(
-			fmt.Errorf("marking fabric VTEP ownership: %w", err),
-			netlink.LinkDel(created),
-		)
-	}
-
-	if err = netlink.LinkSetUp(created); err != nil {
-		return nil, fmt.Errorf("bringing VTEP up: %w", err)
-	}
-
-	return created, nil
-}
-
-// ensurePodFabricRedirect wires one direction of the stitch: every frame received on from is
-// redirected to the egress of to, with checksums materialized first, giving point-to-point wire
-// semantics without bridge state.
-func ensurePodFabricRedirect(from, to netlink.Link) error {
-	qdisc := &netlink.GenericQdisc{
-		QdiscAttrs: netlink.QdiscAttrs{
-			LinkIndex: from.Attrs().Index,
-			Handle:    netlink.MakeHandle(0xffff, 0),
-			Parent:    netlink.HANDLE_CLSACT,
-		},
-		QdiscType: "clsact",
-	}
-	if err := netlink.QdiscReplace(qdisc); err != nil {
-		return fmt.Errorf("installing fabric redirect qdisc on %q: %w", from.Attrs().Name, err)
-	}
-
-	existing, err := netlink.FilterList(from, netlink.HANDLE_MIN_INGRESS)
-	if err != nil {
-		return fmt.Errorf("listing fabric redirect filters on %q: %w", from.Attrs().Name, err)
-	}
-
-	for _, candidate := range existing {
-		if candidate.Attrs().Priority != fabricFilterPriority {
-			continue
-		}
-
-		matchAll, isMatchAll := candidate.(*netlink.MatchAll)
-		if isMatchAll && len(matchAll.Actions) == 1 {
-			mirred, isMirred := matchAll.Actions[0].(*netlink.MirredAction)
-
-			if isMirred && mirred.Ifindex == to.Attrs().Index {
-				return nil
-			}
-		}
-
-		if err = netlink.FilterDel(candidate); err != nil {
-			return fmt.Errorf(
-				"removing stale fabric redirect filter on %q: %w",
-				from.Attrs().Name,
-				err,
-			)
-		}
-	}
-
-	// Checksum completeness comes from disabling TX offload on both veth legs rather than an
-	// act_csum action: csum-before-mirred into a VXLAN device silently drops every frame on
-	// current kernels, while software-checksummed frames stitch cleanly.
-	filter := &netlink.MatchAll{
-		FilterAttrs: netlink.FilterAttrs{
-			LinkIndex: from.Attrs().Index,
-			Parent:    netlink.HANDLE_MIN_INGRESS,
-			Priority:  fabricFilterPriority,
-			Protocol:  unix.ETH_P_ALL,
-		},
-		Actions: []netlink.Action{netlink.NewMirredAction(to.Attrs().Index)},
-	}
-	if err = netlink.FilterAdd(filter); err != nil {
-		return fmt.Errorf("installing fabric redirect filter on %q: %w", from.Attrs().Name, err)
-	}
-
-	return nil
 }
 
 // EnsureHostInterface realizes one host Link: the device-facing leg stays in the Pod namespace
@@ -827,13 +687,16 @@ func (o netlinkOperations) adoptHostInterface(spec HostInterfaceSpec, pod netlin
 	return nil
 }
 
-// SweepTransportState deletes sidecar-owned transport links (fabric pairs, VTEPs, host legs)
+// SweepTransportState deletes sidecar-owned transport links (fabric pairs, host legs, and
+// stale pre-wire VTEPs)
 // whose owners are no longer part of the desired plan. Deleting either veth end removes both,
 // including a host Link's worker-side end.
 func (netlinkOperations) SweepTransportState(ownerPrefix string, keepOwners []string) error {
 	if ownerPrefix == "" {
 		return errors.New("transport sweep owner prefix is empty")
 	}
+
+	sweepPodFabricWireLinks(ownerPrefix, keepOwners)
 
 	keep := make(map[string]bool, len(keepOwners))
 	for _, owner := range keepOwners {

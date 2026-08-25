@@ -67,10 +67,10 @@ func podSelectorLabels(primaryNode string) map[string]string {
 	}
 }
 
-// RenderFabricService renders the fabric (vxlan) service for the given node -- every node gets
+// RenderFabricService renders the fabric wire service for the given node -- every node gets
 // one, and for grouped nodes the service selects the pod of the group's primary node. This
-// per-node service is what lets connectivity sidecars derive tunnel destinations from a link
-// spec alone.
+// per-node service is what lets connectivity sidecars derive wire peer destinations from a
+// link spec alone.
 func (r *ServiceReconciler) RenderFabricService(
 	node *clabernetesapisv1alpha1.Node,
 	primaryNode string,
@@ -85,11 +85,11 @@ func (r *ServiceReconciler) RenderFabricService(
 	service.Spec.Type = k8scorev1.ServiceTypeClusterIP
 	service.Spec.Ports = []k8scorev1.ServicePort{
 		{
-			Name:     "vxlan",
+			Name:     "wire",
 			Protocol: clabernetesconstants.UDP,
-			Port:     clabernetesconstants.VXLANServicePort,
+			Port:     clabernetesconstants.FabricWireServicePort,
 			TargetPort: intstr.IntOrString{
-				IntVal: clabernetesconstants.VXLANServicePort,
+				IntVal: clabernetesconstants.FabricWireServicePort,
 			},
 		},
 	}
@@ -98,7 +98,7 @@ func (r *ServiceReconciler) RenderFabricService(
 }
 
 // RenderDirectFabricService publishes the current direct Pod address even while its connectivity
-// startup gate is pending. Headless discovery avoids pinning VXLAN peers to a Service virtual IP
+// startup gate is pending. Headless discovery avoids pinning wire peers to a Service virtual IP
 // and follows Pod replacement without granting helpers Pod list/watch authority.
 func (r *ServiceReconciler) RenderDirectFabricService(
 	node *clabernetesapisv1alpha1.Node,

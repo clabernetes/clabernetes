@@ -25,6 +25,10 @@ const (
 	// VXLANServicePort is the port number for vxlan that we use in the kubernetes service.
 	VXLANServicePort = 14789
 
+	// FabricWireServicePort is the UDP port of the c9s-owned fabric wire carrying cross-Pod
+	// direct Link frames, carrier state, and peer heartbeats between connectivity sidecars.
+	FabricWireServicePort = 14790
+
 	// ManagementMeshServiceName is the namespace-scoped headless Service through which mesh
 	// member Pods discover the current management L2 mesh peer set.
 	ManagementMeshServiceName = "c9s-management-mesh"

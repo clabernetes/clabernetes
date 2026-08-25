@@ -442,14 +442,13 @@ func fabricTestLinkMTU(t *testing.T, name string) int {
 }
 
 // assertFabricEndpointMTUs asserts the invariant the fabric realization guarantees: the device
-// leg, the sidecar leg, and the VTEP all carry one effective MTU.
+// leg and the sidecar leg both carry one effective MTU.
 func assertFabricEndpointMTUs(t *testing.T, spec FabricEndpointSpec, want int) {
 	t.Helper()
 
 	for _, name := range []string{
 		spec.InterfaceName,
 		fabricSidecarLegName(spec.InterfaceID),
-		fabricVTEPName(spec.InterfaceID),
 	} {
 		if actual := fabricTestLinkMTU(t, name); actual != want {
 			t.Fatalf("endpoint %q interface %q MTU = %d, want %d",
