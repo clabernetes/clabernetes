@@ -212,7 +212,7 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 
 	// Mesh frames cross the Pod underlay encapsulated; every mesh element carries the clamped
 	// MTU so device-derived segment sizes fit the cross-Pod path.
-	meshMTU, err := clampPodFabricMTU(0, podAddress)
+	meshMTU, _, err := clampPodFabricMTU(0, podAddress)
 	if err != nil {
 		return err
 	}

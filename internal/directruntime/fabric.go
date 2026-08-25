@@ -1,5 +1,9 @@
 package directruntime
 
+// fabricEncapsulationOverhead is the VXLAN-over-IPv4 headroom the underlay consumes for one
+// encapsulated frame (outer IPv4 + UDP + VXLAN headers).
+const fabricEncapsulationOverhead = 50
+
 // FabricEndpointSpec is the Pod-local realization request for one cross-Pod Link endpoint: a
 // device-facing veth leg stitched to an in-Pod VXLAN VTEP terminating on the preserved
 // Kubernetes underlay.
@@ -30,6 +34,13 @@ type FabricEndpointSpec struct {
 type FabricEndpointResult struct {
 	Ready  bool
 	Reason string
+	// EffectiveMTU is the realized endpoint MTU after bounding the requested value to what the
+	// Pod underlay can carry encapsulated; every interface of the endpoint chain carries this
+	// value. Zero means the realization failed before MTU evaluation.
+	EffectiveMTU int
+	// UnderlayMTU is the observed Pod underlay MTU backing the encapsulation bound; zero means
+	// the underlay interface was not identifiable.
+	UnderlayMTU int
 }
 
 // HostInterfaceSpec is the Pod-local realization request for one host Link: a veth pair whose

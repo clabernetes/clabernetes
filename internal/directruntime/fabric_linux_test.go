@@ -20,6 +20,8 @@ const fabricSweepNetlinkChild = "C9S_FABRIC_SWEEP_NETLINK_TEST_CHILD"
 
 const fabricAdoptNetlinkChild = "C9S_FABRIC_ADOPT_NETLINK_TEST_CHILD"
 
+const fabricMTUNetlinkChild = "C9S_FABRIC_MTU_NETLINK_TEST_CHILD"
+
 var errWorkerInterfaceOwnerNotAdopted = errors.New("worker interface owner was not adopted")
 
 func TestSweepTransportStateDeletesBothVethEndsInIsolatedNamespace(t *testing.T) {
@@ -33,6 +35,16 @@ func TestEndpointTransportsAdoptRecabledDeviceLegInIsolatedNamespace(t *testing.
 	runFabricNetlinkTest(t, fabricAdoptNetlinkChild, func() {
 		testEnsureFabricPairAdoptsRecabledDeviceLeg(t)
 		testEnsureHostInterfaceAdoptsRecabledDeviceLeg(t)
+	})
+}
+
+func TestFabricEndpointMTUCoherenceInIsolatedNamespace(t *testing.T) {
+	runFabricNetlinkTest(t, fabricMTUNetlinkChild, func() {
+		createFabricTestUnderlay(t)
+		testFabricEndpointClampsUnsetMTUEverywhere(t)
+		testFabricEndpointClampsExcessiveMTUEverywhere(t)
+		testFabricEndpointHonorsFittingMTU(t)
+		testFabricEndpointConvergesDriftedMTU(t)
 	})
 }
 
@@ -101,7 +113,7 @@ func testEnsureFabricPairAdoptsRecabledDeviceLeg(t *testing.T) {
 	}
 	oldLegName := fabricSidecarLegName(oldSpec.InterfaceID)
 
-	if err := ensureFabricPair(oldSpec, oldLegName); err != nil {
+	if err := ensureFabricPair(oldSpec, oldLegName, oldSpec.MTU); err != nil {
 		t.Fatalf("creating initial fabric pair: %v", err)
 	}
 
@@ -128,7 +140,7 @@ func testEnsureFabricPairAdoptsRecabledDeviceLeg(t *testing.T) {
 	}
 	newLegName := fabricSidecarLegName(newSpec.InterfaceID)
 
-	if err = ensureFabricPair(newSpec, newLegName); err != nil {
+	if err = ensureFabricPair(newSpec, newLegName, newSpec.MTU); err != nil {
 		t.Fatalf("adopting recabled fabric pair: %v", err)
 	}
 
@@ -338,6 +350,206 @@ func testEnsureHostInterfaceAdoptsRecabledDeviceLeg(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+const (
+	fabricTestUnderlayMTU    = 1500
+	fabricTestTransportMTU   = fabricTestUnderlayMTU - fabricEncapsulationOverhead
+	fabricTestPodAddress     = "192.0.2.10"
+	fabricTestPeerAddress    = "192.0.2.20"
+	fabricTestMTUOwnerPrefix = "c9s:direct:v1:test:transport:"
+)
+
+// createFabricTestUnderlay realizes the preserved Pod underlay the clamp derives its bound
+// from: an addressed veth end with a known MTU.
+func createFabricTestUnderlay(t *testing.T) {
+	t.Helper()
+
+	attributes := netlink.NewLinkAttrs()
+	attributes.Name = "underlay0"
+	attributes.MTU = fabricTestUnderlayMTU
+
+	if err := netlink.LinkAdd(&netlink.Veth{
+		LinkAttrs: attributes,
+		PeerName:  "underlay0p",
+	}); err != nil {
+		t.Fatalf("creating test underlay pair: %v", err)
+	}
+
+	underlay, err := netlink.LinkByName("underlay0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	address, err := netlink.ParseAddr(fabricTestPodAddress + "/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = netlink.AddrAdd(underlay, address); err != nil {
+		t.Fatalf("addressing test underlay: %v", err)
+	}
+
+	if err = netlink.LinkSetUp(underlay); err != nil {
+		t.Fatalf("bringing test underlay up: %v", err)
+	}
+}
+
+func realizeFabricTestEndpoint(
+	t *testing.T,
+	spec FabricEndpointSpec,
+) FabricEndpointResult {
+	t.Helper()
+
+	result, err := (netlinkOperations{}).EnsureFabricEndpoint(spec)
+	if err != nil {
+		t.Fatalf("realizing fabric endpoint %q: %v", spec.InterfaceID, err)
+	}
+
+	if !result.Ready {
+		t.Fatalf("fabric endpoint %q is not ready: %s", spec.InterfaceID, result.Reason)
+	}
+
+	return result
+}
+
+func fabricTestEndpointSpec(
+	interfaceID, interfaceName string,
+	mtu, tunnelID int,
+) FabricEndpointSpec {
+	return FabricEndpointSpec{
+		InterfaceID:   interfaceID,
+		InterfaceName: interfaceName,
+		Owner:         fabricTestMTUOwnerPrefix + interfaceID,
+		OwnerPrefix:   fabricTestMTUOwnerPrefix,
+		TunnelID:      tunnelID,
+		MTU:           mtu,
+		PeerTransport: fabricTestPeerAddress,
+		PodAddress:    fabricTestPodAddress,
+	}
+}
+
+func fabricTestLinkMTU(t *testing.T, name string) int {
+	t.Helper()
+
+	link, err := netlink.LinkByName(name)
+	if err != nil {
+		t.Fatalf("reading %q for MTU assertion: %v", name, err)
+	}
+
+	return link.Attrs().MTU
+}
+
+// assertFabricEndpointMTUs asserts the invariant the fabric realization guarantees: the device
+// leg, the sidecar leg, and the VTEP all carry one effective MTU.
+func assertFabricEndpointMTUs(t *testing.T, spec FabricEndpointSpec, want int) {
+	t.Helper()
+
+	for _, name := range []string{
+		spec.InterfaceName,
+		fabricSidecarLegName(spec.InterfaceID),
+		fabricVTEPName(spec.InterfaceID),
+	} {
+		if actual := fabricTestLinkMTU(t, name); actual != want {
+			t.Fatalf("endpoint %q interface %q MTU = %d, want %d",
+				spec.InterfaceID, name, actual, want)
+		}
+	}
+}
+
+// testFabricEndpointClampsUnsetMTUEverywhere pins the black-hole regression: with no requested
+// MTU, every interface must carry the encapsulation-bounded value, not the veth default of
+// 1500 that the tunnel silently drops.
+func testFabricEndpointClampsUnsetMTUEverywhere(t *testing.T) {
+	t.Helper()
+
+	spec := fabricTestEndpointSpec("mtu-unset", "ethmtu0", 0, 101)
+
+	result := realizeFabricTestEndpoint(t, spec)
+	if result.EffectiveMTU != fabricTestTransportMTU ||
+		result.UnderlayMTU != fabricTestUnderlayMTU {
+		t.Fatalf(
+			"effective/underlay MTU = %d/%d, want %d/%d",
+			result.EffectiveMTU,
+			result.UnderlayMTU,
+			fabricTestTransportMTU,
+			fabricTestUnderlayMTU,
+		)
+	}
+
+	assertFabricEndpointMTUs(t, spec, fabricTestTransportMTU)
+}
+
+func testFabricEndpointClampsExcessiveMTUEverywhere(t *testing.T) {
+	t.Helper()
+
+	spec := fabricTestEndpointSpec("mtu-excessive", "ethmtu1", 9000, 102)
+
+	result := realizeFabricTestEndpoint(t, spec)
+	if result.EffectiveMTU != fabricTestTransportMTU {
+		t.Fatalf("effective MTU = %d, want %d", result.EffectiveMTU, fabricTestTransportMTU)
+	}
+
+	assertFabricEndpointMTUs(t, spec, fabricTestTransportMTU)
+}
+
+func testFabricEndpointHonorsFittingMTU(t *testing.T) {
+	t.Helper()
+
+	spec := fabricTestEndpointSpec("mtu-fitting", "ethmtu2", 1400, 103)
+
+	result := realizeFabricTestEndpoint(t, spec)
+	if result.EffectiveMTU != 1400 {
+		t.Fatalf("effective MTU = %d, want 1400", result.EffectiveMTU)
+	}
+
+	assertFabricEndpointMTUs(t, spec, 1400)
+}
+
+// testFabricEndpointConvergesDriftedMTU asserts re-assertion semantics: the sidecar leg always
+// converges to the effective MTU, while a device leg is clamped down but never raised behind a
+// device that deliberately lowered its own MTU.
+func testFabricEndpointConvergesDriftedMTU(t *testing.T) {
+	t.Helper()
+
+	spec := fabricTestEndpointSpec("mtu-drift", "ethmtu3", 0, 104)
+
+	realizeFabricTestEndpoint(t, spec)
+
+	legName := fabricSidecarLegName(spec.InterfaceID)
+
+	for _, name := range []string{spec.InterfaceName, legName} {
+		link, err := netlink.LinkByName(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err = netlink.LinkSetMTU(link, fabricTestUnderlayMTU); err != nil {
+			t.Fatalf("drifting %q MTU: %v", name, err)
+		}
+	}
+
+	realizeFabricTestEndpoint(t, spec)
+	assertFabricEndpointMTUs(t, spec, fabricTestTransportMTU)
+
+	device, err := netlink.LinkByName(spec.InterfaceName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = netlink.LinkSetMTU(device, 1300); err != nil {
+		t.Fatalf("lowering device leg MTU: %v", err)
+	}
+
+	realizeFabricTestEndpoint(t, spec)
+
+	if actual := fabricTestLinkMTU(t, spec.InterfaceName); actual != 1300 {
+		t.Fatalf("device-lowered MTU was overridden: %d, want 1300", actual)
+	}
+
+	if actual := fabricTestLinkMTU(t, legName); actual != fabricTestTransportMTU {
+		t.Fatalf("sidecar leg MTU = %d, want %d", actual, fabricTestTransportMTU)
 	}
 }
 

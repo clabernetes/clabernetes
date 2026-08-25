@@ -24,9 +24,6 @@ const (
 	fabricVTEPLinkType = "vxlan"
 	// fabricFilterPriority is the fixed tc filter priority used for fabric redirects.
 	fabricFilterPriority = 42
-	// fabricEncapsulationOverhead is the VXLAN-over-IPv4 headroom the underlay consumes for one
-	// encapsulated frame (outer IPv4 + UDP + VXLAN headers).
-	fabricEncapsulationOverhead = 50
 	// fabricPeerResolveTimeout bounds one peer transport name resolution.
 	fabricPeerResolveTimeout = 3 * time.Second
 )
@@ -55,8 +52,10 @@ func hostTransferLegName(interfaceID string) string {
 
 // EnsureFabricEndpoint realizes one cross-Pod endpoint entirely inside the Pod namespace: the
 // device leg + sidecar leg pair, the VTEP on the preserved underlay, and the tc stitch between
-// them. A device may adopt, rename, or move the device leg after boot; the sidecar leg and VTEP
-// remain sidecar-owned and are converged idempotently.
+// them. Every interface in that chain carries one effective MTU -- the requested MTU bounded to
+// what the underlay can carry encapsulated -- so the device can never emit a frame the tunnel
+// silently drops. A device may adopt, rename, or move the device leg after boot; the sidecar
+// leg and VTEP remain sidecar-owned and are converged idempotently.
 func (o netlinkOperations) EnsureFabricEndpoint(
 	spec FabricEndpointSpec,
 ) (FabricEndpointResult, error) {
@@ -73,9 +72,20 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, errors.New("fabric endpoint spec is incomplete")
 	}
 
+	// The encapsulation bound depends only on the Pod underlay, so it is computed before any
+	// link exists: the device-facing leg must be born with the effective MTU because a device
+	// may adopt and move it where the sidecar can never adjust it again.
+	mtu, underlay, err := clampPodFabricMTU(spec.MTU, podAddress)
+	if err != nil {
+		return result, err
+	}
+
+	result.EffectiveMTU = mtu
+	result.UnderlayMTU = underlay
+
 	legName := fabricSidecarLegName(spec.InterfaceID)
 
-	if err = ensureFabricPair(spec, legName); err != nil {
+	if err = ensureFabricPair(spec, legName, mtu); err != nil {
 		return result, err
 	}
 
@@ -105,11 +115,6 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, nil
 	}
 
-	mtu, err := clampPodFabricMTU(spec.MTU, podAddress)
-	if err != nil {
-		return result, err
-	}
-
 	vtep, err := ensurePodFabricVTEP(
 		fabricVTEPName(spec.InterfaceID),
 		spec.Owner,
@@ -135,10 +140,12 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 	return result, nil
 }
 
-// ensureFabricPair converges the device/sidecar veth pair, tolerating a device that adopted and
-// moved the device leg out of the root namespace: an existing sidecar-owned leg without a
-// visible device leg is accepted state, never an error and never recreated.
-func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
+// ensureFabricPair converges the device/sidecar veth pair on the effective MTU, tolerating a
+// device that adopted and moved the device leg out of the root namespace: an existing
+// sidecar-owned leg without a visible device leg is accepted state, never an error and never
+// recreated. The sidecar leg converges to the effective MTU exactly; a visible device leg is
+// only ever clamped down so a device that deliberately lowered its own MTU is not fought.
+func ensureFabricPair(spec FabricEndpointSpec, legName string, mtu int) error {
 	leg, legPresent, err := lookupLink(legName)
 	if err != nil {
 		return err
@@ -156,7 +163,13 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
 				return fmt.Errorf("fabric leg %q collides with unrelated state", legName)
 			}
 
-			return adoptFabricPair(spec, device, legName)
+			return adoptFabricPair(spec, device, legName, mtu)
+		}
+
+		if mtu > 0 && leg.Attrs().MTU != mtu {
+			if err = netlink.LinkSetMTU(leg, mtu); err != nil {
+				return fmt.Errorf("converging fabric leg MTU: %w", err)
+			}
 		}
 
 		if leg.Attrs().Flags&net.FlagUp == 0 {
@@ -166,6 +179,12 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
 		}
 
 		if devicePresent {
+			if mtu > 0 && device.Attrs().MTU > mtu {
+				if err = netlink.LinkSetMTU(device, mtu); err != nil {
+					return fmt.Errorf("clamping fabric device leg MTU: %w", err)
+				}
+			}
+
 			if device.Attrs().Flags&net.FlagUp == 0 {
 				if err = netlink.LinkSetUp(device); err != nil {
 					return fmt.Errorf("bringing fabric device leg up: %w", err)
@@ -185,22 +204,22 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
 			)
 		}
 
-		return adoptFabricPair(spec, device, legName)
+		return adoptFabricPair(spec, device, legName, mtu)
 	}
 
 	attributes := netlink.NewLinkAttrs()
 	attributes.Name = spec.InterfaceName
 	attributes.Alias = spec.Owner
 
-	if spec.MTU != 0 {
-		attributes.MTU = spec.MTU
+	if mtu != 0 {
+		attributes.MTU = mtu
 	}
 
 	pair := netlink.NewVeth(attributes)
 	pair.PeerName = legName
 
-	if spec.MTU > 0 {
-		pair.PeerMTU = uint32(spec.MTU) //nolint:gosec // positive bound checked.
+	if mtu > 0 {
+		pair.PeerMTU = uint32(mtu) //nolint:gosec // positive bound checked.
 	}
 
 	if err = netlink.LinkAdd(pair); err != nil {
@@ -228,7 +247,7 @@ func ensureFabricPair(spec FabricEndpointSpec, legName string) error {
 	return nil
 }
 
-func adoptFabricPair(spec FabricEndpointSpec, device netlink.Link, legName string) error {
+func adoptFabricPair(spec FabricEndpointSpec, device netlink.Link, legName string, mtu int) error {
 	if device.Type() != vethLinkType ||
 		!strings.HasPrefix(device.Attrs().Alias, spec.OwnerPrefix) {
 		return fmt.Errorf(
@@ -283,8 +302,13 @@ func adoptFabricPair(spec FabricEndpointSpec, device netlink.Link, legName strin
 			}
 		}
 
-		if spec.MTU > 0 && link.Attrs().MTU != spec.MTU {
-			if err = netlink.LinkSetMTU(link, spec.MTU); err != nil {
+		converge := mtu > 0 && link.Attrs().MTU != mtu
+		if link.Attrs().Index == device.Attrs().Index {
+			converge = mtu > 0 && link.Attrs().MTU > mtu
+		}
+
+		if converge {
+			if err = netlink.LinkSetMTU(link, mtu); err != nil {
 				return fmt.Errorf("setting adopted fabric pair MTU: %w", err)
 			}
 		}
@@ -356,13 +380,15 @@ func podBoundResolver(podAddress string) *net.Resolver {
 	}
 }
 
-// clampPodFabricMTU bounds the requested MTU to what the Pod underlay can carry encapsulated.
-func clampPodFabricMTU(requested int, podAddress netip.Addr) (int, error) {
+// clampPodFabricMTU bounds the requested MTU to what the Pod underlay can carry encapsulated,
+// reporting the observed underlay MTU alongside; a zero underlay means the underlay interface
+// was not identifiable and the requested value passes through unbounded.
+func clampPodFabricMTU(requested int, podAddress netip.Addr) (int, int, error) {
 	underlay := 0
 
 	links, err := netlink.LinkList()
 	if err != nil {
-		return 0, fmt.Errorf("listing Pod interfaces: %w", err)
+		return 0, 0, fmt.Errorf("listing Pod interfaces: %w", err)
 	}
 
 	for _, link := range links {
@@ -379,19 +405,22 @@ func clampPodFabricMTU(requested int, podAddress netip.Addr) (int, error) {
 	}
 
 	if underlay == 0 {
-		return requested, nil
+		return requested, 0, nil
 	}
 
 	transport := underlay - fabricEncapsulationOverhead
 	if transport < 68 {
-		return 0, fmt.Errorf("fabric underlay MTU %d cannot carry encapsulation", underlay)
+		return 0, underlay, fmt.Errorf(
+			"fabric underlay MTU %d cannot carry encapsulation",
+			underlay,
+		)
 	}
 
 	if requested == 0 || requested > transport {
-		return transport, nil
+		return transport, underlay, nil
 	}
 
-	return requested, nil
+	return requested, underlay, nil
 }
 
 // ensurePodFabricVTEP converges the sidecar-owned VTEP terminating on the Pod underlay.

@@ -11,7 +11,11 @@ The runtime SHALL directly realize same-Pod, loopback, host, and cross-Pod Links
 requested endpoint names and MTU, entirely from within the Pod: cross-Pod transports terminate
 inside the Pod network namespace on the sidecar-preserved Kubernetes underlay, and host Links
 place one veth end into the worker network namespace through the sidecar's read-only
-host-namespace handle. The device receives a plain interface leg and never owns the transport
+host-namespace handle. For an encapsulated cross-Pod transport, the realization SHALL bound the
+requested MTU to what the Pod underlay can carry encapsulated and MUST apply one effective MTU
+to every interface of the endpoint chain, so the device can never emit a frame its transport
+silently drops; bounding an explicitly requested MTU MUST be surfaced as a diagnostic naming
+the underlay capability. The device receives a plain interface leg and never owns the transport
 underlay, so a kind that adopts its presented interfaces cannot disturb any transport. The
 realization is derived from endpoint shape alone; Links carry no connectivity selector. No Link
 flavor MAY use a nested network-device container and no Link flavor MAY require a node-resident
@@ -21,7 +25,14 @@ agent.
 
 - **WHEN** a valid Link resolves to the cross-Pod, same-Pod, loopback, or host flavor
 - **THEN** the declared interfaces and dataplane are realized in the endpoint namespaces with
-  the requested MTU by the Pod's own connectivity sidecar
+  the requested MTU, bounded for encapsulated transports to the underlay's encapsulated
+  capability, by the Pod's own connectivity sidecar
+
+#### Scenario: Requested MTU exceeds the underlay capability
+
+- **WHEN** a cross-Pod Link requests an MTU larger than the Pod underlay carries encapsulated
+- **THEN** the device leg, sidecar leg, and tunnel interface all realize the bounded effective
+  MTU and the sidecar reports the clamp with the underlay MTU required to honor the request
 
 
 ### Requirement: Required interfaces exist before device boot

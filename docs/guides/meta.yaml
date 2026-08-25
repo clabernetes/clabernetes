@@ -4,6 +4,7 @@ pages:
   - expose-configuration
   - file-mounting
   - image-pull
+  - mtu
   - persistence
   - resource-management
   - nokia-srsim

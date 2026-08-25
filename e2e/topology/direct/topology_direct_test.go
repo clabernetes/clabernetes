@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -179,7 +180,58 @@ func TestLinuxDataplaneDirect(t *testing.T) {
 		" 0% packet loss",
 	)
 
+	// Whatever MTU the fabric presents to the device must be carryable end to end: a
+	// don't-fragment ping filling the advertised MTU exactly would black-hole if the tunnel
+	// carried less than the device-facing interface claims.
+	linkMTU := deviceInterfaceMTU(t, namespace, device, "eth1")
+	waitForDeviceCommand(
+		t,
+		namespace,
+		device,
+		[]string{
+			"ping",
+			"-M", "do",
+			"-s", strconv.Itoa(linkMTU - 28),
+			"-c", "2",
+			"-W", "2",
+			"192.168.1.1",
+		},
+		" 0% packet loss",
+	)
+
 	waitForWorkerArtifactCollection(t, namespace)
+}
+
+// deviceInterfaceMTU reads one interface MTU from inside the device container.
+func deviceInterfaceMTU(
+	t *testing.T,
+	namespace string,
+	device devicePodObservation,
+	interfaceName string,
+) int {
+	t.Helper()
+
+	cmd := exec.CommandContext( //nolint:gosec
+		t.Context(),
+		"kubectl",
+		"exec", "--namespace", namespace, device.podName, "-c", device.containerName,
+		"--",
+		"cat", "/sys/class/net/"+interfaceName+"/mtu",
+	)
+
+	output := clabernetestesthelper.Execute(t, cmd)
+
+	mtu, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	if err != nil || mtu <= 0 {
+		t.Fatalf(
+			"device %q interface %q MTU is unreadable: %q",
+			device.podName,
+			interfaceName,
+			output,
+		)
+	}
+
+	return mtu
 }
 
 // waitForDeviceCommand execs a command inside the device container until its combined output
