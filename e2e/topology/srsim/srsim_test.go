@@ -17,6 +17,7 @@ const (
 	defaultSRSimImage   = "ghcr.io/clab-labs/nokia_srsim:26.7.R1"
 	srsimRegistrySecret = "srsim-registry" //nolint:gosec // resource name, not a credential.
 	deploymentWait      = 10 * time.Minute
+	nodeReadyTimeout    = 12 * time.Minute
 	datapathWait        = 5 * time.Minute
 	datapathPollPeriod  = 10 * time.Second
 )
@@ -93,6 +94,12 @@ func TestSRSimBootsAndReachesLinux(t *testing.T) {
 	)
 
 	assertExpandedSRSimComponents(t, namespace)
+
+	clabernetestesthelper.KubectlWaitForCreate(t, "nodes.c9s.run", namespace, "l1")
+	clabernetestesthelper.KubectlWaitForCreate(t, "nodes.c9s.run", namespace, "sros")
+	waitForNodeReady(t, namespace, "l1")
+	waitForNodeReady(t, namespace, "sros")
+
 	waitForDatapath(t, namespace)
 }
 
@@ -264,6 +271,23 @@ func dockerConfigPath(t *testing.T) string {
 	}
 
 	return filepath.Join(homeDir, ".docker", "config.json")
+}
+
+func waitForNodeReady(t *testing.T, namespace, nodeName string) {
+	t.Helper()
+
+	cmd := exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
+		t.Context(),
+		"kubectl",
+		"wait",
+		"--for=jsonpath={.status.readiness}=ready",
+		"--timeout="+nodeReadyTimeout.String(),
+		"--namespace",
+		namespace,
+		"node.c9s.run/"+nodeName,
+	)
+
+	clabernetestesthelper.Execute(t, cmd)
 }
 
 func waitForDatapath(t *testing.T, namespace string) {
