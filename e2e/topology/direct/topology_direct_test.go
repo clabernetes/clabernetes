@@ -141,9 +141,13 @@ type devicePodObservation struct {
 	image         string
 }
 
-// TestLinuxDataplaneDirect proves generic dataplane across a direct vxlan Link: two linux-kind
-// devices address their link interfaces through imported exec intent and must reach each other
-// across the tunnel from inside the actual device containers.
+// TestLinuxDataplaneDirect proves generic dataplane across a direct cross-Pod Link: two
+// linux-kind devices address their link interfaces through imported exec intent and must reach
+// each other across the fabric wire from inside the actual device containers, at the full
+// advertised interface MTU, with carrier propagating across the wire for both the graceful
+// interface-down case and the endpoint-loss case.
+//
+//nolint:funlen // one sequential dataplane story against a single deployed lab.
 func TestLinuxDataplaneDirect(t *testing.T) {
 	t.Parallel()
 
@@ -180,9 +184,10 @@ func TestLinuxDataplaneDirect(t *testing.T) {
 		" 0% packet loss",
 	)
 
-	// Whatever MTU the fabric presents to the device must be carryable end to end: a
-	// don't-fragment ping filling the advertised MTU exactly would black-hole if the tunnel
-	// carried less than the device-facing interface claims.
+	// The advertised interface MTU must be carryable end to end: a don't-fragment ping filling
+	// the advertised MTU exactly would black-hole if the transport carried less than the
+	// device-facing interface claims. With the wire fragmenting to the underlay, this proves
+	// the containerlab-default 9500 crossing the kind cluster's 1500-byte Pod network.
 	linkMTU := deviceInterfaceMTU(t, namespace, device, "eth1")
 	waitForDeviceCommand(
 		t,
@@ -199,7 +204,139 @@ func TestLinuxDataplaneDirect(t *testing.T) {
 		" 0% packet loss",
 	)
 
+	peer := observeDevicePod(t, namespace, "lin2")
+
+	// Graceful carrier propagation: taking one device leg down must show as loss of carrier on
+	// the peer device's interface, which itself stays administratively up -- and recovery must
+	// follow the same path.
+	deviceCommand(t, namespace, device, []string{"ip", "link", "set", "eth1", "down"})
+
+	waitForDeviceCommand(
+		t,
+		namespace,
+		peer,
+		[]string{"ip", "link", "show", "eth1"},
+		"NO-CARRIER",
+	)
+
+	deviceCommand(t, namespace, device, []string{"ip", "link", "set", "eth1", "up"})
+
+	waitForDeviceCommand(
+		t,
+		namespace,
+		peer,
+		[]string{"ip", "link", "show", "eth1"},
+		"state UP",
+	)
+
+	waitForDeviceCommand(
+		t,
+		namespace,
+		peer,
+		[]string{"ping", "-c", "2", "-W", "2", "192.168.1.0"},
+		" 0% packet loss",
+	)
+
+	// Crash carrier propagation: killing one endpoint Pod outright must take the peer's
+	// interface carrier-down within the wire's liveness bound. The carrier loss is transient
+	// -- the replacement Pod restores it within seconds -- so a sub-second watcher inside the
+	// peer container must already be sampling when the Pod dies; polled execs would race the
+	// recovery.
+	carrierWatch := startDeviceCarrierWatch(t, namespace, peer, "eth1")
+
+	clabernetestesthelper.Execute(t, exec.CommandContext(
+		t.Context(),
+		"kubectl",
+		"delete", "pod", "--namespace", namespace, device.podName, "--wait=false",
+	))
+
+	if output := carrierWatch(); !strings.Contains(output, "WIRE-CARRIER-LOST") {
+		t.Fatalf("peer never observed carrier loss after endpoint Pod death: %s", output)
+	}
+
+	waitForDirectNodeReady(t, namespace, "lin1")
+
+	waitForDeviceCommand(
+		t,
+		namespace,
+		peer,
+		[]string{"ip", "link", "show", "eth1"},
+		"state UP",
+	)
+
+	waitForDeviceCommand(
+		t,
+		namespace,
+		peer,
+		[]string{"ping", "-c", "2", "-W", "2", "192.168.1.0"},
+		" 0% packet loss",
+	)
+
 	waitForWorkerArtifactCollection(t, namespace)
+}
+
+// startDeviceCarrierWatch starts a sub-second carrier sampler inside the device container and
+// returns a function that waits for its verdict: WIRE-CARRIER-LOST as soon as the interface
+// loses carrier, or WIRE-CARRIER-HELD when it never does within the watch window.
+func startDeviceCarrierWatch(
+	t *testing.T,
+	namespace string,
+	device devicePodObservation,
+	interfaceName string,
+) func() string {
+	t.Helper()
+
+	script := "for i in $(seq 1 1200); do " +
+		"[ \"$(cat /sys/class/net/" + interfaceName + "/carrier 2>/dev/null)\" = \"0\" ] && " +
+		"echo WIRE-CARRIER-LOST && exit 0; sleep 0.1; done; echo WIRE-CARRIER-HELD"
+
+	cmd := exec.CommandContext( //nolint:gosec
+		t.Context(),
+		"kubectl",
+		"exec", "--namespace", namespace, device.podName, "-c", device.containerName,
+		"--",
+		"sh", "-c", script,
+	)
+
+	var output strings.Builder
+
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("starting carrier watch in %q: %v", device.podName, err)
+	}
+
+	return func() string {
+		if err := cmd.Wait(); err != nil {
+			t.Logf("carrier watch in %q exited with %v", device.podName, err)
+		}
+
+		return output.String()
+	}
+}
+
+// deviceCommand execs one command inside the device container and fails the test on error.
+func deviceCommand(
+	t *testing.T,
+	namespace string,
+	device devicePodObservation,
+	command []string,
+) {
+	t.Helper()
+
+	arguments := append(
+		[]string{
+			"exec", "--namespace", namespace, device.podName, "-c", device.containerName,
+			"--",
+		},
+		command...,
+	)
+
+	clabernetestesthelper.Execute(
+		t,
+		exec.CommandContext(t.Context(), "kubectl", arguments...), //nolint:gosec
+	)
 }
 
 // deviceInterfaceMTU reads one interface MTU from inside the device container.
