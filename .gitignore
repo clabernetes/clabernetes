@@ -74,3 +74,6 @@ build/**/*.lock
 # clabverter e2e regenerates these at runtime
 e2e/clabverter/test-fixtures/10-apply.yaml
 e2e/clabverter/test-fixtures/_clabverter-basic-ns.yaml
+
+# ignore private files
+*.private.*

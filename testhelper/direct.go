@@ -26,7 +26,7 @@ func DirectDeviceContainerName(t *testing.T, namespace, workload string) string 
 
 	output := Execute(t, cmd)
 	for name := range strings.SplitSeq(string(output), "\n") {
-		if strings.HasPrefix(name, "device-") {
+		if strings.HasPrefix(name, "node-") {
 			return name
 		}
 	}

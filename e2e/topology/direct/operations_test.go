@@ -337,7 +337,7 @@ func connectivityContainerName(
 	)
 
 	for name := range strings.SplitSeq(string(clabernetestesthelper.Execute(t, cmd)), "\n") {
-		if strings.Contains(name, "connectivity") {
+		if name == "clabwire" {
 			return name
 		}
 	}
