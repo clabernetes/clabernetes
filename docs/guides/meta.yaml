@@ -5,6 +5,7 @@ pages:
   - file-mounting
   - image-pull
   - mtu
+  - link-wire
   - persistence
   - resource-management
   - nokia-srsim

@@ -11,28 +11,61 @@ The runtime SHALL directly realize same-Pod, loopback, host, and cross-Pod Links
 requested endpoint names and MTU, entirely from within the Pod: cross-Pod transports terminate
 inside the Pod network namespace on the sidecar-preserved Kubernetes underlay, and host Links
 place one veth end into the worker network namespace through the sidecar's read-only
-host-namespace handle. For an encapsulated cross-Pod transport, the realization SHALL bound the
-requested MTU to what the Pod underlay can carry encapsulated and MUST apply one effective MTU
-to every interface of the endpoint chain, so the device can never emit a frame its transport
-silently drops; bounding an explicitly requested MTU MUST be surfaced as a diagnostic naming
-the underlay capability. The device receives a plain interface leg and never owns the transport
-underlay, so a kind that adopts its presented interfaces cannot disturb any transport. The
-realization is derived from endpoint shape alone; Links carry no connectivity selector. No Link
-flavor MAY use a nested network-device container and no Link flavor MAY require a node-resident
-agent.
+host-namespace handle. The requested MTU SHALL be realized exactly on every endpoint interface,
+defaulting to containerlab's default link MTU when unset; the Pod underlay MTU MUST NOT bound
+any Link's MTU, and MTU realization MUST NOT depend on which Pods or workers the endpoints land
+on. The device receives a plain interface leg and never owns the transport underlay, so a kind
+that adopts its presented interfaces cannot disturb any transport. The realization is derived
+from endpoint shape alone; Links carry no connectivity selector. No Link flavor MAY use a
+nested network-device container and no Link flavor MAY require a node-resident agent.
 
 #### Scenario: Realize each supported flavor
 
 - **WHEN** a valid Link resolves to the cross-Pod, same-Pod, loopback, or host flavor
 - **THEN** the declared interfaces and dataplane are realized in the endpoint namespaces with
-  the requested MTU, bounded for encapsulated transports to the underlay's encapsulated
-  capability, by the Pod's own connectivity sidecar
+  the requested MTU by the Pod's own connectivity sidecar
 
-#### Scenario: Requested MTU exceeds the underlay capability
+#### Scenario: Requested MTU exceeds the underlay MTU
 
-- **WHEN** a cross-Pod Link requests an MTU larger than the Pod underlay carries encapsulated
-- **THEN** the device leg, sidecar leg, and tunnel interface all realize the bounded effective
-  MTU and the sidecar reports the clamp with the underlay MTU required to honor the request
+- **WHEN** a cross-Pod Link requests an MTU larger than the Pod underlay carries
+- **THEN** the device leg and sidecar leg realize the requested MTU exactly and MTU-sized
+  frames cross the Link with zero configuration, on any cluster
+
+### Requirement: Cross-Pod Links use one loss-preserving wire with carrier propagation
+
+Cross-Pod Link frames SHALL cross the Pod network through one sidecar-owned datagram wire that
+segments each frame to the locally observed underlay MTU and reassembles it at the peer
+sidecar; segment sizing SHALL be a purely local decision so mixed-MTU worker sets need no
+coordination. A frame missing any segment SHALL be dropped whole within a bounded reassembly
+window and MUST NOT be retransmitted or acknowledged, so the loss devices observe on an
+emulated Link reflects loss on the path. Reassembly state MUST be memory-bounded per Link.
+
+Endpoint carrier state and peer liveness SHALL share the wire's socket and path with the data
+they describe. Each sidecar SHALL advertise its local endpoint state on change and
+periodically, and SHALL prove liveness with periodic heartbeats. A receiver SHALL realize a
+peer-down or peer-lost condition as loss of carrier on the local device leg by holding its own
+sidecar-owned leg administratively down; it MUST NOT touch the device leg's administrative
+state, and it MUST NOT re-advertise a wire-imposed down as local endpoint state. Datagrams from
+a superseded peer process generation MUST be rejected.
+
+#### Scenario: Peer endpoint goes down gracefully
+
+- **WHEN** one endpoint's device-facing interface goes operationally down
+- **THEN** the peer's device leg shows loss of carrier within 500 ms while remaining
+  administratively up, and carrier restores the same way when the endpoint returns
+
+#### Scenario: Peer Pod dies
+
+- **WHEN** one endpoint Pod dies without any shutdown signal
+- **THEN** every Link terminating on it shows loss of carrier at its peers within the
+  heartbeat timeout, and carrier restores without manual action once a replacement Pod
+  converges
+
+#### Scenario: Underlay loses one fragment of a jumbo frame
+
+- **WHEN** the Pod network drops one segment of a frame the wire fragmented
+- **THEN** the whole frame is dropped, nothing is retransmitted, and subsequent frames are
+  unaffected
 
 
 ### Requirement: Required interfaces exist before device boot

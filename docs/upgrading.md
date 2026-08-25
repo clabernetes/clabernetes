@@ -17,10 +17,9 @@ controller-only `Config.spec.imagePull.registryMetadataTrust`).
 
 **Breaking change:** `Topology.spec.connectivity` and `Link.spec.connectivity` no longer exist;
 remove the field from your manifests. There is exactly one cross-Pod realization: the device
-sees a plain veth interface, and each endpoint terminates on an in-Pod VXLAN tunnel keyed by
-the Link's allocated tunnel id. Wire semantics (L2 point-to-point, MTU intent, live rewires,
-cleanup, rescheduling) are unchanged; the experimental slurpeeth userspace TCP transport is
-retired.
+sees a plain veth interface, and each endpoint feeds the Pod's fabric wire keyed by the Link's
+allocated tunnel id. Wire semantics (L2 point-to-point, MTU intent, live rewires, cleanup,
+rescheduling) are unchanged; the experimental slurpeeth userspace TCP transport is retired.
 
 ## LauncherProfile is renamed to NodeProfile
 

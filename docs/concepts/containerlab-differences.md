@@ -13,9 +13,10 @@ nothing is silently dropped.
 ## Networking
 
 - **Cross-node wires are sidecar-realized.** The transport is an implementation detail: each
-  endpoint terminates on an in-Pod VXLAN tunnel keyed by the Link's cluster-wide tunnel id.
-  The device always sees a plain veth; wire semantics (L2 point-to-point, MTU intent, live
-  rewires, cleanup) are preserved.
+  endpoint feeds a sidecar-to-sidecar wire keyed by the Link's cluster-wide tunnel id, which
+  carries any link MTU over any cluster and propagates carrier state between the ends. The
+  device always sees a plain veth; wire semantics (L2 point-to-point, MTU intent, carrier on
+  peer loss, live rewires, cleanup) are preserved.
 - **The management network keeps containerlab semantics.** There is no Docker management
   bridge, but every node still gets a controller-allocated management address on a shared
   management subnet spanning the whole topology -- peers are reachable by management address

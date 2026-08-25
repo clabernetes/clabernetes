@@ -52,7 +52,8 @@ spec:
 Wiring belongs only to Link objects; interfaces are not embedded into Node specifications. The
 link controller validates endpoints and records a cluster-wide tunnel allocation in status, while
 each device Pod's connectivity sidecar watches only the Links terminating on its own Nodes and
-realizes each cross-Pod wire as an in-Pod VXLAN tunnel carrying the Link's allocated tunnel id.
+realizes each cross-Pod wire on the sidecar-to-sidecar fabric wire, addressed by the Link's
+allocated tunnel id.
 
 ## Why direct resources?
 
