@@ -122,7 +122,7 @@ spec:
             httpGet:
               path: /alive
               port: 10443
-              scheme: HTTPS
+              scheme: HTTP
             successThreshold: 1
             failureThreshold: 2
             periodSeconds: 30
@@ -131,7 +131,7 @@ spec:
             httpGet:
               path: /alive
               port: 10443
-              scheme: HTTPS
+              scheme: HTTP
             successThreshold: 1
             failureThreshold: 3
             periodSeconds: 10

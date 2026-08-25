@@ -9,18 +9,9 @@ func (c *clabernetes) init(ctx context.Context) {
 
 	c.leaderCtx = ctx
 
-	c.logger.Info("initializing certificates...")
-
-	err := initializeCertificates(c)
-	if err != nil {
-		c.logger.Fatalf("failed initializing certificates, err: %s", err)
-	}
-
-	c.logger.Debug("initializing certificates complete...")
-
 	c.logger.Info("initializing crds...")
 
-	err = initializeCrds(c)
+	err := initializeCrds(c)
 	if err != nil {
 		c.logger.Fatalf("failed initializing crds, err: %s", err)
 	}

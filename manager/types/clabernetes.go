@@ -33,8 +33,7 @@ type Clabernetes interface { //nolint: interfacebloat
 	GetNodeRuntimeImage() string
 
 	// IsInitializer returns true if the clabernetes instance is an initializer instance -- if true
-	// this means that this instance should update crds, webhook configurations, and other
-	// initialization resources.
+	// this means that this instance should update crds and other initialization resources.
 	IsInitializer() bool
 
 	// GetKubeConfig returns the in-cluster rest.Config for the clabernetes instance.
