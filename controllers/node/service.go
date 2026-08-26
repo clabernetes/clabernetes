@@ -23,11 +23,11 @@ const (
 	exposeTypeHeadless = "Headless"
 )
 
-// FabricServiceName returns the name of the fabric (inter launcher connectivity) service of the
-// given (containerlab) node -- tunnels to the node are pointed at
-// `<name>.<namespace>.<dns-suffix>` by the remote launchers.
+// FabricServiceName returns the name of the fabric (cross-Pod connectivity) service of the
+// given (containerlab) node -- wire peers resolve the node at
+// `<name>.<namespace>.<dns-suffix>` from the remote connectivity sidecars.
 func FabricServiceName(nodeName string) string {
-	return fmt.Sprintf("%s-vx", nodeName)
+	return fmt.Sprintf("%s-wire", nodeName)
 }
 
 func exposeTypeToServiceType(exposeType string) k8scorev1.ServiceType {
@@ -57,50 +57,79 @@ func NewServiceReconciler(
 	}
 }
 
-// launcherSelectorLabels returns the labels selecting the launcher pod of the given launcher
+// podSelectorLabels returns the labels selecting the device pod of the given primary
 // node -- services of grouped (secondary) nodes select their primary's pod.
-func launcherSelectorLabels(launcherNode string) map[string]string {
+func podSelectorLabels(primaryNode string) map[string]string {
 	return map[string]string{
 		clabernetesconstants.LabelApp:          clabernetesconstants.Clabernetes,
-		clabernetesconstants.LabelName:         launcherNode,
-		clabernetesconstants.LabelTopologyNode: launcherNode,
+		clabernetesconstants.LabelName:         primaryNode,
+		clabernetesconstants.LabelTopologyNode: primaryNode,
 	}
 }
 
-// RenderFabricService renders the fabric (vxlan/slurpeeth) service for the given node -- every
-// node gets one, and for grouped nodes the service selects the pod of the group's launcher
-// (primary) node. This per-node service is what lets launchers derive tunnel destinations from
-// a link spec alone.
+// RenderFabricService renders the fabric wire service for the given node -- every node gets
+// one, and for grouped nodes the service selects the pod of the group's primary node. This
+// per-node service is what lets connectivity sidecars derive wire peer destinations from a
+// link spec alone.
 func (r *ServiceReconciler) RenderFabricService(
 	node *clabernetesapisv1alpha1.Node,
-	launcherNode string,
+	primaryNode string,
 ) *k8scorev1.Service {
 	service := r.renderServiceBase(
 		node,
 		FabricServiceName(node.GetName()),
-		launcherNode,
+		primaryNode,
 		clabernetesconstants.TopologyServiceTypeFabric,
 	)
 
 	service.Spec.Type = k8scorev1.ServiceTypeClusterIP
 	service.Spec.Ports = []k8scorev1.ServicePort{
 		{
-			Name:     string(clabernetesapisv1alpha1.LinkConnectivityVXLAN),
+			Name:     "wire",
 			Protocol: clabernetesconstants.UDP,
-			Port:     clabernetesconstants.VXLANServicePort,
+			Port:     clabernetesconstants.FabricWireServicePort,
 			TargetPort: intstr.IntOrString{
-				IntVal: clabernetesconstants.VXLANServicePort,
-			},
-		},
-		{
-			Name:     string(clabernetesapisv1alpha1.LinkConnectivitySlurpeeth),
-			Protocol: clabernetesconstants.TCP,
-			Port:     clabernetesconstants.SlurpeethServicePort,
-			TargetPort: intstr.IntOrString{
-				IntVal: clabernetesconstants.SlurpeethServicePort,
+				IntVal: clabernetesconstants.FabricWireServicePort,
 			},
 		},
 	}
+
+	return service
+}
+
+// RenderDirectFabricService publishes the current direct Pod address even while its connectivity
+// startup gate is pending. Headless discovery avoids pinning wire peers to a Service virtual IP
+// and follows Pod replacement without granting helpers Pod list/watch authority.
+func (r *ServiceReconciler) RenderDirectFabricService(
+	node *clabernetesapisv1alpha1.Node,
+	primaryNode string,
+) *k8scorev1.Service {
+	service := r.RenderFabricService(node, primaryNode)
+	service.Spec.ClusterIP = k8scorev1.ClusterIPNone
+	service.Spec.PublishNotReadyAddresses = true
+
+	return service
+}
+
+// RenderDirectAliasService realizes one containerlab network alias: a headless Service named by
+// the alias selecting the node's pod, so lab members resolve the alias exactly like the node's
+// own name. Docker realizes aliases as management-network DNS aliases; a portless headless
+// Service is the Kubernetes equivalent of that pure name-to-address binding.
+func (r *ServiceReconciler) RenderDirectAliasService(
+	node *clabernetesapisv1alpha1.Node,
+	primaryNode,
+	alias string,
+) *k8scorev1.Service {
+	service := r.renderServiceBase(
+		node,
+		alias,
+		primaryNode,
+		clabernetesconstants.TopologyServiceTypeAlias,
+	)
+
+	service.Spec.Type = k8scorev1.ServiceTypeClusterIP
+	service.Spec.ClusterIP = k8scorev1.ClusterIPNone
+	service.Spec.PublishNotReadyAddresses = true
 
 	return service
 }
@@ -111,7 +140,7 @@ func (r *ServiceReconciler) RenderFabricService(
 // expose disabled/None per the node's resolved profile).
 func (r *ServiceReconciler) RenderExposeService(
 	node *clabernetesapisv1alpha1.Node,
-	launcherNode string,
+	primaryNode string,
 	resolvedProfile *ResolvedProfile,
 	exposedPorts *clabernetesapisv1alpha1.NodeExposedPorts,
 ) *k8scorev1.Service {
@@ -123,7 +152,7 @@ func (r *ServiceReconciler) RenderExposeService(
 	service := r.renderServiceBase(
 		node,
 		node.GetName(),
-		launcherNode,
+		primaryNode,
 		clabernetesconstants.TopologyServiceTypeExpose,
 	)
 
@@ -155,6 +184,26 @@ func (r *ServiceReconciler) RenderExposeService(
 	return service
 }
 
+// RenderDirectExposeService targets ports bound in the shared Pod namespace directly; there is
+// no intermediate publication port between the Service and device.
+func (r *ServiceReconciler) RenderDirectExposeService(
+	node *clabernetesapisv1alpha1.Node,
+	primaryNode string,
+	resolvedProfile *ResolvedProfile,
+	exposedPorts *clabernetesapisv1alpha1.NodeExposedPorts,
+) *k8scorev1.Service {
+	service := r.RenderExposeService(node, primaryNode, resolvedProfile, exposedPorts)
+	if service == nil {
+		return nil
+	}
+
+	for index := range service.Spec.Ports {
+		service.Spec.Ports[index].TargetPort = intstr.FromInt32(service.Spec.Ports[index].Port)
+	}
+
+	return service
+}
+
 // Conforms asserts if a given service conforms with a rendered service -- this isn't checking
 // if the services are exactly the same, just checking that the parts clabernetes cares about
 // are the same.
@@ -172,6 +221,11 @@ func (r *ServiceReconciler) Conforms( //nolint:gocyclo
 	}
 
 	if serviceIsHeadless(existingService) != serviceIsHeadless(renderedService) {
+		return false
+	}
+
+	if existingService.Spec.PublishNotReadyAddresses !=
+		renderedService.Spec.PublishNotReadyAddresses {
 		return false
 	}
 
@@ -310,7 +364,7 @@ func prepareServiceForUpdate(existingService, renderedService *k8scorev1.Service
 func (r *ServiceReconciler) renderServiceBase(
 	node *clabernetesapisv1alpha1.Node,
 	name,
-	launcherNode,
+	primaryNode,
 	serviceType string,
 ) *k8scorev1.Service {
 	annotations, globalLabels := r.configManagerGetter().GetAllMetadata()
@@ -336,7 +390,7 @@ func (r *ServiceReconciler) renderServiceBase(
 			Labels:      labels,
 		},
 		Spec: k8scorev1.ServiceSpec{
-			Selector: launcherSelectorLabels(launcherNode),
+			Selector: podSelectorLabels(primaryNode),
 		},
 	}
 }

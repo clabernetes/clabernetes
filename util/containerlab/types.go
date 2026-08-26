@@ -6,6 +6,7 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
+	clabtypes "github.com/srl-labs/containerlab/types"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,6 +29,8 @@ type (
 	DNSConfig = clabernetesapisv1alpha1.DNSConfig
 	// CertificateConfig represents the configuration of a TLS infrastructure used by a node.
 	CertificateConfig = clabernetesapisv1alpha1.CertificateConfig
+	// HealthcheckConfig represents a containerlab process health contract for a node.
+	HealthcheckConfig = clabernetesapisv1alpha1.HealthcheckConfig
 	// Component holds a hardware component configuration (i.e. an SR-OS card or mda).
 	Component = clabernetesapisv1alpha1.Component
 	// XIOM holds a single xiom configuration of a hardware component.
@@ -39,7 +42,7 @@ type (
 	// MDAS is a list of MDA objects.
 	MDAS = clabernetesapisv1alpha1.MDAS
 	// MgmtNet struct defines the management network options.
-	MgmtNet = clabernetesapisv1alpha1.MgmtNet
+	MgmtNet = clabtypes.MgmtNet
 )
 
 // Config defines lab configuration as it is provided in the YAML file.
@@ -60,8 +63,11 @@ type Config struct {
 type Topology struct {
 	Defaults *NodeDefinition            `yaml:"defaults"`
 	Kinds    map[string]*NodeDefinition `yaml:"kinds,omitempty"`
-	Nodes    map[string]*NodeDefinition `yaml:"nodes,omitempty"`
-	Links    []*LinkDefinition          `yaml:"links,omitempty"`
+	// Groups carries group-scoped configuration that participates in the imported
+	// node-inheritance rules exactly as kinds do.
+	Groups map[string]*NodeDefinition `yaml:"groups,omitempty"`
+	Nodes  map[string]*NodeDefinition `yaml:"nodes,omitempty"`
+	Links  []*LinkDefinition          `yaml:"links,omitempty"`
 }
 
 // GetNodeKindType returns the kind and type of the given node name -- it cannot fail, it can only

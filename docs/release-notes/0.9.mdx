@@ -1,0 +1,150 @@
+---
+title: "0.9"
+---
+
+Unreleased · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.8.0...main)
+
+<Callout type='warn'>
+
+This release replaces the nested launcher runtime with the direct device runtime and removes
+launcher-era API fields. Upgrading is destructive: back up your resources and plan a full
+uninstall and reinstall, see [Upgrading from 0.8](#upgrading-from-08) below. There is no
+in-place `helm upgrade` path and no nested-runtime fallback in this release.
+
+</Callout>
+
+## The direct device runtime
+
+Every network device now runs as a regular application container in a c9s-managed Pod. The
+launcher image, the Docker daemon inside the Pod, the containerlab executable, image import,
+and nested container discovery are gone. What this changes in practice:
+
+- `kubectl logs`, `kubectl exec`, resource limits, and Pod status address the actual device
+  container. Chassis cards and grouped nodes are visible application containers of one Pod.
+- The kubelet performs the only image pull, with native `imagePullPolicy` and
+  `imagePullSecrets`. c9s resolves only registry metadata (manifests and config blobs) and
+  fails readiness if the running image diverges from the planned digest.
+- Kind behavior comes exclusively from the pinned containerlab 0.78.0 Go module, executed in
+  short-lived locked-down planning Pods that record a deterministic device plan. A containerlab
+  module bump admits newly registered kinds without c9s code changes.
+- Each device Pod boots through a preparation init container that stages and digest-verifies
+  every generated and payload artifact, and a restartable privileged connectivity init-sidecar
+  that gates device start on the accepted cold-start interface set and applies live Link
+  changes.
+
+## Connectivity realization
+
+Each device Pod's privileged connectivity sidecar realizes its own links; no node-resident
+agent is installed. Cross-Pod frames ride the fabric wire, a sidecar-to-sidecar UDP transport
+keyed by the Link's namespace-unique wire id, while same-Pod, loopback, and local veth state
+stays inside the Pod sandbox. The device always sees a plain veth interface. Wire semantics
+(L2 point-to-point, MTU intent, carrier propagation, live rewires, cleanup, rescheduling) are
+preserved. The `connectivity` field is removed from Topology and Link specs: there is exactly
+one realization, and the experimental slurpeeth transport is retired.
+
+## The management network is one L2 domain
+
+The management subnet spans the namespace as a single broadcast domain, matching containerlab's
+management network. Devices reach each other's management addresses device-to-device, so
+hardcoded telemetry targets, syslog collectors, and plain ping across Pods all work, while the
+management gateway stays strictly Pod-local. Nodes joining or leaving the namespace are picked
+up automatically without restarting other Pods. See the
+[management network guide](/docs/guides/management-network).
+
+## Expanded node vocabulary
+
+The Node spec and Topology compiler accept more of the native containerlab vocabulary:
+`startup-delay`, `restart-policy` (`always`/`unless-stopped`), `image-pull-policy`, `cpu` and
+`memory` (device-container limits), `healthcheck` (merged over the image OCI healthcheck),
+`aliases` (extra same-namespace Service names for the node's Pod), `link-apply-mode`, `group`,
+and `topology.groups` inheritance. Compilation is fail-closed: vocabulary the direct runtime
+deliberately rejects fails with a diagnostic stating why, and only cosmetic Docker-only
+constructs are accepted with warnings. See
+[Differences from containerlab](/docs/concepts/containerlab-differences).
+
+## Breaking API changes
+
+The `LauncherProfile` CRD is renamed to `NodeProfile` (`Node.spec.profileRef`,
+`Node.status.appliedProfile`); its spec is unchanged and carries reusable direct-workload
+policy (expose, scheduling, resources, persistence, probes, image pull). Device privilege and
+kind-owned container requirements come from the imported package plan.
+
+Launcher-era fields are removed from `Config`, `NodeProfile`, and `Topology`: launcher
+image/log/env settings, `privilegedLauncher`, containerlab debug/timeout/version, Docker
+config and daemon config, insecure registries, pull-through, CRI overrides, by-kind resource
+defaults, and Docker management-network fields. `Link.status.error` is replaced by the
+`Accepted` condition, and `Node.status.probeStatuses` is removed.
+
+Two node-definition fields change meaning:
+
+- `ports` entries are destination ports only (`22/tcp`). The Docker-style `host:container`
+  form is rejected on Nodes, and two-sided entries inside a Topology `definition:` are
+  normalized to their destination port. c9s allocates the service side and records both halves
+  in `Node.status.exposedPorts`.
+- `labels` in a Topology `definition:` become Kubernetes labels on the emitted Node, its
+  Deployment, and Pods; there is no `Node.spec.labels`. c9s-owned labels move to the qualified
+  `c9s.run/` namespace. The old `clabernetes/...` label keys are no longer written or selected,
+  while annotation keys keep their existing names.
+
+### Removed node vocabulary
+
+The Node spec carries only the vocabulary the direct runtime can realize. Unknown fields are
+rejected at apply time, and a Topology `definition:` fails compilation with a diagnostic naming
+each unsupported field and its location.
+
+| Removed | Use instead |
+| --------- | ------------- |
+| `publish`, `sandbox`, `kernel`, `wait-for`, top-level `SANs` | Nothing, containerlab itself removed these. `SANs` moved to `certificate.sans` |
+| `runtime` | Nothing, devices run as regular Kubernetes containers |
+| `auto-remove` | Nothing, Kubernetes owns container lifecycle |
+| `pid-mode`, `cgroupns-mode` | Nothing, these Docker namespace-sharing modes have no Pod mapping |
+| `cpu-set` | Use `cpu`/`memory` limits; CPU pinning has no portable Pod mapping |
+| `credentials` | Referenced Secrets; imported kind default credentials still apply |
+| `stages` | Nothing, stage ordering assumes the whole lab on one host |
+| `labels` | `metadata.labels` on the Node, automatic in a Topology `definition:` |
+| `position` | Nothing, it feeds containerlab graphs, which c9s does not produce |
+| `extras.mysocket-proxy` | Nothing, mysocketctl is gone along with the `publish` field that fed it |
+
+## Upgrading from 0.8
+
+All c9s custom resources now use `apiVersion: c9s.run/v1alpha1` instead of
+`clabernetes.containerlab.dev/v1alpha1`. There is no automatic migration of existing custom
+resource instances; treat this as a clean cutover. Uninstalling c9s deletes all Topology, Node,
+Link, NodeProfile, and Config resources when the CRDs are removed.
+
+1. Export your manifests before uninstalling:
+
+   ```bash
+   kubectl get topologies,nodes,links,launcherprofiles,configs -A -o yaml > backup.yaml
+   ```
+
+2. Uninstall the existing c9s install and remove its CRDs:
+
+   ```bash
+   make uninstall
+   ```
+
+   Or manually uninstall the Helm release, delete all `*.c9s.run` and
+   `*.clabernetes.containerlab.dev` CRDs, then delete the `c9s` namespace.
+
+3. Update every manifest to the new API group (`apiVersion: c9s.run/v1alpha1`), rename
+   `kind: LauncherProfile` to `kind: NodeProfile` and `Node.spec.launcherProfileRef` to
+   `Node.spec.profileRef`, and remove any field listed above.
+
+4. Install the new c9s release (Helm install).
+
+5. Re-apply your updated manifests.
+
+The repository `make install` target performs the API-group check before Helm. It allows
+same-group version changes, but refuses a legacy/new group crossing and prints the destructive
+cleanup command. With `kubectl`, the fully qualified resource names change accordingly, for
+example `kubectl get nodes.clabernetes.containerlab.dev` becomes `kubectl get nodes.c9s.run`.
+
+Rolling back after the CRD replacement means reinstalling the prior release with its matching
+CRDs and restoring the backed-up resources.
+
+## Compatibility
+
+Supported kinds come from the imported containerlab 0.78.0 registry. c9s maintains no kind
+catalog of its own, and a containerlab module bump admits newly registered kinds without c9s
+changes.

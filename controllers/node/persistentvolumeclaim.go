@@ -32,7 +32,7 @@ func NewPersistentVolumeClaimReconciler(
 	}
 }
 
-// Render renders the pvc for the given (launcher) node. Note that Render accepts an existing
+// Render renders the pvc for the given (primary) node. Note that Render accepts an existing
 // pvc as well -- the VolumeName field is immutable, so we *must* carry over the name of the
 // volume that got provisioned (if it exists).
 func (r *PersistentVolumeClaimReconciler) Render(

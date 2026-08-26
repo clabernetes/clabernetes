@@ -24,34 +24,6 @@ const (
 	TopologyStateDeployFailed TopologyState = "deployfailed"
 )
 
-// NodeProbeStatus represents the status of a single probe type on a node.
-// +kubebuilder:validation:Enum=passing;failing;unknown;disabled
-type NodeProbeStatus string
-
-const (
-	// NodeProbeStatusPassing indicates the probe is succeeding.
-	NodeProbeStatusPassing NodeProbeStatus = "passing"
-
-	// NodeProbeStatusFailing indicates the probe is failing.
-	NodeProbeStatusFailing NodeProbeStatus = "failing"
-
-	// NodeProbeStatusUnknown indicates the probe status is not yet known.
-	NodeProbeStatusUnknown NodeProbeStatus = "unknown"
-
-	// NodeProbeStatusDisabled indicates the probe is not configured.
-	NodeProbeStatusDisabled NodeProbeStatus = "disabled"
-)
-
-// NodeProbeStatuses holds the individual probe statuses for a single node.
-type NodeProbeStatuses struct {
-	// StartupProbe is the status of the node's startup probe.
-	StartupProbe NodeProbeStatus `json:"startupProbe"`
-	// ReadinessProbe is the status of the node's readiness probe.
-	ReadinessProbe NodeProbeStatus `json:"readinessProbe"`
-	// LivenessProbe is the status of the node's liveness probe.
-	LivenessProbe NodeProbeStatus `json:"livenessProbe"`
-}
-
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -80,16 +52,13 @@ type TopologySpec struct {
 	// Expose holds configurations relevant to how clabernetes exposes a topology.
 	// +optional
 	Expose Expose `json:"expose"`
-	// Deployment holds configurations relevant to how clabernetes configures deployments that make
-	// up a given topology.
+	// Deployment holds portable policy compiled into direct Node workloads.
 	// +optional
 	Deployment Deployment `json:"deployment"`
-	// StatusProbes holds the configurations relevant to how clabernetes and the launcher handle
-	// checking and reporting the containerlab node status
+	// StatusProbes holds additional direct application readiness policy.
 	// +optional
 	StatusProbes StatusProbes `json:"statusProbes"`
-	// ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling
-	// images.
+	// ImagePull holds Kubernetes-native defaults compiled into direct device Pods.
 	// +optional
 	ImagePull ImagePull `json:"imagePull"`
 	// Naming tells the clabernetes controller how it should name resources it creates -- that is
@@ -108,13 +77,6 @@ type TopologySpec struct {
 	// +kubebuilder:validation:Enum=prefixed;non-prefixed;global
 	// +kubebuilder:default=global
 	Naming string `json:"naming"`
-	// Connectivity defines the type of connectivity to use between nodes in the topology. The
-	// default behavior is to use vxlan tunnels, alternatively you can enable a more experimental
-	// "slurpeeth" connectivity flavor that stuffs traffic into tcp tunnels to avoid any vxlan mtu
-	// and/or fragmentation challenges.
-	// +kubebuilder:validation:Enum=vxlan;slurpeeth
-	// +kubebuilder:default=vxlan
-	Connectivity string `json:"connectivity,omitempty"`
 }
 
 // TopologyStatus is the status for a Topology resource. Note that all *per node* (and per link)

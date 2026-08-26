@@ -1,0 +1,18 @@
+# Shared Kubernetes and launcher policy for both nodes.
+apiVersion: c9s.run/v1alpha1
+kind: NodeProfile
+metadata:
+  name: srl-multitool
+  labels:
+    c9s.run/example: srl-multitool
+spec:
+  statusProbes:
+    enabled: true
+    excludedNodes:
+      - multitool
+    probeConfiguration:
+      startupSeconds: 1200
+      sshProbeConfiguration:
+        username: admin
+        password: NokiaSrl1!
+        port: 22

@@ -7,29 +7,44 @@ import (
 )
 
 const (
-	// NodeConditionLauncherProfileResolved reports whether the Node's effective
-	// LauncherProfile reference resolved successfully.
-	NodeConditionLauncherProfileResolved = "LauncherProfileResolved"
+	// NodeConditionProfileResolved reports whether the Node's effective
+	// NodeProfile reference resolved successfully.
+	NodeConditionProfileResolved = "NodeProfileResolved"
+	// NodeConditionPlanApplied reports whether status was derived from the currently accepted plan.
+	NodeConditionPlanApplied = "PlanApplied"
+	// NodeConditionPrepared reports whether the direct preparation init container completed.
+	NodeConditionPrepared = "Prepared"
+	// NodeConditionConnectivityReady reports whether cold-start direct connectivity converged.
+	NodeConditionConnectivityReady = "ConnectivityReady"
+	// NodeConditionContainersReady reports aggregate readiness of this logical Node's direct
+	// application containers.
+	NodeConditionContainersReady = "ContainersReady"
+	// NodeConditionLinkLifecycleAction reports the planner-declared action selected for the latest
+	// direct Link-only transition. ConnectivityReady and ContainersReady report convergence.
+	NodeConditionLinkLifecycleAction = "LinkLifecycleAction"
 )
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Node represents a single containerlab node ("device") and is realized as a single launcher
-// pod. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by
+// Node represents one logical containerlab node realized in a direct Kubernetes workload. Nodes
+// are a primary clabernetes API -- they can be created by users directly, emitted by
 // the (optional) Topology compiler, or created by any other machinery (i.e. a containerlab
-// runtime); the node controller treats all of these identically. The object name *is* the
-// containerlab node name -- the launcher pod hostname and the node's services (`<name>` for
-// exposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the
-// namespace is the topology boundary. The spec is simply what a human would write for the node
-// in a containerlab topology file (plus per-node payload and launcherProfileRef); wiring lives
-// exclusively on Link objects and everything operational is stamped by the controller into
-// status.
+// runtime); the Node controller treats all of these identically. The object name is the
+// containerlab Node name and the namespace is the topology boundary. The spec is the flattened
+// containerlab Node definition plus per-node payload and profileRef; wiring lives on Link
+// objects and bounded allocations and observations live in status.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path="nodes",shortName="c9snode"
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".spec.kind",name=Kind,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.image",name=Image,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.readiness",name=Readiness,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='ContainersReady')].status",name=Containers,type=string,priority=1
+// +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='Prepared')].status",name=Prepared,type=string,priority=1
+// +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='ConnectivityReady')].status",name=Connectivity,type=string,priority=1
+// +kubebuilder:printcolumn:JSONPath=".status.planDigest",name=Plan,type=string,priority=1
+// +kubebuilder:printcolumn:JSONPath=".status.appliedProfile.name",name=Profile,type=string,priority=1
 // +kubebuilder:printcolumn:JSONPath=".metadata.creationTimestamp",name=Age,type=date
 type Node struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -41,28 +56,30 @@ type Node struct {
 
 // NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
 // containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an
-// optional LauncherProfile reference. The definition must be self-contained: expanding topology
+// optional NodeProfile reference. The definition must be self-contained: expanding topology
 // defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
 // this for you). Anything that is deployment *policy* rather than node payload -- expose
-// behavior, image pull config, launcher resources, scheduling, privileges -- lives on
-// LauncherProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
-// curated subset (see NodeDefinition): fields a launcher pod cannot realize are absent, and
+// behavior, image pull defaults, generic resources, scheduling, and probes -- lives on
+// NodeProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
+// curated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and
 // unknown fields are rejected rather than silently ignored.
 type NodeSpec struct {
 	NodeDefinition `json:",inline" yaml:",inline"`
 
-	// LauncherProfileRef optionally names the same-namespace LauncherProfile supplying launcher
-	// policy. When omitted, global Config defaults are used.
+	// ProfileRef optionally names the same-namespace NodeProfile supplying direct
+	// workload policy. When omitted, global Config defaults are used.
 	// +optional
-	//nolint:lll // The qualified type and serialization tags form one declaration.
-	LauncherProfileRef *k8scorev1.LocalObjectReference `json:"launcherProfileRef,omitempty" yaml:"-"`
-	// FilesFromConfigMap holds files mounted from ConfigMaps into the launcher responsible for
-	// this Node.
+	ProfileRef *k8scorev1.LocalObjectReference `json:"profileRef,omitempty" yaml:"-"`
+	// FilesFromConfigMap holds files staged from ConfigMaps for this Node's application containers.
 	// +listType=atomic
 	// +optional
 	FilesFromConfigMap []FileFromConfigMap `json:"filesFromConfigMap,omitempty" yaml:"-"`
-	// FilesFromURL holds any files that the launcher for this node should fetch from a URL prior
-	// to launching the node.
+	// FilesFromSecret holds sensitive files projected from same-namespace Secrets into this Node's
+	// direct application container.
+	// +listType=atomic
+	// +optional
+	FilesFromSecret []FileFromSecret `json:"filesFromSecret,omitempty" yaml:"-"`
+	// FilesFromURL holds files preparation must fetch and verify before the Node starts.
 	// +listType=atomic
 	// +optional
 	FilesFromURL []FileFromURL `json:"filesFromURL,omitempty" yaml:"-"`
@@ -71,17 +88,13 @@ type NodeSpec struct {
 // NodeStatus is the status for a Node resource. Everything in here is an *allocation* or an
 // *observation* made by the controller -- user intent never lives in the status.
 type NodeStatus struct {
-	// Readiness is the readiness of this node as reported by its launcher deployment -- one of
+	// Readiness is the controller-observed readiness of this Node's active runtime -- one of
 	// "ready", "notready" or "unknown".
 	// +kubebuilder:validation:Enum=ready;notready;unknown
 	// +optional
 	Readiness string `json:"readiness,omitempty"`
-	// ProbeStatuses holds the per-probe status information for this node.
-	// +optional
-	ProbeStatuses *NodeProbeStatuses `json:"probeStatuses,omitempty"`
-	// ExposedPorts holds the expose port *allocations* for this node -- the controller assigns
-	// an expose port for every (spec or auto-expose default) port and programs the node's expose
-	// service from this very field; the launcher reads it to publish the ports on the pod.
+	// ExposedPorts holds expose-port allocations for this Node. The controller assigns and programs
+	// the direct Pod Service from this field.
 	// +optional
 	ExposedPorts *NodeExposedPorts `json:"exposedPorts,omitempty"`
 	// Conditions contains the current conditions for this Node.
@@ -89,19 +102,71 @@ type NodeStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	// AppliedLauncherProfile identifies the LauncherProfile successfully applied to the launcher
-	// workload. It is nil when the Node uses only global Config defaults.
+	// AppliedProfile identifies the NodeProfile revision successfully applied to the
+	// direct workload. It is nil when the Node uses only global Config defaults.
 	// +optional
-	AppliedLauncherProfile *AppliedLauncherProfileStatus `json:"appliedLauncherProfile,omitempty"`
+	AppliedProfile *AppliedProfileStatus `json:"appliedProfile,omitempty"`
+	// PlanDigest identifies the immutable direct device plan observed by this status.
+	// +optional
+	PlanDigest string `json:"planDigest,omitempty"`
+	// DirectContainers contains bounded Kubernetes observations for application containers that
+	// represent this logical Node. It contains no user intent or full plan data.
+	// +listType=map
+	// +listMapKey=id
+	// +optional
+	DirectContainers []NodeDirectContainerStatus `json:"directContainers,omitempty"`
+	// DirectManagement contains the bounded management allocation from the applied direct plan.
+	// It contains no credentials or kind-specific configuration.
+	// +optional
+	DirectManagement *NodeDirectManagementStatus `json:"directManagement,omitempty"`
 }
 
-// AppliedLauncherProfileStatus identifies the exact LauncherProfile revision applied to a Node.
-type AppliedLauncherProfileStatus struct {
-	// Name is the LauncherProfile name.
+// NodeDirectManagementStatus is the controller-allocated direct management identity for one
+// logical Node.
+type NodeDirectManagementStatus struct {
+	// InterfaceName is the package-selected management interface in the Pod namespace.
+	InterfaceName string `json:"interfaceName"`
+	// IPv4 is the allocated IPv4 address and prefix.
+	// +optional
+	IPv4 string `json:"ipv4,omitempty"`
+	// IPv4Gateway is the source-specific IPv4 gateway.
+	// +optional
+	IPv4Gateway string `json:"ipv4Gateway,omitempty"`
+	// IPv6 is the allocated IPv6 address and prefix.
+	// +optional
+	IPv6 string `json:"ipv6,omitempty"`
+	// IPv6Gateway is the source-specific IPv6 gateway.
+	// +optional
+	IPv6Gateway string `json:"ipv6Gateway,omitempty"`
+}
+
+// NodeDirectContainerStatus is one plan-addressed application-container observation.
+type NodeDirectContainerStatus struct {
+	// ID is the stable runtime-neutral container identity from the applied plan.
+	ID string `json:"id"`
+	// Name is the deterministic Kubernetes container name used with kubectl's -c option.
+	Name string `json:"name"`
+	// ComponentID is the imported component identity when this is not the logical primary.
+	// +optional
+	ComponentID string `json:"componentID,omitempty"`
+	// State is one of unknown, waiting, running, or terminated.
+	State string `json:"state"`
+	// Ready is the Kubernetes application-container readiness observation.
+	Ready bool `json:"ready"`
+	// RestartCount is the kubelet-observed restart count.
+	RestartCount int32 `json:"restartCount"`
+	// ImageID is the kubelet-observed immutable image identity when available.
+	// +optional
+	ImageID string `json:"imageID,omitempty"`
+}
+
+// AppliedProfileStatus identifies the exact NodeProfile revision applied to a Node.
+type AppliedProfileStatus struct {
+	// Name is the NodeProfile name.
 	Name string `json:"name"`
 	// UID distinguishes replacement profiles that reuse a name.
 	UID apimachinerytypes.UID `json:"uid"`
-	// Generation is the applied LauncherProfile generation.
+	// Generation is the applied NodeProfile generation.
 	Generation int64 `json:"generation"`
 }
 
@@ -120,8 +185,7 @@ type NodeExposedPorts struct {
 
 // NodeExposedPort holds a single expose port allocation for a Node.
 type NodeExposedPort struct {
-	// ExposePort is the allocated (or user provided) port published on the launcher pod (and
-	// targeted by the expose service).
+	// ExposePort is the allocated Service port targeting the direct device Pod.
 	ExposePort int `json:"exposePort"`
 	// DestinationPort is the port on the (containerlab) node itself -- this is the port the
 	// expose service listens on.

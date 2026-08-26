@@ -28,42 +28,35 @@ type statuslessLink struct {
 	Spec clabernetesapisv1alpha1.LinkSpec `json:"spec"`
 }
 
-// statuslessLauncherProfile is a LauncherProfile without the status field.
-type statuslessLauncherProfile struct {
+// statuslessNodeProfile is a NodeProfile without the status field.
+type statuslessNodeProfile struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec clabernetesapisv1alpha1.LauncherProfileSpec `json:"spec"`
+	Spec clabernetesapisv1alpha1.NodeProfileSpec `json:"spec"`
 }
 
-// handleCRManifests renders the primitive Node/Link/LauncherProfile manifests for the loaded
+// handleCRManifests renders the primitive Node/Link/NodeProfile manifests for the loaded
 // topology -- no Topology object involved. This reuses the very same compile+render pipeline
 // the in-cluster Topology compiler runs, so `clabverter --emit-crs` output matches what the
 // compiler would emit for the equivalent Topology (minus owner references).
-func (c *Clabverter) handleCRManifests() error {
-	topology, err := c.buildInMemoryTopology()
-	if err != nil {
-		return err
-	}
-
-	compiled, err := clabernetescontrollerstopology.CompileTopology(c.logger, topology)
-	if err != nil {
-		c.logger.Criticalf("failed compiling topology definition, error: %s", err)
-
-		return err
-	}
-
+func (c *Clabverter) handleCRManifests(
+	topology *clabernetesapisv1alpha1.Topology,
+	compiled *clabernetescontrollerstopology.CompiledTopology,
+) error {
 	content := make([]byte, 0)
 
-	for _, profile := range clabernetescontrollerstopology.RenderLauncherProfiles(
+	var err error
+
+	for _, profile := range clabernetescontrollerstopology.RenderNodeProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	) {
-		content, err = appendManifest(content, &statuslessLauncherProfile{
+		content, err = appendManifest(content, &statuslessNodeProfile{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: manifestAPIVersion,
-				Kind:       "LauncherProfile",
+				Kind:       "NodeProfile",
 			},
 			ObjectMeta: profile.ObjectMeta,
 			Spec:       profile.Spec,
@@ -114,13 +107,33 @@ func (c *Clabverter) handleCRManifests() error {
 	c.renderedFiles = append(
 		c.renderedFiles,
 		renderedContent{
-			friendlyName: "clabernetes launcherprofile/node/link manifests",
+			friendlyName: "clabernetes nodeprofile/node/link manifests",
 			fileName:     fileName,
 			content:      content,
 		},
 	)
 
 	return nil
+}
+
+func (c *Clabverter) compileDirectTopology() (
+	*clabernetesapisv1alpha1.Topology,
+	*clabernetescontrollerstopology.CompiledTopology,
+	error,
+) {
+	topology, err := c.buildInMemoryTopology()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	compiled, err := clabernetescontrollerstopology.CompileTopology(c.logger, topology)
+	if err != nil {
+		c.logger.Criticalf("failed compiling topology definition, error: %s", err)
+
+		return nil, nil, err
+	}
+
+	return topology, compiled, nil
 }
 
 const manifestAPIVersion = "c9s.run/v1alpha1"
@@ -139,8 +152,6 @@ func appendManifest(content []byte, manifest any) ([]byte, error) {
 // buildInMemoryTopology assembles the Topology object the compile+render pipeline runs on --
 // exactly the object the topology manifest output would declare, just never persisted. A
 // provided topo spec file is the base, flags/files layer on top.
-//
-//nolint:gocyclo // Keeping all input overlays together makes their precedence explicit.
 func (c *Clabverter) buildInMemoryTopology() (*clabernetesapisv1alpha1.Topology, error) {
 	topology := &clabernetesapisv1alpha1.Topology{
 		ObjectMeta: metav1.ObjectMeta{
@@ -155,7 +166,7 @@ func (c *Clabverter) buildInMemoryTopology() (*clabernetesapisv1alpha1.Topology,
 			return nil, err
 		}
 
-		err = sigsyaml.Unmarshal(content, &topology.Spec)
+		err = sigsyaml.UnmarshalStrict(content, &topology.Spec)
 		if err != nil {
 			return nil, err
 		}
@@ -163,16 +174,7 @@ func (c *Clabverter) buildInMemoryTopology() (*clabernetesapisv1alpha1.Topology,
 
 	topology.Spec.Definition.Containerlab = c.rawClabConfig
 	topology.Spec.Expose.DisableExpose = c.disableExpose
-	topology.Spec.ImagePull.InsecureRegistries = c.insecureRegistries
 	topology.Spec.ImagePull.PullSecrets = c.imagePullSecrets
-	topology.Spec.Deployment.ContainerlabVersion = c.containerlabVersion
-
-	// An in-memory Topology does not pass through API-server defaulting. Normalize defaults whose
-	// compiled representation belongs on a primitive resource so direct output is semantically
-	// identical to compiling a persisted Topology.
-	if topology.Spec.Connectivity == "" {
-		topology.Spec.Connectivity = string(clabernetesapisv1alpha1.LinkConnectivityVXLAN)
-	}
 
 	files := map[string][]topologyConfigMapTemplateVars{}
 
@@ -192,7 +194,8 @@ func (c *Clabverter) buildInMemoryTopology() (*clabernetesapisv1alpha1.Topology,
 	}
 
 	if len(files) > 0 && topology.Spec.Deployment.FilesFromConfigMap == nil {
-		topology.Spec.Deployment.FilesFromConfigMap = map[string][]clabernetesapisv1alpha1.FileFromConfigMap{} //nolint:lll
+		topology.Spec.Deployment.
+			FilesFromConfigMap = map[string][]clabernetesapisv1alpha1.FileFromConfigMap{}
 	}
 
 	for nodeName, nodeFiles := range files {

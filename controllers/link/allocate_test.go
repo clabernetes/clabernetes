@@ -14,7 +14,7 @@ func testLink(
 	interfaceA,
 	nodeB,
 	interfaceB string,
-	tunnelID int,
+	wireID int,
 ) clabernetesapisv1alpha1.Link {
 	return clabernetesapisv1alpha1.Link{
 		ObjectMeta: metav1.ObjectMeta{
@@ -32,7 +32,7 @@ func testLink(
 			},
 		},
 		Status: clabernetesapisv1alpha1.LinkStatus{
-			TunnelID: tunnelID,
+			WireID: wireID,
 		},
 	}
 }
@@ -52,12 +52,6 @@ func testNode(name, networkMode string) clabernetesapisv1alpha1.Node {
 }
 
 func TestValidateLink(t *testing.T) {
-	slurpeethLink := testLink("slurpeeth", "srl1", "e1-1", "srl2", "e1-1", 0)
-	slurpeethLink.Spec.Connectivity = clabernetesapisv1alpha1.LinkConnectivitySlurpeeth
-
-	unknownLink := testLink("unknown", "srl1", "e1-1", "srl2", "e1-1", 0)
-	unknownLink.Spec.Connectivity = "unknown"
-
 	cases := []struct {
 		name        string
 		link        clabernetesapisv1alpha1.Link
@@ -67,16 +61,6 @@ func TestValidateLink(t *testing.T) {
 			name:        "simple",
 			link:        testLink("simple", "srl1", "e1-1", "srl2", "e1-1", 0),
 			expectValid: true,
-		},
-		{
-			name:        "explicit-slurpeeth",
-			link:        slurpeethLink,
-			expectValid: true,
-		},
-		{
-			name:        "unknown-connectivity",
-			link:        unknownLink,
-			expectValid: false,
 		},
 		{
 			name:        "host-link",
@@ -112,20 +96,6 @@ func TestValidateLink(t *testing.T) {
 				t.Fatal("expected link to be invalid, got no error")
 			}
 		})
-	}
-}
-
-func TestLinkConnectivityNormalization(t *testing.T) {
-	link := testLink("default", "srl1", "e1-1", "srl2", "e1-1", 0)
-	if got := link.Spec.NormalizedConnectivity(); got !=
-		clabernetesapisv1alpha1.LinkConnectivityVXLAN {
-		t.Fatalf("expected omitted connectivity to normalize to VXLAN, got %q", got)
-	}
-
-	link.Spec.Connectivity = clabernetesapisv1alpha1.LinkConnectivitySlurpeeth
-	if got := link.Spec.NormalizedConnectivity(); got !=
-		clabernetesapisv1alpha1.LinkConnectivitySlurpeeth {
-		t.Fatalf("expected explicit slurpeeth connectivity, got %q", got)
 	}
 }
 
@@ -188,27 +158,7 @@ func TestFindEndpointConflict(t *testing.T) {
 	}
 }
 
-func TestResolveDesiredTunnelID(t *testing.T) {
-	slurpeethOutOfRange := testLink(
-		"slurpeeth",
-		"srl1",
-		"e1-1",
-		"srl2",
-		"e1-1",
-		clabernetesapisv1alpha1.SlurpeethMaxSegmentID+1,
-	)
-	slurpeethOutOfRange.Spec.Connectivity = clabernetesapisv1alpha1.LinkConnectivitySlurpeeth
-
-	slurpeethMax := testLink(
-		"slurpeeth",
-		"srl1",
-		"e1-1",
-		"srl2",
-		"e1-1",
-		clabernetesapisv1alpha1.SlurpeethMaxSegmentID,
-	)
-	slurpeethMax.Spec.Connectivity = clabernetesapisv1alpha1.LinkConnectivitySlurpeeth
-
+func TestResolveDesiredWireID(t *testing.T) {
 	cases := []struct {
 		name           string
 		link           clabernetesapisv1alpha1.Link
@@ -263,7 +213,7 @@ func TestResolveDesiredTunnelID(t *testing.T) {
 			expected: 0,
 		},
 		{
-			name: "same-launcher-link-needs-no-id",
+			name: "same-pod-link-needs-no-id",
 			link: testLink("a-link", "srl1", "e1-1", "sim-a", "eth1", 4),
 			namespaceNodes: []clabernetesapisv1alpha1.Node{
 				testNode("srl1", ""),
@@ -272,7 +222,7 @@ func TestResolveDesiredTunnelID(t *testing.T) {
 			expected: 0,
 		},
 		{
-			name: "cross-launcher-grouped-nodes-get-id",
+			name: "cross-pod-grouped-nodes-get-id",
 			link: testLink("a-link", "sim-a", "eth1", "sim-b", "eth1", 0),
 			namespaceNodes: []clabernetesapisv1alpha1.Node{
 				testNode("srl1", ""),
@@ -282,21 +232,11 @@ func TestResolveDesiredTunnelID(t *testing.T) {
 			},
 			expected: 1,
 		},
-		{
-			name:     "slurpeeth-reallocates-id-outside-uint16-range",
-			link:     slurpeethOutOfRange,
-			expected: 1,
-		},
-		{
-			name:     "slurpeeth-retains-stable-id-at-uint16-limit",
-			link:     slurpeethMax,
-			expected: clabernetesapisv1alpha1.SlurpeethMaxSegmentID,
-		},
 	}
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			actual, err := clabernetescontrollerslink.ResolveDesiredTunnelID(
+			actual, err := clabernetescontrollerslink.ResolveDesiredWireID(
 				&testCase.link,
 				testCase.namespaceLinks,
 				testCase.namespaceNodes,
@@ -306,8 +246,46 @@ func TestResolveDesiredTunnelID(t *testing.T) {
 			}
 
 			if actual != testCase.expected {
-				t.Fatalf("expected tunnel id %d, got %d", testCase.expected, actual)
+				t.Fatalf("expected wire id %d, got %d", testCase.expected, actual)
 			}
 		})
+	}
+}
+
+func TestResolveDesiredWireIDIsNamespaceScoped(t *testing.T) {
+	t.Parallel()
+
+	// Allocation reads only the Link's own namespace: wire ids dispatch inside one receiving
+	// sidecar from a validated source, so a Link in another namespace holding the same id is
+	// simply not part of the input and can never block allocation.
+	local := testLink("a-link", "srl1", "e1-1", "srl2", "e1-1", 0)
+	local.Namespace = "lab-a"
+
+	sibling := testLink("b-link", "srl1", "e1-2", "srl2", "e1-2", 1)
+	sibling.Namespace = "lab-a"
+
+	got, err := clabernetescontrollerslink.ResolveDesiredWireID(
+		&local,
+		[]clabernetesapisv1alpha1.Link{local, sibling},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got != 2 {
+		t.Fatalf("namespace wire allocation = %d, want 2", got)
+	}
+
+	// Retention holds against namespace state only.
+	local.Status.WireID = 5
+
+	got, err = clabernetescontrollerslink.ResolveDesiredWireID(
+		&local,
+		[]clabernetesapisv1alpha1.Link{local, sibling},
+		nil,
+	)
+	if err != nil || got != 5 {
+		t.Fatalf("namespace retention = %d err=%v, want 5", got, err)
 	}
 }

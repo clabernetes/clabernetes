@@ -1,0 +1,20 @@
+---
+title: NodeProfile
+description: NodeProfile custom resource schema.
+icon: Settings2
+---
+
+The `NodeProfile` CRD holds reusable direct-workload policy: expose behavior, image pull
+defaults, primary-container resources, scheduling, persistence, and probes. Nodes reference
+profiles explicitly via `profileRef`. Device privilege, capabilities, and other kind-owned
+container requirements are not profile policy; they come from the imported package's plan.
+
+Readiness first requires the device application container to be running; an image- or
+definition-declared healthcheck translates into Kubernetes startup/readiness probes that must
+pass. A running image without a healthcheck provides process-level readiness only; configure an
+image healthcheck or an explicit TCP/SSH probe when application readiness matters. With
+`statusProbes.enabled`, TCP/SSH checks execute inside each Node's device container against that
+node's management address, so grouped members are probed individually (per-node settings via
+`nodeProbeConfigurations`).
+
+<CrdViewer name="node-profile" />

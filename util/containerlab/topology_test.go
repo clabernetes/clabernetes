@@ -65,7 +65,7 @@ topology:
 		}
 
 		if len(unknownFields) != 0 {
-			t.Errorf("Config uses only known vocabulary but got warnings: %q", unknownFields)
+			t.Errorf("Config uses only known vocabulary but got diagnostics: %q", unknownFields)
 		}
 	}
 }
@@ -94,7 +94,7 @@ topology:
 	}
 
 	if len(unknownFields) != 0 {
-		t.Fatalf("structured veth endpoint warnings = %q, want none", unknownFields)
+		t.Fatalf("structured veth endpoint diagnostics = %q, want none", unknownFields)
 	}
 
 	want := clabernetesutilcontainerlab.LinkEndpoints{"srsim:1/1/c1/1", "client:eth1"}
@@ -135,7 +135,7 @@ topology:
 	}
 
 	if len(unknownFields) != 0 {
-		t.Fatalf("mixed veth endpoint warnings = %q, want none", unknownFields)
+		t.Fatalf("mixed veth endpoint diagnostics = %q, want none", unknownFields)
 	}
 
 	want := clabernetesutilcontainerlab.LinkEndpoints{"srsim:1/1/c1/1", "client:eth1"}
@@ -231,10 +231,10 @@ func TestLoadContainerlabConfigFromConfigObjects(t *testing.T) {
 			t.Errorf("Unable to load containerlab config: %s", err)
 		}
 
-		// the config objects are built from the vocabulary types themselves, so a warning here
+		// the config objects are built from the vocabulary types themselves, so a diagnostic here
 		// means clabernetes renders a field it cannot read back
 		if len(unknownFields) != 0 {
-			t.Errorf("Round tripping our own vocabulary produced warnings: %q", unknownFields)
+			t.Errorf("Round tripping our own vocabulary produced diagnostics: %q", unknownFields)
 		}
 
 		if diff := cmp.Diff(testCase.config.Topology, cfg.Topology); diff != "" {
@@ -243,11 +243,9 @@ func TestLoadContainerlabConfigFromConfigObjects(t *testing.T) {
 	}
 }
 
-// TestLoadContainerlabConfigWarnsOnUnknownFields covers the asymmetry between the two ways a
-// containerlab topology reaches clabernetes: a Node custom resource is validated strictly by the
-// apiserver, but a Topology definition is native containerlab text, so vocabulary clabernetes has
-// no home for is dropped with a warning rather than failing the lab.
-func TestLoadContainerlabConfigWarnsOnUnknownFields(t *testing.T) {
+// TestLoadContainerlabConfigReportsUnknownFields proves the parse layer returns every unsupported
+// location so compiler callers can reject the complete set rather than losing source vocabulary.
+func TestLoadContainerlabConfigReportsUnknownFields(t *testing.T) {
 	// publish and stages are real containerlab vocabulary clabernetes does not implement,
 	// tooootally-not-a-field stands in for a typo or a newer containerlab
 	config, unknownFields, err := clabernetesutilcontainerlab.LoadContainerlabConfig(`
@@ -287,15 +285,15 @@ topology:
 	}
 
 	for _, field := range []string{"publish", "tooootally-not-a-field", "stages"} {
-		if !slices.ContainsFunc(unknownFields, func(warning string) bool {
-			return strings.Contains(warning, field)
+		if !slices.ContainsFunc(unknownFields, func(diagnostic string) bool {
+			return strings.Contains(diagnostic, field)
 		}) {
-			t.Errorf("expected a warning naming %q, got %q", field, unknownFields)
+			t.Errorf("expected a diagnostic naming %q, got %q", field, unknownFields)
 		}
 	}
 
 	if len(unknownFields) != 3 {
-		t.Errorf("expected exactly 3 warnings, got %q", unknownFields)
+		t.Errorf("expected exactly 3 diagnostics, got %q", unknownFields)
 	}
 }
 

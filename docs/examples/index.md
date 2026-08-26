@@ -16,18 +16,17 @@ the code so they can be tested and updated with the APIs they demonstrate.
 ## Deployment configuration
 
 [Deployment examples](https://github.com/clabernetes/clabernetes/tree/main/examples/deployment)
-cover resource requests, scheduling, persistence, file mounting, custom launcher settings, and
-status probes.
+cover resource requests, scheduling, persistence, and file mounting.
 
 ## Service exposure
 
 [Exposure examples](https://github.com/clabernetes/clabernetes/tree/main/examples/expose) show
-LoadBalancer, ClusterIP, management-address, and disabled exposure modes.
+ClusterIP, Headless, disabled auto-expose, and fully disabled exposure modes.
 
 ## Advanced labs
 
 [Advanced examples](https://github.com/clabernetes/clabernetes/tree/main/examples/advanced) include
-larger topologies, private registries, probes, grouped nodes, slurpeeth, and Nokia SR-SIM.
+larger topologies, private registries, probes, grouped nodes, and Nokia SR-SIM.
 
 ## Apply an example
 

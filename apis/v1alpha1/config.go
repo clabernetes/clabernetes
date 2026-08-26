@@ -28,11 +28,10 @@ type ConfigSpec struct {
 	// InClusterDNSSuffix overrides the default in cluster dns suffix used when resolving services.
 	// +optional
 	InClusterDNSSuffix string `json:"inClusterDNSSuffix,omitempty"`
-	// ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling
-	// images.
+	// ImagePull holds direct Pod pull defaults and controller-only OCI metadata trust policy.
 	// +optional
 	ImagePull ConfigImagePull `json:"imagePull"`
-	// Deployment holds clabernetes deployment related configuration settings.
+	// Deployment holds generic direct device workload defaults.
 	// +optional
 	Deployment ConfigDeployment `json:"deployment"`
 	// Naming holds the global override for the "naming" setting for Topology objects -- this

@@ -50,7 +50,7 @@ type ClabernetesLeaseLock struct {
 // created lease.
 func (ll *ClabernetesLeaseLock) Create(
 	ctx context.Context,
-	ler resourcelock.LeaderElectionRecord, //nolint: gocritic
+	ler resourcelock.LeaderElectionRecord,
 ) error {
 	err := ll.LeaseLock.Create(ctx, ler)
 	if err != nil {

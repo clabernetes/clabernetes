@@ -29,16 +29,11 @@ type Clabernetes interface { //nolint: interfacebloat
 	// GetNamespace returns the namespace the clabernetes instance is running in.
 	GetNamespace() string
 
-	// GetClusterCRIKind returns the kind (from a clabernetes perspective) of the cluster CRI --
-	// this value can be `containerd`, `crio` or `unknown`. If all nodes in a cluster (at the time
-	// the manager starts up) are of a given CRI kind we make the (possibly not great) assumption
-	// that the cluster is made up of only that CRI type. If there is a mix of CRIs we set the kind
-	// to "unknown".
-	GetClusterCRIKind() string
+	// GetNodeRuntimeImage returns the c9s manager image used by direct-runtime workers/helpers.
+	GetNodeRuntimeImage() string
 
 	// IsInitializer returns true if the clabernetes instance is an initializer instance -- if true
-	// this means that this instance should update crds, webhook configurations, and other
-	// initialization resources.
+	// this means that this instance should update crds and other initialization resources.
 	IsInitializer() bool
 
 	// GetKubeConfig returns the in-cluster rest.Config for the clabernetes instance.

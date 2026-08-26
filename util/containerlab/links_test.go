@@ -1,36 +1,40 @@
 package containerlab_test
 
 import (
-	"reflect"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
-func TestActiveLinks(t *testing.T) {
+func testConflictLink(
+	name,
+	nodeA,
+	interfaceA,
+	nodeB,
+	interfaceB string,
+) clabernetesapisv1alpha1.Link {
+	link := clabernetesapisv1alpha1.Link{}
+	link.Name = name
+	link.Namespace = "clabernetes"
+	link.Spec.EndpointA = clabernetesapisv1alpha1.LinkEndpointSpec{
+		NodeName:      nodeA,
+		InterfaceName: interfaceA,
+	}
+	link.Spec.EndpointB = clabernetesapisv1alpha1.LinkEndpointSpec{
+		NodeName:      nodeB,
+		InterfaceName: interfaceB,
+	}
+
+	return link
+}
+
+func TestFindEndpointConflict(t *testing.T) {
 	links := []clabernetesapisv1alpha1.Link{
-		testDigestLink("b-conflict", "srl1", "e1-1", "srl3", "e1-1"),
-		testDigestLink("a-winner", "srl1", "e1-1", "srl2", "e1-1"),
-		// b-conflict is rejected, so its otherwise-unused second endpoint remains available.
-		testDigestLink("c-chain", "srl3", "e1-1", "srl4", "e1-1"),
-		// An invalid, lexically earlier link must not reserve an endpoint from a valid link.
-		testDigestLink("d-invalid", "srl5", "e1-1", "srl5", "e1-1"),
-		testDigestLink("e-after-invalid", "srl5", "e1-1", "srl6", "e1-1"),
-		testDigestLink("f-rejected", "srl7", "e1-1", "srl8", "e1-1"),
-	}
-	links[5].Status.Error = "endpoint already claimed remotely"
-
-	active := clabernetesutilcontainerlab.ActiveLinks(links)
-	activeNames := make([]string, len(active))
-
-	for idx := range active {
-		activeNames[idx] = active[idx].GetName()
-	}
-
-	expectedNames := []string{"a-winner", "c-chain", "e-after-invalid"}
-	if !reflect.DeepEqual(activeNames, expectedNames) {
-		t.Fatalf("expected active links %v, got %v", expectedNames, activeNames)
+		testConflictLink("b-conflict", "srl1", "e1-1", "srl3", "e1-1"),
+		testConflictLink("a-winner", "srl1", "e1-1", "srl2", "e1-1"),
+		// b-conflict loses its first endpoint, so its second endpoint remains available.
+		testConflictLink("c-chain", "srl3", "e1-1", "srl4", "e1-1"),
 	}
 
 	if conflict := clabernetesutilcontainerlab.FindEndpointConflict(

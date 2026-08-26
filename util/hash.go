@@ -17,7 +17,7 @@ func HashBytes(b []byte) string {
 }
 
 // HashObject accepts any object, dumps it to json then sends it to HashBytes.
-func HashObject(o any) ([]byte, string, error) { //nolint:gocritic
+func HashObject(o any) ([]byte, string, error) {
 	b, err := json.Marshal(o)
 	if err != nil {
 		return nil, "", err
@@ -27,7 +27,7 @@ func HashObject(o any) ([]byte, string, error) { //nolint:gocritic
 }
 
 // HashObjectYAML accepts any object, dumps it to yaml then sends it to HashBytes.
-func HashObjectYAML(o any) ([]byte, string, error) { //nolint:gocritic
+func HashObjectYAML(o any) ([]byte, string, error) {
 	b, err := yaml.Marshal(o)
 	if err != nil {
 		return nil, "", err

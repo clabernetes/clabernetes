@@ -15,7 +15,6 @@ import {
   Cable,
   Maximize2,
   Minimize2,
-  Network,
   ScrollText,
   Server,
   Settings,
@@ -51,12 +50,13 @@ const flowNodeHandles: Record<
   { source: HandlePosition[]; target: HandlePosition[] }
 > = {
   topology: { source: ['bottom'], target: [] },
-  'launcher-profile': { source: ['right'], target: ['top'] },
+  'node-profile': { source: ['right'], target: ['top'] },
   nodes: { source: [], target: ['top', 'bottom', 'left'] },
   links: { source: [], target: ['top', 'bottom'] },
   'node-controller': { source: ['top', 'bottom'], target: [] },
   'link-controller': { source: ['top', 'bottom'], target: ['top'] },
-  launchers: { source: [], target: ['top'] },
+  'planning-pods': { source: ['bottom'], target: ['top'] },
+  'device-pods': { source: [], target: ['top'] },
 };
 
 const flowNodes: Node<ArchitectureFlowNodeData>[] = [
@@ -74,15 +74,15 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
     },
   },
   {
-    id: 'launcher-profile',
+    id: 'node-profile',
     type: 'architecture',
     position: { x: 24, y: 220 },
     style: { width: 250 },
     data: {
       badge: 'policy',
-      detail: 'launcher policy',
+      detail: 'reusable workload policy',
       icon: ScrollText,
-      title: 'LauncherProfile',
+      title: 'NodeProfile',
       tone: 'gray',
     },
   },
@@ -106,7 +106,7 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
     style: { width: 250 },
     data: {
       badge: 'per wire',
-      detail: 'one wire + connectivity',
+      detail: 'one wire per resource',
       icon: Cable,
       title: 'Link CRs',
       tone: 'indigo',
@@ -119,10 +119,11 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
     style: { width: 300 },
     data: {
       badge: 'reconcile',
-      detail: 'deployments · services · PVC · status',
+      detail: 'image metadata · one Deployment per Node/group · status',
       icon: Box,
       title: 'Node controller',
       tone: 'cyan',
+      chips: ['fabric <name>-vx', 'expose svc', 'alias svc'],
     },
   },
   {
@@ -132,34 +133,51 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
     style: { width: 300 },
     data: {
       badge: 'reconcile',
-      detail: 'validates links · allocates tunnel ids',
+      detail: 'validates links · allocates cluster-wide tunnel ids',
       icon: Cable,
       title: 'Link controller',
       tone: 'indigo',
     },
   },
   {
-    id: 'launchers',
+    id: 'planning-pods',
     type: 'architecture',
-    position: { x: 150, y: 665 },
+    position: { x: 24, y: 660 },
+    style: { width: 270 },
+    data: {
+      badge: 'short-lived · locked down',
+      detail: 'containerlab module records a device plan → immutable ConfigMap',
+      icon: Settings,
+      title: 'Planning Pods',
+      tone: 'gray',
+    },
+  },
+  {
+    id: 'device-pods',
+    type: 'architecture',
+    position: { x: 150, y: 905 },
     style: { width: 700 },
     data: {
-      badge: 'one per network node',
+      badge: 'one per Node / group',
       detail:
-        'Reads Nodes and terminating Links, then creates topo.clab.yaml and runs clab + tunnels.',
+        'kubelet runs the real device image · chassis cards are extra containers of the same Pod',
       icon: Server,
-      title: 'Launcher pods',
+      title: 'Device Pods',
       tone: 'emerald',
-      chips: ['Node + Link watch', 'topo.clab.yaml', 'clab + tunnels'],
+      chips: [
+        'preparation init',
+        'connectivity sidecar · in-Pod VXLAN',
+        'device container(s)',
+      ],
     },
   },
 ];
 
 const flowEdges: Edge[] = [
   {
-    id: 'topology-launcher-profile',
+    id: 'topology-node-profile',
     source: 'topology',
-    target: 'launcher-profile',
+    target: 'node-profile',
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
@@ -199,8 +217,8 @@ const flowEdges: Edge[] = [
     type: 'smoothstep',
   },
   {
-    id: 'launcher-profile-nodes',
-    source: 'launcher-profile',
+    id: 'node-profile-nodes',
+    source: 'node-profile',
     target: 'nodes',
     sourceHandle: 'source-right',
     targetHandle: 'target-left',
@@ -208,21 +226,40 @@ const flowEdges: Edge[] = [
     label: 'ref',
   },
   {
-    id: 'node-controller-launchers',
+    id: 'node-controller-planning-pods',
     source: 'node-controller',
-    target: 'launchers',
+    target: 'planning-pods',
+    sourceHandle: 'source-bottom',
+    targetHandle: 'target-top',
+    type: 'smoothstep',
+    label: 'plans',
+  },
+  {
+    id: 'node-controller-device-pods',
+    source: 'node-controller',
+    target: 'device-pods',
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
     label: 'creates',
   },
   {
-    id: 'link-controller-launchers',
-    source: 'link-controller',
-    target: 'launchers',
+    id: 'planning-pods-device-pods',
+    source: 'planning-pods',
+    target: 'device-pods',
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
+    label: 'plan ConfigMap',
+  },
+  {
+    id: 'link-controller-device-pods',
+    source: 'link-controller',
+    target: 'device-pods',
+    sourceHandle: 'source-bottom',
+    targetHandle: 'target-top',
+    type: 'smoothstep',
+    label: 'tunnel ids',
   },
 ];
 
@@ -319,7 +356,7 @@ export function ArchitectureReactFlowDiagram() {
         ) : null}
       </div>
       <div
-        aria-label="A React Flow version of the clabernetes architecture, with Topology resources flowing into the primary API, controllers, and launcher pods."
+        aria-label="The clabernetes architecture, with Topology resources compiling into the primary API, controllers running planning pods, and device pods whose connectivity sidecars wire the lab together."
         className="c9s-react-flow-canvas"
         role="img"
       >
@@ -364,8 +401,9 @@ export function ArchitectureReactFlowDiagram() {
         </ReactFlow>
       </div>
       <figcaption className="sr-only">
-        The same architecture rendered with React Flow smoothstep edges and arrow markers for
-        comparison with the custom SVG diagram above.
+        Topology compiles into NodeProfile, Node, and Link resources; the node controller
+        runs planning pods and renders device pods, while the link controller allocates tunnel
+        ids consumed by each pod's connectivity sidecar to wire the pods together.
       </figcaption>
     </figure>
   );

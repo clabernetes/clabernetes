@@ -62,7 +62,6 @@ class Cluster:
 @dataclass(frozen=True)
 class Images:
     manager: str
-    launcher: str
 
 
 def fail(message: str) -> NoReturn:
@@ -278,9 +277,8 @@ def build_local_images(
     rebuild: bool,
 ) -> Images:
     manager = f"{DEFAULT_IMAGE_BASE}/clabernetes-manager:{image_tag}"
-    launcher = f"{DEFAULT_IMAGE_BASE}/clabernetes-launcher:{image_tag}"
     if reuse:
-        return Images(manager=manager, launcher=launcher)
+        return Images(manager=manager)
     if shutil.which("docker") is None:
         fail("local source installation requires Docker")
     run(["docker", "info"], capture=True)
@@ -291,15 +289,12 @@ def build_local_images(
         )
     platform = cluster.platforms[0]
     if kind_name:
-        if rebuild or not (
-            docker_image_present(manager) and docker_image_present(launcher)
-        ):
+        if rebuild or not docker_image_present(manager):
             run(
                 [
                     "make",
                     "--no-print-directory",
                     "build-manager",
-                    "build-launcher",
                     f"IMAGE_TAG={image_tag}",
                     f"TARGET_PLATFORM={platform}",
                     f"C9S_LOCAL_BUILD_ID={build_id}",
@@ -307,38 +302,31 @@ def build_local_images(
                 cwd=repo_root,
             )
         run([str(tools.kind), "load", "docker-image", manager, "--name", kind_name])
-        run([str(tools.kind), "load", "docker-image", launcher, "--name", kind_name])
-        return Images(manager=manager, launcher=launcher)
+        return Images(manager=manager)
     if not registry:
         fail("local source requires a KinD cluster or C9S_REGISTRY")
     registry = registry.rstrip("/")
     manager = f"{registry}/clabernetes-manager:{image_tag}"
-    launcher = f"{registry}/clabernetes-launcher:{image_tag}"
     run(
         ["bash", ".develop/ensure-registry-auth.sh"],
         cwd=repo_root,
         extra_env={"REGISTRY": registry, "UV": str(tools.uv)},
     )
-    if rebuild or not (
-        docker_image_present(manager) and docker_image_present(launcher)
-    ):
+    if rebuild or not docker_image_present(manager):
         run(
             [
                 "make",
                 "--no-print-directory",
                 "build-manager",
-                "build-launcher",
                 f"IMAGE_TAG={image_tag}",
                 f"TARGET_PLATFORM={platform}",
                 f"C9S_LOCAL_BUILD_ID={build_id}",
                 f"MANAGER_IMAGE={manager.rsplit(':', 1)[0]}",
-                f"LAUNCHER_IMAGE={launcher.rsplit(':', 1)[0]}",
             ],
             cwd=repo_root,
         )
     run(["docker", "push", manager])
-    run(["docker", "push", launcher])
-    return Images(manager=manager, launcher=launcher)
+    return Images(manager=manager)
 
 
 def chart_images(tools: Tools, chart: str, version: str) -> Images:
@@ -346,70 +334,9 @@ def chart_images(tools: Tools, chart: str, version: str) -> Images:
         [str(tools.helm), "show", "values", chart, "--version", version], capture=True
     )
     manager = yq(tools, '.manager.image // ""', values)
-    launcher = yq(tools, '.globalConfig.deployment.launcherImage // ""', values)
     if not manager:
         manager = f"{DEFAULT_IMAGE_BASE}/clabernetes-manager:{'dev-latest' if version == '0.0.0' else version}"
-    if not launcher:
-        launcher = f"{DEFAULT_IMAGE_BASE}/clabernetes-launcher:{'dev-latest' if version == '0.0.0' else version}"
-    return Images(manager=manager, launcher=launcher)
-
-
-def proxy_values(tools: Tools, cluster: Cluster) -> str | None:
-    http_proxy = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy", "")
-    https_proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy", "")
-    if not http_proxy and not https_proxy:
-        return None
-    nodes = node_data(cluster, tools)
-    pod_cidrs = ",".join(
-        cidr
-        for item in nodes.get("items", [])
-        for cidr in item.get("spec", {}).get("podCIDRs", [])
-    )
-    config = run(
-        kubectl(
-            cluster,
-            tools,
-            "-n",
-            "kube-system",
-            "get",
-            "configmap",
-            "kubeadm-config",
-            "-o",
-            "jsonpath={.data.ClusterConfiguration}",
-        ),
-        capture=True,
-    )
-    service_cidr = yq(tools, '.networking.serviceSubnet // ""', config)
-    if not pod_cidrs or not service_cidr:
-        fail("proxy environment detected but pod/service CIDRs could not be discovered")
-    no_proxy = os.environ.get("NO_PROXY") or os.environ.get("no_proxy", "")
-    no_proxy = ",".join(
-        filter(
-            None,
-            [
-                no_proxy,
-                service_cidr,
-                pod_cidrs,
-                ".svc",
-                ".svc.cluster.local",
-                "localhost",
-                "127.0.0.1",
-            ],
-        )
-    )
-    env = [
-        {"name": name, "value": value}
-        for name, value in (
-            ("HTTP_PROXY", http_proxy),
-            ("http_proxy", http_proxy),
-            ("HTTPS_PROXY", https_proxy),
-            ("https_proxy", https_proxy),
-            ("NO_PROXY", no_proxy),
-            ("no_proxy", no_proxy),
-        )
-        if value
-    ]
-    return json.dumps(env, separators=(",", ":"))
+    return Images(manager=manager)
 
 
 def install(
@@ -523,14 +450,7 @@ def install(
         f"manager.image={images.manager}",
         "--set",
         "manager.imagePullPolicy=IfNotPresent",
-        "--set",
-        f"globalConfig.deployment.launcherImage={images.launcher}",
-        "--set",
-        "globalConfig.deployment.launcherImagePullPolicy=IfNotPresent",
     ]
-    proxy = proxy_values(tools, cluster)
-    if proxy:
-        helm_args.extend(["--set-json", f"globalConfig.deployment.extraEnv={proxy}"])
     run(helm_args)
     run(
         kubectl(
@@ -577,51 +497,10 @@ def install(
         time.sleep(1)
     else:
         fail("Config singleton did not become available")
-    patch = json.dumps(
-        {
-            "spec": {
-                "deployment": {
-                    "launcherImage": images.launcher,
-                    "launcherImagePullPolicy": "IfNotPresent",
-                }
-            }
-        },
-        separators=(",", ":"),
-    )
-    run(
-        kubectl(
-            cluster,
-            tools,
-            "-n",
-            namespace,
-            "patch",
-            f"{config_resource}/clabernetes",
-            "--type=merge",
-            "-p",
-            patch,
-        )
-    )
-    launcher_observed = run(
-        kubectl(
-            cluster,
-            tools,
-            "-n",
-            namespace,
-            "get",
-            f"{config_resource}/clabernetes",
-            "-o",
-            "jsonpath={.spec.deployment.launcherImage}",
-        ),
-        capture=True,
-    ).strip()
-    if launcher_observed != images.launcher:
-        fail(
-            f"launcher image mismatch: expected {images.launcher}, observed {launcher_observed}"
-        )
     console.print(
         f"Installed [bold]{source}[/bold] chart={selected_version} "
         f"context={cluster.context} namespace={namespace} "
-        f"manager={manager_observed} launcher={launcher_observed}"
+        f"manager={manager_observed}"
     )
 
 

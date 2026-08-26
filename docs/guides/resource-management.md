@@ -1,6 +1,6 @@
 ---
 title: Resources and scheduling
-description: Configure launcher resources, node selection, tolerations, affinity, and privileges.
+description: Configure device Pod resources, node selection, tolerations, and affinity.
 ---
 
 This guide explains how to configure resource limits, requests, node scheduling, and tolerations for Clabernetes topologies.
@@ -9,7 +9,7 @@ This guide explains how to configure resource limits, requests, node scheduling,
 
 Clabernetes allows fine-grained control over:
 
-- **Resource requests/limits**: CPU and memory for launcher pods
+- **Resource requests/limits**: CPU and memory for device Pods
 - **Node selectors**: Control which Kubernetes nodes run your topology
 - **Tolerations**: Run on tainted nodes
 
@@ -63,18 +63,19 @@ spec:
           cpu: "250m"
 ```
 
-For a Topology, the compiler emits one shared LauncherProfile for the default policy and a
-complete dedicated LauncherProfile only for a Node whose resource policy differs. Every emitted
-Node receives an explicit `launcherProfileRef`; profiles do not inherit from one another.
+For a Topology, the compiler emits one shared NodeProfile for the default policy and a
+complete dedicated NodeProfile only for a Node whose resource policy differs. Every emitted
+Node receives an explicit `profileRef`; profiles do not inherit from one another.
 
-### Direct Node and LauncherProfile Resources
+### Direct Node and NodeProfile Resources
 
-When authoring the primary API directly, put launcher resources on a LauncherProfile and reference
-it explicitly from each intended Node:
+When authoring the primary API directly, put resource policy on a NodeProfile and reference
+it explicitly from each intended Node. Profile resources apply to each logical Node's primary
+application container; component containers keep the requirements their imported plan declares:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: high-capacity
 spec:
@@ -90,11 +91,11 @@ metadata:
 spec:
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux:latest
-  launcherProfileRef:
+  profileRef:
     name: high-capacity
 ```
 
-The reference is same-namespace and singular. LauncherProfiles are never selected by labels or
+The reference is same-namespace and singular. NodeProfiles are never selected by labels or
 merged by priority.
 
 ### Global Resources (Config CRD)
@@ -116,7 +117,9 @@ spec:
 
 ### Resources by Containerlab Kind
 
-Set resources based on containerlab kind and type:
+Per-kind resource defaults are no longer configured in c9s: the imported containerlab package
+owns kind requirements, and generic defaults come from `config.deployment.resourcesDefault`. Use
+a `NodeProfile` when a specific group of nodes needs different sizing:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -125,37 +128,39 @@ metadata:
   name: clabernetes
 spec:
   deployment:
-    resourcesByContainerlabKind:
-      nokia_srlinux:
-        default:
-          requests:
-            memory: "4Gi"
-            cpu: "2"
-        ixr10:  # Specific type
-          requests:
-            memory: "16Gi"
-            cpu: "8"
-      nokia_sros:
-        default:
-          requests:
-            memory: "8Gi"
-            cpu: "4"
-      linux:
-        default:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
+    resourcesDefault:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+```
+
+### Containerlab `cpu` and `memory`
+
+A node definition may size its own container with containerlab vocabulary: `cpu` (vcpus) and
+`memory` (i.e. `1Gb`) become the device container's Kubernetes CPU and memory limits. `cpu-set`
+is rejected because CPU pinning has no portable Pod mapping. For a resource name that a
+NodeProfile (or the global default) also sets, the profile value wins on the logical Node's
+primary application container:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+spec:
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+  cpu: 2
+  memory: 4Gb
 ```
 
 ### Resource Priority
 
-The effective LauncherProfile (explicitly authored or generated from Topology policy) overrides
+The effective NodeProfile (explicitly authored or generated from Topology policy) overrides
 global Config fields it sets. Omitted profile fields continue to use Config resolution:
 
-1. Referenced/generated LauncherProfile resources
-2. Global kind/type resources (`config.deployment.resourcesByContainerlabKind.<kind>.<type>`)
-3. Global kind default resources (`config.deployment.resourcesByContainerlabKind.<kind>.default`)
-4. Global default resources (`config.deployment.resourcesDefault`)
+1. Referenced/generated NodeProfile resources
+2. Global default resources (`config.deployment.resourcesDefault`)
 
 ## Recommended Resource Values
 
@@ -277,13 +282,13 @@ kubectl taint nodes worker-1 dedicated=network-lab:NoSchedule-
 
 ## Affinity Rules
 
-Affinity rules apply to launcher Pods and use the native Kubernetes affinity structure. They can
-require or prefer particular Kubernetes nodes with `nodeAffinity`, or place launcher Pods in
+Affinity rules apply to direct device Pods and use the native Kubernetes affinity structure. They
+can require or prefer particular Kubernetes nodes with `nodeAffinity`, or place device Pods in
 relation to other Pods with `podAffinity` and `podAntiAffinity`.
 
 ### Topology-level affinity
 
-Set affinity under `spec.deployment.scheduling` to apply one scheduling policy to all launcher Pods
+Set affinity under `spec.deployment.scheduling` to apply one scheduling policy to all device Pods
 generated for a Topology:
 
 ```yaml
@@ -314,17 +319,17 @@ spec:
                 topologyKey: kubernetes.io/hostname
 ```
 
-The Topology controller copies this policy into its generated shared LauncherProfile. Dedicated
+The Topology controller copies this policy into its generated shared NodeProfile. Dedicated
 profiles generated for resource overrides retain the same topology-wide affinity.
 
-### LauncherProfile-level affinity
+### NodeProfile-level affinity
 
-For directly authored Nodes, put the same affinity structure on a LauncherProfile and reference it
+For directly authored Nodes, put the same affinity structure on a NodeProfile and reference it
 from each Node that should use the policy:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
-kind: LauncherProfile
+kind: NodeProfile
 metadata:
   name: network-lab-scheduling
 spec:
@@ -345,16 +350,16 @@ kind: Node
 metadata:
   name: srl1
 spec:
-  launcherProfileRef:
+  profileRef:
     name: network-lab-scheduling
   kind: nokia_srlinux
   image: ghcr.io/nokia/srlinux:latest
 ```
 
-One LauncherProfile can be referenced by multiple Nodes. If Nodes share one launcher through
-`network-mode: container:<primary>`, the primary Node's LauncherProfile controls the shared Pod.
+One NodeProfile can be referenced by multiple Nodes. If Nodes share one Pod through
+`network-mode: container:<primary>`, the primary Node's NodeProfile controls that shared Pod.
 Affinity `labelSelector` fields select peer Pods for pod affinity or anti-affinity; they do not
-select which Nodes receive a LauncherProfile.
+select which Nodes receive a NodeProfile.
 
 ## Complete Example
 
@@ -447,15 +452,10 @@ kubectl describe node <node-name> | grep -A5 "Allocated"
 
 ## Privileged Mode
 
-Launcher pods run in privileged mode by default. To disable:
-
-```yaml
-spec:
-  deployment:
-    privilegedLauncher: false
-```
-
-**Note**: Some network OS images require privileged mode. Test thoroughly before disabling.
+There is no privileged wrapper pod and no `privilegedLauncher` knob. Each device container
+receives exactly the privilege, capabilities, and devices its imported containerlab kind plan
+declares, including any `privileged`, `cap-add`, or `devices` vocabulary in the node
+definition itself. Privilege is per-container plan output, never profile or Config policy.
 
 ## Related
 

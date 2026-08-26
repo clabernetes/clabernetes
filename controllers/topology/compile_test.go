@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -13,30 +14,18 @@ import (
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
-type warningRecordingLogger struct {
-	claberneteslogging.FakeInstance
-
-	warnings []string
-}
-
-func (l *warningRecordingLogger) Warn(message string) {
-	l.warnings = append(l.warnings, message)
-}
-
-func compileDefinitionWithOptions(
+func compileDefinition(
 	t *testing.T,
 	definition string,
-	options clabernetescontrollerstopology.CompileOptions,
 ) (*clabernetescontrollerstopology.CompiledTopology, error) {
 	t.Helper()
 
 	topology := &clabernetesapisv1alpha1.Topology{}
 	topology.Spec.Definition.Containerlab = definition
 
-	return clabernetescontrollerstopology.CompileTopologyWithOptions(
+	return clabernetescontrollerstopology.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
-		options,
 	)
 }
 
@@ -75,18 +64,12 @@ topology:
       binds:
         - /node:/node
       ports:
-        - 21022:22/tcp
+        - 22/tcp
         - 5201/udp
       labels:
         owner: roman
         # The exposePorts directive is consumed into ports and never becomes Kubernetes metadata.
         c9s.run/exposePorts: "5201/UDP, 9273/tcp, 9273/tcp"
-        # Docker labels are far more permissive than Kubernetes labels, and clabernetes owns its
-        # own label namespace and controller keys -- all four of these have to be dropped.
-        not a valid key: x
-        bad-value: has spaces and a !
-        c9s.run/ignoreReconcile: "true"
-        app.kubernetes.io/name: user-value
     multitool:
       kind: linux
   links:
@@ -152,8 +135,7 @@ func TestCompileContainerlabFlattening(t *testing.T) {
 		t.Fatalf("expected merged binds %v, got %v", expectedBinds, srl1.Binds)
 	}
 
-	// pasted containerlab topologies carry docker style bindings; the host side is dropped since
-	// clabernetes allocates it, while destination-only entries pass through untouched
+	// destination-only entries pass through untouched
 	expectedPorts := []string{"22/tcp", "5201/udp", "9273/tcp"}
 	if !reflect.DeepEqual(srl1.Ports, expectedPorts) {
 		t.Fatalf("expected normalized node ports %v, got %v", expectedPorts, srl1.Ports)
@@ -180,6 +162,155 @@ func TestCompileContainerlabFlattening(t *testing.T) {
 
 	if compiled.Mgmt == nil || compiled.Mgmt.IPv4Subnet != "172.20.20.0/24" {
 		t.Fatalf("expected mgmt settings to be compiled, got %+v", compiled.Mgmt)
+	}
+}
+
+//nolint:gocyclo,wsl_v5 // One scenario checks the complete package-owned inheritance contract.
+func TestCompileContainerlabUsesImportedInheritanceSemantics(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: imported-inheritance
+topology:
+  defaults:
+    kind: package-owned-kind
+    exec: [defaults-exec]
+    env-files: [defaults.env]
+    binds:
+      - /defaults:/shared
+      - /defaults-only:/defaults-only
+    devices: [/dev/default]
+    cap-add: [NET_ADMIN]
+    security-opts: [seccomp=defaults.json]
+    tmpfs: { /run: defaults, /defaults: rw }
+    ports: [1000/tcp]
+    env: { FROM_DEFAULTS: "1", OVERRIDE: defaults }
+    sysctls: { net.ipv4.ip_forward: "1" }
+    labels: { tier: defaults, owner: defaults }
+    mgmt-ipv4: 192.0.2.250/24
+    config:
+      vars: { from_defaults: true, override: defaults }
+    certificate:
+      issue: true
+      validity-duration: 24h
+      sans: [defaults.example]
+  kinds:
+    package-owned-kind:
+      image: example/device:1
+      exec: [kind-exec]
+      env-files: [kind.env]
+      binds: [/kind:/shared]
+      devices: [/dev/kind]
+      cap-add: [SYS_ADMIN]
+      security-opts: [apparmor=kind]
+      tmpfs: { /run: kind }
+      ports: [2000/tcp]
+      env: { FROM_KIND: "1", OVERRIDE: kind }
+      labels: { tier: kind }
+      config:
+        vars: { from_kind: true, override: kind }
+      certificate:
+        key-size: 4096
+      components:
+        - { slot: inherited, type: line-card }
+  nodes:
+    primary:
+      exec: [node-exec]
+      env-files: [node.env]
+      binds: [/node:/shared]
+      ports: [3000/udp]
+      env: { FROM_NODE: "1", OVERRIDE: node }
+      labels: { owner: node }
+      tmpfs: { /run: node }
+      config:
+        vars: { from_node: true, override: node }
+      certificate:
+        sans: [node.example]
+      components: []
+      mgmt-ipv4: 192.0.2.10/24
+    secondary:
+      network-mode: container:primary
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	primary := compiled.Nodes["primary"]
+	if primary == nil {
+		t.Fatal("compiled topology has no primary Node")
+	}
+	if got, want := primary.Exec, []string{"defaults-exec", "kind-exec", "node-exec"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
+		t.Fatalf("effective exec = %q, want %q", got, want)
+	}
+	if got, want := primary.EnvFiles, []string{"defaults.env", "kind.env", "node.env"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
+		t.Fatalf("effective env-files = %q, want %q", got, want)
+	}
+	if got, want := primary.Binds,
+		[]string{"/defaults-only:/defaults-only", "/node:/shared"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("effective binds = %q, want %q", got, want)
+	}
+	if got, want := primary.Ports, []string{"3000/udp"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("effective ports = %q, want most-specific %q", got, want)
+	}
+	if got, want := primary.Devices, []string{"/dev/default", "/dev/kind"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
+		t.Fatalf("effective devices = %q, want %q", got, want)
+	}
+	if got, want := primary.CapAdd, []string{"NET_ADMIN", "SYS_ADMIN"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
+		t.Fatalf("effective capabilities = %q, want %q", got, want)
+	}
+	if got, want := primary.SecurityOpts,
+		[]string{"seccomp=defaults.json", "apparmor=kind"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("effective security options = %q, want %q", got, want)
+	}
+	if got, want := primary.Tmpfs,
+		map[string]string{"/defaults": "rw", "/run": "node"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("effective tmpfs = %q, want %q", got, want)
+	}
+	if got, want := primary.Env, map[string]string{
+		"FROM_DEFAULTS": "1", "FROM_KIND": "1", "FROM_NODE": "1", "OVERRIDE": "node",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("effective env = %q, want %q", got, want)
+	}
+	if got, want := primary.Labels, map[string]string{"tier": "kind", "owner": "node"}; !reflect.DeepEqual(
+		got,
+		want,
+	) {
+		t.Fatalf("effective labels = %q, want %q", got, want)
+	}
+	if primary.Config == nil || len(primary.Config.Vars) != 4 ||
+		string(primary.Config.Vars["override"].Raw) != `"node"` {
+		t.Fatalf("effective config vars = %#v", primary.Config)
+	}
+	if primary.Certificate == nil || primary.Certificate.Issue == nil ||
+		!*primary.Certificate.Issue || primary.Certificate.KeySize != 4096 ||
+		primary.Certificate.ValidityDuration != "24h0m0s" ||
+		!reflect.DeepEqual(primary.Certificate.SANs, []string{"node.example"}) {
+		t.Fatalf("effective certificate = %#v", primary.Certificate)
+	}
+	if primary.MgmtIPv4 != "192.0.2.10/24" {
+		t.Fatalf("primary management address = %q", primary.MgmtIPv4)
+	}
+	if primary.Components == nil || len(primary.Components) != 0 {
+		t.Fatalf("explicit component clearing was not preserved: %#v", primary.Components)
+	}
+
+	secondary := compiled.Nodes["secondary"]
+	if secondary == nil || secondary.NetworkMode != "container:primary" ||
+		secondary.MgmtIPv4 != "" || len(secondary.Components) != 1 ||
+		secondary.Components[0].Slot != "inherited" {
+		t.Fatalf("effective secondary Node = %#v", secondary)
 	}
 }
 
@@ -392,7 +523,7 @@ func TestCompileContainerlabLinks(t *testing.T) {
 }
 
 func TestCompileContainerlabStructuredVethLink(t *testing.T) {
-	compiled, err := compileDefinitionWithOptions(t, `
+	compiled, err := compileDefinition(t, `
 name: structured-veth
 topology:
   nodes:
@@ -413,7 +544,7 @@ topology:
           interface: 1/1/c1/1
         - node: client
           interface: eth1
-`, clabernetescontrollerstopology.CompileOptions{})
+`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +561,7 @@ topology:
 }
 
 func TestCompileContainerlabBriefVethLink(t *testing.T) {
-	compiled, err := compileDefinitionWithOptions(t, `
+	compiled, err := compileDefinition(t, `
 name: brief-veth
 topology:
   nodes:
@@ -443,7 +574,7 @@ topology:
   links:
     - type: veth
       endpoints: ["srsim:1/1/c1/1", "client:eth1"]
-`, clabernetescontrollerstopology.CompileOptions{})
+`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +591,7 @@ topology:
 }
 
 func TestCompileContainerlabSRSimEmptyComponents(t *testing.T) {
-	compiled, err := compileDefinitionWithOptions(t, `
+	compiled, err := compileDefinition(t, `
 name: srsim-components-empty
 topology:
   nodes:
@@ -470,7 +601,7 @@ topology:
       type: SR-1-48D
       license: license.txt
       components: []
-`, clabernetescontrollerstopology.CompileOptions{})
+`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +620,7 @@ topology:
 	}
 }
 
-func TestCompileTopologyStrictRejectsLossyCompatibility(t *testing.T) {
+func TestCompileTopologyRejectsLossyCompatibility(t *testing.T) {
 	definition := `
 name: strict-test
 mgmt:
@@ -499,7 +630,7 @@ topology:
     n1:
       kind: linux
       image: ghcr.io/srl-labs/network-multitool
-      cpu: 2
+      cpu-set: 0-1
       ports: [22022:22/tcp]
   links:
     - endpoints: ["n1:eth1", "host:veth-review"]
@@ -507,25 +638,7 @@ topology:
       vars: {delay: 10}
 `
 
-	// The compatibility controller remains permissive.
-	topology := &clabernetesapisv1alpha1.Topology{}
-	topology.Spec.Definition.Containerlab = definition
-
-	_, err := clabernetescontrollerstopology.CompileTopology(
-		&claberneteslogging.FakeInstance{},
-		topology,
-	)
-	if err != nil {
-		t.Fatalf("warning policy unexpectedly rejected topology: %s", err)
-	}
-
-	_, err = compileDefinitionWithOptions(
-		t,
-		definition,
-		clabernetescontrollerstopology.CompileOptions{
-			UnsupportedFieldPolicy: clabernetescontrollerstopology.UnsupportedFieldPolicyError,
-		},
-	)
+	_, err := compileDefinition(t, definition)
 	if err == nil {
 		t.Fatal("strict compilation accepted lossy topology")
 	}
@@ -541,8 +654,6 @@ topology:
 	}
 
 	for _, expected := range []string{
-		"host-port-pinning",
-		"management-network-semantics",
 		"unsupported-field",
 		"unsupported-link-labels",
 		"unsupported-link-vars",
@@ -551,11 +662,251 @@ topology:
 			t.Errorf("expected diagnostic %q, got %v", expected, codes)
 		}
 	}
+
+	// Host port pinning is lossless to drop inside the cluster, so it warns instead of failing.
+	if slices.Contains(codes, "host-port-pinning") {
+		t.Errorf("host port pinning should be a warning, got fatal diagnostics %v", codes)
+	}
 }
 
-func TestCompileTopologyWarningsIncludeLocations(t *testing.T) {
+func TestCompileTopologyIgnoresDockerOnlyManagementFields(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: docker-management
+mgmt:
+  network: st
+  bridge: br-st
+  mtu: 1500
+  external-access: false
+  skip-when-unused: false
+  driver-opts: {a: b}
+  ipv4-subnet: 172.30.30.0/24
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine}
+`)
+	if err != nil {
+		t.Fatalf("Docker-only management fields must be accepted and ignored, got: %s", err)
+	}
+
+	if compiled.Mgmt == nil || compiled.Mgmt.IPv4Subnet != "172.30.30.0/24" {
+		t.Fatalf("management policy was not preserved: %+v", compiled.Mgmt)
+	}
+}
+
+func TestCompileTopologyWiresExtendedNodeVocabulary(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: extended-vocabulary
+topology:
+  defaults:
+    image-pull-policy: IfNotPresent
+  kinds:
+    linux:
+      restart-policy: unless-stopped
+      startup-delay: 7
+      cpu: 1.5
+      memory: 1Gb
+      link-apply-mode: live
+      healthcheck:
+        test: [CMD, "true"]
+        interval: 10
+        timeout: 3
+        retries: 2
+        start-period: 5
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      aliases: [n1-alt]
+`)
+	if err != nil {
+		t.Fatalf("extended vocabulary must compile, got: %s", err)
+	}
+
+	node, ok := compiled.Nodes["n1"]
+	if !ok {
+		t.Fatalf("compiled nodes = %+v, want n1", compiled.Nodes)
+	}
+
+	if node.ImagePullPolicy != "IfNotPresent" || node.RestartPolicy != "unless-stopped" ||
+		node.StartupDelay != 7 || node.CPU != 1.5 || node.Memory != "1Gb" ||
+		node.LinkApplyMode != "live" {
+		t.Fatalf("inherited vocabulary was not flattened onto the node: %+v", node)
+	}
+
+	if node.Healthcheck == nil || node.Healthcheck.Interval != 10 ||
+		node.Healthcheck.StartPeriod != 5 ||
+		!slices.Equal(node.Healthcheck.Test, []string{"CMD", "true"}) {
+		t.Fatalf("inherited healthcheck was not flattened onto the node: %+v", node.Healthcheck)
+	}
+
+	if !slices.Equal(node.Aliases, []string{"n1-alt"}) {
+		t.Fatalf("aliases = %+v, want [n1-alt]", node.Aliases)
+	}
+}
+
+func TestCompileTopologyRejectsUnportableVocabularyValues(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: unportable-vocabulary
+topology:
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      restart-policy: "on-failure"
+      image-pull-policy: sometimes
+      link-apply-mode: bounce
+      aliases: [Bad_Alias, n2, shared]
+    n2:
+      kind: linux
+      image: alpine
+      aliases: [shared]
+`)
+	if err == nil {
+		t.Fatal("unportable vocabulary values must fail compilation")
+	}
+
+	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	codes := make([]string, 0, len(unsupported.Diagnostics))
+	for _, diagnostic := range unsupported.Diagnostics {
+		codes = append(codes, diagnostic.Code)
+	}
+
+	for _, expected := range []string{
+		"unsupported-restart-policy",
+		"unsupported-image-pull-policy",
+		"unsupported-link-apply-mode",
+		"invalid-alias",
+		"duplicate-alias",
+	} {
+		if !slices.Contains(codes, expected) {
+			t.Errorf("expected diagnostic %q, got %v", expected, codes)
+		}
+	}
+}
+
+func TestCompileTopologyDocumentsRejectedVocabulary(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: rejected-vocabulary
+topology:
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      runtime: podman
+      stages:
+        create:
+          wait-for:
+            - node: n2
+              stage: healthy
+`)
+	if err == nil {
+		t.Fatal("rejected vocabulary must fail compilation")
+	}
+
+	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	rejected := map[string]bool{}
+
+	for _, diagnostic := range unsupported.Diagnostics {
+		if diagnostic.Code == "unsupported-field" &&
+			strings.Contains(diagnostic.Message, "is rejected:") {
+			rejected[diagnostic.Path] = true
+		}
+	}
+
+	for _, field := range []string{"runtime", "stages"} {
+		if !rejected[field] {
+			t.Errorf(
+				"expected documented rejection for field %q, got diagnostics %+v",
+				field,
+				unsupported.Diagnostics,
+			)
+		}
+	}
+}
+
+func TestCompileTopologyNormalizesHostPinnedPortsAndGroups(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: lossy-but-portable
+topology:
+  groups:
+    telemetry:
+      env:
+        ROLE: telemetry
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      group: telemetry
+      ports: ["9090:9090", "127.0.0.1:3000:3000/tcp"]
+`)
+	if err != nil {
+		t.Fatalf("host-pinned ports and groups must compile, got: %s", err)
+	}
+
+	node := compiled.Nodes["n1"]
+	if node == nil {
+		t.Fatal("compiled topology has no node n1")
+	}
+
+	if node.Group != "telemetry" {
+		t.Fatalf("group was not preserved: %+v", node)
+	}
+
+	if node.Env["ROLE"] != "telemetry" {
+		t.Fatalf("group-scoped configuration was not inherited: %+v", node.Env)
+	}
+
+	wantPorts := []string{"9090", "3000/tcp"}
+	if !reflect.DeepEqual(node.Ports, wantPorts) {
+		t.Fatalf("ports = %q, want normalized Pod-side %q", node.Ports, wantPorts)
+	}
+}
+
+func TestCompileTopologyWithOptionsRejectsRemovedWarningMode(t *testing.T) {
+	t.Parallel()
+
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Spec.Definition.Containerlab = `
+name: removed-warning-mode
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine}
+`
+
+	_, err := clabernetescontrollerstopology.CompileTopologyWithOptions(
+		&claberneteslogging.FakeInstance{},
+		topology,
+		clabernetescontrollerstopology.CompileOptions{
+			UnsupportedFieldPolicy: clabernetescontrollerstopology.UnsupportedFieldPolicy("warn"),
+		},
+	)
+	if err == nil {
+		t.Fatal("compiler accepted removed warning mode")
+	}
+}
+
+//nolint:wsl_v5 // Keeping the expected diagnostic set beside compilation makes ordering explicit.
+func TestCompileTopologyDiagnosticsAreSortedAndLocated(t *testing.T) {
 	definition := `
-name: warning-locations
+name: diagnostic-locations
 topology:
   nodes:
     n1: {kind: linux, image: alpine}
@@ -566,32 +917,32 @@ topology:
     - endpoints: ["n1:eth2", "n2:eth2"]
       vars: {purpose: second}
 `
-	topology := &clabernetesapisv1alpha1.Topology{}
-	topology.Spec.Definition.Containerlab = definition
-	logger := &warningRecordingLogger{}
-
-	_, err := clabernetescontrollerstopology.CompileTopology(logger, topology)
-	if err != nil {
-		t.Fatalf("warning policy unexpectedly rejected topology: %s", err)
+	_, err := compileDefinition(t, definition)
+	if err == nil {
+		t.Fatal("compiler accepted lossy Link metadata")
+	}
+	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
 	}
 
-	want := []string{
-		"topology.links[0].labels: link labels are not preserved by the c9s Link API",
-		"topology.links[1].vars: link vars are not preserved by the c9s Link API",
+	want := []clabernetescontrollerstopology.CompilerDiagnostic{
+		{
+			Code: "unsupported-link-labels", Path: "topology.links[0].labels",
+			Message: "link labels are not preserved by the c9s Link API",
+		},
+		{
+			Code: "unsupported-link-vars", Path: "topology.links[1].vars",
+			Message: "link vars are not preserved by the c9s Link API",
+		},
 	}
-	if !reflect.DeepEqual(logger.warnings, want) {
-		t.Fatalf("warnings = %q, want %q", logger.warnings, want)
+	if !reflect.DeepEqual(unsupported.Diagnostics, want) {
+		t.Fatalf("diagnostics = %#v, want %#v", unsupported.Diagnostics, want)
 	}
 }
 
 func TestCompileTopologyAlwaysRejectsImpossibleStructures(t *testing.T) {
 	tests := map[string]string{
-		"bridge pseudo node": `
-name: bridge-test
-topology:
-  nodes:
-    br0: {kind: bridge}
-`,
 		"mgmt endpoint": `
 name: mgmt-test
 topology:
@@ -658,7 +1009,7 @@ topology:
 				topology,
 			)
 			if err == nil {
-				t.Fatal("warning policy accepted structurally unsupported topology")
+				t.Fatal("compiler accepted structurally unsupported topology")
 			}
 
 			unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
@@ -666,5 +1017,22 @@ topology:
 				t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
 			}
 		})
+	}
+}
+
+//nolint:wsl_v5 // The single result assertion follows compilation directly.
+func TestCompileTopologyDefersOpaqueKindCapabilityToImportedPlanner(t *testing.T) {
+	compiled, err := compileDefinition(t, `
+name: opaque-kind-test
+topology:
+  nodes:
+    node-a: {kind: package-owned-kind}
+`)
+	if err != nil {
+		t.Fatalf("compiling opaque imported kind: %v", err)
+	}
+	if compiled.Nodes["node-a"] == nil ||
+		compiled.Nodes["node-a"].Kind != "package-owned-kind" {
+		t.Fatalf("compiled opaque Node = %#v", compiled.Nodes["node-a"])
 	}
 }

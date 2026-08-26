@@ -3,7 +3,7 @@ package v1alpha1
 import k8scorev1 "k8s.io/api/core/v1"
 
 // FileFromConfigMap represents a file that you would like to mount (from a configmap) in the
-// launcher pod for a given node.
+// device pod for a given node.
 type FileFromConfigMap struct {
 	// FilePath is the path to mount the file.
 	FilePath string `json:"filePath"`
@@ -22,7 +22,25 @@ type FileFromConfigMap struct {
 	Mode string `json:"mode,omitempty"`
 }
 
-// FileFromURL represents a file that you would like to mount from a URL in the launcher pod for
+// FileFromSecret represents one file projected from a same-namespace Kubernetes Secret.
+type FileFromSecret struct {
+	// FilePath is the absolute destination path, or the destination directory when SecretPath is
+	// omitted and every Secret key is projected.
+	FilePath string `json:"filePath"`
+	// SecretName is the name of the same-namespace Secret.
+	SecretName string `json:"secretName"`
+	// SecretPath is the Secret data key to project. When omitted, every key is projected beneath
+	// FilePath in deterministic key order.
+	// +optional
+	SecretPath string `json:"secretPath,omitempty"`
+	// Mode selects read-only or read-and-execute permissions for the staged file.
+	// +kubebuilder:validation:Enum=read;execute
+	// +kubebuilder:default=read
+	// +optional
+	Mode string `json:"mode,omitempty"`
+}
+
+// FileFromURL represents a file that you would like to mount from a URL in the device pod for
 // a given node.
 type FileFromURL struct {
 	// FilePath is the path to mount the file.
@@ -31,13 +49,16 @@ type FileFromURL struct {
 	// be simply downloaded and dumped to disk -- meaning a normal file server type endpoint or if
 	// using GitHub or similar a "raw" path.
 	URL string `json:"url"`
+	// Digest is the required SHA-256 identity of the downloaded bytes in direct-runtime mode. It
+	// prevents a mutable URL from changing a device payload without changing the accepted plan.
+	// +kubebuilder:validation:Pattern=`^sha256:[a-f0-9]{64}$`
+	// +optional
+	Digest string `json:"digest,omitempty"`
 }
 
-// Persistence holds information about how to persist the containlerab lab directory for each node
-// in a topology.
+// Persistence holds direct device artifact persistence policy for each Node in a Topology.
 type Persistence struct {
-	// Enabled indicates if persistence of hte containerlab lab/working directory will be placed in
-	// a mounted PVC.
+	// Enabled indicates whether package-planned persistent artifacts are placed in a mounted PVC.
 	Enabled bool `json:"enabled"`
 	// ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 5Gi.
 	// If provided, the string value must be a valid kubernetes storage requests style string. Note
@@ -52,10 +73,6 @@ type Persistence struct {
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
 }
-
-// InsecureRegistries is a slice of strings of insecure registries to configure in the launcher
-// pods.
-type InsecureRegistries []string
 
 // Definition holds the underlying topology definition for the Topology CR. A Topology *must* have
 // one -- and only one -- definition type defined.
@@ -128,8 +145,7 @@ type Expose struct {
 	UseNodeMgmtIpv6Address bool `json:"useNodeMgmtIpv6Address,omitempty"`
 }
 
-// Deployment holds configurations relevant to how clabernetes configures deployments that make
-// up a given topology.
+// Deployment holds portable policy compiled into direct Node workloads.
 type Deployment struct {
 	// Resources is a mapping of nodeName (or "default") to kubernetes resource requirements -- any
 	// value set here overrides the "global" config resource definitions. If a key "default" is set,
@@ -139,103 +155,48 @@ type Deployment struct {
 	// mapping applied.
 	// +optional
 	Resources map[string]k8scorev1.ResourceRequirements `json:"resources"`
-	// Scheduling holds information about how the launcher pod(s) should be configured with respect
-	// to "scheduling" things (affinity/node selector/tolerations).
+	// Scheduling holds direct Pod scheduling policy.
 	// +optional
 	Scheduling Scheduling `json:"scheduling"`
-	// PrivilegedLauncher, when true, sets the launcher containers to privileged. Historically we
-	// tried very hard to *not* need to set privileged mode on pods, however the reality is it is
-	// much, much easier to get various network operating system images booting with this enabled,
-	// so, the default mode is to set the privileged flag on pods. Disabling this option causes
-	// clabernetes to try to run the pods for this topology in the "not so privileged" mode -- this
-	// basically means we mount all capabilities we think should be available, set apparmor to
-	// "unconfined", and mount paths like /dev/kvm and dev/net/tun. With this "not so privileged"
-	// mode, Nokia SRL devices and Arista cEOS devices have been able to boot on some clusters, but
-	// your mileage may vary. In short: if you don't care about having some privileged pods, just
-	// leave this alone.
-	// +optional
-	PrivilegedLauncher *bool `json:"privilegedLauncher"`
 	// FilesFromConfigMap is a slice of FileFromConfigMap that define the configmap/path and node
-	// and path on a launcher node that the file should be mounted to. If the path is not provided
+	// and path in a device pod that the file should be mounted to. If the path is not provided
 	// the configmap is mounted in its entirety (like normal k8s things), so you *probably* want
 	// to specify the sub path unless you are sure what you're doing!
 	// +optional
 	FilesFromConfigMap map[string][]FileFromConfigMap `json:"filesFromConfigMap"`
+	// FilesFromSecret maps logical Node names to same-namespace Secret-backed payloads.
+	// +optional
+	FilesFromSecret map[string][]FileFromSecret `json:"filesFromSecret,omitempty"`
 	// FilesFromURL is a mapping of FileFromURL that define a URL at which to fetch a file, and path
-	// on a launcher node that the file should be downloaded to. This is useful for configs that are
+	// in a device pod that the file should be staged at. This is useful for configs that are
 	// larger than the ConfigMap (etcd) 1Mb size limit.
 	// +optional
 	FilesFromURL map[string][]FileFromURL `json:"filesFromURL"`
-	// Persistence holds configurations relating to persisting each nodes working containerlab
-	// directory.
+	// Persistence holds direct device artifact persistence policy.
 	// +optional
 	Persistence Persistence `json:"persistence"`
-	// ContainerlabDebug sets the `--debug` flag when invoking containerlab in the launcher pods.
-	// This is disabled by default. If this value is unset, the global config value (default of
-	// "false") will be used.
-	// +optional
-	ContainerlabDebug *bool `json:"containerlabDebug"`
-	// ContainerlabTimeout sets the `--timeout` flag when invoking containerlab in the launcher
-	// pods.
-	// +optional
-	ContainerlabTimeout string `json:"containerlabTimeout"`
-	// ContainerlabVersion sets a custom version to use for containerlab -- when set this will cause
-	// the launcher pods to download and use this specific version of containerlab. Setting a bad
-	// version (version that doesnt exist/typo/etc.) will cause pods to fail to launch, so be
-	// careful! You never "need" to this as the publicly available launcher image will always be
-	// built with a (reasonably) up to date containerlab version, this setting exists in case you
-	// want to pin back to an older version for some reason or you want to be bleeding edge with
-	// some new feature (but do note that just because it exists in containerlab doesnt
-	// *necessarily* mean it will be auto-working in clabernetes!
-	// 0.78.0 is the floor -- the Node vocabulary includes fields older releases reject outright.
-	// +optional
-	ContainerlabVersion string `json:"containerlabVersion,omitempty"`
-	// LauncherImage sets the default launcher image to use when spawning launcher deployments for
-	// this Topology. This is optional, the launcher image will default to whatever is set in the
-	// global config CR.
-	// +optional
-	LauncherImage string `json:"launcherImage,omitempty"`
-	// LauncherImagePullPolicy sets the default launcher image pull policy to use when spawning
-	// launcher deployments for this Topology. This is also optional and defaults to whatever is set
-	// in the global config CR (typically "IfNotPresent"). Note: omitempty because empty str does
-	// not satisfy enum of course.
-	// +kubebuilder:validation:Enum=IfNotPresent;Always;Never
-	// +optional
-	LauncherImagePullPolicy string `json:"launcherImagePullPolicy,omitempty"`
-	// LauncherLogLevel sets the launcher clabernetes worker log level -- this overrides whatever
-	// is set on the controllers env vars for this topology. Note: omitempty because empty str does
-	// not satisfy enum of course.
-	// +kubebuilder:validation:Enum=disabled;critical;warn;info;debug
-	// +optional
-	LauncherLogLevel string `json:"launcherLogLevel,omitempty"`
-	// ExtraEnv is a list of additional environment variables to set on the launcher container. The
-	// values here override any configured global config extra envs!
-	// +optional
-	// +listType=atomic
-	ExtraEnv []k8scorev1.EnvVar `json:"extraEnv"`
 }
 
-// Scheduling holds information about how the launcher pod(s) should be configured with respect
-// to "scheduling" things (affinity/node selector/tolerations).
+// Scheduling holds direct Pod node selection and toleration policy.
 type Scheduling struct {
-	// NodeSelector sets the node selector that will be configured on all launcher pods for this
+	// NodeSelector sets the node selector that will be configured on all device pods for this
 	// Topology.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-	// Tolerations is a list of Tolerations that will be set on the launcher pod spec.
+	// Tolerations is a list of Tolerations that will be set on the device pod spec.
 	// +listType=atomic
 	// +optional
 	Tolerations []k8scorev1.Toleration `json:"tolerations"`
-	// Affinity sets the affinity rules that will be configured on all launcher pods using this
+	// Affinity sets the affinity rules that will be configured on all direct device Pods using this
 	// scheduling policy. This supports node affinity, pod affinity, and pod anti-affinity.
 	// +optional
 	Affinity *k8scorev1.Affinity `json:"affinity,omitempty"`
 }
 
 // StatusProbes holds details about if the status probes are enabled and if so how they should be
-// handled. Enabled probes always require the nested container to be running and not paused,
-// restarting, or dead. If Docker exposes an image-defined healthcheck, it must also be healthy.
-// Configured TCP and SSH probes are additional requirements.
+// handled. Node readiness always requires every device application container to be running and
+// ready, including any image-defined or declared healthcheck translated into its startup and
+// readiness probes. Configured TCP and SSH probes are additional requirements.
 type StatusProbes struct {
 	// Enabled sets the status probes to enabled (or obviously disabled). A Node that has previously
 	// started but later fails its readiness check remains running and is reported not ready. A Node
@@ -261,13 +222,13 @@ type StatusProbes struct {
 }
 
 // ProbeConfiguration holds optional application-specific probes for a (containerlab) node in a
-// Topology. If both styles are configured, both and the generic nested-container probe must succeed
-// in order to report healthy.
+// Topology. If both styles are configured, both and the generic device-container readiness must
+// succeed in order to report healthy.
 type ProbeConfiguration struct {
 	// StartupSeconds is the total amount of seconds to allow for the node to start. This defaults
 	// to roughly 15 minutes to account for slow-to-boot nodes. The allowance must include time for
-	// c9s to pull the image, load it into Docker on the launcher, and boot the node. A larger value
-	// does not delay fast nodes because the readiness probe takes over as soon as startup succeeds.
+	// the kubelet to pull the image and boot the device. A larger value does not delay fast nodes
+	// because the readiness probe takes over as soon as startup succeeds.
 	// +optional
 	StartupSeconds int `json:"startupSeconds"`
 	// SSHProbeConfiguration defines an SSH probe.
@@ -280,8 +241,8 @@ type ProbeConfiguration struct {
 
 // SSHProbeConfiguration defines a "ssh" probe -- the ssh probe just connects using standard go
 // crypto ssh setup and reports true if auth is successful, it does no further checking. The probe
-// is executed by the launcher and the result is placed into /clabernetes/.nodestatus so the k8s
-// probe can pick it up and reflect the status.
+// runs inside the device pod against the node's management address and feeds the container's
+// Kubernetes readiness.
 type SSHProbeConfiguration struct {
 	// Username is the username to use for auth.
 	Username string `json:"username"`
@@ -292,51 +253,24 @@ type SSHProbeConfiguration struct {
 	Port int `json:"port"`
 }
 
-// TCPProbeConfiguration defines a "tcp" probe. The probe is executed by the launcher and the
-// result is placed into /clabernetes/.nodestatus so the k8s probe can pick it up and reflect the
-// status.
+// TCPProbeConfiguration defines a "tcp" probe. The probe runs inside the device pod against the
+// node's management address and feeds the container's Kubernetes readiness.
 type TCPProbeConfiguration struct {
-	// Port defines the port to try to open a TCP connection to. When using TCP probe setup this
-	// connection happens inside the launcher rather than the "normal" k8s style probes. This style
-	// probe behaves like a k8s style probe though in that it is "successful" whenever a TCP
-	// connection to this port can be opened successfully.
+	// Port defines the port to try to open a TCP connection to. The probe is "successful"
+	// whenever a TCP connection to this port can be opened successfully.
 	Port int `json:"port"`
 }
 
-// ImagePull holds configurations relevant to how clabernetes launcher pods handle pulling
-// images.
+// ImagePull holds Kubernetes-native image pull defaults compiled into NodeProfile.
 type ImagePull struct {
-	// InsecureRegistries is a slice of strings of insecure registries to configure in the launcher
-	// pods.
+	// Policy is the default Kubernetes pull policy for application containers whose flattened Node
+	// definition does not explicitly declare one.
+	// +kubebuilder:validation:Enum=IfNotPresent;Always;Never
 	// +optional
-	InsecureRegistries InsecureRegistries `json:"insecureRegistries"`
-	// PullThroughOverride allows for overriding the image pull through mode for this
-	// particular topology.
-	// +kubebuilder:validation:Enum=auto;always;never
-	// +optional
-	PullThroughOverride string `json:"pullThroughOverride,omitempty"`
-	// PullSecrets allows for providing secret(s) to use when pulling the image. This is only
-	// applicable *if* ImagePullThrough mode is auto or always. The secret is used by the launcher
-	// pod to pull the image via the cluster CRI. The secret is *not* mounted to the pod, but
-	// instead is used in conjunction with a job that spawns a pod using the specified secret. The
-	// job will kill the pod as soon as the image has been pulled -- we do this because we don't
-	// care if the pod runs, we only care that the image gets pulled on a specific node. Note that
-	// just like "normal" pull secrets, the secret needs to be in the namespace that the topology
-	// is in.
+	Policy string `json:"policy,omitempty"`
+	// PullSecrets lists same-namespace Docker-config Secrets placed on direct device Pods through
+	// Pod.spec.imagePullSecrets. Credentials are not mounted into application containers.
 	// +listType=set
 	// +optional
 	PullSecrets []string `json:"pullSecrets"`
-	// DockerDaemonConfig allows for setting the docker daemon config for all launchers in this
-	// topology. The secret *must be present in the namespace of this topology*. The secret *must*
-	// contain a key "daemon.json" -- as this secret will be mounted to /etc/docker and docker will
-	// be expecting the config at /etc/docker/daemon.json.
-	// +optional
-	DockerDaemonConfig string `json:"dockerDaemonConfig,omitempty"`
-	// DockerConfig allows for setting the docker user (for root) config for all launchers in this
-	// topology. The secret *must be present in the namespace of this topology*. The secret *must*
-	// contain a key "config.json" -- as this secret will be mounted to /root/.docker/config.json
-	// and as such wil be utilized when doing docker-y things -- this means you can put auth things
-	// in here in the event your cluster doesn't support the preferred image pull through option.
-	// +optional
-	DockerConfig string `json:"dockerConfig,omitempty"`
 }

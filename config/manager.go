@@ -3,7 +3,6 @@ package config
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 
@@ -64,18 +63,10 @@ func InitManager(
 						Requests: nil,
 						Claims:   nil,
 					},
-					ResourcesByContainerlabKind: make(
-						map[string]map[string]*k8scorev1.ResourceRequirements,
-					),
-					NodeSelectorsByImage:    make(map[string]map[string]string),
-					PrivilegedLauncher:      true,
-					ContainerlabDebug:       false,
-					LauncherImage:           os.Getenv(clabernetesconstants.LauncherImageEnv),
-					LauncherImagePullPolicy: clabernetesconstants.KubernetesImagePullIfNotPresent,
-					LauncherLogLevel:        clabernetesconstants.Info,
+					NodeSelectorsByImage: make(map[string]map[string]string),
 				},
 				ImagePull: clabernetesapisv1alpha1.ConfigImagePull{
-					PullThroughOverride: clabernetesconstants.ImagePullThroughModeAuto,
+					Policy: clabernetesconstants.KubernetesImagePullIfNotPresent,
 				},
 				Naming: clabernetesconstants.NamingModePrefixed,
 			},
@@ -114,51 +105,28 @@ type Manager interface { //nolint: interfacebloat
 	GetGlobalLabels() map[string]string
 	// GetAllMetadata returns the global annotations and global labels.
 	GetAllMetadata() (map[string]string, map[string]string)
-	// GetResourcesForContainerlabKind returns the desired default resources for a containerlab
-	// kind/type combo.
-	GetResourcesForContainerlabKind(
-		containerlabKind string,
-		containerlabType string,
-	) *k8scorev1.ResourceRequirements
+	// GetDefaultResources returns the generic default application resource policy without
+	// consulting any kind/type-indexed lookup.
+	GetDefaultResources() *k8scorev1.ResourceRequirements
+	// GetApplicationImagePullPolicy returns the global default Kubernetes application pull policy.
+	GetApplicationImagePullPolicy() string
+	// GetImagePullSecrets returns global same-namespace Pod image-pull Secret names.
+	GetImagePullSecrets() []string
 	// GetNodeSelectorsByImage returns the node selectors map for an image.
 	GetNodeSelectorsByImage(
 		imageName string,
 	) map[string]string
-	// GetPrivilegedLauncher returns the global config value for the privileged launcher mode.
-	GetPrivilegedLauncher() bool
-	// GetContainerlabDebug returns the global config value for containerlabDebug.
-	GetContainerlabDebug() bool
-	// GetContainerlabTimeout returns the global config containerlab timeout value.
-	GetContainerlabTimeout() string
 	// GetInClusterDNSSuffix returns the in cluster dns suffix as set by the global config.
 	GetInClusterDNSSuffix() string
-	// GetImagePullThroughMode returns the image pull through mode in the global config.
-	GetImagePullThroughMode() string
-	// GetImagePullCriSockOverride returns the cri sock path override.
-	GetImagePullCriSockOverride() string
-	// GetImagePullCriKindOverride returns the cri kind override.
-	GetImagePullCriKindOverride() string
-	// GetImagePullCriHostsDir returns the host directory containing CRI registry configuration.
-	GetImagePullCriHostsDir() string
-	// GetDockerDaemonConfig returns the secret name to mount in /etc/docker -- the secret *must*
-	// have a key "daemon.json" so the final mounted file is /etc/docker/daemon.json.
-	GetDockerDaemonConfig() string
-	// GetDockerConfig returns the secret name to mount in /root/.docker/ -- the secret *must* have
-	// a key "config.json" so the final mounted file is /root/.docker/config.json.
-	GetDockerConfig() string
-	// GetLauncherImage returns the global default launcher image.
-	GetLauncherImage() string
-	// GetLauncherImagePullPolicy returns the global default launcher image pull policy.
-	GetLauncherImagePullPolicy() string
-	// GetLauncherLogLevel returns the default launcher log level.
-	GetLauncherLogLevel() string
-	// GetExtraEnv returns the default extra env vars for setting on launcher containers.
-	GetExtraEnv() []k8scorev1.EnvVar
+	// GetRegistryMetadataTrust returns exact controller-only OCI registry trust exceptions.
+	GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
 	// GetRemoveTopologyPrefix returns true if the topology prefix should be removed from Topology
 	// resources, otherwise false.
 	GetRemoveTopologyPrefix() bool
-	// GetContainerlabVersion returns the global config containerlab version.
-	GetContainerlabVersion() string
+	// GetContainerStopSignals returns true if the direct-pod renderer should map an image's OCI
+	// stop signal to the Kubernetes lifecycle.stopSignal field -- this requires the cluster to
+	// enable the ContainerStopSignals feature gate.
+	GetContainerStopSignals() bool
 }
 
 type manager struct {

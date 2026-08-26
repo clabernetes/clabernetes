@@ -136,26 +136,27 @@
         "imagePull": {
           "type": "object",
           "properties": {
-            "imagePullThroughMode": {
+            "policy": {
               "type": "string",
-              "enum": ["never", "auto", "always"]
+              "enum": ["Never", "IfNotPresent", "Always"]
             },
-            "criSockOverride": {
-              "type": "string",
-              "pattern": "(.*containerd\\.sock)"
+            "pullSecrets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             },
-            "criKindOverride": {
-              "type": "string",
-              "enum": ["containerd"]
-            },
-            "criHostsDir": {
-              "type": "string",
-              "pattern": "^/.+",
-              "not": {
-                "anyOf": [
-                  {"pattern": "^/*$"},
-                  {"pattern": "(^|/)\\.\\.?(/|$)"}
-                ]
+            "registryMetadataTrust": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["registry"],
+                "properties": {
+                  "registry": {"type": "string", "minLength": 1},
+                  "caBundle": {"type": "string"},
+                  "plainHTTP": {"type": "boolean"}
+                }
               }
             }
           }
@@ -166,41 +167,12 @@
             "resourcesDefault": {
               "type": "object"
             },
-            "resourcesByContainerlabKind": {
-              "type": "object"
-            },
-            "privilegedLauncher": {
+            "containerStopSignals": {
               "type": "boolean"
-            },
-            "containerlabDebug": {
-              "type": "boolean"
-            },
-            "containerlabTimeout": {
-              "type": "string"
-            },
-            "launcherImage": {
-              "type": "string"
-            },
-            "launcherImagePullPolicy": {
-              "type": "string",
-              "enum": ["Never", "IfNotPresent", "Always"]
-            },
-            "launcherLogLevel": {
-              "type": "string",
-              "enum": ["disabled", "critical", "warn", "info", "debug"]
-            },
-            "containerlabVersion": {
-              "type": "string"
-            },
-            "extraEnv": {
-              "type": "array",
-              "items": {
-                "type": "object"
-              }
             }
           }
         },
-        "removeTopologyPrefix": {
+        "naming": {
           "type": "string",
           "enum": ["prefixed", "non-prefixed"]
         }

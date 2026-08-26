@@ -29,9 +29,9 @@ func TestContainerlabBasic(t *testing.T) {
 
 	steps := clabernetestesthelpersuite.Steps{
 		{
-			// the topology compiles to Node/Link/LauncherProfile objects and the Node controller
-			// realizes those -- so this asserts the whole compile + realize pipeline including
-			// the (unprefixed! the namespace is the topology boundary) deployment and services
+			// the topology compiles to Node/Link/NodeProfile objects and the Node controller
+			// realizes those -- this asserts the compile pipeline plus the expose/fabric
+			// services (the device Pods themselves are covered behaviorally in e2e/topology/direct)
 			Index:       10,
 			Description: "Create a simple containerlab topology with just one node",
 			AssertObjects: map[string][]clabernetestesthelpersuite.AssertObject{
@@ -51,7 +51,7 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 				},
-				"launcherprofile": {
+				"nodeprofile": {
 					{
 						Name:           testName,
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{},
@@ -65,17 +65,9 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 					{
-						Name: "srl1-vx",
+						Name: "srl1-wire",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeFabricService,
-						},
-					},
-				},
-				"deployment": {
-					{
-						Name: "srl1",
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
-							clabernetestesthelper.NormalizeDeployment,
 						},
 					},
 				},
@@ -130,29 +122,15 @@ func TestContainerlabBasic(t *testing.T) {
 						},
 					},
 					{
-						Name: "srl1-vx",
+						Name: "srl1-wire",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeFabricService,
 						},
 					},
 					{
-						Name: "srl2-vx",
+						Name: "srl2-wire",
 						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
 							clabernetestesthelper.NormalizeFabricService,
-						},
-					},
-				},
-				"deployment": {
-					{
-						Name: "srl1",
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
-							clabernetestesthelper.NormalizeDeployment,
-						},
-					},
-					{
-						Name: "srl2",
-						NormalizeFuncs: []func(t *testing.T, objectData []byte) []byte{
-							clabernetestesthelper.NormalizeDeployment,
 						},
 					},
 				},
@@ -183,12 +161,39 @@ func TestSRLinuxDNSFromManagementNamespace(t *testing.T) {
 		"test-fixtures/20-apply.yaml",
 	)
 
+	for _, nodeName := range []string{"srl1", "srl2"} {
+		clabernetestesthelper.KubectlWaitForCreate(
+			t,
+			"nodes.c9s.run",
+			namespace,
+			nodeName,
+		)
+		waitForNodeReady(t, namespace, nodeName)
+	}
+
 	srLinuxNodes := getSRLinuxNodeNames(t, namespace)
 	if len(srLinuxNodes) < 2 {
 		t.Skipf("topology has fewer than two SR Linux nodes: %v", srLinuxNodes)
 	}
 
 	waitForSRLinuxRemotePing(t, namespace, srLinuxNodes[0], srLinuxNodes[1])
+}
+
+func waitForNodeReady(t *testing.T, namespace, nodeName string) {
+	t.Helper()
+
+	cmd := exec.CommandContext( //nolint:gosec
+		t.Context(),
+		"kubectl",
+		"wait",
+		"--for=jsonpath={.status.readiness}=ready",
+		"--timeout=12m",
+		"--namespace",
+		namespace,
+		"node.c9s.run/"+nodeName,
+	)
+
+	clabernetestesthelper.Execute(t, cmd)
 }
 
 func getSRLinuxNodeNames(t *testing.T, namespace string) []string {
@@ -240,70 +245,170 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 	t.Helper()
 
 	const (
-		pollInterval = 3 * time.Second
-		timeout      = 5 * time.Minute
+		pollInterval    = 3 * time.Second
+		confirmInterval = 20 * time.Second
+		timeout         = 5 * time.Minute
 	)
 
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 
+	// The per-node fabric Service is headless, so Service DNS resolves directly to the remote
+	// device Pod instead of relying on the cluster's optional per-Pod DNS record mode.
+	remoteDNSName := fmt.Sprintf("%s-wire.%s.svc.cluster.local", remoteNode, namespace)
+
 	var lastOutput []byte
 
+	consecutive := 0
+
 	for {
-		remoteDNSName, err := getRemoteNodeDNSName(t, namespace, remoteNode)
-		if err != nil {
-			lastOutput = []byte(err.Error())
-		} else if remoteDNSName != "" {
-			command := []string{
-				"exec",
-				"--namespace",
-				namespace,
-				"deployment/" + sourceNode,
-				"-c",
-				sourceNode,
-				"--",
-				"sh",
-				"-ec",
-				`source="$1"
-remote="$2"
-container_id="$(docker ps --quiet --filter "label=clab-node-name=${source}")"
-test -n "${container_id}"
-docker exec "${container_id}" ip netns exec srbase-mgmt ping -c 1 -W 5 "${remote}"`,
-				"launcher",
-				sourceNode,
-				remoteDNSName,
+		podName, containerName, targetErr := getDevicePodTarget(t, namespace, sourceNode)
+		if targetErr != nil || podName == "" {
+			lastOutput = []byte("device Pod for " + sourceNode + " is not observable yet")
+
+			select {
+			case <-t.Context().Done():
+				t.Fatalf("DNS lookup canceled: %s", strings.TrimSpace(string(lastOutput)))
+			case <-deadline.C:
+				t.Fatalf(
+					"timed out waiting for SR Linux DNS ping %s -> %s: %s",
+					sourceNode,
+					remoteNode,
+					strings.TrimSpace(string(lastOutput)),
+				)
+			case <-time.After(pollInterval):
 			}
 
-			cmd := exec.CommandContext( //nolint:gosec
-				t.Context(),
-				"kubectl",
-				command...,
-			)
+			continue
+		}
 
-			output, pingErr := cmd.CombinedOutput()
-			if pingErr == nil && strings.TrimSpace(string(output)) != "" {
+		command := []string{
+			"exec",
+			"--namespace",
+			namespace,
+			podName,
+			"-c",
+			containerName,
+			"--",
+			"ip",
+			"netns",
+			"exec",
+			"srbase-mgmt",
+			"ping",
+			"-c",
+			"1",
+			"-W",
+			"5",
+			remoteDNSName,
+		}
+
+		cmd := exec.CommandContext( //nolint:gosec
+			t.Context(),
+			"kubectl",
+			command...,
+		)
+
+		output, pingErr := cmd.CombinedOutput()
+		if pingErr == nil && strings.TrimSpace(string(output)) != "" {
+			// A very early ping can win a race against the device populating its own
+			// management resolver state, so a single success is not steady-state proof.
+			consecutive++
+			if consecutive >= 2 {
 				return
 			}
+		} else {
+			consecutive = 0
+		}
 
-			lastOutput = output
+		lastOutput = output
+
+		wait := pollInterval
+		if consecutive == 1 {
+			// Leave the early-boot race window before confirming steady-state resolution.
+			wait = confirmInterval
 		}
 
 		select {
 		case <-t.Context().Done():
 			t.Fatalf("DNS lookup canceled: %s", strings.TrimSpace(string(lastOutput)))
 		case <-deadline.C:
+			dumpSRLinuxDNSDiagnostics(t, namespace, sourceNode)
 			t.Fatalf(
 				"timed out waiting for SR Linux DNS ping %s -> %s: %s",
 				sourceNode,
 				remoteNode,
 				strings.TrimSpace(string(lastOutput)),
 			)
-		case <-time.After(pollInterval):
+		case <-time.After(wait):
 		}
 	}
 }
 
-func getRemoteNodeDNSName(t *testing.T, namespace, nodeName string) (string, error) {
+// dumpSRLinuxDNSDiagnostics logs the management resolver chain of one SR Linux node so a CI-only
+// resolution failure is diagnosable from the job log: the dnsmasq forwarder config SR Linux
+// renders from its `system dns` state, the management netns routing tables, raw TCP reachability
+// of both the local forwarder and the cluster DNS Service, and the Pod resolver the runtime
+// completed the device DNS from.
+func dumpSRLinuxDNSDiagnostics(t *testing.T, namespace, nodeName string) {
+	t.Helper()
+
+	podName, containerName, err := getDevicePodTarget(t, namespace, nodeName)
+	if err != nil || podName == "" {
+		t.Logf("DNS diagnostics skipped: device Pod for %s is not observable: %v", nodeName, err)
+
+		return
+	}
+
+	diagnostics := [][]string{
+		{"pod resolv.conf", "cat", "/etc/resolv.conf"},
+		{"dnsmasq forwarder config", "cat", "/etc/dnsmasq-clab-default.conf"},
+		{"dnsmasq process", "pgrep", "-a", "dnsmasq"},
+		{
+			"management netns resolv.conf",
+			"ip", "netns", "exec", "srbase-mgmt", "cat", "/etc/resolv.conf",
+		},
+		{
+			"management netns v4 routes",
+			"ip", "netns", "exec", "srbase-mgmt", "ip", "-4", "route", "show", "table", "all",
+		},
+		{
+			"lookup via local dnsmasq forwarder",
+			"ip", "netns", "exec", "srbase-mgmt",
+			"timeout", "5", "nslookup", "kubernetes.default.svc.cluster.local", "127.0.0.1",
+		},
+		{
+			"lookup direct against cluster DNS",
+			"ip", "netns", "exec", "srbase-mgmt",
+			"timeout", "5", "nslookup", "kubernetes.default.svc.cluster.local", "10.96.0.10",
+		},
+		{
+			"lookup direct against cluster DNS from Pod namespace",
+			"timeout", "5", "nslookup", "kubernetes.default.svc.cluster.local", "10.96.0.10",
+		},
+	}
+
+	for _, diagnostic := range diagnostics {
+		command := append(
+			[]string{"exec", "--namespace", namespace, podName, "-c", containerName, "--"},
+			diagnostic[1:]...,
+		)
+
+		cmd := exec.CommandContext(t.Context(), "kubectl", command...) //nolint:gosec
+
+		output, diagErr := cmd.CombinedOutput()
+		t.Logf(
+			"DNS diagnostic [%s] (err: %v):\n%s",
+			diagnostic[0],
+			diagErr,
+			strings.TrimSpace(string(output)),
+		)
+	}
+}
+
+// getDevicePodTarget resolves the running device Pod and its device container for one logical
+// node: the direct runtime realizes devices as Pod containers, so command intent targets the
+// container directly.
+func getDevicePodTarget(t *testing.T, namespace, nodeName string) (string, string, error) {
 	t.Helper()
 
 	cmd := exec.CommandContext( //nolint:gosec
@@ -321,31 +426,41 @@ func getRemoteNodeDNSName(t *testing.T, namespace, nodeName string) (string, err
 
 	output, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	var podList struct {
 		Items []struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+			Spec struct {
+				Containers []struct {
+					Name string `json:"name"`
+				} `json:"containers"`
+			} `json:"spec"`
 			Status struct {
-				PodIP string `json:"podIP"`
+				Phase string `json:"phase"`
 			} `json:"status"`
 		} `json:"items"`
 	}
 
 	err = json.Unmarshal(output, &podList)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	if len(podList.Items) == 0 || podList.Items[0].Status.PodIP == "" {
-		return "", nil
+	for _, pod := range podList.Items {
+		if pod.Status.Phase != "Running" {
+			continue
+		}
+
+		for _, container := range pod.Spec.Containers {
+			if strings.HasPrefix(container.Name, "node-") {
+				return pod.Metadata.Name, container.Name, nil
+			}
+		}
 	}
 
-	podIP := strings.ReplaceAll(podList.Items[0].Status.PodIP, ".", "-")
-
-	return fmt.Sprintf(
-		"%s.%s.pod.cluster.local",
-		podIP,
-		namespace,
-	), nil
+	return "", "", nil
 }

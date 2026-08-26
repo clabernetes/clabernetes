@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: How Clabernetes controllers, launchers, resources, and connectivity work together.
+description: How Clabernetes controllers, direct device Pods, resources, and connectivity work together.
 icon: Layers
 ---
 
@@ -10,8 +10,15 @@ import { ArchitectureReactFlowDiagram } from '@/components/architecture-react-fl
 
 clabernetes is a collection of kubernetes custom resources and controllers that reconcile those
 resources. The ultimate goal of the controllers is to render a network topology in the cluster:
-one launcher pod per (containerlab) node, network node interfaces stitched together across pods,
-and the management interfaces of the nodes exposed.
+one device Pod per (containerlab) node running the actual network-device image as a regular
+application container, network node interfaces stitched together across pods, and the management
+interfaces of the nodes exposed.
+
+There is no nested runtime: no Docker daemon inside the Pod, no containerlab executable, and no
+image import path. The kubelet pulls and runs every device image natively, and Kubernetes owns
+device lifecycle, logs, resources, and status. Kind behavior (defaults, generated files,
+lifecycle commands, readiness) comes exclusively from an unmodified, pinned containerlab Go
+module, so a containerlab module bump admits new kinds without any clabernetes kind code.
 
 The model in one picture:
 
@@ -22,26 +29,22 @@ were written by a person, by tooling, or by the Topology compiler.
 
 ## The Primary API: Nodes and Links
 
-A `Node` custom resource represents a single containerlab node -- its spec is simply what a
+A `Node` custom resource represents a single containerlab node: its spec is simply what a
 human would write for that node in a containerlab topology file (flat, verbatim containerlab
 vocabulary). A `Link` custom resource represents a single wire between two nodes. That's the
 whole authoritative api: apply Node and Link objects and the controllers render a running,
-wired lab -- no Topology object required.
+wired lab, with no Topology object required.
 
-The object name of a Node *is* the containerlab node name: the launcher pod hostname and the
+The object name of a Node *is* the containerlab node name: the device pod hostname and the
 node's services derive from it, which also means the **namespace is the topology boundary**.
 Everything operational is controller-stamped into the statuses: expose port allocations and
-readiness on Nodes, tunnel id allocations on Links. Deployment *policy* -- expose behavior,
-image pull config, launcher resources, scheduling, privileges -- lives on `LauncherProfile`.
-Each Node can explicitly reference one same-namespace profile through
-`spec.launcherProfileRef`; an omitted reference uses global Config defaults, while a missing
-explicit reference prevents realization instead of silently falling back.
-
-The primitive objects are bounded: a Node grows only with its own definition and payload, a
-Link contains one wire, and each launcher watches only Links terminating on its own Nodes
-(server-side field selectors require Kubernetes 1.31+). This removes the single authoritative
-aggregate-object ceiling; it does not imply arbitrary runtime scale because API-server capacity,
-controller throughput, and total object count remain finite.
+readiness on Nodes, wire id allocations on Links. Deployment *policy* (expose behavior,
+image pull defaults, primary-container resources, scheduling, persistence, probes) lives on
+`NodeProfile` (the retained CRD name for reusable direct-workload policy). Each Node can
+explicitly reference one same-namespace profile through `spec.profileRef`; an omitted
+reference uses global Config defaults, while a missing explicit reference prevents realization
+instead of silently falling back. Device privilege, capabilities, devices, and other kind-owned
+container requirements are *not* profile policy: they come from the imported package's plan.
 
 `Topology` remains a supported, backward-compatible auxiliary resource. Its existing
 `connectivity`, `expose`, `deployment`, `imagePull`, and `statusProbes` fields are accepted and
@@ -54,80 +57,154 @@ large labs should use clabverter's direct primitive output instead of persisting
 
 The "brains" of clabernetes is the manager deployment which runs three cooperating controllers:
 
-- the **node controller** turns every (launcher) Node into a deployment, a per-node "fabric"
-  service (`<name>-vx`, the tunnel termination point), an expose service (`<name>`), and an
-  optional PVC -- and stamps readiness/allocations into the Node status. Grouped nodes
-  (containerlab's `network-mode: container:<primary>`) share their primary's pod.
-- the **link controller** validates Links and allocates tunnel ids into their statuses.
+- the **node controller** turns every Node (or `network-mode: container:<primary>` group of
+  Nodes) into one Recreate Deployment of a direct device Pod, a per-node "fabric" service
+  (`<name>-wire`, headless peer discovery for cross-worker wires), an expose service (`<name>`),
+  one headless service per declared network alias, and an optional PVC, and stamps
+  readiness/allocations into the Node status. Before rendering, it resolves image metadata and
+  runs planning (below); a Node whose plan fails stays failed with a structured diagnostic and
+  never mutates the last successfully applied workload.
+- the **link controller** validates Links and allocates namespace-unique wire ids into their
+  statuses (wire ids become the link identities on the fabric wire between connectivity
+  sidecars; datagrams dispatch inside one receiving sidecar from a validated source, so the
+  namespace is the whole allocation domain).
 - the **topology controller** is the optional convenience layer: it *compiles* a Topology
-  (a containerlab file plus knobs) into LauncherProfile/Link/Node objects -- expanding
-  topology defaults/kinds into each node so every emitted Node is self contained -- prunes
-  emitted objects that fall out of the definition, protects them from drift, and aggregates
-  fixed-size counts and readiness back into the Topology status. Profiles and Links are
-  reconciled before Nodes.
+  (a containerlab file plus knobs) into NodeProfile/Link/Node objects, expanding
+  topology defaults/kinds/groups into each node so every emitted Node is self contained. It
+  prunes emitted objects that fall out of the definition, protects them from drift, and
+  aggregates fixed-size counts and readiness back into the Topology status. Profiles and Links
+  are reconciled before Nodes.
 
-The compiler normally emits one shared LauncherProfile and places its explicit reference on
-every Node. A distinct per-node launcher resource policy produces a complete dedicated profile,
-not an inheritance chain. Shared containerlab management-network settings temporarily remain in
-every generated LauncherProfile required by the Topology's Nodes; this is a compatibility bridge,
-not the final ownership model.
+The compiler normally emits one shared NodeProfile and places its explicit reference on
+every Node. A distinct per-node workload resource policy produces a complete dedicated profile,
+not an inheritance chain.
 
-Compilation is permissive for lossy fields that can be omitted: the controller emits the supported
-resources and logs warnings with source locations. It fails before resource creation when the
-definition cannot identify realizable c9s resources, including pseudo-nodes, special or unresolved
-endpoints, unsupported explicit link types other than `veth`, and invalid launcher groups. Explicit
-`veth` links may use brief `node:interface` endpoints or equivalent structured `node`/`interface`
-mappings; empty or malformed endpoint values fail before Link resources are emitted. Strict
-diagnostics are available to library callers; `clabverter` does not currently expose a strict-mode
-flag.
+Compilation fails closed: any unrecognized or unrepresentable Containerlab field fails before
+resource creation with sorted structured diagnostics naming every unsupported field and
+location. Deliberately rejected vocabulary fails with a diagnostic stating why, and only
+constructs whose loss cannot change lab behavior inside the cluster are accepted with a
+warning instead; see [Differences from containerlab](/docs/concepts/containerlab-differences)
+for the full list. Explicit `veth` links may use brief `node:interface` endpoints or equivalent
+structured `node`/`interface` mappings; empty or malformed endpoint values fail before Link
+resources are emitted.
 
-### Launchers
+### Planning
 
-Each Node gets a Deployment running a single launcher container -- a Debian image with the
-clabernetes launcher binary and a full docker installation (not docker-in-docker: no docker
-sock mounting, just an independent docker inside the pod, free of the cluster's CRI/CNI).
+Imported containerlab code mixes intent with side effects, so kind hooks never run inside the
+long-running manager. The node controller instead launches a short-lived, locked-down and
+deadline-bounded **planning Pod** per plan input. Inside it, the imported registry
+and node hooks run against a generic recording runtime and a disposable workspace: container
+creation, files, mounts, lifecycle, exec, namespace, and interface operations are *recorded*
+rather than performed, and the result is a deterministic, runtime-neutral **device plan**.
 
-On startup the launcher fetches its own Node object (and those of any grouped nodes), lists
-the Links terminating on them via field selectors, and verifies that link view against a
-digest annotation the node controller stamped on the pod. From that it materializes a
-containerlab topology file locally and runs plain containerlab.
+The plan's image configuration comes from a registry **metadata resolver** in the manager that
+fetches only manifests and config blobs (never layers) using same-namespace pull Secrets and
+the controller-only `Config.spec.imagePull.registryMetadataTrust` policy. The kubelet performs
+the only real image pull, and readiness fails on a material digest mismatch between the planned
+image and the kubelet-reported `imageID`.
 
-Containerlab normally creates one same-named nested container for a Node. A component-based node,
-such as a distributed SR-SIM chassis, is different: containerlab expands the logical node into card
-containers, labels them with one root-node identity, builds the internal fabric, and puts the cards
-in one network namespace. Clabernetes keeps that expansion inside one launcher Pod and treats the
-whole set as one logical Node; it does not reproduce containerlab's device-specific component or
-fabric logic. The launcher discovers the expanded set only when no same-named container exists,
-requires unique component names and exactly one namespace owner, and rejects external or cyclic
-`container:<target>` references.
+Accepted plans are stored in immutable, digest-named, owner-referenced ConfigMaps that contain
+no secret bytes; payloads and certificates ride as referenced objects. Each cold plan owns one
+bounded mutable connectivity-revision ConfigMap so live-capable Link changes update interfaces
+without rolling the Pod.
 
-When status probes are enabled, the launcher checks every nested container in a group or expanded
-component set. Each must be running and not paused, restarting, or dead; an image-defined Docker
-healthcheck must also be healthy. The shared launcher status is therefore atomic across the full
-set. For an expanded component node, optional TCP and SSH checks address the validated namespace
-owner; for explicit `network-mode: container:<primary>` groups, they remain scoped to the primary
-Node. A running image without a healthcheck remains only process-level readiness.
+### Direct device Pods
 
-Grouped Nodes also share the launcher's filesystem. If several members carry a shared payload such
-as an SR-SIM license at the same normalized destination, the Deployment renders that destination
-once only when the ConfigMap, key, and mode agree. Conflicting attachments stop reconciliation
-instead of silently selecting the first source.
+Each rendered Pod runs, in order:
+
+1. a **preparation init container** that re-runs the imported deterministic file generation
+   against its mounted payload/certificate inputs, verifies every planned path, mode, and
+   digest, and stages artifacts into plan-scoped volumes. It renders generated configuration
+   with the runtime-completed management identity, so package templates emit the real
+   management address, prefix, and gateway;
+2. a **restartable privileged connectivity init-sidecar** whose startup probe gates device
+   start until the accepted cold-start interface set exists. It stays running to reconcile
+   live Link changes, invoke imported endpoint hooks, and publish connectivity readiness; and
+3. one **regular application container** per grouped logical Node or planned chassis component,
+   running the unmodified device image. Kubernetes-native image pull policy, pull Secrets,
+   environment, users, ports, resources, devices, capabilities, privilege, seccomp/AppArmor,
+   sysctls, tmpfs, shared memory, and DNS all map from the plan onto native Pod fields.
+
+A standalone Node has one Deployment/Pod; `network-mode: container:<primary>` adds application
+containers to the primary's Pod; a component-based node (i.e. a distributed SR-SIM chassis)
+expands into card containers that are directly visible as application containers of one Pod
+with validated namespace ownership. Container names are deterministic DNS labels derived from
+logical Node and component identity, so `kubectl logs` and `kubectl exec` target the actual
+device container (`-c` selects components).
+
+VM-backed kinds stay ordinary application containers running their packaged qemu/vrnetlab
+entrypoint; the plan grants `/dev/kvm`, tap access, and resources, and clabernetes does not
+launch the VM itself.
 
 ### Inter-Node Connectivity
 
-Cross-pod wires are realized as vxlan (or, experimentally, slurpeeth) tunnels between the
-per-node fabric services. Connectivity is declared on each Link and consumed by both endpoints;
-it is not a LauncherProfile setting. The tunnel destination is *derived* from the link spec alone
-(`<remote node>-vx.<namespace>...`), and the launcher keeps watching its links: moving a
-wire's far end ("rewiring") re-targets the tunnel live without restarting anything, while
-changing the set of interfaces attached to a node rolls just that node's pod.
+The device always sees a plain interface leg; every kind tolerates that, including kinds
+that adopt the interfaces presented to them. All connectivity is realized by the Pod's own
+privileged **connectivity sidecar**; no node-resident agent exists. Before any device container
+starts, the sidecar preserves the CNI interface under a sidecar-owned name (`c9s0`), so the
+Kubernetes underlay survives whatever a device does to the interfaces it is shown.
+
+Cross-pod wires terminate inside the Pod on that preserved underlay: each endpoint is a veth
+pair whose sidecar-side leg feeds the Pod's **fabric wire**, a sidecar-to-sidecar UDP
+transport (one socket per Pod) that segments whole frames to the local underlay MTU,
+reassembles them at the peer, propagates endpoint carrier state, and detects peer loss with
+heartbeats, all on one socket and one path so the carrier signal cannot diverge from the
+datapath in endpoint or route. Frames are addressed by the Link's allocated wire id; loss stays loss (nothing is retransmitted), so
+link MTUs never depend on the Pod network MTU and loss/convergence testing stays honest. Peer
+discovery uses the per-node headless
+fabric service (`<remote node>-wire.<namespace>...`), which publishes the current Pod address
+even before readiness; rewiring and Pod rescheduling converge on the sidecar's reconcile tick,
+and a peer that stops answering takes the link carrier-down like an unplugged cable.
+Same-Pod, loopback, and local veth state stays inside the Pod sandbox and is removed
+automatically with it. Host Links (`host:<interface>` endpoints) are veth pairs whose
+worker-side end the sidecar places through a read-only worker network-namespace handle
+(mounted only when the topology declares host Links); because a veth pair dies with either
+end, forced Pod deletion leaves no worker residue and nothing needs sweeping.
+
+### Management and DNS
+
+Management identity is always addressed with containerlab semantics: every node's management
+address is controller-allocated, from the operator's management policy (profile `mgmt`
+subnets, static `mgmt-ipv4`/`mgmt-ipv6`), or from containerlab's default management subnet
+(`172.20.20.0/24`, gateway at the first usable address) when no policy is declared. The
+sidecar interposes a synthetic management interface carrying that address before the device
+starts: the device adopts it exactly as it would a physical management port, a sidecar-owned
+policy routing table keeps Kubernetes transport immune to device rewrites of the main table,
+and an nftables translation table (hooked ahead of anything a device programs) SNATs outbound
+management traffic to the Pod address and DNATs declared ports from it, so Service exposure
+keeps working. Inbound translated connections also get the Pod-local gateway as their source,
+so a device that only knows its connected management route (SR OS reads its routes from a
+Docker-shaped environment) can always answer. This is the same source identity containerlab's
+Docker port publishing presents. Management configuration renders at plan time through each kind's own imported
+templates using the allocated address, prefix, and gateway.
+
+The management subnet is one shared L2 domain across the whole topology, exactly as on
+containerlab's management network: a device dialing a peer's *management address* (a hardcoded
+telemetry target, a syslog collector, plain ping) reaches the peer device itself, any protocol,
+both directions. Each Pod bridges its management legs onto a management VXLAN tunnel endpoint
+riding the preserved Pod underlay, with peers discovered through a namespace-scoped
+headless Service (`c9s-management-mesh`), so nodes joining or leaving the namespace converge
+on the sidecar's reconcile tick without restarting any Pod. The management *gateway* stays
+strictly Pod-local: every Pod answers the gateway address itself with one deterministic
+identity, and gateway traffic never crosses the mesh. Lab members also resolve each other by
+node name through namespace-local Services; declared `aliases` add extra headless Services
+bound to the same Pod.
 
 ### Exposing Nodes
 
 Ports listed in a node definition (plus a sensible default set unless auto-expose is
-disabled) are allocated into the Node status and exposed through a per-node service --
-LoadBalancer flavored by default. The assigned address is reflected back into the Node
-status.
+disabled) are allocated into the Node status and exposed through a per-node service,
+LoadBalancer flavored by default, targeting the device Pod's ports directly. The assigned
+address is reflected back into the Node status.
+
+### Status and readiness
+
+The node controller reads init/application container status directly and maps it back to each
+logical Node using applied plan identity and UID checks, so a stale Pod cannot update a
+replacement Node. OCI image healthchecks and declared `healthcheck` contracts translate into
+container startup/readiness behavior; profile `statusProbes` add TCP/SSH checks. Failures
+surface as bounded Node conditions and Kubernetes Events naming the logical Node, plan digest,
+and failing typed action.
 
 ### Clabverter
 
@@ -142,13 +219,14 @@ As clabernetes is not running on your machine, and you only interact with it via
 kubernetes api, we don't have any way to automagically copy or mount any files from your
 machine.
 
-To work around this, the "clabverter" tool was created -- this is a very simple cli tool that
+To work around this, the "clabverter" tool was created. This is a very simple cli tool that
 can be pointed at a containerlab topology (either locally or at a URL). This tool determines
 if any files would be mounted when using this topology file, and if so renders kubernetes
 configmaps containing the file contents and a Topology that appropriately mounts them into
 the pods.
 
 clabverter can also skip the Topology object entirely: `--emit-crs` renders the primitive
-LauncherProfile/Link/Node manifests directly, using the same compile and render pipeline as the
+NodeProfile/Link/Node manifests directly, using the same compile and render pipeline as the
 in-cluster compiler (without Topology owner references). This is the preferred path when the
-aggregate source Topology would be too large to persist.
+aggregate source Topology would be too large to persist. Both paths validate identically and
+fail with the same sorted diagnostics before anything reaches the cluster.

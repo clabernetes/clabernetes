@@ -39,9 +39,6 @@ spec:
         links:
           - endpoints: ["srl1:e1-1", "srl2:e1-1"]
   deployment:
-    containerlabDebug: null
-    containerlabTimeout: ""
-    extraEnv: null
     filesFromConfigMap:
       srl1:
       - configMapName: topo01-srl1-startup-config
@@ -82,7 +79,6 @@ spec:
     filesFromURL: null
     persistence:
       enabled: false
-    privilegedLauncher: null
     resources: null
     scheduling:
       tolerations: null
@@ -90,8 +86,6 @@ spec:
     disableAutoExpose: false
     disableExpose: false
   imagePull:
-    insecureRegistries:
-    - 1.2.3.4
     pullSecrets:
     - regcred
   naming: prefixed

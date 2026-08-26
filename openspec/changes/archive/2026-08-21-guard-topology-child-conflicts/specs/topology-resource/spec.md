@@ -2,10 +2,10 @@
 
 ### Requirement: Generated resources have deterministic identity and ownership
 
-For a given Topology input, the compiler SHALL produce stable Node, Link, and LauncherProfile names
+For a given Topology input, the compiler SHALL produce stable Node, Link, and NodeProfile names
 and specs. In-cluster generated resources SHALL carry a controller owner reference to the Topology
 and labels sufficient for observability and pruning. Before creating or updating any generated
-child, the Topology controller SHALL preflight every desired Node, Link, and LauncherProfile name
+child, the Topology controller SHALL preflight every desired Node, Link, and NodeProfile name
 in the Topology namespace. An existing resource is compatible only when it is recognized as
 generated for the current Topology; any unrelated occupant SHALL block child reconciliation.
 
@@ -22,12 +22,12 @@ generated for the current Topology; any unrelated occupant SHALL block child rec
 
 #### Scenario: Generated resource drifts
 
-- **WHEN** a user mutates a compiler-owned Node, Link, or LauncherProfile away from compiled intent
+- **WHEN** a user mutates a compiler-owned Node, Link, or NodeProfile away from compiled intent
 - **THEN** the Topology controller restores the generated resource
 
 #### Scenario: Detect an occupied generated child name
 
-- **WHEN** a desired Node, Link, or LauncherProfile name is already occupied in the Topology
+- **WHEN** a desired Node, Link, or NodeProfile name is already occupied in the Topology
   namespace by an unrelated resource
 - **THEN** the Topology controller creates or updates none of the desired child resources and
   reports every conflict in Topology status
@@ -60,7 +60,7 @@ unbounded per-child conflict structure.
 
 #### Scenario: Report duplicate child resources
 
-- **WHEN** one or more desired Node, Link, or LauncherProfile names conflict with unrelated
+- **WHEN** one or more desired Node, Link, or NodeProfile names conflict with unrelated
   resources in the Topology namespace
 - **THEN** `status.error` contains the namespace, a deterministic sorted `type/name` list, and the
   guidance to create the Topology in a different namespace or disambiguate node names

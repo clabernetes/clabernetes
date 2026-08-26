@@ -18,11 +18,15 @@ import (
 )
 
 const (
-	bindSeparator           = ":"
-	bindPartsLen            = 2
-	bindClabNodeDir         = "__clabNodeDir__"
-	bindClabDir             = "__clabDir__"
-	inlineStartupConfigPath = "/clabernetes/startup-config"
+	bindSeparator   = ":"
+	bindPartsLen    = 2
+	bindClabNodeDir = "__clabNodeDir__"
+	bindClabDir     = "__clabDir__"
+	// inlineStartupConfigPath is where an embedded startup-config is staged. Containerlab treats
+	// an embedded startup-config as a *partial* config merged over the kind's generated default,
+	// and it detects partial-ness from the file name -- so the staged path must carry the
+	// .partial marker or externalizing the config silently flips it to a full replacement.
+	inlineStartupConfigPath = "/clabernetes/startup-config.partial.cfg"
 )
 
 type extraFile struct {

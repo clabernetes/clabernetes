@@ -40,13 +40,13 @@ func TestFindChildResourceConflictsReportsAllKindsSorted(t *testing.T) {
 					Namespace: topology.GetNamespace(),
 				},
 			},
-			&clabernetesapisv1alpha1.LauncherProfile{
+			&clabernetesapisv1alpha1.NodeProfile{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "profile-a",
 					Namespace: topology.GetNamespace(),
 				},
 			},
-			&clabernetesapisv1alpha1.LauncherProfile{
+			&clabernetesapisv1alpha1.NodeProfile{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "profile-owned",
 					Namespace: topology.GetNamespace(),
@@ -76,7 +76,7 @@ func TestFindChildResourceConflictsReportsAllKindsSorted(t *testing.T) {
 		context.Background(),
 		topology,
 		renderedChildren{
-			launcherProfiles: []*clabernetesapisv1alpha1.LauncherProfile{
+			nodeProfiles: []*clabernetesapisv1alpha1.NodeProfile{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "profile-a",
@@ -113,9 +113,9 @@ func TestFindChildResourceConflictsReportsAllKindsSorted(t *testing.T) {
 	}
 
 	expected := []string{
-		"launcherprofile/profile-a",
 		"link/link-a",
 		"node/node-a",
+		"nodeprofile/profile-a",
 	}
 	if !reflect.DeepEqual(conflicts, expected) {
 		t.Fatalf("conflicts = %v, want %v", conflicts, expected)
@@ -140,7 +140,7 @@ func TestReconcileChildConflictBlocksChildrenAndClearsAfterResolution(t *testing
 			Namespace: topology.GetNamespace(),
 		},
 	}
-	foreignProfile := &clabernetesapisv1alpha1.LauncherProfile{
+	foreignProfile := &clabernetesapisv1alpha1.NodeProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "lab",
 			Namespace: topology.GetNamespace(),
@@ -167,7 +167,7 @@ func TestReconcileChildConflictBlocksChildrenAndClearsAfterResolution(t *testing
 	}
 
 	expectedError := "duplicate resources found in the clabernetes namespace: " +
-		"launcherprofile/lab, link/frr1-eth1-frr2-eth1, node/frr1\n" +
+		"link/frr1-eth1-frr2-eth1, node/frr1, nodeprofile/lab\n" +
 		"create the topology in a different namespace or disambiguate node names."
 	if topology.Status.Error != expectedError {
 		t.Fatalf("status error = %q, want %q", topology.Status.Error, expectedError)
@@ -197,7 +197,7 @@ func assertOnlyForeignChildren(
 	client ctrlruntimeclient.Client,
 	foreignNode *clabernetesapisv1alpha1.Node,
 	foreignLink *clabernetesapisv1alpha1.Link,
-	foreignProfile *clabernetesapisv1alpha1.LauncherProfile,
+	foreignProfile *clabernetesapisv1alpha1.NodeProfile,
 ) {
 	t.Helper()
 
@@ -223,15 +223,15 @@ func assertOnlyForeignChildren(
 		t.Fatalf("expected no generated Links, got %v", links.Items)
 	}
 
-	var profiles clabernetesapisv1alpha1.LauncherProfileList
+	var profiles clabernetesapisv1alpha1.NodeProfileList
 
 	err = client.List(context.Background(), &profiles)
 	if err != nil {
-		t.Fatalf("listing LauncherProfiles failed: %s", err)
+		t.Fatalf("listing NodeProfiles failed: %s", err)
 	}
 
 	if len(profiles.Items) != 1 || profiles.Items[0].GetName() != foreignProfile.GetName() {
-		t.Fatalf("expected no generated LauncherProfiles, got %v", profiles.Items)
+		t.Fatalf("expected no generated NodeProfiles, got %v", profiles.Items)
 	}
 }
 
@@ -240,7 +240,7 @@ func deleteConflictingChildren(
 	client ctrlruntimeclient.Client,
 	foreignNode *clabernetesapisv1alpha1.Node,
 	foreignLink *clabernetesapisv1alpha1.Link,
-	foreignProfile *clabernetesapisv1alpha1.LauncherProfile,
+	foreignProfile *clabernetesapisv1alpha1.NodeProfile,
 ) {
 	t.Helper()
 

@@ -21,11 +21,11 @@ func testProfileNode(name string, nodeLabels map[string]string) *clabernetesapis
 	return node
 }
 
-func testLauncherProfile(
+func testNodeProfile(
 	name string,
-	mutate func(spec *clabernetesapisv1alpha1.LauncherProfileSpec),
-) *clabernetesapisv1alpha1.LauncherProfile {
-	profile := &clabernetesapisv1alpha1.LauncherProfile{
+	mutate func(spec *clabernetesapisv1alpha1.NodeProfileSpec),
+) *clabernetesapisv1alpha1.NodeProfile {
+	profile := &clabernetesapisv1alpha1.NodeProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
 			Namespace:  "clabernetes",
@@ -51,8 +51,8 @@ func TestResolveProfileDefaults(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	if resolved.AppliedLauncherProfile != nil {
-		t.Fatalf("expected no applied LauncherProfile, got %+v", resolved.AppliedLauncherProfile)
+	if resolved.AppliedProfile != nil {
+		t.Fatalf("expected no applied NodeProfile, got %+v", resolved.AppliedProfile)
 	}
 
 	if resolved.ExposeType != "LoadBalancer" {
@@ -60,16 +60,19 @@ func TestResolveProfileDefaults(t *testing.T) {
 	}
 }
 
-func TestResolveExplicitLauncherProfile(t *testing.T) {
-	profile := testLauncherProfile(
+func TestResolveExplicitNodeProfile(t *testing.T) {
+	profile := testNodeProfile(
 		"custom",
-		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
-			spec.Deployment = &clabernetesapisv1alpha1.LauncherProfileDeployment{
-				LauncherLogLevel:    "debug",
-				ContainerlabTimeout: new("5m"),
-				PrivilegedLauncher:  new(false),
+		func(spec *clabernetesapisv1alpha1.NodeProfileSpec) {
+			spec.Deployment = &clabernetesapisv1alpha1.NodeProfileDeployment{
+				Persistence: &clabernetesapisv1alpha1.Persistence{
+					Enabled: true, ClaimSize: "10Gi",
+				},
 			}
-			spec.Expose = &clabernetesapisv1alpha1.LauncherProfileExpose{
+			spec.ImagePull = &clabernetesapisv1alpha1.NodeProfileImagePull{
+				Policy: string(k8scorev1.PullNever),
+			}
+			spec.Expose = &clabernetesapisv1alpha1.NodeProfileExpose{
 				DisableAutoExpose: new(true),
 			}
 		},
@@ -84,23 +87,20 @@ func TestResolveExplicitLauncherProfile(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	if resolved.AppliedLauncherProfile == nil ||
-		resolved.AppliedLauncherProfile.Name != profile.GetName() ||
-		resolved.AppliedLauncherProfile.UID != profile.GetUID() ||
-		resolved.AppliedLauncherProfile.Generation != profile.GetGeneration() {
+	if resolved.AppliedProfile == nil ||
+		resolved.AppliedProfile.Name != profile.GetName() ||
+		resolved.AppliedProfile.UID != profile.GetUID() ||
+		resolved.AppliedProfile.Generation != profile.GetGeneration() {
 		t.Fatalf(
 			"expected applied profile identity from %q, got %+v",
 			profile.GetName(),
-			resolved.AppliedLauncherProfile,
+			resolved.AppliedProfile,
 		)
 	}
 
-	if resolved.LauncherLogLevel != "debug" || resolved.ContainerlabTimeout != "5m" {
-		t.Fatalf("expected explicit deployment overrides, got %+v", resolved)
-	}
-
-	if resolved.PrivilegedLauncher {
-		t.Fatal("expected explicit false to override the Config true default")
+	if !resolved.Persistence.Enabled || resolved.Persistence.ClaimSize != "10Gi" ||
+		resolved.ImagePullPolicy != string(k8scorev1.PullNever) {
+		t.Fatalf("expected direct workload overrides, got %+v", resolved)
 	}
 
 	if !resolved.DisableAutoExpose {
@@ -109,50 +109,44 @@ func TestResolveExplicitLauncherProfile(t *testing.T) {
 }
 
 func TestResolveProfilePreservesExplicitEmptyValues(t *testing.T) {
-	profile := testLauncherProfile(
+	profile := testNodeProfile(
 		"empty-values",
-		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
-			spec.ImagePull = &clabernetesapisv1alpha1.LauncherProfileImagePull{
-				InsecureRegistries: []string{},
-				PullSecrets:        []string{},
-				DockerDaemonConfig: new(""),
-				DockerConfig:       new(""),
+		func(spec *clabernetesapisv1alpha1.NodeProfileSpec) {
+			spec.ImagePull = &clabernetesapisv1alpha1.NodeProfileImagePull{
+				PullSecrets: []string{},
 			}
 			spec.Scheduling = &clabernetesapisv1alpha1.Scheduling{
 				NodeSelector: map[string]string{},
 				Tolerations:  []k8scorev1.Toleration{},
 				Affinity:     &k8scorev1.Affinity{},
 			}
-			spec.Deployment = &clabernetesapisv1alpha1.LauncherProfileDeployment{
-				ContainerlabTimeout: new(""),
-				ContainerlabVersion: new(""),
-				ExtraEnv:            []k8scorev1.EnvVar{},
-			}
 		},
 	)
+	getter := func() clabernetesconfig.Manager {
+		return clabernetesconfig.NewFakeManager(
+			clabernetesconfig.WithImagePullSecrets([]string{"global-registry"}),
+		)
+	}
 
 	resolved, err := clabernetescontrollersnode.ResolveProfile(
 		testProfileNode("srl1", nil),
 		profile,
-		clabernetesconfig.GetFakeManager,
+		getter,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	if resolved.InsecureRegistries == nil || resolved.PullSecrets == nil ||
-		resolved.NodeSelector == nil || resolved.Tolerations == nil ||
-		resolved.ExtraEnv == nil {
+	if resolved.PullSecrets == nil || resolved.NodeSelector == nil || resolved.Tolerations == nil {
 		t.Fatalf("expected explicit empty collections to remain non-nil, got %+v", resolved)
+	}
+
+	if len(resolved.PullSecrets) != 0 {
+		t.Fatalf("expected profile to clear global pull Secrets, got %+v", resolved.PullSecrets)
 	}
 
 	if resolved.Affinity == nil {
 		t.Fatal("expected explicit empty affinity to remain non-nil")
-	}
-
-	if resolved.DockerDaemonConfig != "" || resolved.DockerConfig != "" ||
-		resolved.ContainerlabTimeout != "" || resolved.ContainerlabVersion != "" {
-		t.Fatalf("expected explicit empty scalar overrides, got %+v", resolved)
 	}
 }
 
@@ -170,9 +164,9 @@ func TestResolveProfileDeepCopiesAffinity(t *testing.T) {
 			},
 		},
 	}
-	profile := testLauncherProfile(
+	profile := testNodeProfile(
 		"affinity",
-		func(spec *clabernetesapisv1alpha1.LauncherProfileSpec) {
+		func(spec *clabernetesapisv1alpha1.NodeProfileSpec) {
 			spec.Scheduling = &clabernetesapisv1alpha1.Scheduling{Affinity: affinity}
 		},
 	)
@@ -199,6 +193,6 @@ func TestResolveProfileDeepCopiesAffinity(t *testing.T) {
 
 	if resolved.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.
 		NodeSelectorTerms[0].MatchExpressions[0].Values[0] != "zone-a" {
-		t.Fatal("resolved affinity shares mutable state with the LauncherProfile")
+		t.Fatal("resolved affinity shares mutable state with the NodeProfile")
 	}
 }

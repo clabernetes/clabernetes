@@ -26,6 +26,26 @@ spec:
     - jsonPath: .status.readiness
       name: Readiness
       type: string
+    - jsonPath: .status.conditions[?(@.type=='ContainersReady')].status
+      name: Containers
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Prepared')].status
+      name: Prepared
+      priority: 1
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='ConnectivityReady')].status
+      name: Connectivity
+      priority: 1
+      type: string
+    - jsonPath: .status.planDigest
+      name: Plan
+      priority: 1
+      type: string
+    - jsonPath: .status.appliedProfile.name
+      name: Profile
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -33,16 +53,13 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          Node represents a single containerlab node ("device") and is realized as a single launcher
-          pod. Nodes are a primary clabernetes API -- they can be created by users directly, emitted by
+          Node represents one logical containerlab node realized in a direct Kubernetes workload. Nodes
+          are a primary clabernetes API -- they can be created by users directly, emitted by
           the (optional) Topology compiler, or created by any other machinery (i.e. a containerlab
-          runtime); the node controller treats all of these identically. The object name *is* the
-          containerlab node name -- the launcher pod hostname and the node's services (`<name>` for
-          exposed ports, `<name>-vx` for the inter-node fabric) all derive from it, which also means the
-          namespace is the topology boundary. The spec is simply what a human would write for the node
-          in a containerlab topology file (plus per-node payload and launcherProfileRef); wiring lives
-          exclusively on Link objects and everything operational is stamped by the controller into
-          status.
+          runtime); the Node controller treats all of these identically. The object name is the
+          containerlab Node name and the namespace is the topology boundary. The spec is the flattened
+          containerlab Node definition plus per-node payload and profileRef; wiring lives on Link
+          objects and bounded allocations and observations live in status.
         properties:
           apiVersion:
             description: |-
@@ -65,14 +82,25 @@ spec:
             description: |-
               NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
               containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an
-              optional LauncherProfile reference. The definition must be self-contained: expanding topology
+              optional NodeProfile reference. The definition must be self-contained: expanding topology
               defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
               this for you). Anything that is deployment *policy* rather than node payload -- expose
-              behavior, image pull config, launcher resources, scheduling, privileges -- lives on
-              LauncherProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
-              curated subset (see NodeDefinition): fields a launcher pod cannot realize are absent, and
+              behavior, image pull defaults, generic resources, scheduling, and probes -- lives on
+              NodeProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
+              curated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and
               unknown fields are rejected rather than silently ignored.
             properties:
+              aliases:
+                description: |-
+                  Aliases lists additional network names for the node. Each alias is realized as an extra
+                  same-namespace headless Service selecting the node's Pod, so lab members resolve the
+                  alias exactly like the node's own name. Aliases do not inherit from defaults or kinds.
+                items:
+                  maxLength: 63
+                  pattern: ^[a-z]([-a-z0-9]*[a-z0-9])?$
+                  type: string
+                type: array
+                x-kubernetes-list-type: atomic
               binds:
                 description: Binds is a list of bind (mount) compatible strings.
                 items:
@@ -191,6 +219,12 @@ spec:
                     description: Vars holds the variables for the config engine.
                     type: object
                 type: object
+              cpu:
+                description: |-
+                  CPU is the number of vcpus to allocate for the node's container -- it becomes the
+                  container's Kubernetes CPU limit.
+                minimum: 0
+                type: number
               devices:
                 description: Devices is a list of host devices to map into the node's
                   container.
@@ -266,13 +300,12 @@ spec:
                     x-kubernetes-list-type: atomic
                 type: object
               filesFromConfigMap:
-                description: |-
-                  FilesFromConfigMap holds files mounted from ConfigMaps into the launcher responsible for
-                  this Node.
+                description: FilesFromConfigMap holds files staged from ConfigMaps
+                  for this Node's application containers.
                 items:
                   description: |-
                     FileFromConfigMap represents a file that you would like to mount (from a configmap) in the
-                    launcher pod for a given node.
+                    device pod for a given node.
                   properties:
                     configMapName:
                       description: ConfigMapName is the name of the configmap to mount.
@@ -301,15 +334,55 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
-              filesFromURL:
+              filesFromSecret:
                 description: |-
-                  FilesFromURL holds any files that the launcher for this node should fetch from a URL prior
-                  to launching the node.
+                  FilesFromSecret holds sensitive files projected from same-namespace Secrets into this Node's
+                  direct application container.
+                items:
+                  description: FileFromSecret represents one file projected from a
+                    same-namespace Kubernetes Secret.
+                  properties:
+                    filePath:
+                      description: |-
+                        FilePath is the absolute destination path, or the destination directory when SecretPath is
+                        omitted and every Secret key is projected.
+                      type: string
+                    mode:
+                      default: read
+                      description: Mode selects read-only or read-and-execute permissions
+                        for the staged file.
+                      enum:
+                      - read
+                      - execute
+                      type: string
+                    secretName:
+                      description: SecretName is the name of the same-namespace Secret.
+                      type: string
+                    secretPath:
+                      description: |-
+                        SecretPath is the Secret data key to project. When omitted, every key is projected beneath
+                        FilePath in deterministic key order.
+                      type: string
+                  required:
+                  - filePath
+                  - secretName
+                  type: object
+                type: array
+                x-kubernetes-list-type: atomic
+              filesFromURL:
+                description: FilesFromURL holds files preparation must fetch and verify
+                  before the Node starts.
                 items:
                   description: |-
-                    FileFromURL represents a file that you would like to mount from a URL in the launcher pod for
+                    FileFromURL represents a file that you would like to mount from a URL in the device pod for
                     a given node.
                   properties:
+                    digest:
+                      description: |-
+                        Digest is the required SHA-256 identity of the downloaded bytes in direct-runtime mode. It
+                        prevents a mutable URL from changing a device payload without changing the accepted plan.
+                      pattern: ^sha256:[a-f0-9]{64}$
+                      type: string
                     filePath:
                       description: FilePath is the path to mount the file.
                       type: string
@@ -325,30 +398,81 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-list-type: atomic
+              group:
+                description: |-
+                  Group names the containerlab group a node belongs to. Group-scoped configuration from
+                  the topology's groups section participates in the imported inheritance rules, and the
+                  name itself is carried onto the compiled Node as a label.
+                type: string
+              healthcheck:
+                description: |-
+                  Healthcheck is the containerlab process health contract for the node; it merges over the
+                  image-defined OCI healthcheck and is realized as container startup/readiness behavior.
+                properties:
+                  interval:
+                    description: Interval is the time in seconds to wait between checks.
+                    minimum: 0
+                    type: integer
+                  retries:
+                    description: Retries is the number of consecutive failures needed
+                      to consider the container unhealthy.
+                    minimum: 0
+                    type: integer
+                  start-period:
+                    description: |-
+                      StartPeriod is the time in seconds to wait for the container to initialize before the
+                      retries countdown starts.
+                    minimum: 0
+                    type: integer
+                  test:
+                    description: |-
+                      Test is the command to run to check the health of the container -- the first element
+                      selects the containerlab test form (i.e. CMD) and the remainder is the command itself.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  timeout:
+                    description: Timeout is the time in seconds to wait before considering
+                      a check to have hung.
+                    minimum: 0
+                    type: integer
+                type: object
               image:
                 description: Image is the container image for the node.
+                type: string
+              image-pull-policy:
+                description: |-
+                  ImagePullPolicy is the containerlab pull policy for the node's image; it maps onto the
+                  equivalent Kubernetes image pull policy and takes precedence over profile and global
+                  defaults.
+                enum:
+                - always
+                - Always
+                - never
+                - Never
+                - ifnotpresent
+                - IfNotPresent
                 type: string
               kind:
                 description: Kind is the containerlab kind of the node -- i.e. nokia_srlinux.
                 type: string
-              launcherProfileRef:
-                description: |-
-                  LauncherProfileRef optionally names the same-namespace LauncherProfile supplying launcher
-                  policy. When omitted, global Config defaults are used.
-                properties:
-                  name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                    type: string
-                type: object
-                x-kubernetes-map-type: atomic
               license:
                 description: License is the path to the license file for the node.
+                type: string
+              link-apply-mode:
+                description: |-
+                  LinkApplyMode declares the lifecycle action used when the node's links change: live (no
+                  lifecycle action), restart, or recreate. It overrides the kind's imported default.
+                enum:
+                - live
+                - restart
+                - recreate
+                type: string
+              memory:
+                description: |-
+                  Memory is the memory limit for the node's container in containerlab's human-readable
+                  form -- i.e. 1Gb -- and becomes the container's Kubernetes memory limit.
                 type: string
               mgmt-ipv4:
                 description: MgmtIPv4 is the user-defined IPv4 address of the node
@@ -361,16 +485,16 @@ spec:
               network-mode:
                 description: |-
                   NetworkMode declares that this node shares the network namespace -- and therefore the
-                  launcher pod -- of the named primary node. `container:<primary node name>` is the only
-                  accepted value: clabernetes derives node "grouping" (nodes co-located in one launcher pod,
+                  device pod -- of the named primary node. `container:<primary node name>` is the only
+                  accepted value: clabernetes derives node "grouping" (nodes co-located in one device pod,
                   i.e. the cards of a distributed chassis) from exactly this containerlab-native field, and
-                  the other containerlab network modes have no meaning inside a launcher pod.
+                  the other containerlab network modes have no meaning inside a device pod.
                 maxLength: 73
                 type: string
                 x-kubernetes-validations:
                 - message: network-mode must be container:<primary node name> -- it
-                    declares that this node shares its launcher pod with the named
-                    primary node
+                    declares that this node shares its device pod with the named primary
+                    node
                   rule: self.matches('^container:[a-z0-9]([-a-z0-9]*[a-z0-9])?$')
               ports:
                 description: |-
@@ -388,6 +512,33 @@ spec:
               privileged:
                 description: Privileged runs the node's container in privileged mode.
                 type: boolean
+              profileRef:
+                description: |-
+                  ProfileRef optionally names the same-namespace NodeProfile supplying direct
+                  workload policy. When omitted, global Config defaults are used.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              restart-policy:
+                description: |-
+                  RestartPolicy is the container restart policy for the node. Only the values with a
+                  shared-Pod mapping are accepted -- a device container in a direct Pod always restarts
+                  with its Pod, so Docker's "no" and "on-failure" policies cannot be represented.
+                enum:
+                - always
+                - Always
+                - unless-stopped
+                - Unless-stopped
+                type: string
               security-opts:
                 description: |-
                   SecurityOpts is a list of security options (i.e. seccomp or apparmor settings) to apply to
@@ -405,6 +556,11 @@ spec:
                   StartupConfig is the startup configuration for the node -- either a path or an inline
                   (multiline string) config.
                 type: string
+              startup-delay:
+                description: |-
+                  StartupDelay is an optional delay in seconds applied before the node's application
+                  container starts.
+                type: integer
               suppress-startup-config:
                 description: |-
                   SuppressStartupConfig boots the node with its factory configuration -- containerlab
@@ -433,17 +589,17 @@ spec:
               NodeStatus is the status for a Node resource. Everything in here is an *allocation* or an
               *observation* made by the controller -- user intent never lives in the status.
             properties:
-              appliedLauncherProfile:
+              appliedProfile:
                 description: |-
-                  AppliedLauncherProfile identifies the LauncherProfile successfully applied to the launcher
-                  workload. It is nil when the Node uses only global Config defaults.
+                  AppliedProfile identifies the NodeProfile revision successfully applied to the
+                  direct workload. It is nil when the Node uses only global Config defaults.
                 properties:
                   generation:
-                    description: Generation is the applied LauncherProfile generation.
+                    description: Generation is the applied NodeProfile generation.
                     format: int64
                     type: integer
                   name:
-                    description: Name is the LauncherProfile name.
+                    description: Name is the NodeProfile name.
                     type: string
                   uid:
                     description: UID distinguishes replacement profiles that reuse
@@ -514,11 +670,80 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              directContainers:
+                description: |-
+                  DirectContainers contains bounded Kubernetes observations for application containers that
+                  represent this logical Node. It contains no user intent or full plan data.
+                items:
+                  description: NodeDirectContainerStatus is one plan-addressed application-container
+                    observation.
+                  properties:
+                    componentID:
+                      description: ComponentID is the imported component identity
+                        when this is not the logical primary.
+                      type: string
+                    id:
+                      description: ID is the stable runtime-neutral container identity
+                        from the applied plan.
+                      type: string
+                    imageID:
+                      description: ImageID is the kubelet-observed immutable image
+                        identity when available.
+                      type: string
+                    name:
+                      description: Name is the deterministic Kubernetes container
+                        name used with kubectl's -c option.
+                      type: string
+                    ready:
+                      description: Ready is the Kubernetes application-container readiness
+                        observation.
+                      type: boolean
+                    restartCount:
+                      description: RestartCount is the kubelet-observed restart count.
+                      format: int32
+                      type: integer
+                    state:
+                      description: State is one of unknown, waiting, running, or terminated.
+                      type: string
+                  required:
+                  - id
+                  - name
+                  - ready
+                  - restartCount
+                  - state
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - id
+                x-kubernetes-list-type: map
+              directManagement:
+                description: |-
+                  DirectManagement contains the bounded management allocation from the applied direct plan.
+                  It contains no credentials or kind-specific configuration.
+                properties:
+                  interfaceName:
+                    description: InterfaceName is the package-selected management
+                      interface in the Pod namespace.
+                    type: string
+                  ipv4:
+                    description: IPv4 is the allocated IPv4 address and prefix.
+                    type: string
+                  ipv4Gateway:
+                    description: IPv4Gateway is the source-specific IPv4 gateway.
+                    type: string
+                  ipv6:
+                    description: IPv6 is the allocated IPv6 address and prefix.
+                    type: string
+                  ipv6Gateway:
+                    description: IPv6Gateway is the source-specific IPv6 gateway.
+                    type: string
+                required:
+                - interfaceName
+                type: object
               exposedPorts:
                 description: |-
-                  ExposedPorts holds the expose port *allocations* for this node -- the controller assigns
-                  an expose port for every (spec or auto-expose default) port and programs the node's expose
-                  service from this very field; the launcher reads it to publish the ports on the pod.
+                  ExposedPorts holds expose-port allocations for this Node. The controller assigns and programs
+                  the direct Pod Service from this field.
                 properties:
                   loadBalancerAddress:
                     description: |-
@@ -538,9 +763,8 @@ spec:
                             expose service listens on.
                           type: integer
                         exposePort:
-                          description: |-
-                            ExposePort is the allocated (or user provided) port published on the launcher pod (and
-                            targeted by the expose service).
+                          description: ExposePort is the allocated Service port targeting
+                            the direct device Pod.
                           type: integer
                         protocol:
                           description: Protocol is the protocol of the port -- TCP
@@ -557,45 +781,13 @@ spec:
                     type: array
                     x-kubernetes-list-type: atomic
                 type: object
-              probeStatuses:
-                description: ProbeStatuses holds the per-probe status information
-                  for this node.
-                properties:
-                  livenessProbe:
-                    description: LivenessProbe is the status of the node's liveness
-                      probe.
-                    enum:
-                    - passing
-                    - failing
-                    - unknown
-                    - disabled
-                    type: string
-                  readinessProbe:
-                    description: ReadinessProbe is the status of the node's readiness
-                      probe.
-                    enum:
-                    - passing
-                    - failing
-                    - unknown
-                    - disabled
-                    type: string
-                  startupProbe:
-                    description: StartupProbe is the status of the node's startup
-                      probe.
-                    enum:
-                    - passing
-                    - failing
-                    - unknown
-                    - disabled
-                    type: string
-                required:
-                - livenessProbe
-                - readinessProbe
-                - startupProbe
-                type: object
+              planDigest:
+                description: PlanDigest identifies the immutable direct device plan
+                  observed by this status.
+                type: string
               readiness:
                 description: |-
-                  Readiness is the readiness of this node as reported by its launcher deployment -- one of
+                  Readiness is the controller-observed readiness of this Node's active runtime -- one of
                   "ready", "notready" or "unknown".
                 enum:
                 - ready
@@ -606,4 +798,5 @@ spec:
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}

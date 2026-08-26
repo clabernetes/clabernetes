@@ -4,18 +4,9 @@ package manager
 func (c *clabernetes) prepare() {
 	c.logger.Info("begin prepare...")
 
-	c.logger.Info("preparing certificates...")
-
-	err := prepareCertificates(c)
-	if err != nil {
-		c.logger.Fatalf("failed preparing certificates, err: %s", err)
-	}
-
-	c.logger.Debug("preparing certificates complete...")
-
 	c.logger.Info("preparing scheme...")
 
-	err = registerToScheme(c)
+	err := registerToScheme(c)
 	if err != nil {
 		c.logger.Fatalf("failed registering apis to scheme, err: %s", err)
 	}

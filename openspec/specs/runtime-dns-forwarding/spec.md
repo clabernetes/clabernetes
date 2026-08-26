@@ -2,109 +2,55 @@
 
 ## Purpose
 
-Define the launcher runtime repair that allows SR Linux management namespaces to reach DNS and
-remote Kubernetes launcher networking through the nested Docker management network.
+Bound how the direct runtime handles management-plane platform gaps (such as SR Linux DNS
+reachability): unmodified imported behavior first, generic evidence-gated capabilities only, and
+never a kind- or vendor-specific repair.
 
 ## Requirements
 
-### Requirement: Discover eligible SR Linux containers from runtime metadata
-
-The launcher SHALL discover nested containers and their eligibility from structured Docker inspection
-data after containerlab deployment. It SHALL identify SR Linux containers using containerlab's
-`clab-node-kind` label, including the `srl` and `nokia_srlinux` kinds, and SHALL NOT re-parse the
-rendered topology YAML.
-
-#### Scenario: Select an eligible SR Linux container
-
-- **WHEN** Docker inspection reports an SR Linux node-kind label, an independent network namespace,
-  a management-network entry, a gateway, and an IPv4 address
-- **THEN** the launcher selects that container for management forwarding
-
-#### Scenario: Skip an unrelated container
-
-- **WHEN** Docker inspection reports a container without an SR Linux node-kind label
-- **THEN** the launcher skips that container without changing its routes or sysctls
-
-#### Scenario: Skip a shared or unsupported network namespace
-
-- **WHEN** Docker inspection reports an SR Linux container using `container:*`, `host`, or `none`
-  network mode
-- **THEN** the launcher skips that container without applying the nested management repair
-
-### Requirement: Derive management network values from structured runtime data
-
-The launcher SHALL obtain the management network name from structured management-network
-configuration, defaulting to containerlab's `clab` network when no name is configured. It SHALL
-obtain the gateway and node IPv4 address from the selected Docker inspection network entry and
-SHALL treat missing or invalid values as an actionable runtime failure.
-
-#### Scenario: Use a configured management network
-
-- **WHEN** the launcher has a configured management network name and Docker inspection contains that
-  network entry with a gateway and IPv4 address
-- **THEN** the launcher uses those inspected values for the forwarding repair
-
-#### Scenario: Use the default management network
-
-- **WHEN** no management network name is configured and Docker inspection contains the `clab`
-  network entry with valid values
-- **THEN** the launcher uses the `clab` gateway and IPv4 address
-
-#### Scenario: Reject incomplete runtime metadata
-
-- **WHEN** the selected network entry has no gateway or IPv4 address
-- **THEN** the launcher reports the node and missing value and does not apply partial forwarding
-  configuration
-
-### Requirement: Configure SR Linux management forwarding
-
-The launcher MUST configure and verify the nested management forwarding path after the selected SR
-Linux container exposes the `srbase-mgmt` namespace, its `mgmt0.0` peer, and the root namespace
-`mgmt0` and `mgmt0-0` interfaces. It does so in the container root namespace by replacing the
-gateway route and default route through `mgmt0`, replacing the node management route through
-`mgmt0-0`, and enabling IPv4 forwarding.
-
-#### Scenario: Apply forwarding after interface readiness
-
-- **WHEN** `srbase-mgmt`, its `mgmt0.0`, and the root namespace `mgmt0` and `mgmt0-0` are present
-- **THEN** the launcher applies the prescribed route replacements and enables IPv4 forwarding before
-  reporting the node ready
-
-#### Scenario: Reapply forwarding idempotently
-
-- **WHEN** the forwarding helper runs again for a container with the same runtime values
-- **THEN** route replacement and sysctl operations succeed without duplicate routes or errors caused
-  by prior application
-
-#### Scenario: Command verification fails
-
-- **WHEN** any forwarding or verification command exits unsuccessfully
-- **THEN** the launcher reports the node and failed operation and does not mark the node ready
-
-### Requirement: Gate readiness on management forwarding
-
-The launcher SHALL keep an eligible SR Linux node unready until management forwarding has completed
-successfully. It SHALL retry transient namespace and interface absence for a bounded interval, then
-report an actionable failure if the required runtime state never appears.
-
-#### Scenario: Runtime interfaces appear during the retry window
-
-- **WHEN** the required namespace or interface is initially absent but appears before the bounded
-  timeout
-- **THEN** the launcher applies and verifies forwarding and allows readiness to succeed
-
-#### Scenario: Runtime interfaces never appear
-
-- **WHEN** the required namespace or interface remains absent until the bounded timeout
-- **THEN** the launcher keeps readiness failing and reports the node, missing runtime object, and
-  timeout
-
 ### Requirement: Preserve standalone containerlab behavior
 
-The forwarding repair SHALL be implemented only in the clabernetes launcher lifecycle and SHALL NOT
-alter generic containerlab commands or require users to add topology-level execution commands.
+Direct management validation and any kind-opaque Kubernetes realization SHALL be owned by c9s and SHALL NOT require a containerlab patch, change standalone containerlab deployment semantics, or require topology-level execution commands. The absence of a c9s launcher repair SHALL be the default unless direct-Pod evidence demonstrates a generic platform gap.
 
 #### Scenario: Standalone containerlab deployment
 
-- **WHEN** a topology is deployed directly with standalone containerlab
-- **THEN** containerlab behavior and its topology-defined execution commands remain unchanged
+- **WHEN** a topology is deployed through standalone containerlab
+- **THEN** its existing runtime and topology-defined execution behavior remains unchanged
+
+### Requirement: Prove direct management reachability before remediation
+
+The direct runtime SHALL first run a device image using the unmodified imported containerlab package behavior and the ordinary direct-Pod networking contract, without carrying forward a launcher-only repair. Applicable conformance SHALL verify management addressing, DNS resolution, exposure-Service reachability, and external reachability from the device's management plane. Historical nested-runtime behavior MUST NOT by itself create a direct plan action or readiness dependency.
+
+#### Scenario: Direct SR Linux management works without launcher repair
+
+- **WHEN** an SR Linux image is booted as the direct application container with its imported package-derived configuration
+- **THEN** management addressing, DNS, Service, and external reachability pass without c9s inspecting or modifying device-internal namespace or interface names
+
+#### Scenario: Direct reachability fails
+
+- **WHEN** an applicable direct management observation fails before any compatibility repair is added
+- **THEN** conformance records the exact failed observation and generic runtime boundary involved, and the Node remains incompatible until that generic capability is represented and verified
+
+### Requirement: Management remediation is kind opaque and evidence derived
+
+When direct evidence proves that c9s must realize additional management behavior, the behavior SHALL be represented as a generic runtime capability derived from explicit normalized inputs and imported containerlab behavior. Identical generic operations SHALL have identical semantics for every current or future kind. c9s MUST NOT infer remediation from a kind, vendor, image, environment variable, old launcher command, documentation string, or device-internal namespace or interface name. If imported behavior emits no representable operation and no kind-opaque Kubernetes platform capability can satisfy the failed observation, planning or conformance MUST report the missing generic capability rather than synthesize a vendor action.
+
+#### Scenario: Imported behavior emits a supported generic operation
+
+- **WHEN** imported behavior and explicit inputs produce a supported management route, sysctl, namespace, or readiness operation
+- **THEN** the direct helper applies and verifies that typed operation idempotently without knowing which kind emitted it
+
+#### Scenario: No generic operation describes the requested repair
+
+- **WHEN** a failed management observation would require c9s to recognize a vendor or copy a device-internal name
+- **THEN** c9s rejects the behavior as an unsupported generic capability and does not add a kind-specific plan, helper branch, or readiness gate
+
+#### Scenario: A newly imported kind uses an existing management capability
+
+- **WHEN** a containerlab module update adds a kind whose imported behavior emits only already-supported generic management operations
+- **THEN** updating the module and dependency lock data is sufficient for c9s to plan and realize those operations
+
+#### Scenario: Pod resolver identity completes unspecified node DNS
+
+- **WHEN** a logical Node reaches an in-Pod lifecycle boundary without topology- or controller-declared DNS servers
+- **THEN** runtime management completion fills the node's DNS configuration from the executing Pod's own resolv.conf exactly as containerlab fills node DNS from the host resolver, topology-declared DNS always wins, container-network-mode members are skipped, and every kind receives the identical completion

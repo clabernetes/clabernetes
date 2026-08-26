@@ -391,9 +391,9 @@ func (c *clabernetes) buildPods(
 							},
 							Env: []k8scorev1.EnvVar{
 								{
-									Name: clabernetesconstants.LauncherLoggerLevelEnv,
+									Name: clabernetesconstants.ClickerLoggerLevelEnv,
 									Value: clabernetesutil.GetEnvStrOrDefault(
-										clabernetesconstants.LauncherLoggerLevelEnv,
+										clabernetesconstants.ClickerLoggerLevelEnv,
 										clabernetesconstants.Info,
 									),
 								},

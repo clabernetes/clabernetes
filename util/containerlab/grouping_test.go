@@ -29,7 +29,7 @@ func testGroupingNodes() map[string]*clabernetesapisv1alpha1.Node {
 	)
 }
 
-func TestResolveLauncherNode(t *testing.T) {
+func TestResolvePrimaryNode(t *testing.T) {
 	cases := []struct {
 		name     string
 		nodeName string
@@ -44,13 +44,13 @@ func TestResolveLauncherNode(t *testing.T) {
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			actual := clabernetesutilcontainerlab.ResolveLauncherNode(
+			actual := clabernetesutilcontainerlab.ResolvePrimaryNode(
 				testGroupingNodes(),
 				testCase.nodeName,
 			)
 
 			if actual != testCase.expected {
-				t.Fatalf("expected launcher node %q, got %q", testCase.expected, actual)
+				t.Fatalf("expected primary node %q, got %q", testCase.expected, actual)
 			}
 		})
 	}
@@ -58,19 +58,19 @@ func TestResolveLauncherNode(t *testing.T) {
 
 func TestResolveGroupMembers(t *testing.T) {
 	cases := []struct {
-		name         string
-		launcherNode string
-		expected     []string
+		name        string
+		primaryNode string
+		expected    []string
 	}{
-		{name: "group", launcherNode: "srl1", expected: []string{"srl1", "chain-b", "sim-a"}},
-		{name: "standalone", launcherNode: "srl2", expected: []string{"srl2"}},
+		{name: "group", primaryNode: "srl1", expected: []string{"srl1", "chain-b", "sim-a"}},
+		{name: "standalone", primaryNode: "srl2", expected: []string{"srl2"}},
 	}
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			actual := clabernetesutilcontainerlab.ResolveGroupMembers(
 				testGroupingNodes(),
-				testCase.launcherNode,
+				testCase.primaryNode,
 			)
 
 			if !reflect.DeepEqual(actual, testCase.expected) {

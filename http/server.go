@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -71,7 +70,7 @@ func GetManager() Manager {
 
 // Manager is the http server manager interface defining the server manager methods.
 type Manager interface {
-	// Start starts the http server listening on TLS.
+	// Start starts the http server.
 	Start()
 	// Stop stops the http server by calling the http.Server.Shutdown() method.
 	Stop() error
@@ -110,37 +109,10 @@ func (m *manager) Start() {
 		ReadTimeout:       timeoutSeconds * time.Second,
 		WriteTimeout:      timeoutSeconds * time.Second,
 		ReadHeaderTimeout: timeoutSeconds * time.Second,
-		TLSConfig: &tls.Config{
-			MinVersion:       tls.VersionTLS12,
-			CurvePreferences: []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
-			CipherSuites: []uint16{
-				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_AES_128_GCM_SHA256,
-				tls.TLS_AES_256_GCM_SHA384,
-				tls.TLS_CHACHA20_POLY1305_SHA256,
-			},
-		},
 	}
 
 	go func() {
-		err := m.server.ListenAndServeTLS(
-			fmt.Sprintf(
-				"%s/%s/tls.crt",
-				clabernetesconstants.CertificateDirectory,
-				clabernetesconstants.WebhookCertificateSubDir,
-			),
-			fmt.Sprintf(
-				"%s/%s/tls.key",
-				clabernetesconstants.CertificateDirectory,
-				clabernetesconstants.WebhookCertificateSubDir,
-			),
-		)
+		err := m.server.ListenAndServe()
 		if err != nil && !m.stopping {
 			m.logger.Criticalf("http manager server has failed, error: %s", err)
 

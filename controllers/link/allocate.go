@@ -8,9 +8,9 @@ import (
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
-// maxVXLANTunnelID is the ceiling retained from the Link status API. Slurpeeth uses a smaller
-// uint16 segment identifier, selected per Link below.
-const maxVXLANTunnelID = 16_000_000
+// maxWireID is the Link status API's allocation ceiling -- an arbitrary sane bound, far below
+// the wire protocol's 32-bit link-id space.
+const maxWireID = 16_000_000
 
 // ValidateLink checks the parts of a link spec that the crd schema cannot express. A non-nil
 // error means the spec is terminally invalid -- there is nothing to retry until the spec
@@ -51,15 +51,14 @@ func IsHostLink(link *clabernetesapisv1alpha1.Link) bool {
 		link.Spec.EndpointB.NodeName == clabernetesapisv1alpha1.LinkHostNodeName
 }
 
-// IsSameLauncherLink returns true if both endpoints of the link resolve to the same launcher
-// (pod) -- such links are materialized as direct containerlab links by that launcher and need
-// no tunnel id.
-func IsSameLauncherLink(
+// IsSamePodLink returns true if both endpoints of the link resolve to the same primary node
+// (pod) -- such links are materialized inside that pod and need no wire id.
+func IsSamePodLink(
 	link *clabernetesapisv1alpha1.Link,
 	nodes map[string]*clabernetesapisv1alpha1.Node,
 ) bool {
-	return clabernetesutilcontainerlab.ResolveLauncherNode(nodes, link.Spec.EndpointA.NodeName) ==
-		clabernetesutilcontainerlab.ResolveLauncherNode(nodes, link.Spec.EndpointB.NodeName)
+	return clabernetesutilcontainerlab.ResolvePrimaryNode(nodes, link.Spec.EndpointA.NodeName) ==
+		clabernetesutilcontainerlab.ResolvePrimaryNode(nodes, link.Spec.EndpointB.NodeName)
 }
 
 // FindEndpointConflict checks if any *other* link in the namespace claims an endpoint (node +
@@ -90,14 +89,16 @@ func LinksWithResolvedEndpoints(
 	return resolved
 }
 
-// ResolveDesiredTunnelID determines the tunnel id the given link should hold in its status:
+// ResolveDesiredWireID determines the wire id the given link should hold in its status:
 //
-//   - host links and same-launcher links need no tunnel -- 0.
-//   - a valid existing id is retained unless a lexically-smaller-named link claims the same id
+//   - host links and same-pod links never touch the wire -- 0.
+//   - a valid existing id is retained unless a lexically-smaller-keyed link claims the same id
 //     (retention is what keeps "rewires" -- endpoint changes on an existing link -- as live
-//     tunnel moves rather than re-allocations).
-//   - otherwise the lowest id not used by any other link in the namespace is allocated.
-func ResolveDesiredTunnelID(
+//     wire moves rather than re-allocations).
+//   - otherwise the lowest id not used by any other link in the namespace is allocated: wire
+//     ids dispatch inside one receiving sidecar from a validated source, so the namespace is
+//     the whole allocation domain and identical ids in other namespaces can never meet.
+func ResolveDesiredWireID(
 	link *clabernetesapisv1alpha1.Link,
 	namespaceLinks []clabernetesapisv1alpha1.Link,
 	namespaceNodes []clabernetesapisv1alpha1.Node,
@@ -112,50 +113,46 @@ func ResolveDesiredTunnelID(
 		nodes[namespaceNodes[idx].GetName()] = &namespaceNodes[idx]
 	}
 
-	if IsSameLauncherLink(link, nodes) {
+	if IsSamePodLink(link, nodes) {
 		return 0, nil
-	}
-
-	maxTunnelID := maxVXLANTunnelID
-	if link.Spec.NormalizedConnectivity() ==
-		clabernetesapisv1alpha1.LinkConnectivitySlurpeeth {
-		maxTunnelID = clabernetesapisv1alpha1.SlurpeethMaxSegmentID
 	}
 
 	usedIDs := map[int]bool{}
 	ownIDContested := false
+	linkKey := link.GetNamespace() + "/" + link.GetName()
 
 	for idx := range namespaceLinks {
 		other := &namespaceLinks[idx]
+		otherKey := other.GetNamespace() + "/" + other.GetName()
 
-		if other.GetName() == link.GetName() {
+		if otherKey == linkKey {
 			continue
 		}
 
-		if other.Status.TunnelID <= 0 {
+		if other.Status.WireID <= 0 {
 			continue
 		}
 
-		usedIDs[other.Status.TunnelID] = true
+		usedIDs[other.Status.WireID] = true
 
-		if other.Status.TunnelID == link.Status.TunnelID && other.GetName() < link.GetName() {
+		if other.Status.WireID == link.Status.WireID && otherKey < linkKey {
 			ownIDContested = true
 		}
 	}
 
-	if link.Status.TunnelID >= 1 && link.Status.TunnelID <= maxTunnelID && !ownIDContested {
-		return link.Status.TunnelID, nil
+	if link.Status.WireID >= 1 && link.Status.WireID <= maxWireID && !ownIDContested {
+		return link.Status.WireID, nil
 	}
 
-	for candidate := 1; candidate <= maxTunnelID; candidate++ {
+	for candidate := 1; candidate <= maxWireID; candidate++ {
 		if !usedIDs[candidate] {
 			return candidate, nil
 		}
 	}
 
 	return 0, fmt.Errorf(
-		"%w: no tunnel ids remain in range 1-%d",
+		"%w: no wire ids remain in range 1-%d",
 		claberneteserrors.ErrInvalidData,
-		maxTunnelID,
+		maxWireID,
 	)
 }

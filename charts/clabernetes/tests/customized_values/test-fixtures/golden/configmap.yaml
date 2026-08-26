@@ -26,17 +26,15 @@ data:
     requests:
       cpu: 200m
       memory: 512Mi
-  resourcesByContainerlabKind: |-
-    ---
-    {}
   nodeSelectorsByImage: |-
     {}
     ---
-  privilegedLauncher: "true"
-  containerlabDebug: "false"
+  containerStopSignals: "false"
   inClusterDNSSuffix: svc.cluster.local
-  imagePullThroughMode: auto
-  launcherImagePullPolicy: IfNotPresent
-  launcherLogLevel: info
-  criHostsDir: "/etc/cri/hosts"
+  imagePullPolicy: Always
+  imagePullSecrets: |-
+    - device-registry
+  registryMetadataTrust: |-
+    - plainHTTP: true
+      registry: registry.lab.example:5000
   naming: prefixed

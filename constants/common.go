@@ -22,11 +22,17 @@ const (
 	// AppNameDefault is the default name for the "app" (the helm value appName) -- "clabernetes".
 	AppNameDefault = "clabernetes"
 
-	// VXLANServicePort is the port number for vxlan that we use in the kubernetes service.
-	VXLANServicePort = 14789
+	// ManagementMeshVXLANPort is the UDP port of the kernel VXLAN management mesh joining a
+	// namespace's interposed Pods into one management L2 domain.
+	ManagementMeshVXLANPort = 14789
 
-	// SlurpeethServicePort is the port number for slurpeeth that we use in the kubernetes service.
-	SlurpeethServicePort = 4799
+	// FabricWireServicePort is the UDP port of the c9s-owned fabric wire carrying cross-Pod
+	// direct Link frames, carrier state, and peer heartbeats between connectivity sidecars.
+	FabricWireServicePort = 14790
+
+	// ManagementMeshServiceName is the namespace-scoped headless Service through which mesh
+	// member Pods discover the current management L2 mesh peer set.
+	ManagementMeshServiceName = "c9s-management-mesh"
 
 	// TCP is... TCP.
 	TCP = "TCP"

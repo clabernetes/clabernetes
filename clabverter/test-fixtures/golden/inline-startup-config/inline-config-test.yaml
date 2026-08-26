@@ -14,12 +14,12 @@ spec:
               srl1:
                   kind: nokia_srlinux
                   image: ghcr.io/nokia/srlinux:latest
-                  startup-config: /clabernetes/startup-config
+                  startup-config: /clabernetes/startup-config.partial.cfg
                   ports: []
               sros1:
                   kind: nokia_srsim
                   image: nokia_srsim:latest
-                  startup-config: /clabernetes/startup-config
+                  startup-config: /clabernetes/startup-config.partial.cfg
                   ports: []
           links:
               - endpoints:
@@ -27,24 +27,20 @@ spec:
                   - sros1:1/1/c1/1
       debug: false
   deployment:
-    containerlabDebug: null
-    containerlabTimeout: ""
-    extraEnv: null
     filesFromConfigMap:
       srl1:
       - configMapName: inline-config-test-srl1-startup-config
         configMapPath: REPLACED
-        filePath: /clabernetes/startup-config
+        filePath: /clabernetes/startup-config.partial.cfg
         mode: read
       sros1:
       - configMapName: inline-config-test-sros1-startup-config
         configMapPath: REPLACED
-        filePath: /clabernetes/startup-config
+        filePath: /clabernetes/startup-config.partial.cfg
         mode: read
     filesFromURL: null
     persistence:
       enabled: false
-    privilegedLauncher: null
     resources: null
     scheduling:
       tolerations: null
@@ -52,7 +48,6 @@ spec:
     disableAutoExpose: false
     disableExpose: false
   imagePull:
-    insecureRegistries: null
     pullSecrets: null
   naming: prefixed
   statusProbes:

@@ -1,24 +1,23 @@
 package testhelper
 
 import (
-	"fmt"
+	"bytes"
 	"os/exec"
 	"testing"
 )
 
 // YQCommand accepts some yaml content and returns it after executing the given yqPattern against
-// it.
+// it. The content is fed over stdin so quoting inside the document (for example quoted condition
+// messages) can never break shell interpolation.
 func YQCommand(t *testing.T, content []byte, yqPattern string) []byte {
 	t.Helper()
 
-	yqCmd := fmt.Sprintf("echo '%s' | yq '%s'", string(content), yqPattern)
-
 	cmd := exec.CommandContext( //nolint:gosec
 		t.Context(),
-		"bash",
-		"-c",
-		yqCmd,
+		"yq",
+		yqPattern,
 	)
+	cmd.Stdin = bytes.NewReader(content)
 
 	return Execute(t, cmd)
 }

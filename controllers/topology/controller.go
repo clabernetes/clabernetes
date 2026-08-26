@@ -12,7 +12,7 @@ import (
 )
 
 // Controller is the Containerlab topology controller object -- despite the grand name it is
-// "just" a compiler these days: it compiles a Topology definition into Node/Link/LauncherProfile
+// "just" a compiler these days: it compiles a Topology definition into Node/Link/NodeProfile
 // objects and aggregates their statuses; all actual reconciliation happens in the node and link
 // controllers, identically for compiled and hand written objects.
 type Controller struct {
@@ -81,7 +81,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 			),
 		).
 		Watches(
-			&clabernetesapisv1alpha1.LauncherProfile{},
+			&clabernetesapisv1alpha1.NodeProfile{},
 			ctrlruntimehandler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),

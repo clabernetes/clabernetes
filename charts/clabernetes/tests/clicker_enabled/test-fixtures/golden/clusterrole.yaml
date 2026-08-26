@@ -80,6 +80,39 @@ rules:
       - patch
       - watch
   - apiGroups:
+      - networking.k8s.io
+    resources:
+      - networkpolicies
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - patch
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - pods/exec
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
+  - apiGroups:
       - rbac.authorization.k8s.io
     resources:
       - rolebindings
@@ -102,28 +135,27 @@ metadata:
     heritage: Helm
     revision: "1"
     c9s.run/app: clabernetes-plus-clicker
-    c9s.run/name: "clabernetes-plus-clicker-launcher-role"
-    c9s.run/component: launcher-role
+    c9s.run/name: "clabernetes-plus-clicker-direct-runtime-role"
+    c9s.run/component: direct-runtime-role
     anotherlabel: anotherlabelvalue
     somelabel: somelabelvalue
   annotations:
     annotherannotation: anotherannotationvalue
     someannotation: someannotationvalue
-  name: "clabernetes-plus-clicker-launcher-role"
+  name: "clabernetes-plus-clicker-direct-runtime-role"
 rules:
   - apiGroups:
       - c9s.run
     resources:
-      - imagerequests
-    verbs:
-      - get
-      - create
-  - apiGroups:
-      - c9s.run
-    resources:
-      - nodes
       - links
     verbs:
       - get
       - list
       - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+    verbs:
+      - get
