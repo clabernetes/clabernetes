@@ -269,6 +269,15 @@ func adoptFabricPair(spec FabricEndpointSpec, device netlink.Link, legName strin
 	}
 
 	if leg.Attrs().Name != legName {
+		// The kernel refuses to rename an interface that is administratively up. The leg is
+		// sidecar-owned, so a brief admin-down for the rename is safe; the adoption pass below
+		// restores admin state under the wire's carrier rules.
+		if leg.Attrs().Flags&net.FlagUp != 0 {
+			if err = netlink.LinkSetDown(leg); err != nil {
+				return fmt.Errorf("lowering adopted fabric leg for rename: %w", err)
+			}
+		}
+
 		if err = netlink.LinkSetName(leg, legName); err != nil {
 			return fmt.Errorf("renaming adopted fabric leg to %q: %w", legName, err)
 		}

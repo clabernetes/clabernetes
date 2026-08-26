@@ -328,10 +328,28 @@ func preserveTransportInterface(
 	}
 
 	if !carried {
-		return nil, 0, fmt.Errorf(
-			"preserved transport interface %q no longer carries the Pod address %q",
-			spec.TransportInterface,
+		// A device enumerating the shared namespace may flush the sidecar-owned transport
+		// address (cSRX strips every interface it inventories at boot). The address is
+		// kubelet-assigned state the sidecar owns, so restore it instead of failing the
+		// helper into a restart loop the device would immediately re-break.
+		restore := &netlink.Addr{IPNet: &net.IPNet{
+			IP:   podAddress.AsSlice(),
+			Mask: net.CIDRMask(32, 32),
+		}}
+		if err = netlink.AddrAdd(transport, restore); err != nil {
+			return nil, 0, fmt.Errorf(
+				"restoring the Pod address %q on preserved transport %q: %w",
+				spec.PodAddress,
+				spec.TransportInterface,
+				err,
+			)
+		}
+
+		fmt.Fprintf(
+			os.Stderr,
+			"connectivity: restored Pod address %s on preserved transport %s\n",
 			spec.PodAddress,
+			spec.TransportInterface,
 		)
 	}
 
