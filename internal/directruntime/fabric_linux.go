@@ -103,10 +103,12 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, err
 	}
 
-	remote, resolved, err := o.resolveFabricPeer(spec.PeerTransport, spec.PodAddress)
+	remote, resolveReason, err := o.resolveFabricPeer(spec)
 	if err != nil {
 		return result, err
 	}
+
+	resolved := resolveReason == ""
 
 	// The link is registered even while the peer is unresolvable so the wire holds the
 	// device leg carrier-down: an unplugged far end must look like a dead cable, not a live
@@ -123,7 +125,7 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 	}
 
 	if !resolved {
-		result.Reason = "peer transport is not yet resolvable"
+		result.Reason = resolveReason
 
 		return result, nil
 	}
@@ -315,42 +317,101 @@ func adoptFabricPair(spec FabricEndpointSpec, device netlink.Link, legName strin
 	return nil
 }
 
-// resolveFabricPeer resolves a fabric peer transport to one IPv4 address. Absence is unready,
-// not an error: headless Service records appear when the peer Pod exists. Lookups bind the Pod
-// address so resolution rides the source-scoped transport rule even when a device rewrote the
-// main routing table.
+// resolveFabricPeer resolves a fabric peer transport to one IPv4 address. Absence is unready
+// with a reason, not an error: headless Service records appear when the peer Pod exists.
+// Lookups bind the Pod address so resolution rides the source-scoped transport rule even when a
+// device rewrote the main routing table, and a captured resolver configuration keeps the
+// nameservers and search domains independent of the shared /etc/resolv.conf a device may own.
+// An empty returned reason means the address is resolved.
 func (o netlinkOperations) resolveFabricPeer(
-	peerTransport, podAddress string,
-) (netip.Addr, bool, error) {
+	spec FabricEndpointSpec,
+) (netip.Addr, string, error) {
 	var remote netip.Addr
 
-	if peerTransport == "" {
-		return remote, false, errors.New("fabric endpoint has no peer transport")
+	if spec.PeerTransport == "" {
+		return remote, "", errors.New("fabric endpoint has no peer transport")
 	}
 
-	if parsed, err := netip.ParseAddr(peerTransport); err == nil {
-		return parsed, true, nil
-	}
-
-	resolver := peerAddressResolver(podBoundResolver(podAddress))
-	if net.ParseIP(podAddress) == nil && o.resolver != nil {
-		resolver = o.resolver
+	if parsed, err := netip.ParseAddr(spec.PeerTransport); err == nil {
+		return parsed, "", nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), fabricPeerResolveTimeout)
 	defer cancel()
 
-	addresses, err := resolver.LookupNetIP(ctx, "ip4", peerTransport)
-	if err != nil || len(addresses) == 0 {
-		return remote, false, nil
+	if net.ParseIP(spec.PodAddress) == nil && o.resolver != nil {
+		addresses, err := o.resolver.LookupNetIP(ctx, "ip4", spec.PeerTransport)
+		if err != nil || len(addresses) == 0 {
+			return remote, fmt.Sprintf(
+				"peer transport %q is not yet resolvable", spec.PeerTransport,
+			), nil
+		}
+
+		return addresses[0].Unmap(), "", nil
 	}
 
-	return addresses[0].Unmap(), true, nil
+	if spec.Resolver != nil && spec.Resolver.usable() {
+		captured, capturedReason := resolveWithCapturedConfig(ctx, spec)
+
+		return captured, capturedReason, nil
+	}
+
+	resolver := peerAddressResolver(podBoundResolver(spec.PodAddress))
+
+	addresses, err := resolver.LookupNetIP(ctx, "ip4", spec.PeerTransport)
+	if err != nil || len(addresses) == 0 {
+		return remote, fmt.Sprintf(
+			"peer transport %q is not yet resolvable through the shared resolver configuration",
+			spec.PeerTransport,
+		), nil
+	}
+
+	return addresses[0].Unmap(), "", nil
 }
 
-// podBoundResolver resolves through sockets bound to the Pod address, keeping DNS on the
-// sidecar-owned transport table regardless of main-table state.
-func podBoundResolver(podAddress string) *net.Resolver {
+// resolveWithCapturedConfig answers a peer lookup through the captured Pod DNS configuration:
+// each search-completed candidate is queried against each captured nameserver from a socket
+// bound to the Pod address. The candidates are rooted, so the underlying resolver performs no
+// /etc/resolv.conf search expansion of its own.
+func resolveWithCapturedConfig(
+	ctx context.Context,
+	spec FabricEndpointSpec,
+) (netip.Addr, string) {
+	var remote netip.Addr
+
+	var lastErr error
+
+	for _, server := range spec.Resolver.Nameservers {
+		resolver := podBoundResolverForServer(spec.PodAddress, server)
+
+		for _, candidate := range resolverCandidates(spec.PeerTransport, spec.Resolver.Search) {
+			addresses, err := resolver.LookupNetIP(ctx, "ip4", candidate)
+			if err != nil {
+				lastErr = err
+
+				continue
+			}
+
+			if len(addresses) > 0 {
+				return addresses[0].Unmap(), ""
+			}
+		}
+	}
+
+	reason := fmt.Sprintf("peer transport %q is not yet resolvable", spec.PeerTransport)
+	if lastErr != nil {
+		reason = fmt.Sprintf(
+			"peer transport %q lookup failed: %v", spec.PeerTransport, lastErr,
+		)
+	}
+
+	return remote, reason
+}
+
+// podBoundResolverForServer resolves through sockets bound to the Pod address. A non-empty
+// server replaces whatever nameserver the process's own resolver configuration names, keeping
+// lookups on the captured configuration.
+func podBoundResolverForServer(podAddress, server string) *net.Resolver {
 	local := net.ParseIP(podAddress)
 
 	return &net.Resolver{
@@ -367,9 +428,19 @@ func podBoundResolver(podAddress string) *net.Resolver {
 				}
 			}
 
+			if server != "" {
+				address = net.JoinHostPort(server, "53")
+			}
+
 			return dialer.DialContext(ctx, network, address)
 		},
 	}
+}
+
+// podBoundResolver resolves through sockets bound to the Pod address, keeping DNS on the
+// sidecar-owned transport table regardless of main-table state.
+func podBoundResolver(podAddress string) *net.Resolver {
+	return podBoundResolverForServer(podAddress, "")
 }
 
 // podFabricUnderlayMTU observes the MTU of the interface carrying the Pod address. A zero

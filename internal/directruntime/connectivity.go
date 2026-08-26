@@ -878,6 +878,64 @@ type ConnectivityOptions struct {
 	// hostEndpointPacer rate-limits steady-state host endpoint re-assertion; the sidecar owns
 	// drift correction, so unchanged ticks do not need a per-second reconcile fan-out.
 	hostEndpointPacer *hostEndpointPacer
+
+	// resolver is the Pod DNS client configuration captured at startup, before any application
+	// container could rewrite the shared /etc/resolv.conf.
+	resolver *ResolverConfig
+
+	// readinessLog reports endpoint readiness transitions, so an endpoint that silently holds
+	// connectivity unready names its reason exactly once per state change.
+	readinessLog *endpointReadinessLog
+}
+
+// endpointReadinessLog deduplicates per-endpoint readiness transition reporting.
+type endpointReadinessLog struct {
+	mutex   sync.Mutex
+	reasons map[string]string
+}
+
+// noteUnready reports one endpoint's unready reason when it differs from the last report.
+func (l *endpointReadinessLog) noteUnready(interfaceID, reason string) {
+	if l == nil {
+		return
+	}
+
+	if reason == "" {
+		reason = "endpoint transport is not ready"
+	}
+
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.reasons == nil {
+		l.reasons = map[string]string{}
+	}
+
+	if l.reasons[interfaceID] == reason {
+		return
+	}
+
+	l.reasons[interfaceID] = reason
+
+	fmt.Fprintf(os.Stderr, "connectivity: endpoint %s is not ready: %s\n", interfaceID, reason)
+}
+
+// noteReady reports one endpoint's recovery when it was last reported unready.
+func (l *endpointReadinessLog) noteReady(interfaceID string) {
+	if l == nil {
+		return
+	}
+
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if _, unready := l.reasons[interfaceID]; !unready {
+		return
+	}
+
+	delete(l.reasons, interfaceID)
+
+	fmt.Fprintf(os.Stderr, "connectivity: endpoint %s is ready\n", interfaceID)
 }
 
 // hostEndpointReassertInterval bounds how often an unchanged revision re-asserts host
@@ -1054,6 +1112,7 @@ func runConnectivity(
 	}
 
 	options.hostEndpointPacer = &hostEndpointPacer{}
+	options.readinessLog = &endpointReadinessLog{}
 
 	if options.NATOperations == nil {
 		options.NATOperations = newNATOperations()
@@ -1070,6 +1129,13 @@ func runConnectivity(
 	stateDirectory, err := prepareConnectivityStateDirectory(options.StateDirectory)
 	if err != nil {
 		return err
+	}
+
+	// The DNS client configuration is captured before any application container can boot and
+	// rewrite the shared /etc/resolv.conf; a restart after such a rewrite falls back to the
+	// copy persisted in the sidecar-owned state directory.
+	if options.resolver == nil {
+		options.resolver = captureResolverConfig(systemResolverConfigPath, stateDirectory)
 	}
 
 	if err = clearConnectivityMarkers(stateDirectory); err != nil {
@@ -1569,6 +1635,7 @@ func reconcileEndpointTransports(
 			MTU:           intf.MTU,
 			PeerTransport: intf.PeerTransport,
 			PodAddress:    options.PodAddress,
+			Resolver:      options.resolver,
 		})
 		if err != nil {
 			reconcileErr = fmt.Errorf("realizing fabric Link %q: %w", intf.LinkID, err)
@@ -1578,6 +1645,10 @@ func reconcileEndpointTransports(
 
 		if !result.Ready {
 			ready = false
+
+			options.readinessLog.noteUnready(intf.ID, result.Reason)
+		} else {
+			options.readinessLog.noteReady(intf.ID)
 		}
 	}
 

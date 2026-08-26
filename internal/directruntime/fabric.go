@@ -30,6 +30,10 @@ type FabricEndpointSpec struct {
 	PeerTransport string
 	// PodAddress is this Pod's bare underlay address, the local wire endpoint.
 	PodAddress string
+	// Resolver is the captured Pod DNS client configuration for peer transport resolution. When
+	// set, peer names resolve against these nameservers and search domains instead of the
+	// shared /etc/resolv.conf, which a device may have rewritten for its own management stack.
+	Resolver *ResolverConfig
 }
 
 // FabricEndpointResult reports one endpoint's transport state: an unready endpoint keeps its
