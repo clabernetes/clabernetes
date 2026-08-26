@@ -25,11 +25,11 @@ Kubernetes 1.31 or newer is already required for selectable Link endpoint fields
 
 ## Decisions
 
-### 1. Pin an exact behavior baseline and generate one compatibility inventory
+### 1. Pin the module and use its live imported registry
 
-Add `compatibility/containerlab/baseline.json` for the exact upstream module identity, plan schema, and generic capability/scenario/behavior contract. It deliberately contains no kind names, aliases, registry digest, availability rows, or evidence rows. The live imported registry is the only kind inventory, so a dependency update cannot be blocked by a stale c9s catalog.
+Pin the exact upstream module identity in `go.mod` and `go.sum`. The live imported registry is the only kind inventory, so a dependency update cannot be blocked by a stale c9s catalog.
 
-A repository tool obtains the registry from the pinned containerlab Go module, normalizes aliases, and generates ephemeral reports and parameterized conformance inputs. Verification checks the imported module identity, live registry construction, generic operation coverage, documentation, and any remaining build-time version reference; it never compares names to a committed matrix. A new kind or alias is exercised automatically and does not require a c9s allowlist, mapping, or hand-authored fixture. Verification fails only when imported execution records a generic operation the direct runtime cannot represent. Debian package revision syntax is not treated as the behavior version.
+Device planning constructs the registry from the linked containerlab Go module and records the linked module version plus a digest of the live names. It rejects replaced or unversioned dependencies and never compares names to a committed matrix. A new kind or alias is exercised automatically and does not require a c9s allowlist, mapping, or hand-authored fixture. Planning fails only when imported execution records a generic operation the direct runtime cannot represent. Debian package revision syntax is not treated as the behavior version.
 
 Alternatives considered:
 
@@ -66,7 +66,7 @@ The normalized plan contains:
 - typed file inputs and outputs, mounts, tmpfs/shared memory, persistence targets, devices, sysctls, capabilities, privilege, and security profiles;
 - typed prepare, pre-start, post-start, readiness, post-stop, save, and interface-fixup actions with explicit target container/namespace;
 - management interfaces, addresses, routes, DNS, certificate inputs, endpoint names/MTU, link-apply mode, and readiness dependencies; and
-- schema version, compatibility baseline, normalized input digest, and planner build identity.
+- schema version, linked module and live-registry identity, normalized input digest, and planner build identity.
 
 Arbitrary shell strings are retained only where containerlab already defines user `exec` intent; kind-owned lifecycle behavior is represented by typed actions whenever possible. Plans refer to Secret/ConfigMap/payload identities rather than embedding secret bytes. Normalized serialization is stable and fixture-testable.
 
@@ -76,7 +76,7 @@ Alternatives considered:
 
 - Adding a planner to containerlab would create unnecessary cross-repository coupling for a Kubernetes-specific consumer and make c9s delivery depend on upstream changes.
 - Calling imported hooks in the manager or against the real host/runtime would execute side effects; the isolated planning Pod, controlled workspace, and recording runtime are mandatory.
-- Copying the full kind registry or maintaining patched kind implementations in c9s would create a fork and make baseline bumps unverifiable.
+- Copying the full kind registry or maintaining patched kind implementations in c9s would create a fork and defeat live registry discovery.
 - Embedding raw Kubernetes API objects in the plan would couple kind intent to rendering and make fixture-level validation harder.
 
 ### 3. Resolve image configuration without pulling device layers through c9s
@@ -294,7 +294,7 @@ The Node controller watches owned Pods and reads application/init container stat
 
 ### 9. Treat the matrix as work inventory, not documentation metadata
 
-Each canonical kind progresses independently through `inventoried`, `planned`, `rendered`, `booted`, and `compatible`; aliases inherit only after their resolution is verified. `compatible` requires all applicable automated or recorded scenarios and is invalidated by a baseline, planner, renderer, or relevant helper change. Generally obtainable images run in automation. Restricted images use a documented harness that emits a signed/checksummed evidence record containing image digest, planner/runtime revisions, scenario results, date, and environment facts; rendering alone cannot advance status.
+Each canonical kind progresses independently through `inventoried`, `planned`, `rendered`, `booted`, and `compatible`; aliases inherit only after their resolution is verified. `compatible` requires all applicable automated or recorded scenarios and must be revalidated after the pinned module, planner, renderer, or relevant helper changes. Generally obtainable images run in automation. Restricted images use a documented harness that emits a signed/checksummed evidence record containing image digest, planner/runtime revisions, scenario results, date, and environment facts; rendering alone cannot advance status.
 
 The multi-worker suite uses task-scoped namespaces and labels and covers traffic, live changes, forced Pod deletion, rescheduling, controller/helper restarts, partial updates, all Link flavors, and orphan cleanup. Direct manifests, the Topology compiler, and clabverter compare normalized plan digests before their runtime observations are compared. After evidence is recorded, iterative runs remove their task-scoped completed or failed planning Pods, Jobs, stale workloads, and superseded diagnostics. Final acceptance removes every task-created namespace and cluster resource unless a specific retained diagnostic is reported. Cleanup selects resources by task namespace, release, owner, and labels and never sweeps unrelated completed Pods or user workloads.
 
@@ -305,17 +305,17 @@ The multi-worker suite uses task-scoped namespaces and labels and covers traffic
 - **[OCI metadata access can differ from kubelet registry access]** → Separate metadata trust/auth diagnostics from pull status, support Kubernetes pull Secrets and explicit CA/HTTP policy, compare resolved digest with kubelet `imageID`, and fail closed on mismatch.
 - **[Static management addresses can conflict with Pod networking]** → Keep the Kubernetes Pod IP intact, allocate/validate management addresses centrally, use a distinct planned overlay/interface behavior, and reject overlaps or unreachable modes before boot.
 - **[Large component plans or generated configs can exceed API limits]** → Store only normalized non-secret plans in immutable ConfigMaps, keep payloads in referenced objects/PVCs, enforce size ceilings, and split typed artifacts by digest when necessary.
-- **[Commercial evidence can become stale without CI access]** → Encode invalidation inputs in evidence records and make the release gate treat stale/missing evidence as incompatible.
+- **[Commercial evidence can become stale without CI access]** → Record module, image, planner, and runtime revisions in evidence and treat stale or missing evidence as incompatible.
 - **[Removing alpha Docker fields is disruptive]** → Provide preflight reporting, a temporary feature-gated migration release, explicit replacements, and a documented no-in-place-fallback boundary.
 - **[Device images may assume Docker-specific behavior not expressible by Kubernetes]** → Make the incompatibility visible in planning and define one tested portable c9s adapter/runtime semantic; never weaken or ignore it silently.
 
 ## Migration Plan
 
-1. Introduce the exact 0.78.0 registry inventory, plan schema, conformance matrix, generator, and release gates without changing the current runtime.
+1. Pin containerlab 0.78.0, introduce the plan schema and registry-driven conformance, and add release gates without changing the current runtime.
 2. Pin and import the unmodified containerlab module, land the c9s-owned plan schema and generic recorder/workspace adapter, and drive every live kind and alias through registry-parameterized conformance. Add OCI metadata resolution and plan validation.
 3. Add a temporary explicit `nested|direct` development mode. Implement the direct Deployment renderer, preparation init, restartable connectivity init-sidecar, and host cleanup daemon. There is no automatic fallback: a direct-plan failure stays failed.
 4. Expand generic operation support until native, VM-backed, component-based, and restricted-image families all pass without kind-specific c9s logic. Add direct operations and entry-path equivalence while retaining nested mode solely as an A/B oracle in non-production conformance.
-5. Run the full multi-worker and vendor evidence matrix. Make direct mode the default only after every baseline entry and behavior is compatible.
+5. Run the full multi-worker and vendor evidence matrix. Make direct mode the default only after every registered kind and applicable behavior is compatible.
 6. In one breaking API/runtime cut, remove nested mode, launcher code/image/RBAC, Docker/containerlab layers, ImageRequest/import paths, obsolete Config/LauncherProfile fields, and legacy status vocabulary. Regenerate and inspect every API artifact and update documentation, examples, release notes, and preflight migration tooling.
 7. Validate unit, race, lint, generated artifacts, images, production manifests, all generally obtainable images, recorded restricted-image scenarios, and the complete authorized multi-worker suite. Record required evidence, then remove task-scoped completed/failed Pods, Jobs, workloads, namespaces, and diagnostics; report any intentional retention. Only this validated and cleaned state can close the change.
 

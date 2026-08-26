@@ -9,9 +9,8 @@ See proposal.md for motivation. Constraints that shape the approach:
 - The wire already validates datagram sources (`dropForeignSource`) and dispatches link IDs
   inside one receiving sidecar; the mesh is kernel VXLAN on UDP 14789 while the wire is
   userspace UDP on 14790. Both facts are what make the scoping and ceiling changes safe.
-- Plan bytes are covered by compatibility invalidation digests; changing the plan schema
-  (connectivity value, field name) refreshes `compatibility/containerlab/baseline.json` and
-  invalidates recorded conformance evidence by design.
+- Changing the serialized plan schema (connectivity value and field name) requires matching
+  fixture and golden updates.
 - e2e goldens must be regenerated on a `make test-e2e-local`-style cluster (chart installed
   with debug log levels) or they silently flip.
 

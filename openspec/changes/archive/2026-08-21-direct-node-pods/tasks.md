@@ -1,12 +1,10 @@
-## 1. Compatibility Baseline and Inventory
+## 1. Pinned Module and Live Registry
 
-- [x] 1.1 Add the exact containerlab 0.78.0 module-identity baseline and generic capability, scenario, behavior, and invalidation inventory without committing a kind-name catalog.
-- [x] 1.2 Add registry discovery that reads the authoritative imported registry and can emit deterministic canonical/alias data for ephemeral reports and parameterized tests.
+- [x] 1.1 Pin the exact containerlab 0.78.0 module identity in `go.mod` and `go.sum` without committing a kind-name catalog.
+- [x] 1.2 Construct the authoritative imported registry and expose deterministic canonical/alias data to planning and parameterized tests.
 - [x] 1.3 Add tests that construct and validate the live imported registry without comparing it to a c9s-maintained list, so added kinds and aliases participate automatically.
-- [x] 1.4 Gate the declared baseline against every code, build, fixture, and documentation version reference so a partial version bump fails verification.
-- [x] 1.5 Inventory every current c9s Node field, launcher behavior, Link flavor, operation, and entry path into matrix capability columns without marking unvalidated behavior compatible.
-- [x] 1.6 Add generic inventory schema validation for unique IDs, required scenarios, capability references, source paths, and plan/renderer/helper invalidation inputs.
-- [x] 1.7 Generate user-facing baseline and compatibility tables from the validated matrix and add drift checks.
+- [x] 1.4 Record the linked module version and live-registry digest in device plans and reject replaced or unversioned dependencies.
+- [x] 1.5 Add source verification that prevents kind-named dispatch or concrete kind implementation imports from entering the generic direct runtime.
 
 ## 2. Imported Containerlab Planning Adapter
 
@@ -84,7 +82,7 @@
 
 ## 9. Compiler and External Entry Paths
 
-- [x] 9.1 Make Topology compilation reject every unrecognized or unrepresentable baseline field with sorted structured diagnostics and remove lossy warning-mode output.
+- [x] 9.1 Make Topology compilation reject every unrecognized or unrepresentable Containerlab field with sorted structured diagnostics and remove lossy warning-mode output.
 - [x] 9.2 Preserve all plan-relevant defaults, kinds, payloads, labels, ports, management, grouping, components, and connectivity in emitted primitives.
 - [x] 9.3 Update direct manifest generation to use identical validation and prove normalized plan equivalence with in-cluster compilation.
 - [x] 9.4 Update clabverter output and tests to produce only directly representable resources or fail before output.
@@ -99,7 +97,6 @@
 - [x] 10.6 Validate Juniper VM-based families with components where applicable, KVM/tap, configuration, management, and dataplane tests.
 - [x] 10.7 Add repeatable restricted-image harnesses and current recorded evidence for every commercial/license-gated matrix entry before marking it compatible.
 - [x] 10.8 Add conformance for startup configs, variables, licenses, certificates, persistence, DNS, Services, probes, exec, logs, save, events, packet capture, and every supported security/storage behavior.
-- [x] 10.9 Make matrix status/evidence invalidation automatic when the baseline, planner, renderer, preparation, connectivity, or relevant fixtures change.
 
 ## 11. Remove the Nested Runtime
 

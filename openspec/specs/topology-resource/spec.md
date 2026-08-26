@@ -140,7 +140,7 @@ The system SHALL document and support direct application of generated primitive 
 
 ### Requirement: A source definition accepts native Containerlab vocabulary
 
-The compiler SHALL accept native Containerlab vocabulary from the declared compatibility baseline only when it can preserve that vocabulary through direct resources and device plans. It MUST reject unrecognized or unrepresentable fields with deterministic structured diagnostics before rendering resources; it MUST NOT omit such fields under a compatibility warning mode.
+The compiler SHALL accept native Containerlab vocabulary from the pinned imported module only when it can preserve that vocabulary through direct resources and device plans. It MUST reject unrecognized or unrepresentable fields with deterministic structured diagnostics before rendering resources; it MUST NOT omit such fields under a compatibility warning mode.
 
 Malformed input, a recognized field with an unusable value, an unsupported explicit link type, or a structure that cannot identify realizable direct resources SHALL also fail. Explicit `veth` links SHALL accept brief `node:interface` endpoints or structured node/interface mappings when both identify the same representable endpoints.
 

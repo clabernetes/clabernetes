@@ -207,7 +207,7 @@ issuing an update when the current status already equals the desired status.
 
 ### Requirement: Node vocabulary excludes fields the direct runtime cannot realize
 
-The Node spec SHALL NOT expose Containerlab node fields the direct runtime cannot represent with defined portable semantics. Excluded fields are those absent from the declared compatibility baseline, those whose meaning spans several Nodes and belongs to another c9s resource, and those describing Pod-level policy owned by NodeProfile or the Pod plan. Supported fields MUST be planned and enforced rather than ignored.
+The Node spec SHALL NOT expose Containerlab node fields the direct runtime cannot represent with defined portable semantics. Excluded fields include those whose meaning spans several Nodes and belongs to another c9s resource and those describing Pod-level policy owned by NodeProfile or the Pod plan. Supported fields MUST be planned and enforced rather than ignored.
 
 #### Scenario: Field owned by realization policy is absent from Node
 

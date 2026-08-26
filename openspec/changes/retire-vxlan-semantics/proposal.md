@@ -69,9 +69,8 @@ _None._
   CRDs, `assets/crd/`, generated clients, openapi, docs CRD pages.
 - `controllers/link` (allocation scope, comments, status message), `controllers/node`
   (plan-input connectivity value, mesh VNI derivation, fabric Service suffix).
-- `internal/deviceplan` (connectivity value, field rename) — changes plan bytes, so
-  compatibility invalidation digests refresh and recorded conformance evidence is invalidated
-  by design.
+- `internal/deviceplan` (connectivity value, field rename) — changes plan bytes and requires
+  matching fixture and golden updates.
 - `internal/directruntime` (plan consumption, error strings, VTEP-sweep removal, frame
   headroom, comment wording).
 - e2e golden fixtures (Service names, Link status fields) and a new VLAN-transparency e2e.

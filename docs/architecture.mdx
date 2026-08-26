@@ -79,7 +79,7 @@ The compiler normally emits one shared NodeProfile and places its explicit refer
 every Node. A distinct per-node workload resource policy produces a complete dedicated profile,
 not an inheritance chain.
 
-Compilation fails closed: any unrecognized or unrepresentable baseline field fails before
+Compilation fails closed: any unrecognized or unrepresentable Containerlab field fails before
 resource creation with sorted structured diagnostics naming every unsupported field and
 location. Deliberately rejected vocabulary fails with a diagnostic stating why, and only
 constructs whose loss cannot change lab behavior inside the cluster are accepted with a

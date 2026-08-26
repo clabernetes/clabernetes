@@ -1,22 +1,22 @@
 # device-planning Specification
 
 ## Purpose
-Define an exhaustive, versioned compatibility baseline and a deterministic c9s device-plan contract derived from an unmodified, pinned containerlab Go dependency.
+Define a deterministic c9s device-plan contract derived from an unmodified, version-pinned containerlab Go dependency and its live imported registry.
 
 ## Requirements
 
-### Requirement: Compatibility baseline is exact and exhaustive
+### Requirement: Containerlab dependency is exact and registry discovery is exhaustive
 
-The repository SHALL declare one exact `github.com/srl-labs/containerlab` Go module version as its compatibility baseline and SHALL discover every registered kind name and alias from that imported release at runtime or test time. The repository MUST NOT maintain a second machine-readable kind/alias inventory or expected registry digest. Generic capability and scenario definitions MAY be committed because they describe Kubernetes operations rather than kind membership.
+The repository SHALL pin one exact `github.com/srl-labs/containerlab` Go module version in its module graph and SHALL discover every registered kind name and alias from that imported release at runtime or test time. The repository MUST NOT maintain a second machine-readable kind/alias inventory or expected registry digest.
 
-#### Scenario: Verify the declared baseline
+#### Scenario: Verify the pinned release
 
-- **WHEN** compatibility verification runs for the declared containerlab release
+- **WHEN** device planning runs for the pinned containerlab release
 - **THEN** the generated report or parameterized run contains every live registered kind name and alias exactly once without consulting a committed expected-name set
 
 #### Scenario: Containerlab adds a kind or alias
 
-- **WHEN** the declared containerlab release changes and its registry differs from the inventory
+- **WHEN** the pinned containerlab release changes and its live registry differs
 - **THEN** registry-driven planning and conformance automatically exercise it without a c9s kind registration or implementation change
 
 ### Requirement: Containerlab remains an unmodified pinned dependency
@@ -33,18 +33,18 @@ c9s SHALL consume the declared containerlab release without a source patch, fork
 - **WHEN** the pinned module is updated to a release containing a new kind implemented through the imported interfaces
 - **THEN** the dependency update alone makes that kind plan and run through the existing generic c9s integration
 
-#### Scenario: Build against the declared baseline
+#### Scenario: Build against the pinned release
 
-- **WHEN** c9s builds or verifies device planning for the declared baseline
+- **WHEN** c9s builds or verifies device planning for the pinned release
 - **THEN** it requires no patched containerlab source or artifact from a sibling repository
 
 ### Requirement: Every supported kind produces a runtime-neutral device plan
 
-For every kind in the compatibility baseline, the c9s planning adapter SHALL use the imported registry and applicable exported kind/configuration behavior to convert a fully resolved Node and its explicit inputs into a versioned runtime-neutral plan. The plan MUST describe all application and component containers, images, entrypoints, commands, environment, security, resources, files, mounts, devices, lifecycle actions, management behavior, readiness, and interface requirements needed to realize that Node. A kind MUST NOT be marked compatible if any required behavior is absent from the plan.
+For every kind in the live imported registry, the c9s planning adapter SHALL use the imported registry and applicable exported kind/configuration behavior to convert a fully resolved Node and its explicit inputs into a versioned runtime-neutral plan. The plan MUST describe all application and component containers, images, entrypoints, commands, environment, security, resources, files, mounts, devices, lifecycle actions, management behavior, readiness, and interface requirements needed to realize that Node. A kind MUST NOT be marked compatible if any required behavior is absent from the plan.
 
-#### Scenario: Plan a baseline kind
+#### Scenario: Plan a registered kind
 
-- **WHEN** a complete valid definition for any baseline kind is submitted to the planner
+- **WHEN** a complete valid definition for any registered kind is submitted to the planner
 - **THEN** planning returns either a complete direct-runtime plan or a structured rejection naming input that has no portable representation
 
 #### Scenario: Kind requires several containers

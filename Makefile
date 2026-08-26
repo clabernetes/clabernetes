@@ -255,13 +255,7 @@ VERIFY_GENERATED_PATHS := \
 	charts/clabernetes/crds \
 	generated
 
-verify-containerlab-compatibility: ## Verify the pinned module identity and discover its live registry
-	$(C9S_GO_ENV) go run ./cmd/compatibility -mode verify
-
-generate-containerlab-compatibility: ## Regenerate the containerlab compatibility documentation
-	$(C9S_GO_ENV) go run ./cmd/compatibility -mode render-doc > compatibility/containerlab/README.md
-
-verify-generated: run-generate verify-containerlab-compatibility ## Regenerate all API artifacts and fail if generated outputs change
+verify-generated: run-generate ## Regenerate all API artifacts and fail if generated outputs change
 	git diff --exit-code -- $(VERIFY_GENERATED_PATHS)
 
 delete-generated: ## Deletes all zz_*.go (generated) files, and crds

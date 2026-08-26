@@ -15,7 +15,7 @@
       (`apis/v1alpha1/link.go`); regenerate deepcopy, CRDs, assets, clients, openapi.
 - [x] 2.2 Plan schema: `ConnectivityVXLAN "vxlan"` → `ConnectivityWire "wire"`,
       `InterfacePlan.TunnelID` → `WireID` (`internal/deviceplan`, `controllers/node`);
-      keep mesh `TunnelID` (genuinely a VNI); refresh compatibility invalidation digests.
+      keep mesh `TunnelID` (genuinely a VNI); update affected fixtures.
 - [x] 2.3 Runtime: consume the renamed plan fields, "VXLAN Link" error → "wire Link", delete
       the pre-wire VTEP sweep (`fabricVTEPLinkType`), fix stale comments
       (`internal/directruntime`).

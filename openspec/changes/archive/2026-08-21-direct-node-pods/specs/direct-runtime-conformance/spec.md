@@ -6,7 +6,7 @@ Define the evidence required to claim complete kind and behavior compatibility f
 
 ### Requirement: Compatibility matrix is an executable release gate
 
-The compatibility report SHALL be generated from every kind and alias in the live imported registry and join those names with generic scenario results, image availability observations, and recorded status at verification time. c9s MUST NOT commit expected kind rows or require a matching per-kind fixture. A kind SHALL be reported compatible only when all applicable planning, boot, readiness, management, dataplane, lifecycle, and cleanup evidence passes for the declared baseline.
+The compatibility report SHALL be generated from every kind and alias in the live imported registry and join those names with generic scenario results, image availability observations, and recorded status at verification time. c9s MUST NOT commit expected kind rows or require a matching per-kind fixture. A kind SHALL be reported compatible only when all applicable planning, boot, readiness, management, dataplane, lifecycle, and cleanup evidence passes for the pinned module release.
 
 #### Scenario: Verify matrix completeness
 
@@ -57,7 +57,7 @@ Commercial, private, export-controlled, or license-gated kinds SHALL have docume
 
 #### Scenario: Evidence is stale after behavior changes
 
-- **WHEN** its device plan, relevant runtime behavior, or baseline version changes
+- **WHEN** its device plan, relevant runtime behavior, or pinned module version changes
 - **THEN** prior recorded evidence becomes insufficient until the scenario is rerun
 
 ### Requirement: Multi-worker recovery suite covers runtime lifecycle and cleanup

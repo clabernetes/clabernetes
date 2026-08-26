@@ -25,11 +25,9 @@ func TestDirectRuntimeSourceContainsNoContainerlabKindKnowledge(t *testing.T) {
 
 	for _, directory := range []string{
 		".",
-		"../compatibility",
 		"../directpod",
 		"../directruntime",
 		"../ocimetadata",
-		"../../cmd/compatibility",
 		"../../controllers/node",
 		"../../controllers/topology",
 	} {

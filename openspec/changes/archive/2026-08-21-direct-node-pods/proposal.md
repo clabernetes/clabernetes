@@ -4,7 +4,7 @@ c9s currently runs each network device as a Docker container nested inside a pri
 
 ## What Changes
 
-- Add a versioned compatibility inventory generated from the supported containerlab kind registry without creating a second kind dispatch catalog in c9s.
+- Drive compatibility coverage from the live imported containerlab kind registry without creating a second kind dispatch catalog in c9s.
 - Add a deterministic, runtime-neutral device plan for kind defaults, application containers, component containers, files, mounts, security, lifecycle actions, management intent, and interface requirements.
 - Render network-device images as first-class application containers in c9s-managed Pods, including grouped Nodes and component/distributed-chassis kinds, with Kubernetes-native image pulling, storage, DNS, resources, security, observability, and lifecycle status.
 - Replace containerlab topology materialization, nested Docker startup/discovery/health, image import, and runtime containerlab commands with c9s preparation and connectivity components that do not act as a second container runtime.
@@ -12,13 +12,13 @@ c9s currently runs each network device as a Docker container nested inside a pri
 - Treat launcher-only runtime repairs as migration hypotheses: first prove the unmodified device image and imported containerlab behavior in a direct Pod, then add only a demonstrated kind-opaque Kubernetes capability rather than porting vendor names or commands.
 - Preserve direct Node/Link manifests, Topology compilation, and clabverter output while rejecting any input whose semantics cannot be represented directly.
 - **BREAKING** Make the direct runtime the only runtime; remove the launcher image, inner Docker/containerlab paths, Docker-specific registry/image-import behavior, and obsolete API/configuration fields after their replacements are complete.
-- Document the supported containerlab baseline, per-kind conformance state, portable Kubernetes semantics, intentional differences, migration, and upgrade behavior.
+- Document the pinned containerlab release, per-kind conformance state, portable Kubernetes semantics, intentional differences, migration, and upgrade behavior.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `device-planning`: Defines the pinned containerlab compatibility baseline, live imported-registry inventory, deterministic runtime-neutral device plans, registry-parameterized conformance, and a version-bump gate that requires no c9s kind port.
+- `device-planning`: Defines the pinned containerlab dependency, live imported registry, deterministic runtime-neutral device plans, and registry-parameterized conformance that requires no c9s kind port.
 - `direct-device-runtime`: Defines direct application-container Pods, grouped and component Nodes, preparation/lifecycle helpers, Kubernetes-native image and storage behavior, and device observability.
 - `direct-connectivity`: Defines direct realization and reconciliation of every supported Link flavor across same-Pod and multi-worker placements.
 - `direct-runtime-conformance`: Defines the boot, dataplane, lifecycle, recovery, integration, and licensed-vendor evidence required before a kind or runtime behavior is compatible.

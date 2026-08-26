@@ -13,7 +13,7 @@
 
 - [x] 2.1 Remove `Topology.spec.connectivity` and `Link.spec.connectivity` with the slurpeeth enum
 - [x] 2.2 Remove the slurpeeth VNI clamp, fabric Service TCP port, and plan vocabulary
-- [x] 2.3 Update clabverter, tests, goldens, examples, and the compatibility baseline
+- [x] 2.3 Update clabverter, tests, goldens, and examples
 
 ## 3. NodeProfile rename
 

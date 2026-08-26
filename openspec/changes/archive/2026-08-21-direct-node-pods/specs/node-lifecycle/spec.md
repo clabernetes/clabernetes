@@ -184,7 +184,7 @@ The controller SHALL record Node readiness, plan identity, probe observations, e
 
 ### Requirement: Node vocabulary excludes fields the direct runtime cannot realize
 
-The Node spec SHALL NOT expose Containerlab node fields the direct runtime cannot represent with defined portable semantics. Excluded fields are those absent from the declared compatibility baseline, those whose meaning spans several Nodes and belongs to another c9s resource, and those describing Pod-level policy owned by LauncherProfile or the Pod plan. Supported fields MUST be planned and enforced rather than ignored.
+The Node spec SHALL NOT expose Containerlab node fields the direct runtime cannot represent with defined portable semantics. Excluded fields include those whose meaning spans several Nodes and belongs to another c9s resource and those describing Pod-level policy owned by LauncherProfile or the Pod plan. Supported fields MUST be planned and enforced rather than ignored.
 
 #### Scenario: Field owned by realization policy is absent from Node
 
@@ -221,7 +221,7 @@ The Node spec SHALL NOT expose Containerlab node fields the direct runtime canno
 
 ### Requirement: Node vocabulary is parseable by the launcher's Containerlab
 
-**Reason**: Direct device Pods contain no launcher container or containerlab executable; compatibility is instead verified against the exact baseline registry and runtime-neutral planner.
+**Reason**: Direct device Pods contain no launcher container or containerlab executable; compatibility is instead derived from the live imported registry and runtime-neutral planner.
 
 **Migration**: Pin the baseline and validate Node vocabulary through the registry-driven `device-planning` compatibility gate.
 
