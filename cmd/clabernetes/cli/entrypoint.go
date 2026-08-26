@@ -360,12 +360,23 @@ func deviceRuntimeCommand() *cli.Command {
 					&cli.StringFlag{Name: devicePlanRevision, Required: true},
 					&cli.StringFlag{Name: deviceRuntimePhase, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeContainer, Required: true},
+					&cli.StringFlag{Name: deviceRuntimeConnectivityRevision},
 				},
 				Action: func(c *cli.Context) error {
 					input, plan, err := readRuntimePlanInput(
 						c.String(deviceRuntimeInput),
 						c.String(deviceRuntimePlan),
 					)
+					if err != nil {
+						return err
+					}
+
+					input, plan, err = clabernetesinternaldirectruntime.
+						ApplyConnectivityRevisionFromFile(
+							input,
+							plan,
+							c.String(deviceRuntimeConnectivityRevision),
+						)
 					if err != nil {
 						return err
 					}

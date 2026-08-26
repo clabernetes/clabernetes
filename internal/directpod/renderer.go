@@ -540,6 +540,7 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 		certificateNames,
 		enableApplicationLogBroker,
 		options.EntropySecretName != "",
+		options.ConnectivityRevisionConfigMapName != "",
 	)
 	if err != nil {
 		return nil, err
@@ -1072,6 +1073,7 @@ func renderApplicationLifecycle(
 	certificateNames map[string]string,
 	enableApplicationLogBroker bool,
 	hasEntropy bool,
+	hasConnectivityRevision bool,
 ) (bool, bool, error) {
 	containerIndexes := make(map[string]int, len(plan.Containers))
 
@@ -1267,6 +1269,17 @@ func renderApplicationLifecycle(
 			)
 		}
 
+		// A retained Pod recreated after a live or restart Link revision must replay its plan
+		// actions against the revised interface set, so post-start lifecycle boundaries read
+		// the projected connectivity revision the sidecar already consumes.
+		if hasConnectivityRevision && postStartTargets[containerID] {
+			mounts = append(mounts, k8scorev1.VolumeMount{
+				Name:      connectivityRevisionVolumeName,
+				MountPath: connectivityRevisionMountPath,
+				ReadOnly:  true,
+			})
+		}
+
 		if hasEntropy && (readinessTargets[containerID] ||
 			importedPostDeployTargets[containerID] || importedSaveTargets[containerID]) {
 			mounts = append(mounts, k8scorev1.VolumeMount{
@@ -1395,6 +1408,14 @@ func renderApplicationLifecycle(
 					container.Lifecycle.PostStart.Exec.Command,
 					"--entropy",
 					lifecycleEntropyRoot,
+				)
+			}
+
+			if hasConnectivityRevision {
+				container.Lifecycle.PostStart.Exec.Command = append(
+					container.Lifecycle.PostStart.Exec.Command,
+					"--connectivityRevision",
+					connectivityRevisionMountPath+"/revision.json",
 				)
 			}
 		}

@@ -1385,6 +1385,30 @@ func publishConnectivityMarker(stateDirectory, name, temporaryPattern, digest st
 	return nil
 }
 
+// ApplyConnectivityRevisionFromFile merges the projected connectivity revision at path into the
+// immutable base input/plan pair. Live and restart Link revisions deliberately retain the Pod
+// and its cold plan, so a lifecycle boundary that replays plan actions after a Pod recreation
+// must apply the projected revision or it would act on interfaces the revision renamed or
+// removed. An empty path or absent file leaves the base pair unchanged; invalid or mismatched
+// revision content fails closed.
+func ApplyConnectivityRevisionFromFile(
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
+	path string,
+) (clabernetesinternaldeviceplan.Input, clabernetesinternaldeviceplan.Plan, error) {
+	if path == "" {
+		return input, plan, nil
+	}
+
+	if _, err := os.Stat(filepath.Clean(path)); errors.Is(err, os.ErrNotExist) {
+		return input, plan, nil
+	}
+
+	effectiveInput, effectivePlan, _, err := loadConnectivityRevision(input, plan, path)
+
+	return effectiveInput, effectivePlan, err
+}
+
 func loadConnectivityRevision(
 	baseInput clabernetesinternaldeviceplan.Input,
 	basePlan clabernetesinternaldeviceplan.Plan,

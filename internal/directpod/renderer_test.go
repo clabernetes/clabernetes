@@ -1196,6 +1196,60 @@ func TestRenderProjectsOnlyNodeCertificateMaterialIntoImportedLifecycleTarget(t 
 	}
 }
 
+func TestRenderProjectsConnectivityRevisionIntoPostStartLifecycle(t *testing.T) {
+	t.Parallel()
+
+	plan := renderablePlan()
+	plan.Actions = []clabernetesinternaldeviceplan.Action{{
+		ID: "exec", Phase: clabernetesinternaldeviceplan.PhasePostStart,
+		Target: clabernetesinternaldeviceplan.ActionTarget{
+			NodeID: "node-a", ContainerID: "node-a/root",
+		},
+		Kind: clabernetesinternaldeviceplan.ActionExec,
+		Exec: &clabernetesinternaldeviceplan.ExecAction{
+			Command: []string{"/usr/bin/apply-config"}, Wait: true,
+		},
+	}}
+
+	deployment, err := clabernetesinternaldirectpod.Render(
+		plan,
+		clabernetesinternaldirectpod.Options{
+			Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+			InputConfigMapName:                "device-a-plan-input-abc",
+			ConnectivityRevisionConfigMapName: "device-a-connectivity-abc",
+			PreparationImage:                  "example/c9s:1", ConnectivityImage: "example/c9s:1",
+			EnableContainerStopSignals: true,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root := containerByImage(
+		t,
+		deployment.Spec.Template.Spec.Containers,
+		"example/device@sha256:"+strings.Repeat("a", 64),
+	)
+	if root == nil || root.Lifecycle == nil || root.Lifecycle.PostStart == nil ||
+		root.Lifecycle.PostStart.Exec == nil {
+		t.Fatalf("post-start target lifecycle = %#v", root)
+	}
+
+	// A retained Pod recreated after a live/restart Link revision replays plan actions; the
+	// hook must therefore read the projected revision the sidecar consumes.
+	command := root.Lifecycle.PostStart.Exec.Command
+
+	revisionIndex := slices.Index(command, "--connectivityRevision")
+	if revisionIndex < 0 || revisionIndex+1 >= len(command) ||
+		command[revisionIndex+1] != "/var/run/clabernetes/connectivity-revision/revision.json" {
+		t.Fatalf("post-start command lacks the projected revision: %#v", command)
+	}
+
+	if !hasReadOnlyMount(*root, "/var/run/clabernetes/connectivity-revision") {
+		t.Fatalf("post-start target lacks the revision mount: %#v", root.VolumeMounts)
+	}
+}
+
 func TestRenderMapsGenericPostStartActionsIntoTargetApplicationContainer(t *testing.T) {
 	t.Parallel()
 
