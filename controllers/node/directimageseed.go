@@ -35,7 +35,7 @@ func (r *Reconciler) resolveImagesForDiscovery(
 
 	cold, err := r.loadDirectColdPlan(ctx, node, deployment)
 	if err != nil {
-		return resolved, nil
+		return resolved, nil //nolint:nilerr // unusable cold state falls back to topology-declared images.
 	}
 
 	if !declaredTopologyImagesMatchCold(declaredImages, cold.Input.Images) {
@@ -52,17 +52,17 @@ func (r *Reconciler) resolveImagesForDiscovery(
 
 	compiled, compileErr := CompilePlanInput(seedRequest)
 	if compileErr != nil {
-		return resolved, nil
+		return resolved, nil //nolint:nilerr // an unusable cold seed deliberately falls back to declared images.
 	}
 
 	compiledDigest, digestErr := compiled.Digest()
 	if digestErr != nil {
-		return resolved, nil
+		return resolved, nil //nolint:nilerr // an unusable cold digest deliberately falls back to declared images.
 	}
 
 	coldDigest, digestErr := cold.Input.Digest()
 	if digestErr != nil || compiledDigest != coldDigest {
-		return resolved, nil
+		return resolved, nil //nolint:nilerr // an unusable or stale cold digest falls back to declared images.
 	}
 
 	return slices.Clone(cold.Input.Images), nil

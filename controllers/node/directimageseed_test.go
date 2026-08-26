@@ -1,4 +1,4 @@
-package node
+package node //nolint:testpackage // tests exercise the unexported cold-image seed matcher.
 
 import (
 	"strings"

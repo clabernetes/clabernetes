@@ -1,4 +1,4 @@
-package node
+package node //nolint:testpackage // tests exercise unexported worker-artifact ownership details.
 
 import (
 	"context"
@@ -84,6 +84,7 @@ func TestGarbageCollectWorkerArtifactsRemovesSupersededCaches(t *testing.T) {
 
 	for _, name := range []string{staleOutput.GetName(), staleInput.GetName()} {
 		configMap := &k8scorev1.ConfigMap{}
+
 		err := client.Get(
 			context.Background(),
 			apimachinerytypes.NamespacedName{Namespace: node.GetNamespace(), Name: name},

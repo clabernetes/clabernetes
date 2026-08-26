@@ -363,7 +363,7 @@ func (r *Reconciler) optionalOwnedDirectDeployment(
 	}
 
 	if !ownedByUID(existing, node.GetUID()) {
-		return nil, nil
+		return nil, nil //nolint:nilnil // a workload owned by another Node is absent for this optional lookup.
 	}
 
 	return existing, nil
