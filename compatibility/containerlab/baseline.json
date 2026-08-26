@@ -20,7 +20,7 @@
       "pattern": "const pinnedContainerlabVersion = \"{{version}}\""
     },
     {
-      "path": "docs/upgrading.md",
+      "path": "docs/concepts/containerlab-differences.md",
       "pattern": "containerlab {{version}}"
     }
   ],

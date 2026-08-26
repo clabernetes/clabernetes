@@ -17,16 +17,16 @@ which keeps the exposed port set a declared list rather than "everything the nod
 
 1. The default management port list (see the table below) is exposed unless
    `disableAutoExpose: true`.
-2. Anything outside that list -- a custom app on 8080, iperf3 on 5201 -- has to be named in the
+2. Anything outside that list (a custom app on 8080, iperf3 on 5201) has to be named in the
    node's `ports` (ports the imported kind plan itself declares on the container are carried
    automatically unless auto-expose is disabled).
 3. Each destination port is recorded in the Node's `status.exposedPorts`. That status is the
-   source of truth the node's expose Service -- named after the node itself -- is programmed
+   source of truth the node's expose Service (named after the node itself) is programmed
    from.
 
 Clients always connect to the node's natural port: the Service listens on the destination port
 and targets that same port on the device Pod directly, with no Docker port publication in
-between -- which is why `ports` entries declare a destination port only. Declared `aliases`
+between. This is why `ports` entries declare a destination port only. Declared `aliases`
 each add an extra headless Service selecting the node's Pod under the alias name.
 
 ### Portable containerlab topologies
@@ -80,7 +80,7 @@ spec:
 **Effects:**
 
 - No expose services are created for any node
-- Nodes still communicate with each other over their Links -- fabric connectivity does not
+- Nodes still communicate with each other over their Links; fabric connectivity does not
   depend on expose Services
 - No external access to nodes
 
@@ -115,7 +115,7 @@ spec:
               - 57400/tcp # gNMI
 ```
 
-Each entry is the destination port -- the port the node itself listens on -- with an optional
+Each entry is the destination port (the port the node itself listens on) with an optional
 protocol. The Service listens on that port and targets it directly on the device Pod; docker
 style `host:container` bindings are rejected on Nodes, and a Topology `definition:` normalizes
 two-sided entries to their destination port.
@@ -320,7 +320,7 @@ ssh admin@srl1.default.svc.cluster.local
 ### With No Services
 
 ```bash
-# Access via pod directly (not recommended for production) -- the deployment is named after
+# Access via pod directly (not recommended for production); the deployment is named after
 # the node, and unqualified exec targets the device application container
 kubectl exec -it deploy/srl1 -- sr_cli
 ```

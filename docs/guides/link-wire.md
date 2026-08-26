@@ -1,6 +1,6 @@
 ---
 title: Link wire semantics
-description: What the cross-Pod link transport emulates faithfully — carrier, loss, jumbo frames — and what it does not.
+description: What the cross-Pod link transport emulates faithfully (carrier, loss, jumbo frames) and what it does not.
 ---
 
 Links between device Pods cross the Kubernetes Pod network through the Clabernetes **wire**: a
@@ -12,8 +12,8 @@ lab behaviors you can trust, and where the emulation deliberately stops.
 
 ### Carrier
 
-Pulling a port behaves like unplugging a cable. When a device takes a link interface down —
-admin-down, `shutdown`, interface deletion — the peer device sees **loss of carrier**
+Pulling a port behaves like unplugging a cable. When a device takes a link interface down
+(admin-down, `shutdown`, interface deletion), the peer device sees **loss of carrier**
 (`NO-CARRIER` / `LOWERLAYERDOWN`) on its own interface within milliseconds, while that
 interface stays administratively up. Protocols reconverge on carrier loss, not on hold-timer
 expiry. When the interface returns, carrier restores the same way.
@@ -24,9 +24,9 @@ rescheduled and converges, carrier restores without any manual action.
 
 The signal shares the datapath's fate: carrier advertisements, liveness heartbeats, and the
 link frames themselves share one socket and one network path, so control and data cannot
-diverge in endpoint or route. (Pathologies that drop only large datagrams -- a size-selective
-filter, an underlay MTU black-hole -- can still pass small control messages while data
-suffers, exactly as a degraded physical path would.)
+diverge in endpoint or route. (Pathologies that drop only large datagrams, such as a
+size-selective filter or an underlay MTU black-hole, can still pass small control messages
+while data suffers, exactly as a degraded physical path would.)
 
 ### Loss
 
@@ -38,17 +38,17 @@ transport, where the wire itself would repair loss and add head-of-line latency 
 
 One consequence of fragmentation is loss amplification for large frames: a 9500-byte frame
 crossing a 1500-byte Pod network is about seven fragments, and the loss of any one drops the
-whole frame — so jumbo-frame loss rate is roughly the underlay loss rate multiplied by the
+whole frame, so jumbo-frame loss rate is roughly the underlay loss rate multiplied by the
 fragment count. Real jumbo links amplify bit-error rates similarly, but keep it in mind when
 measuring loss with large packets over a lossy underlay.
 
 ### Any MTU, anywhere
 
-Frames up to the link MTU — containerlab's 9500-byte default included — cross any cluster
+Frames up to the link MTU, containerlab's 9500-byte default included, cross any cluster
 regardless of the Pod network MTU, because the wire fragments to whatever the local underlay
 carries. One floor applies: fragments are never sized below 1200 bytes of payload, so on an
 underlay smaller than roughly 1250 bytes the outer datagrams fall back to ordinary IP
-fragmentation — the wire still works, it just stops adapting below that point. See the
+fragmentation. The wire still works there, it just stops adapting below that point. See the
 [Link MTU](/docs/guides/mtu) guide.
 
 ### Transparency
@@ -62,7 +62,7 @@ link 4 extra bytes of MTU when full-size payloads must carry two tags.
 ## What the wire does not emulate
 
 - **Timing fidelity.** Latency and jitter are those of the Kubernetes Pod network plus a
-  userspace forwarding step in each sidecar — not a calibrated link. Do not benchmark
+  userspace forwarding step in each sidecar, not a calibrated link. Do not benchmark
   microsecond-scale timing behavior across cross-Pod links.
 - **Line-rate throughput.** Every cross-Pod frame is handled in userspace by both sidecars.
   Throughput is far above what software network OS dataplanes forward, so it is virtually never
@@ -73,7 +73,7 @@ link 4 extra bytes of MTU when full-size payloads must carry two tags.
 
 ## Observability
 
-The connectivity sidecar logs wire events — carrier transitions, peer sessions, and periodic
+The connectivity sidecar logs wire events: carrier transitions, peer sessions, and periodic
 per-link drop counters classified by cause (reassembly expiry, memory cap, stale peer
 generation, oversize, send-queue full):
 

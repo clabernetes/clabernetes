@@ -49,14 +49,12 @@ probes are translated into the generated primitive resources and NodeProfile pol
 
 The embedded `containerlab` definition remains native containerlab YAML, and compilation is
 fail-closed: a field c9s does not implement fails compilation with a structured diagnostic naming
-the field and its source line, and deliberately rejected fields (`runtime`, `auto-remove`,
-`pid-mode`, `cgroupns-mode`, `cpu-set`, `stages`, `credentials`) each fail with a diagnostic
-stating why. Diagnostics are collected and sorted, so one compile reports every problem at once,
-and no resource is created until all of them are resolved. Only constructs whose loss cannot
-change lab behavior inside the cluster are accepted with a warning instead: Docker-only
-management-network fields (`mgmt.network`, `mgmt.bridge`, MTU, external access, driver options)
-and the host half of Docker-style `host:container` port bindings, whose Pod-side port is kept.
-Malformed YAML and recognized fields with invalid value types also fail compilation.
+the field and its source line. Diagnostics are collected and sorted, so one compile reports every
+problem at once, and no resource is created until all of them are resolved. Deliberately rejected
+fields each fail with a diagnostic stating why, and only constructs whose loss cannot change lab
+behavior inside the cluster are accepted with a warning instead; see
+[Differences from containerlab](containerlab-differences.md) for the full list. Malformed YAML
+and recognized fields with invalid value types also fail compilation.
 
 Containerlab node labels have a Kubernetes-native destination:
 

@@ -10,8 +10,8 @@ NodeProfile, Link, and Node objects.
 
 ## Resources
 
-- [Topology](/docs/crd/topology) — optional whole-lab compiler input
-- [Node](/docs/crd/node) — primary API: one containerlab node per object
-- [Link](/docs/crd/link) — primary API: one wire between two nodes
-- [NodeProfile](/docs/crd/node-profile) — reusable direct-workload policy
-- [Config](/docs/crd/config) — cluster-wide defaults
+- [Topology](/docs/crd/topology): optional whole-lab compiler input
+- [Node](/docs/crd/node): primary API, one containerlab node per object
+- [Link](/docs/crd/link): primary API, one wire between two nodes
+- [NodeProfile](/docs/crd/node-profile): reusable direct-workload policy
+- [Config](/docs/crd/config): cluster-wide defaults

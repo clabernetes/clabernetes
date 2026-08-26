@@ -146,7 +146,7 @@ filesFromConfigMap:
 
 ## Mounting Files from Secrets
 
-Sensitive payloads -- credentials, private keys, licenses under NDA -- belong in Secrets rather
+Sensitive payloads (credentials, private keys, licenses under NDA) belong in Secrets rather
 than ConfigMaps. Secret-backed payloads are marked sensitive: only their digest reaches the
 plan, and the bytes are projected straight into the preparation container.
 
@@ -227,7 +227,7 @@ https://drive.google.com/file/d/xxx               # Requires auth
 ### Authentication
 
 URL payloads are fetched anonymously. For content behind authentication, load it into a
-ConfigMap or Secret and reference that instead -- registry credentials belong in Kubernetes
+ConfigMap or Secret and reference that instead. Registry credentials belong in Kubernetes
 `imagePull.pullSecrets`, not in file mounting.
 
 ## Common Use Cases

@@ -48,7 +48,7 @@ import fallback.
 ### Integrated Systems
 
 Integrated SR-SIM systems run as a single container. Nokia supports the integrated model only
-for these platform types -- every other chassis, including the FP5 small fixed platforms such
+for these platform types. Every other chassis, including the FP5 small fixed platforms such
 as `sr-1-92s`, must run distributed (declare `components`):
 
 | Platform Type | Description                      |
@@ -61,7 +61,7 @@ as `sr-1-92s`, must run distributed (declare `components`):
 | `ixr-e2c`     | 7250 IXR-e2c                     |
 
 A componentless node of any other type boots a single simulator container that never attaches
-its data-path ports -- the Node reports ready on management but forwards nothing.
+its data-path ports: the Node reports ready on management but forwards nothing.
 
 **Example topology:**
 
@@ -111,7 +111,7 @@ spec:
 ### Distributed Chassis Systems
 
 Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single chassis using
-multiple containers—one for each card slot (CPM-A, CPM-B, IOMs). In the explicit-card form,
+multiple containers, one for each card slot (CPM-A, CPM-B, IOMs). In the explicit-card form,
 secondary containers share a network namespace via `network-mode: container:<name>`; in the
 component form, the imported containerlab package expands the node into card containers during
 planning.
@@ -330,13 +330,13 @@ SR OS diagnostics rather than booting degraded:
   yields `MGMT_CORE #4001: ... MDA must exist` at config commit and dead ports.
 - **Card/MDA pairings come from Nokia's supported-hardware tables** (the SR-SIM Installation
   and Setup appendix). Pairing an MDA with the wrong card fails commit with
-  `Not supported by chassis/card/xiom type/capability` -- for example `me6-100gb-qsfp28`
+  `Not supported by chassis/card/xiom type/capability`. For example `me6-100gb-qsfp28`
   pairs with `iom5-e`, not `iom4-e`.
 - **XIOM-based cards take `ms*` MDAs.** On `-s` chassis (`sr-2s`, `sr-7s`, ...) the XIOM MDA
   must be one of the `ms*` types (`ms18-100gb-qsfp28`, `ms24-10/100gb-sfpdd`, ...); the config
   commit rejects anything else and names the accepted keywords. Ports gain an `x` element:
   `1/x1/1/c1/1` maps to interface `1/x1/1/c1/1` on the Link and `e1-x1-1-c1-1` in the Pod.
-- **SR-SIM forwards at most ~1000 pps per port** by design -- it validates control-plane and
+- **SR-SIM forwards at most ~1000 pps per port** by design; it validates control-plane and
   reachability behavior, not throughput.
 - **Live link changes work; leave the default `link-apply-mode` alone.** Although Nokia
   documents data-path interfaces attached at container start only, the simulator hot-attaches
@@ -464,7 +464,7 @@ attachment stops reconciliation instead of silently choosing one license.
 
 ### Cards Within a Chassis Must Be Co-located
 
-All cards (CPM-A, CPM-B, IOMs) within a single distributed chassis must run on the same Kubernetes worker node. This is a fundamental constraint of Linux network namespaces—they cannot span multiple hosts.
+All cards (CPM-A, CPM-B, IOMs) within a single distributed chassis must run on the same Kubernetes worker node. This is a fundamental constraint of Linux network namespaces: they cannot span multiple hosts.
 
 **Impact:** A single Kubernetes worker must have sufficient resources (CPU, memory) for all cards in a chassis.
 
@@ -476,7 +476,7 @@ All cards (CPM-A, CPM-B, IOMs) within a single distributed chassis must run on t
 
 ### Different Chassis Can Be Distributed
 
-While cards within a chassis must be co-located, different chassis (routers) in your topology can be scheduled on different Kubernetes worker nodes. For example, if you have two SR-7 routers in your topology, each can run on a different worker node—only the cards within each individual router must share a node.
+While cards within a chassis must be co-located, different chassis (routers) in your topology can be scheduled on different Kubernetes worker nodes. For example, if you have two SR-7 routers in your topology, each can run on a different worker node; only the cards within each individual router must share a node.
 
 ### Port Publishing
 

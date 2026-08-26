@@ -4,7 +4,7 @@ description: NodeProfile custom resource schema.
 icon: Settings2
 ---
 
-The `NodeProfile` CRD holds reusable direct-workload policy -- expose behavior, image pull
+The `NodeProfile` CRD holds reusable direct-workload policy: expose behavior, image pull
 defaults, primary-container resources, scheduling, persistence, and probes. Nodes reference
 profiles explicitly via `profileRef`. Device privilege, capabilities, and other kind-owned
 container requirements are not profile policy; they come from the imported package's plan.

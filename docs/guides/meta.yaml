@@ -2,6 +2,7 @@ title: Guides
 icon: Map
 pages:
   - expose-configuration
+  - management-network
   - file-mounting
   - image-pull
   - mtu

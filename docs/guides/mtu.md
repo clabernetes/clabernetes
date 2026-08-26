@@ -9,7 +9,7 @@ to it (short version: it doesn't bound anything).
 ## What happens by default
 
 Every link gets **containerlab's default link MTU of 9500** unless the topology requests
-something else — the same value the lab would have under containerlab on a bare host. This
+something else, the same value the lab would have under containerlab on a bare host. This
 holds on any cluster, including a typical 1500-byte Pod network: links between device Pods
 cross the Pod network through the Clabernetes wire, a sidecar-to-sidecar transport that
 segments each frame to whatever the local Pod network carries and reassembles it at the far
@@ -46,7 +46,7 @@ The wire fragments each frame to the local Pod network MTU. A 9000-byte frame ov
 1500-byte Pod network crosses as about seven UDP datagrams and is reassembled on arrival; over
 a jumbo (9000+) Pod network it crosses as one. Fewer fragments mean less per-frame overhead and
 less exposure to underlay packet loss (a frame is dropped whole if any one of its fragments is
-lost — see the [link wire semantics](/docs/guides/link-wire) guide). Raising the Pod network MTU is
+lost, see the [link wire semantics](/docs/guides/link-wire) guide). Raising the Pod network MTU is
 therefore an optional performance improvement, never a correctness requirement.
 
 Mixed worker MTUs need no special handling: each sender fragments to its own Pod network MTU,
@@ -54,10 +54,10 @@ and reassembly does not care what size the fragments were.
 
 One floor applies: the wire never sizes fragments below 1200 bytes of payload, so on a Pod
 network smaller than roughly 1250 bytes the outer datagrams fall back to ordinary IP
-fragmentation. Links still work there — the wire just stops adapting below that point.
+fragmentation. Links still work there; the wire just stops adapting below that point.
 
 ## Links that never cross the Pod network
 
 Links with both endpoints in the same Pod, loopbacks, and host links are plain kernel
-interfaces. They follow the same MTU rules — requested value honored exactly, containerlab
-default when unset — without any wire involvement.
+interfaces. They follow the same MTU rules (requested value honored exactly, containerlab
+default when unset) without any wire involvement.

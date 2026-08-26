@@ -100,8 +100,8 @@ spec:
 
 ## What Gets Persisted
 
-The PVC backs the node's plan-owned artifact volume -- the package-planned persistent device
-artifacts, not a containerlab working directory:
+The PVC backs the node's plan-owned artifact volume, meaning the persistent device artifacts
+the plan declares, not a containerlab working directory:
 
 - **Generated files**: startup configuration and other artifacts the imported kind renders
 - **Kind-mounted directories**: every path the kind mounts from its lab directory, including
@@ -141,8 +141,8 @@ The storage class cannot be changed after PVC creation. To change storage class:
 
 ### Node Removal Removes the PVC
 
-Each PVC is owner-referenced to its Node: deleting the Node -- or removing it from a Topology,
-which prunes the emitted Node -- garbage-collects the claim and its data. Disabling persistence
+Each PVC is owner-referenced to its Node: deleting the Node (or removing it from a Topology,
+which prunes the emitted Node) garbage-collects the claim and its data. Disabling persistence
 on the effective profile also deletes the c9s-owned claim. Back up anything you need first.
 
 ## Use Cases
@@ -204,7 +204,7 @@ kubectl describe pvc <pvc-name>
 ### Backing Up Node Data
 
 The persisted directories are mounted into the device container at the destinations the
-imported kind declares -- for example, SR Linux keeps its configuration under
+imported kind declares. For example, SR Linux keeps its configuration under
 `/etc/opt/srlinux`. Inspect the Pod's volume mounts to see which paths the PVC backs, then copy
 them out of the device container:
 

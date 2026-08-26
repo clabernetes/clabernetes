@@ -33,7 +33,7 @@ defaults apply. An explicit reference that does not exist prevents the Node from
 
 ## Link
 
-A Link declares exactly two endpoints -- one wire, nothing else.
+A Link declares exactly two endpoints: one wire, nothing else.
 
 ```yaml
 apiVersion: c9s.run/v1alpha1

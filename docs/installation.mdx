@@ -21,7 +21,7 @@ A typical installation method uses the [c9s Helm chart](https://github.com/clabe
 - **VXLAN and nftables support in the worker kernel** (standard in distribution kernels):
   the namespace-wide management mesh is kernel VXLAN inside the Pods on the CNI network, and
   management translation uses an nftables table inside each Pod's namespace. Cross-worker
-  Link wires need nothing special -- they are plain UDP between the connectivity sidecars.
+  Link wires need nothing special; they are plain UDP between the connectivity sidecars.
 - **`/dev/kvm` on workers** only when running VM-backed (vrnetlab) kinds; the plan requests the
   device through ordinary Kubernetes device semantics.
 - **Registry access is cluster administration**: private device images use ordinary
@@ -117,9 +117,9 @@ specific context:
 ## Upgrade
 
 This release is a breaking API and runtime cut: there is no in-place upgrade path. Upgrading
-from any earlier release requires a full uninstall and reinstall -- follow the
-[upgrade guide](/docs/upgrading), which walks through exporting your manifests, uninstalling,
-updating manifests for the new API, and reinstalling.
+from any earlier release requires a full uninstall and reinstall. Follow the steps in the
+[0.9 release notes](/docs/release-notes/0.9#upgrading-from-08), which walk through exporting
+your manifests, uninstalling, updating manifests for the new API, and reinstalling.
 
 Within one release line, re-running the installation commands above (`helm upgrade --install`,
 or `make install`) upgrades the release in place. If you installed with a values file, pass the

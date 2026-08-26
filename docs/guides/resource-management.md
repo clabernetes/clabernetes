@@ -138,7 +138,7 @@ spec:
 
 A node definition may size its own container with containerlab vocabulary: `cpu` (vcpus) and
 `memory` (i.e. `1Gb`) become the device container's Kubernetes CPU and memory limits. `cpu-set`
-is rejected -- CPU pinning has no portable Pod mapping. For a resource name that a
+is rejected because CPU pinning has no portable Pod mapping. For a resource name that a
 NodeProfile (or the global default) also sets, the profile value wins on the logical Node's
 primary application container:
 
@@ -454,7 +454,7 @@ kubectl describe node <node-name> | grep -A5 "Allocated"
 
 There is no privileged wrapper pod and no `privilegedLauncher` knob. Each device container
 receives exactly the privilege, capabilities, and devices its imported containerlab kind plan
-declares -- including any `privileged`, `cap-add`, or `devices` vocabulary in the node
+declares, including any `privileged`, `cap-add`, or `devices` vocabulary in the node
 definition itself. Privilege is per-container plan output, never profile or Config policy.
 
 ## Related
