@@ -19,12 +19,18 @@ import (
 const interpositionTableName = "c9s-interposition"
 
 const (
-	// interpositionDestinationPriority hooks destination translation ahead of every x_tables NAT
-	// PREROUTING chain (fixed at -100), so a device programming its own iptables NAT cannot
-	// shadow the sidecar's declared-port translation.
-	interpositionDestinationPriority = -110
+	// interpositionDestinationPriority hooks destination translation after every device-owned
+	// x_tables/iptables-nft NAT PREROUTING chain (fixed at -100). In Docker the device's own
+	// NAT is the only destination translation in its namespace — vrnetlab-style wrappers rely
+	// on it to forward declared management ports onward to a nested guest — and a connection
+	// receives exactly one destination binding, so the sidecar's declared-port translation
+	// must be the fallback for flows the device leaves untranslated, never a preemption of
+	// the device's own forwarding.
+	interpositionDestinationPriority = -90
 	// interpositionSourcePriority hooks source translation ahead of every x_tables NAT
-	// POSTROUTING chain (fixed at 100) for the same precedence guarantee on egress.
+	// POSTROUTING chain (fixed at 100), so the Pod-identity source invariants (management
+	// masquerade, hairpin, and inbound gateway translation) bind before a device-owned
+	// masquerade can pin the flow to a management-scoped source.
 	interpositionSourcePriority = 90
 )
 
