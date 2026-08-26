@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,6 +139,78 @@ func TestCompileRegistryMetadataTrustFailsClosed(t *testing.T) {
 func TestImageMetadataResolverRejectsUnrepresentableGenericOCIConfig(t *testing.T) {
 	t.Parallel()
 
+	cases := []struct {
+		name       string
+		config     clabernetesinternalocimetadata.RuntimeConfig
+		diagnostic string
+	}{
+		{
+			name:       "network disabled",
+			config:     clabernetesinternalocimetadata.RuntimeConfig{NetworkDisabled: true},
+			diagnostic: "networkDisabled",
+		},
+		{
+			name: "mac address",
+			config: clabernetesinternalocimetadata.RuntimeConfig{
+				MacAddress: "02:00:00:00:00:01",
+			},
+			diagnostic: "macAddress",
+		},
+		{
+			name:       "domain name",
+			config:     clabernetesinternalocimetadata.RuntimeConfig{Domainname: "device.example"},
+			diagnostic: "domainname",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			scheme := apimachineryruntime.NewScheme()
+			if err := k8scorev1.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+
+			fake := &fakeOCIMetadataResolver{result: &clabernetesinternalocimetadata.Metadata{
+				SchemaVersion:   clabernetesinternalocimetadata.SchemaVersion,
+				DigestReference: "registry.example/device@sha256:aaaaaaaa",
+				Config:          testCase.config,
+			}}
+			discovery := clabernetesinternaldeviceplan.ImageDiscovery{
+				SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
+				Compatibility: planInputTestCompatibility(),
+				InputDigest:   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+				Planner: clabernetesinternaldeviceplan.PlannerIdentity{
+					Name:     "clabernetes",
+					Revision: "images-v1",
+				},
+				Images: []clabernetesinternaldeviceplan.ImageRequirement{{
+					NodeID: "node-a", Role: "device", SourceReference: "registry.example/device:1",
+				}},
+			}
+
+			_, err := (ImageMetadataResolver{
+				Client:   ctrlruntimefake.NewClientBuilder().WithScheme(scheme).Build(),
+				Resolver: fake,
+				Platform: clabernetesinternalocimetadata.Platform{
+					OS: "linux", Architecture: "amd64",
+				},
+			}).Resolve(context.Background(), "lab", discovery, nil)
+			if err == nil {
+				t.Fatal("Resolve() accepted unrepresentable OCI network identity")
+			}
+
+			if !strings.Contains(err.Error(), testCase.diagnostic) {
+				t.Fatalf("Resolve() diagnostic %q does not name %q", err, testCase.diagnostic)
+			}
+		})
+	}
+}
+
+func TestImageMetadataResolverAcceptsAndIgnoresImageBuildHostname(t *testing.T) {
+	t.Parallel()
+
 	scheme := apimachineryruntime.NewScheme()
 	if err := k8scorev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
@@ -146,7 +219,11 @@ func TestImageMetadataResolverRejectsUnrepresentableGenericOCIConfig(t *testing.
 	fake := &fakeOCIMetadataResolver{result: &clabernetesinternalocimetadata.Metadata{
 		SchemaVersion:   clabernetesinternalocimetadata.SchemaVersion,
 		DigestReference: "registry.example/device@sha256:aaaaaaaa",
-		Config:          clabernetesinternalocimetadata.RuntimeConfig{NetworkDisabled: true},
+		Config: clabernetesinternalocimetadata.RuntimeConfig{
+			Entrypoint: []string{"/device"},
+			// Opaque image-build container ID, as emitted by docker commit based appliances.
+			Hostname: "927c33021a3b",
+		},
 	}}
 	discovery := clabernetesinternaldeviceplan.ImageDiscovery{
 		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
@@ -161,11 +238,16 @@ func TestImageMetadataResolverRejectsUnrepresentableGenericOCIConfig(t *testing.
 		}},
 	}
 
-	_, err := (ImageMetadataResolver{
+	resolution, err := (ImageMetadataResolver{
 		Client: ctrlruntimefake.NewClientBuilder().WithScheme(scheme).Build(), Resolver: fake,
 		Platform: clabernetesinternalocimetadata.Platform{OS: "linux", Architecture: "amd64"},
 	}).Resolve(context.Background(), "lab", discovery, nil)
-	if err == nil {
-		t.Fatal("Resolve() accepted unrepresentable OCI network identity")
+	if err != nil {
+		t.Fatalf("Resolve() rejected an image whose only identity field is a build hostname: %v",
+			err)
+	}
+
+	if len(resolution.Images) != 1 {
+		t.Fatalf("Resolve() images = %#v", resolution.Images)
 	}
 }

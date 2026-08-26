@@ -173,12 +173,24 @@ func imageInputFromMetadata(
 			"resolved OCI metadata identity differs from the imported image requirement",
 		)
 	}
-	if metadata.Config.NetworkDisabled || metadata.Config.MacAddress != "" ||
-		metadata.Config.Hostname != "" || metadata.Config.Domainname != "" {
+	// Config.Hostname is deliberately not inspected: appliance images routinely carry an
+	// opaque build-container ID there, and Kubernetes supplies the Pod hostname instead.
+	var unsupportedIdentity []string
+	if metadata.Config.NetworkDisabled {
+		unsupportedIdentity = append(unsupportedIdentity, "networkDisabled")
+	}
+	if metadata.Config.MacAddress != "" {
+		unsupportedIdentity = append(unsupportedIdentity, "macAddress")
+	}
+	if metadata.Config.Domainname != "" {
+		unsupportedIdentity = append(unsupportedIdentity, "domainname")
+	}
+	if len(unsupportedIdentity) > 0 {
 		return clabernetesinternaldeviceplan.ImageInput{}, planInputError(
 			clabernetesinternaldeviceplan.ErrorUnsupported,
 			"images."+requirement.Role+".config",
-			"OCI image requests container-local network identity with no shared-Pod mapping",
+			"OCI image requests container-local network identity ("+
+				strings.Join(unsupportedIdentity, ", ")+") with no shared-Pod mapping",
 		)
 	}
 	environment := map[string]string{}
