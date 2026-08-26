@@ -1,6 +1,7 @@
 # direct-runtime-conformance Specification
 
 ## Purpose
+
 Define the evidence required to claim complete kind and behavior compatibility for the direct Kubernetes runtime.
 
 ## Requirements
@@ -103,7 +104,6 @@ User-facing compatibility documentation SHALL be generated from or verified agai
 - **WHEN** documentation verification or release packaging runs
 - **THEN** documented kind status and limitations match the executable matrix
 
-
 ### Requirement: Sidecar connectivity conformance is executable release evidence
 
 Sidecar-owned connectivity SHALL have per-kind executable conformance evidence covering: the device observing its allocated management address after adopting the synthetic interface, preservation of Pod transport throughout device boot and restart, outbound translation for the kind's traffic shape, inbound declared-port reachability with a real protocol session, cross-Pod fabric on the preserved underlay, and cleanup on Pod deletion including forced deletion. For same-namespace kinds the evidence SHALL additionally cover transport and fabric survival across device rewrites of shared namespace state. For topologies with host Links, evidence SHALL cover worker-side veth placement and its automatic disappearance with the Pod.
@@ -119,3 +119,28 @@ Kinds without recorded evidence SHALL be documented as unvalidated for the daemo
 
 - **WHEN** a kind has no recorded sidecar connectivity evidence
 - **THEN** compatibility documentation lists it as unvalidated rather than claiming support
+
+### Requirement: Repeated direct reconciliation cleans superseded planner artifacts
+
+Direct-runtime conformance SHALL verify that repeated reconciliation of an unchanged or
+successfully converged Node does not accumulate obsolete image-discovery or device-planning
+artifacts. Cleanup verification SHALL include worker Pods, NetworkPolicies, input ConfigMaps, and
+persisted output ConfigMaps and SHALL be scoped to the Node owner and task namespace.
+
+#### Scenario: Reconcile an unchanged direct Node repeatedly
+
+- **WHEN** an unchanged direct Node is reconciled after its discovery and planning chain has
+  converged
+- **THEN** the accepted workload remains unchanged, cached discovery/planning results remain
+  usable, and superseded worker artifacts are absent
+
+#### Scenario: Clean up a converging discovery chain
+
+- **WHEN** a direct Node requires multiple bounded discovery rounds before convergence
+- **THEN** the active chain remains usable while convergence proceeds and later reconciles remove
+  artifacts from superseded chains without touching unrelated workloads or resources
+
+#### Scenario: Verify cleanup ownership
+
+- **WHEN** the cleanup sweep encounters worker artifacts owned by another Node or task
+- **THEN** those artifacts remain unchanged
