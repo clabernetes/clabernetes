@@ -44,6 +44,11 @@ func (r *Reconciler) resolveImagesForDiscovery(
 
 	seedRequest := baseRequest
 	seedRequest.Images = slices.Clone(cold.Input.Images)
+	// Certificates are a discovery-derived section of the cold input, exactly like image
+	// roles: the pre-discovery base request never carries them, so reconstructing the cold
+	// digest for comparison must take them from the cold input or a certificate-bearing
+	// workload would fail this check — and re-run discovery — on every reconcile.
+	seedRequest.Certificates = slices.Clone(cold.Input.Certificates)
 
 	compiled, compileErr := CompilePlanInput(seedRequest)
 	if compileErr != nil {

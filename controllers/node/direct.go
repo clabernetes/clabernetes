@@ -291,6 +291,15 @@ func (r *Reconciler) reconcileDirect(
 
 			break
 		}
+		// A non-final round is still part of the converging chain: when the next reconcile
+		// starts from the same seed it must find this attempt's cached output instead of
+		// re-running the worker, so its artifacts survive the sweep alongside the final
+		// attempt's.
+		keepConvergedWorkerAttempt(
+			keepWorkerArtifacts,
+			discoveryResult.PodName,
+			discoveryResult.InputConfigMapName,
+		)
 		resolvedImages = nextInput.Images
 	}
 	if !imageDiscoveryConverged {

@@ -303,6 +303,104 @@ func TestDirectReconcileCarriesRemotePeerDiscoveryIntoBothPodPlans(t *testing.T)
 	}
 }
 
+func TestDirectImageDiscoveryIsQuiescentAfterConvergenceWithCertificates(t *testing.T) {
+	ctx := context.Background()
+	node := planInputTestNode(
+		"future-a",
+		"uid-future-a",
+		"future-kind-known-only-to-imported-package",
+		"registry.example/device:1",
+	)
+
+	scheme := plannerTestScheme(t)
+	if err := k8sappsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).Build()
+	reconciler := NewReconciler(
+		&claberneteslogging.FakeInstance{}, client, client, "clabernetes",
+		clabernetesconfig.GetFakeManager,
+	)
+	reconciler.DirectRuntimeImage = "example/c9s-manager@sha256:cccccccc"
+	reconciler.DirectCompatibility = func() (clabernetesinternaldeviceplan.Compatibility, error) {
+		return planInputTestCompatibility(), nil
+	}
+	reconciler.DirectPlatform = clabernetesinternalocimetadata.Platform{
+		OS:           "linux",
+		Architecture: "amd64",
+	}
+	reconciler.ImageMetadataResolver.Resolver = &fakeOCIMetadataResolver{
+		result: &clabernetesinternalocimetadata.Metadata{
+			SchemaVersion:   clabernetesinternalocimetadata.SchemaVersion,
+			DigestReference: "registry.example/device@sha256:" + strings.Repeat("a", 64),
+		},
+	}
+	reconciler.ImageDiscoveryReconciler.ReadLogs = directTestWorkerLogsWithCertificates(t, client)
+	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogsWithCertificates(t, client)
+
+	deployment := reconcileDirectTestDeployment(ctx, t, reconciler, client, node)
+
+	references, err := clabernetesinternaldirectpod.DeploymentPlanReferences(deployment)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inputConfigMap := &k8scorev1.ConfigMap{}
+	if err = client.Get(ctx, ctrlruntimeclient.ObjectKey{
+		Namespace: node.GetNamespace(), Name: references.InputConfigMapName,
+	}, inputConfigMap); err != nil {
+		t.Fatal(err)
+	}
+
+	coldInput, err := clabernetesinternaldeviceplan.DecodeInput(
+		[]byte(inputConfigMap.Data[plannerInputKey]),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(coldInput.Certificates) != 1 {
+		t.Fatalf(
+			"cold input does not carry the discovery-derived certificate section: %#v",
+			coldInput.Certificates,
+		)
+	}
+
+	workerPods := func() map[string]apimachinerytypes.UID {
+		pods := &k8scorev1.PodList{}
+		if err := client.List(ctx, pods,
+			ctrlruntimeclient.InNamespace(node.GetNamespace())); err != nil {
+			t.Fatal(err)
+		}
+
+		result := map[string]apimachinerytypes.UID{}
+
+		for index := range pods.Items {
+			if strings.Contains(pods.Items[index].GetName(), "-images-") {
+				result[pods.Items[index].GetName()] = pods.Items[index].GetUID()
+			}
+		}
+
+		return result
+	}
+
+	// A converged workload must not re-run image discovery on later reconciles: the cold
+	// input reconstruction includes the discovery-derived certificate section, so the cached
+	// attempt satisfies every steady-state pass. A regressed comparison creates a fresh
+	// worker Pod each reconcile, which stays pending here and fails the emptiness check.
+	for range 3 {
+		if err := reconciler.Reconcile(ctx, node); err != nil {
+			t.Fatal(err)
+		}
+
+		if now := workerPods(); len(now) != 0 {
+			t.Fatalf("steady-state reconcile spawned image-discovery workers: %#v", now)
+		}
+	}
+}
+
 func TestDirectLiveLinkChangeUpdatesRevisionWithoutPodTemplateRollout(t *testing.T) {
 	ctx := context.Background()
 	node := planInputTestNode(
@@ -1806,6 +1904,29 @@ func directTestWorkerLogsWithMode(
 ) PlannerLogReader {
 	t.Helper()
 
+	return directTestWorkerLogsFull(t, client, linkApplyMode, false)
+}
+
+// directTestWorkerLogsWithCertificates fabricates worker outputs whose image discovery also
+// requests package-owned certificate material, modeling kinds whose imported hooks declare TLS
+// requirements.
+func directTestWorkerLogsWithCertificates(
+	t *testing.T,
+	client ctrlruntimeclient.Client,
+) PlannerLogReader {
+	t.Helper()
+
+	return directTestWorkerLogsFull(t, client, clabernetesinternaldeviceplan.LinkApplyLive, true)
+}
+
+func directTestWorkerLogsFull(
+	t *testing.T,
+	client ctrlruntimeclient.Client,
+	linkApplyMode clabernetesinternaldeviceplan.LinkApplyMode,
+	withCertificates bool,
+) PlannerLogReader {
+	t.Helper()
+
 	return func(
 		ctx context.Context,
 		namespace,
@@ -1856,20 +1977,28 @@ func directTestWorkerLogsWithMode(
 				)
 			}
 
-			return clabernetesinternaldeviceplan.EncodeImageWorkerOutput(
-				clabernetesinternaldeviceplan.ImageDiscovery{
-					SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
-					Compatibility: input.Compatibility,
-					InputDigest:   inputDigest,
-					Planner: clabernetesinternaldeviceplan.PlannerIdentity{
-						Name: "clabernetes", Revision: clabernetesconstants.Version,
-					},
-					Images: []clabernetesinternaldeviceplan.ImageRequirement{{
-						NodeID: input.Nodes[0].ID, Role: "package-owned-primary",
-						SourceReference: "registry.example/device:1",
-					}},
+			discovery := clabernetesinternaldeviceplan.ImageDiscovery{
+				SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
+				Compatibility: input.Compatibility,
+				InputDigest:   inputDigest,
+				Planner: clabernetesinternaldeviceplan.PlannerIdentity{
+					Name: "clabernetes", Revision: clabernetesconstants.Version,
 				},
-			)
+				Images: []clabernetesinternaldeviceplan.ImageRequirement{{
+					NodeID: input.Nodes[0].ID, Role: "package-owned-primary",
+					SourceReference: "registry.example/device:1",
+				}},
+			}
+			if withCertificates {
+				discovery.Certificates = []clabernetesinternaldeviceplan.CertificateRequirement{{
+					NodeID:      input.Nodes[0].ID,
+					StorageName: "package-storage-name",
+					CommonName:  input.Nodes[0].Name + ".lab.example",
+					KeySize:     2048,
+				}}
+			}
+
+			return clabernetesinternaldeviceplan.EncodeImageWorkerOutput(discovery)
 		}
 
 		containerID := input.Nodes[0].ID + "/primary"
