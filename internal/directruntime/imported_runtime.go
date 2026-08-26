@@ -391,6 +391,7 @@ func (r *importedApplicationRuntime) Exec(
 	err := process.Run()
 	result.SetStdOut(stdout.Bytes())
 	result.SetStdErr(stderr.Bytes())
+	logImportedExecOutcome(command.GetCmd(), process.ProcessState, stderr.Bytes())
 	if err == nil {
 		return result, nil
 	}
@@ -404,8 +405,41 @@ func (r *importedApplicationRuntime) Exec(
 	return nil, err
 }
 
+// importedExecDiagnosticLimit bounds how much captured stderr one imported exec may surface into
+// the lifecycle stream.
+const importedExecDiagnosticLimit = 4096
+
+// logImportedExecOutcome surfaces a failed or complaining imported exec into the lifecycle
+// process's own stderr. The captured buffers otherwise exist only inside the ExecResult, where a
+// package hook that fails on them leaves no accessible evidence of what the command reported.
+func logImportedExecOutcome(command []string, state *os.ProcessState, stderr []byte) {
+	code := 0
+	if state != nil {
+		code = state.ExitCode()
+	}
+
+	if code == 0 && len(stderr) == 0 {
+		return
+	}
+
+	diagnostic := stderr
+	if len(diagnostic) > importedExecDiagnosticLimit {
+		diagnostic = diagnostic[:importedExecDiagnosticLimit]
+	}
+
+	fmt.Fprintf(
+		os.Stderr,
+		"lifecycle: imported exec %q exited %d, stderr: %s\n",
+		strings.Join(command, " "),
+		code,
+		string(diagnostic),
+	)
+}
+
+// ExecNotWait launches a fire-and-forget command with the imported runtime's Docker semantics:
+// nothing is attached and nothing is awaited, so the context cannot govern the child's lifetime.
 func (r *importedApplicationRuntime) ExecNotWait(
-	ctx context.Context,
+	_ context.Context,
 	runtimeID string,
 	command *clabexec.ExecCmd,
 ) error {
@@ -422,13 +456,26 @@ func (r *importedApplicationRuntime) ExecNotWait(
 	if command == nil || len(command.GetCmd()) == 0 {
 		return errors.New("imported post-deploy exec has no command")
 	}
-	process := exec.CommandContext( //nolint:gosec // the command comes from the accepted immutable plan.
-		ctx,
-		command.GetCmd()[0],
-		command.GetCmd()[1:]...,
-	)
-	process.Stdout = os.Stdout
-	process.Stderr = os.Stderr
+
+	return startDetachedExec(command.GetCmd())
+}
+
+// detachedCommand builds a fire-and-forget command with imported ExecNotWait semantics: no
+// stdio is attached and the child owns its own session. A surviving daemon must never inherit
+// the lifecycle hook's stdio — a PostStart exec stream held open by such a child blocks the
+// kubelet from ever observing hook completion — and hook teardown must not signal the child.
+func detachedCommand(command []string) *exec.Cmd {
+	//nolint:gosec,noctx // Plan-supplied command; no context may govern the detached child.
+	process := exec.Command(command[0], command[1:]...)
+	process.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
+	return process
+}
+
+// startDetachedExec launches a detached command and releases every handle to it.
+func startDetachedExec(command []string) error {
+	process := detachedCommand(command)
+
 	if err := process.Start(); err != nil {
 		return err
 	}

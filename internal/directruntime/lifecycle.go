@@ -379,12 +379,12 @@ func runLifecycleExec(ctx context.Context, action clabernetesinternaldeviceplan.
 	if action.Exec.Shell {
 		command = []string{"/bin/sh", "-c", strings.Join(command, " ")}
 	}
+	if !action.Exec.Wait {
+		return startDetachedExec(command)
+	}
 	process := exec.CommandContext(commandContext, command[0], command[1:]...) //nolint:gosec
 	process.Stdout = os.Stdout
 	process.Stderr = os.Stderr
-	if !action.Exec.Wait {
-		return process.Start()
-	}
 
 	return process.Run()
 }
