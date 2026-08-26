@@ -24,6 +24,7 @@ type fakeManager struct {
 	globalAnnotations     map[string]string
 	globalLabels          map[string]string
 	registryMetadataTrust []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
+	containerStopSignals  bool
 }
 
 // FakeOption defined type alias to be used below.
@@ -66,6 +67,13 @@ func WithNodeSelectors(selectors map[string]map[string]string) FakeOption {
 func WithDefaultResources(resources *k8scorev1.ResourceRequirements) FakeOption {
 	return func(fm *fakeManager) {
 		fm.defaultResources = resources.DeepCopy()
+	}
+}
+
+// WithContainerStopSignals configures OCI stop signal mapping on the fake manager.
+func WithContainerStopSignals(enabled bool) FakeOption {
+	return func(fm *fakeManager) {
+		fm.containerStopSignals = enabled
 	}
 }
 
@@ -129,4 +137,8 @@ func (f fakeManager) GetRegistryMetadataTrust() (
 
 func (f fakeManager) GetRemoveTopologyPrefix() bool {
 	return false
+}
+
+func (f fakeManager) GetContainerStopSignals() bool {
+	return f.containerStopSignals
 }

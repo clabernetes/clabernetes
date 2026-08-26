@@ -33,6 +33,13 @@ type ConfigDeployment struct {
 	// }.
 	// +optional
 	NodeSelectorsByImage map[string]map[string]string `json:"nodeSelectorsByImage"`
+	// ContainerStopSignals, when true, has the direct-pod renderer map an image's OCI stop signal
+	// to the Kubernetes lifecycle.stopSignal field; this requires the cluster (apiserver and
+	// kubelets) to enable the ContainerStopSignals feature gate. When false, images that declare a
+	// stop signal fail planning rather than silently dropping the signal.
+	// +kubebuilder:default=false
+	// +optional
+	ContainerStopSignals bool `json:"containerStopSignals,omitempty"`
 }
 
 // RegistryMetadataTrustEntry is one exact registry transport policy used only by the c9s

@@ -123,6 +123,10 @@ type Manager interface { //nolint: interfacebloat
 	// GetRemoveTopologyPrefix returns true if the topology prefix should be removed from Topology
 	// resources, otherwise false.
 	GetRemoveTopologyPrefix() bool
+	// GetContainerStopSignals returns true if the direct-pod renderer should map an image's OCI
+	// stop signal to the Kubernetes lifecycle.stopSignal field -- this requires the cluster to
+	// enable the ContainerStopSignals feature gate.
+	GetContainerStopSignals() bool
 }
 
 type manager struct {

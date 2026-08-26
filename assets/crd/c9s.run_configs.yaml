@@ -46,6 +46,14 @@ spec:
               deployment:
                 description: Deployment holds generic direct device workload defaults.
                 properties:
+                  containerStopSignals:
+                    default: false
+                    description: |-
+                      ContainerStopSignals, when true, has the direct-pod renderer map an image's OCI stop signal
+                      to the Kubernetes lifecycle.stopSignal field; this requires the cluster (apiserver and
+                      kubelets) to enable the ContainerStopSignals feature gate. When false, images that declare a
+                      stop signal fail planning rather than silently dropping the signal.
+                    type: boolean
                   nodeSelectorsByImage:
                     additionalProperties:
                       additionalProperties:

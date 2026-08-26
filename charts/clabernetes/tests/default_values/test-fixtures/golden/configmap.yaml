@@ -29,6 +29,7 @@ data:
   nodeSelectorsByImage: |-
     {}
     ---
+  containerStopSignals: "false"
   inClusterDNSSuffix: svc.cluster.local
   imagePullPolicy: IfNotPresent
   imagePullSecrets: |-

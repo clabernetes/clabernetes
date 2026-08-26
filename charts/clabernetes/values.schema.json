@@ -166,6 +166,9 @@
           "properties": {
             "resourcesDefault": {
               "type": "object"
+            },
+            "containerStopSignals": {
+              "type": "boolean"
             }
           }
         },

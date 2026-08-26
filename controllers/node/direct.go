@@ -424,6 +424,7 @@ func (r *Reconciler) reconcileDirect(
 		ApplicationImagePullPolicy: profile.ImagePullPolicy,
 		Payloads:                   planInput.Payloads,
 		PersistentVolumeClaims:     persistentVolumeClaims,
+		EnableContainerStopSignals: r.configManagerGetter().GetContainerStopSignals(),
 	}
 	existingDeployment, err := r.currentOwnedDirectDeployment(ctx, node)
 	if err != nil {

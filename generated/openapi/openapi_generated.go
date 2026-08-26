@@ -474,6 +474,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigDeployment(
 							},
 						},
 					},
+					"containerStopSignals": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ContainerStopSignals, when true, has the direct-pod renderer map an image's OCI stop signal to the Kubernetes lifecycle.stopSignal field; this requires the cluster (apiserver and kubelets) to enable the ContainerStopSignals feature gate. When false, images that declare a stop signal fail planning rather than silently dropping the signal.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},

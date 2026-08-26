@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -18,6 +19,7 @@ type bootstrapConfig struct {
 	globalLabels          map[string]string
 	resourcesDefault      *k8scorev1.ResourceRequirements
 	nodeSelectorsByImage  map[string]map[string]string
+	containerStopSignals  bool
 	inClusterDNSSuffix    string
 	imagePullPolicy       string
 	imagePullSecrets      []string
@@ -71,6 +73,16 @@ func bootstrapFromConfigMap( //nolint:gocyclo,funlen
 		err := sigsyaml.Unmarshal([]byte(nodeSelectorsByImageData), &bc.nodeSelectorsByImage)
 		if err != nil {
 			outErrors = append(outErrors, err.Error())
+		}
+	}
+
+	containerStopSignalsData, containerStopSignalsOk := inMap["containerStopSignals"]
+	if containerStopSignalsOk {
+		containerStopSignals, parseErr := strconv.ParseBool(containerStopSignalsData)
+		if parseErr != nil {
+			outErrors = append(outErrors, parseErr.Error())
+		} else {
+			bc.containerStopSignals = containerStopSignals
 		}
 	}
 
@@ -188,6 +200,10 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 		config.Spec.Deployment.ResourcesDefault = bootstrap.resourcesDefault
 	}
 
+	if !config.Spec.Deployment.ContainerStopSignals {
+		config.Spec.Deployment.ContainerStopSignals = bootstrap.containerStopSignals
+	}
+
 	if len(bootstrap.nodeSelectorsByImage) > 0 &&
 		config.Spec.Deployment.NodeSelectorsByImage == nil {
 		config.Spec.Deployment.NodeSelectorsByImage = make(
@@ -247,6 +263,7 @@ func mergeFromBootstrapConfigReplace(
 		Deployment: clabernetesapisv1alpha1.ConfigDeployment{
 			ResourcesDefault:     bootstrap.resourcesDefault,
 			NodeSelectorsByImage: bootstrap.nodeSelectorsByImage,
+			ContainerStopSignals: bootstrap.containerStopSignals,
 		},
 		Naming: bootstrap.naming,
 	}

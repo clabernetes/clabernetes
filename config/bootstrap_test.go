@@ -81,6 +81,100 @@ func TestMergeFromBootstrapConfigApplicationImagePullPolicy(t *testing.T) {
 	}
 }
 
+func TestMergeFromBootstrapConfigContainerStopSignals(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name           string
+		configCRExists bool
+		mergeMode      string
+		bootstrap      string
+		existing       bool
+		want           bool
+	}{
+		{
+			name:      "new config uses bootstrap value",
+			bootstrap: "true",
+			want:      true,
+		},
+		{
+			name:           "merge fills unset value",
+			configCRExists: true,
+			bootstrap:      "true",
+			want:           true,
+		},
+		{
+			name:           "merge preserves existing value",
+			configCRExists: true,
+			bootstrap:      "false",
+			existing:       true,
+			want:           true,
+		},
+		{
+			name:           "overwrite replaces existing value",
+			configCRExists: true,
+			mergeMode:      "overwrite",
+			bootstrap:      "false",
+			existing:       true,
+			want:           false,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			bootstrapConfigMap := &k8scorev1.ConfigMap{
+				Data: map[string]string{
+					"containerStopSignals": tt.bootstrap,
+					"mergeMode":            tt.mergeMode,
+				},
+			}
+			config := &clabernetesapisv1alpha1.Config{
+				Spec: clabernetesapisv1alpha1.ConfigSpec{
+					Deployment: clabernetesapisv1alpha1.ConfigDeployment{
+						ContainerStopSignals: tt.existing,
+					},
+				},
+			}
+
+			err := clabernetesconfig.MergeFromBootstrapConfig(
+				bootstrapConfigMap,
+				config,
+				tt.configCRExists,
+			)
+			if err != nil {
+				t.Fatalf("merge bootstrap config: %v", err)
+			}
+
+			if config.Spec.Deployment.ContainerStopSignals != tt.want {
+				t.Fatalf(
+					"expected container stop signals %t, got %t",
+					tt.want,
+					config.Spec.Deployment.ContainerStopSignals,
+				)
+			}
+		})
+	}
+}
+
+func TestMergeFromBootstrapConfigContainerStopSignalsParseError(t *testing.T) {
+	t.Parallel()
+
+	bootstrapConfigMap := &k8scorev1.ConfigMap{
+		Data: map[string]string{
+			"containerStopSignals": "not-a-bool",
+		},
+	}
+
+	err := clabernetesconfig.MergeFromBootstrapConfig(
+		bootstrapConfigMap,
+		&clabernetesapisv1alpha1.Config{},
+		true,
+	)
+	if err == nil {
+		t.Fatal("expected parse error for invalid containerStopSignals value")
+	}
+}
+
 func TestMergeFromBootstrapConfigImagePullSecrets(t *testing.T) {
 	t.Parallel()
 

@@ -122,6 +122,13 @@ globalConfig:
     # The "nodeSelectorsByImage" key holds a map[string]map[string]string.
     nodeSelectorsByImage: {}
 
+    # containerStopSignals, when true, has the direct-pod renderer map an image's OCI stop signal
+    # to the Kubernetes lifecycle.stopSignal field. This requires the cluster (apiserver and
+    # kubelets) to enable the ContainerStopSignals feature gate; c9s cannot enable it for you.
+    # When false, images that declare a stop signal fail planning rather than silently dropping
+    # the signal.
+    containerStopSignals: false
+
   # name is the global setting that governs a Topology's "naming" field when set to "global".
   # valid options are "prefixed" or "non-prefixed", see the api types for more detail.
   naming: prefixed
