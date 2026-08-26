@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	clabcert "github.com/srl-labs/containerlab/cert"
 	clabnodes "github.com/srl-labs/containerlab/nodes"
@@ -85,24 +86,81 @@ func (a Adapter) RunPostDeploy(
 		return err
 	}
 	defer state.close()
-	if err = runImportedRuntimeHook(
-		targetNode.ID,
-		"postDeployment",
-		"imported-post-deploy",
-		"containerlab post-deployment hook panicked",
-		"running imported post-deployment hook",
-		state.runtime,
-		func() error {
-			return state.target.PostDeploy(
-				ctx,
-				&clabnodes.PostDeployParams{Nodes: state.implementations},
-			)
-		},
-	); err != nil {
-		return err
-	}
 
-	return nil
+	return a.runPostDeployHookWithRetry(ctx, targetNode.ID, state)
+}
+
+const (
+	// importedPostDeployRetryWindow bounds how long a failing imported post-deploy hook is
+	// retried in place. Under Docker, containerlab fires post-deploy only after the whole
+	// topology deployed, giving an appliance's own first-boot initialization a head start; a
+	// Kubernetes PostStart fires immediately, and a hook racing that initialization (SSH
+	// host-key generation, service supervision) must receive the same slack. A container
+	// restart would reset the appliance filesystem and rerun the same race, so in-place retry
+	// is the only convergent path; hooks still failing at the window's end stay fatal.
+	importedPostDeployRetryWindow = 90 * time.Second
+	// importedPostDeployRetryBackoff paces those in-place retries.
+	importedPostDeployRetryBackoff = 5 * time.Second
+)
+
+func (a Adapter) runPostDeployHookWithRetry(
+	ctx context.Context,
+	nodeID string,
+	state *importedDeploymentState,
+) error {
+	window := a.PostDeployRetryWindow
+	if window <= 0 {
+		window = importedPostDeployRetryWindow
+	}
+	backoff := a.PostDeployRetryBackoff
+	if backoff <= 0 {
+		backoff = importedPostDeployRetryBackoff
+	}
+	deadline := time.Now().Add(window)
+
+	for {
+		err := runImportedRuntimeHook(
+			nodeID,
+			"postDeployment",
+			"imported-post-deploy",
+			"containerlab post-deployment hook panicked",
+			"running imported post-deployment hook",
+			state.runtime,
+			func() error {
+				return state.target.PostDeploy(
+					ctx,
+					&clabnodes.PostDeployParams{Nodes: state.implementations},
+				)
+			},
+		)
+		if err == nil {
+			return nil
+		}
+
+		// Typed errors are deterministic boundary or panic outcomes; only a plain hook error
+		// can describe a not-yet-initialized appliance worth waiting for.
+		var typed *Error
+		if errors.As(err, &typed) {
+			return err
+		}
+
+		if ctx.Err() != nil || !time.Now().Add(backoff).Before(deadline) {
+			return err
+		}
+
+		fmt.Fprintf(
+			os.Stderr,
+			"lifecycle: imported post-deploy hook failed, retrying in %s: %v\n",
+			backoff,
+			err,
+		)
+
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(backoff):
+		}
+	}
 }
 
 // ImportedHookExecutor runs one imported hook in the OS execution context selected by a direct

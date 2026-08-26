@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	clabcert "github.com/srl-labs/containerlab/cert"
 	clabconstants "github.com/srl-labs/containerlab/constants"
@@ -56,6 +57,11 @@ type Adapter struct {
 	// only by the preparation worker after Kubernetes has scheduled the direct Pod onto its target
 	// node, so host CPU, kernel, memory, and device observations describe the actual worker.
 	CheckDeploymentConditions bool
+	// PostDeployRetryWindow and PostDeployRetryBackoff bound in-place retries of a failed
+	// imported post-deploy hook. Zero values select the production defaults; tests inject
+	// shorter pacing.
+	PostDeployRetryWindow  time.Duration
+	PostDeployRetryBackoff time.Duration
 }
 
 // Evaluation is the initialized imported intent consumed by generic c9s plan mappings.

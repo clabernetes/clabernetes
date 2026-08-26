@@ -385,6 +385,25 @@ func (n *syntheticImportedNode) PostDeployEndpoints(ctx context.Context) error {
 	return n.DefaultNode.PostDeployEndpoints(ctx)
 }
 
+// flakyPostDeploy models an appliance whose own first-boot initialization races the hook: the
+// first invocation reports a plain not-ready error, later invocations succeed.
+func flakyPostDeploy(labDir string) error {
+	attempted := filepath.Join(labDir, "package-post-deploy-attempted")
+	if _, err := os.Stat(attempted); err != nil {
+		if writeErr := os.WriteFile(attempted, []byte("first"), 0o600); writeErr != nil {
+			return writeErr
+		}
+
+		return errors.New("appliance initialization has not finished")
+	}
+
+	return os.WriteFile(
+		filepath.Join(labDir, "package-post-deploy-ran"),
+		[]byte("package-owned"),
+		0o600,
+	)
+}
+
 func (n *syntheticImportedNode) PostDeploy(
 	ctx context.Context,
 	_ *clabnodes.PostDeployParams,
@@ -413,6 +432,10 @@ func (n *syntheticImportedNode) PostDeploy(
 			raw,
 			0o600,
 		)
+	}
+
+	if n.Config().NodeType == "postdeploy-flaky-test" {
+		return flakyPostDeploy(n.Config().LabDir)
 	}
 
 	if n.Config().NodeType == "postdeploy-test" ||
@@ -1097,6 +1120,65 @@ func TestPackageOwnedPostDeployRunsForNewRegistryKindWithoutC9sRegistration(t *t
 	marker, err := os.ReadFile(
 		filepath.Join(nodeRoot, "package-post-deploy-ran"),
 	) //nolint:gosec // test-controlled path.
+	if err != nil || string(marker) != "package-owned" {
+		t.Fatalf("package post-deploy marker = %q, %v", marker, err)
+	}
+}
+
+func TestPackagePostDeployHookRetriesInPlaceWhileApplianceInitializes(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Type = "postdeploy-flaky-test"
+	input.Nodes[0].Definition = mustJSON(t, map[string]string{
+		"kind": syntheticKind, "type": "postdeploy-flaky-test", "image": "example/future:1",
+	})
+	adapter := clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "package-post-deploy-retry-v1",
+		PostDeployRetryWindow:  5 * time.Second,
+		PostDeployRetryBackoff: 25 * time.Millisecond,
+	}
+
+	plan, err := adapter.Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	artifactRoot := t.TempDir()
+
+	nodeRoot := filepath.Join(
+		artifactRoot,
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+	)
+	if err = os.MkdirAll(nodeRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
+		input,
+		*plan,
+		plan.Containers[0].ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = adapter.RunPostDeploy(
+		context.Background(),
+		input,
+		*plan,
+		plan.Containers[0].ID,
+		t.TempDir(),
+		artifactRoot,
+		"",
+		runtime,
+	); err != nil {
+		t.Fatalf("post-deploy hook did not converge across the retry window: %v", err)
+	}
+
+	markerPath := filepath.Join(nodeRoot, "package-post-deploy-ran")
+
+	marker, err := os.ReadFile(markerPath) //nolint:gosec // test-controlled path.
 	if err != nil || string(marker) != "package-owned" {
 		t.Fatalf("package post-deploy marker = %q, %v", marker, err)
 	}
