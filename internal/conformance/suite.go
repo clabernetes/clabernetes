@@ -14,7 +14,7 @@ import (
 	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
-	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
+	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabnodes "github.com/srl-labs/containerlab/nodes"
@@ -502,7 +502,7 @@ func topologyDocumentImages(raw []byte) ([]ImageObservation, error) {
 		return nil, fmt.Errorf("decoding Topology: %w", err)
 	}
 
-	compiled, err := clabernetescontrollerstopology.CompileTopology(
+	compiled, err := clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)

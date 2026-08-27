@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	k8sappsv1 "k8s.io/api/apps/v1"
@@ -58,9 +59,9 @@ topology:
 
 	_, err := reconciler.Reconcile(context.Background(), topology)
 
-	unsupported := &UnsupportedFeaturesError{}
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 	if !errors.As(err, &unsupported) {
-		t.Fatalf("Reconcile() error = %v, want UnsupportedFeaturesError", err)
+		t.Fatalf("Reconcile() error = %v, want clabernetescompiler.UnsupportedFeaturesError", err)
 	}
 
 	actual := &k8sappsv1.Deployment{}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
@@ -96,7 +97,7 @@ func (r *Reconciler) Reconcile(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
 ) (ctrlruntime.Result, error) {
-	compiled, err := CompileTopology(r.Log, topology)
+	compiled, err := clabernetescompiler.CompileTopology(r.Log, topology)
 	if err != nil {
 		r.Log.Criticalf("failed compiling topology definition, err: %s", err)
 
@@ -104,13 +105,13 @@ func (r *Reconciler) Reconcile(
 	}
 
 	rendered := renderedChildren{
-		nodeProfiles: RenderNodeProfiles(
+		nodeProfiles: clabernetescompiler.RenderNodeProfiles(
 			topology,
 			compiled,
 			r.configManagerGetter,
 		),
-		links: RenderLinks(topology, compiled, r.configManagerGetter),
-		nodes: RenderNodes(topology, compiled, r.configManagerGetter),
+		links: clabernetescompiler.RenderLinks(topology, compiled, r.configManagerGetter),
+		nodes: clabernetescompiler.RenderNodes(topology, compiled, r.configManagerGetter),
 	}
 
 	conflicts, err := r.findChildResourceConflicts(ctx, topology, rendered)

@@ -1,4 +1,4 @@
-package topology
+package compiler
 
 import (
 	"fmt"
@@ -101,7 +101,7 @@ func compileContainerlabDefinition(
 	}
 
 	for _, warning := range diagnostics.warnings() {
-		logger.Warnf("topology compile: %s", formatCompilerDiagnostic(warning))
+		logger.Warnf("topology compile: %s", formatDiagnostic(warning))
 	}
 
 	diagnosticErr := diagnostics.err()
@@ -159,7 +159,7 @@ func validateManagementPolicy(
 			continue
 		}
 
-		diagnostics.add(CompilerDiagnostic{
+		diagnostics.add(Diagnostic{
 			Code:    "ignored-management-field",
 			Path:    field.path,
 			Line:    line,
@@ -218,7 +218,7 @@ func validateNodeNetworkModes(
 
 		path := fmt.Sprintf("topology.nodes.%s.network-mode", nodeName)
 		if primary == "" || len(k8svalidation.IsDNS1123Label(primary)) != 0 {
-			diagnostics.add(CompilerDiagnostic{
+			diagnostics.add(Diagnostic{
 				Code: "unsupported-network-mode",
 				Path: path,
 				Message: fmt.Sprintf(
@@ -233,7 +233,7 @@ func validateNodeNetworkModes(
 		}
 
 		if _, exists := nodes[primary]; !exists {
-			diagnostics.add(CompilerDiagnostic{
+			diagnostics.add(Diagnostic{
 				Code: "unknown-network-mode-primary",
 				Path: path,
 				Message: fmt.Sprintf(
@@ -251,7 +251,7 @@ func validateNodeNetworkModes(
 		current := primary
 		for current != "" {
 			if seen[current] {
-				diagnostics.add(CompilerDiagnostic{
+				diagnostics.add(Diagnostic{
 					Code: "network-mode-cycle",
 					Path: path,
 					Message: fmt.Sprintf(
@@ -309,7 +309,7 @@ func validateNodeVocabularyPolicies(
 		node := nodes[nodeName]
 
 		if !restartPolicies[node.RestartPolicy] {
-			diagnostics.add(CompilerDiagnostic{
+			diagnostics.add(Diagnostic{
 				Code: "unsupported-restart-policy",
 				Path: fmt.Sprintf("topology.nodes.%s.restart-policy", nodeName),
 				Message: fmt.Sprintf(
@@ -322,7 +322,7 @@ func validateNodeVocabularyPolicies(
 		}
 
 		if !pullPolicies[node.ImagePullPolicy] {
-			diagnostics.add(CompilerDiagnostic{
+			diagnostics.add(Diagnostic{
 				Code: "unsupported-image-pull-policy",
 				Path: fmt.Sprintf("topology.nodes.%s.image-pull-policy", nodeName),
 				Message: fmt.Sprintf(
@@ -335,7 +335,7 @@ func validateNodeVocabularyPolicies(
 		}
 
 		if !linkApplyModes[node.LinkApplyMode] {
-			diagnostics.add(CompilerDiagnostic{
+			diagnostics.add(Diagnostic{
 				Code: "unsupported-link-apply-mode",
 				Path: fmt.Sprintf("topology.nodes.%s.link-apply-mode", nodeName),
 				Message: fmt.Sprintf(
@@ -364,7 +364,7 @@ func validateNodeAliases(
 			path := fmt.Sprintf("topology.nodes.%s.aliases[%d]", nodeName, index)
 
 			if problems := k8svalidation.IsDNS1035Label(alias); len(problems) != 0 {
-				diagnostics.add(CompilerDiagnostic{
+				diagnostics.add(Diagnostic{
 					Code: "invalid-alias",
 					Path: path,
 					Message: fmt.Sprintf(
@@ -379,7 +379,7 @@ func validateNodeAliases(
 			}
 
 			if owner, exists := owners[alias]; exists {
-				diagnostics.add(CompilerDiagnostic{
+				diagnostics.add(Diagnostic{
 					Code: "duplicate-alias",
 					Path: path,
 					Message: fmt.Sprintf(
@@ -429,8 +429,8 @@ func rejectedContainerlabFieldReason(field string) (string, bool) {
 
 var unknownFieldPattern = regexp.MustCompile(`^line (\d+): field ([^ ]+)`)
 
-func diagnosticFromUnknownField(message string) CompilerDiagnostic {
-	diagnostic := CompilerDiagnostic{
+func diagnosticFromUnknownField(message string) Diagnostic {
+	diagnostic := Diagnostic{
 		Code:    "unsupported-field",
 		Message: message,
 	}
@@ -469,7 +469,7 @@ func normalizeNodePorts(
 			continue
 		}
 
-		diagnostics.add(CompilerDiagnostic{
+		diagnostics.add(Diagnostic{
 			Code: "host-port-pinning",
 			Path: fmt.Sprintf("topology.nodes.%s.ports[%d]", nodeName, idx),
 			Message: fmt.Sprintf(
@@ -520,7 +520,7 @@ func consumeExposePortsLabel(
 
 		typedPort, err := clabernetesutilcontainerlab.ProcessPortDefinition(portDefinition)
 		if err != nil {
-			diagnostics.add(CompilerDiagnostic{
+			diagnostics.add(Diagnostic{
 				Code: "invalid-expose-ports-label",
 				Path: fmt.Sprintf(
 					"topology.nodes.%s.labels.%s[%d]",
@@ -583,7 +583,7 @@ func dropUnusableNodeLabels(
 			reason = strings.Join(problems, "; ")
 		}
 
-		diagnostics.add(CompilerDiagnostic{
+		diagnostics.add(Diagnostic{
 			Code: "unusable-node-label",
 			Path: fmt.Sprintf("topology.nodes.%s.labels.%s", nodeName, key),
 			Message: fmt.Sprintf(
@@ -930,7 +930,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 	for linkIndex, link := range containerlabConfig.Topology.Links {
 		linkPath := fmt.Sprintf("topology.links[%d]", linkIndex)
 		if len(link.Labels) != 0 {
-			diagnostics.add(CompilerDiagnostic{
+			diagnostics.add(Diagnostic{
 				Code:    "unsupported-link-labels",
 				Path:    linkPath + ".labels",
 				Message: "link labels are not preserved by the c9s Link API",
@@ -938,7 +938,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 		}
 
 		if len(link.Vars) != 0 {
-			diagnostics.add(CompilerDiagnostic{
+			diagnostics.add(Diagnostic{
 				Code:    "unsupported-link-vars",
 				Path:    linkPath + ".vars",
 				Message: "link vars are not preserved by the c9s Link API",
@@ -983,7 +983,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 			}
 
 			if nodeName == "mgmt-net" || nodeName == "macvlan" {
-				diagnostics.add(CompilerDiagnostic{
+				diagnostics.add(Diagnostic{
 					Code: "unsupported-special-endpoint",
 					Path: fmt.Sprintf("%s.endpoints[%d]", linkPath, endpointIndex),
 					Message: fmt.Sprintf(
@@ -998,7 +998,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 			}
 
 			if _, exists := containerlabConfig.Topology.Nodes[nodeName]; !exists {
-				diagnostics.add(CompilerDiagnostic{
+				diagnostics.add(Diagnostic{
 					Code:    "unknown-link-endpoint",
 					Path:    fmt.Sprintf("%s.endpoints[%d]", linkPath, endpointIndex),
 					Message: fmt.Sprintf("link endpoint references nonexistent node %q", nodeName),
@@ -1010,7 +1010,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 
 		if endpointAParts[0] == clabernetesapisv1alpha1.LinkHostNodeName &&
 			endpointBParts[0] == clabernetesapisv1alpha1.LinkHostNodeName {
-			diagnostics.add(CompilerDiagnostic{
+			diagnostics.add(Diagnostic{
 				Code:    "invalid-host-link",
 				Path:    linkPath + ".endpoints",
 				Message: "a c9s host link must have exactly one Node endpoint",
@@ -1039,7 +1039,7 @@ func compileContainerlabLinks( //nolint:gocyclo
 	return links, nil
 }
 
-func unsupportedContainerlabLinkTypeDiagnostic(linkType, linkPath string) CompilerDiagnostic {
+func unsupportedContainerlabLinkTypeDiagnostic(linkType, linkPath string) Diagnostic {
 	message := fmt.Sprintf(
 		"native link type %q has no c9s topology-link equivalent",
 		linkType,
@@ -1053,7 +1053,7 @@ func unsupportedContainerlabLinkTypeDiagnostic(linkType, linkPath string) Compil
 		)
 	}
 
-	return CompilerDiagnostic{
+	return Diagnostic{
 		Code:    "unsupported-link-type",
 		Path:    linkPath + ".type",
 		Message: message,
