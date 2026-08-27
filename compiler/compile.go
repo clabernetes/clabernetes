@@ -1,4 +1,4 @@
-package topology
+package compiler
 
 import (
 	"errors"
@@ -29,8 +29,8 @@ type CompileOptions struct {
 	UnsupportedFieldPolicy UnsupportedFieldPolicy
 }
 
-// CompilerDiagnostic describes one source construct that c9s cannot faithfully preserve.
-type CompilerDiagnostic struct {
+// Diagnostic describes one source construct that c9s cannot faithfully preserve.
+type Diagnostic struct {
 	Code    string
 	Path    string
 	Line    int
@@ -44,7 +44,7 @@ type CompilerDiagnostic struct {
 // UnsupportedFeaturesError reports all unsupported source constructs found in one compile pass.
 // Diagnostics are sorted so CLI errors and tests remain stable across map iteration order.
 type UnsupportedFeaturesError struct {
-	Diagnostics []CompilerDiagnostic
+	Diagnostics []Diagnostic
 }
 
 func (e *UnsupportedFeaturesError) Error() string {
@@ -54,13 +54,13 @@ func (e *UnsupportedFeaturesError) Error() string {
 
 	parts := make([]string, 0, len(e.Diagnostics))
 	for _, diagnostic := range e.Diagnostics {
-		parts = append(parts, formatCompilerDiagnostic(diagnostic))
+		parts = append(parts, formatDiagnostic(diagnostic))
 	}
 
 	return "topology contains features unsupported by c9s: " + strings.Join(parts, "; ")
 }
 
-func formatCompilerDiagnostic(diagnostic CompilerDiagnostic) string {
+func formatDiagnostic(diagnostic Diagnostic) string {
 	location := diagnostic.Path
 	if location == "" {
 		location = "topology"
@@ -74,19 +74,19 @@ func formatCompilerDiagnostic(diagnostic CompilerDiagnostic) string {
 }
 
 type compileDiagnostics struct {
-	diagnostics []CompilerDiagnostic
+	diagnostics []Diagnostic
 }
 
 func newCompileDiagnostics() *compileDiagnostics {
 	return &compileDiagnostics{}
 }
 
-func (d *compileDiagnostics) add(diagnostic CompilerDiagnostic) {
+func (d *compileDiagnostics) add(diagnostic Diagnostic) {
 	d.diagnostics = append(d.diagnostics, diagnostic)
 }
 
-func (d *compileDiagnostics) warnings() []CompilerDiagnostic {
-	warnings := []CompilerDiagnostic(nil)
+func (d *compileDiagnostics) warnings() []Diagnostic {
+	warnings := []Diagnostic(nil)
 
 	for _, diagnostic := range d.diagnostics {
 		if diagnostic.Warning {
@@ -98,7 +98,7 @@ func (d *compileDiagnostics) warnings() []CompilerDiagnostic {
 }
 
 func (d *compileDiagnostics) err() error {
-	diagnostics := []CompilerDiagnostic(nil)
+	diagnostics := []Diagnostic(nil)
 
 	for _, diagnostic := range d.diagnostics {
 		if !diagnostic.Warning {

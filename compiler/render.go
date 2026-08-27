@@ -1,4 +1,4 @@
-package topology
+package compiler
 
 import (
 	"crypto/sha256"

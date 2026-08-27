@@ -5,8 +5,8 @@ import (
 	"sort"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
-	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	sigsyaml "sigs.k8s.io/yaml"
 )
@@ -42,13 +42,13 @@ type statuslessNodeProfile struct {
 // compiler would emit for the equivalent Topology (minus owner references).
 func (c *Clabverter) handleCRManifests(
 	topology *clabernetesapisv1alpha1.Topology,
-	compiled *clabernetescontrollerstopology.CompiledTopology,
+	compiled *clabernetescompiler.CompiledTopology,
 ) error {
 	content := make([]byte, 0)
 
 	var err error
 
-	for _, profile := range clabernetescontrollerstopology.RenderNodeProfiles(
+	for _, profile := range clabernetescompiler.RenderNodeProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -66,7 +66,7 @@ func (c *Clabverter) handleCRManifests(
 		}
 	}
 
-	for _, link := range clabernetescontrollerstopology.RenderLinks(
+	for _, link := range clabernetescompiler.RenderLinks(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -84,7 +84,7 @@ func (c *Clabverter) handleCRManifests(
 		}
 	}
 
-	for _, node := range clabernetescontrollerstopology.RenderNodes(
+	for _, node := range clabernetescompiler.RenderNodes(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -118,7 +118,7 @@ func (c *Clabverter) handleCRManifests(
 
 func (c *Clabverter) compileDirectTopology() (
 	*clabernetesapisv1alpha1.Topology,
-	*clabernetescontrollerstopology.CompiledTopology,
+	*clabernetescompiler.CompiledTopology,
 	error,
 ) {
 	topology, err := c.buildInMemoryTopology()
@@ -126,7 +126,7 @@ func (c *Clabverter) compileDirectTopology() (
 		return nil, nil, err
 	}
 
-	compiled, err := clabernetescontrollerstopology.CompileTopology(c.logger, topology)
+	compiled, err := clabernetescompiler.CompileTopology(c.logger, topology)
 	if err != nil {
 		c.logger.Criticalf("failed compiling topology definition, error: %s", err)
 

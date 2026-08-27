@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,7 +19,7 @@ import (
 func (r *Reconciler) reconcileStatus(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
+	compiled *clabernetescompiler.CompiledTopology,
 ) error {
 	return r.reconcileStatusWithError(ctx, topology, compiled, "")
 }
@@ -26,7 +27,7 @@ func (r *Reconciler) reconcileStatus(
 func (r *Reconciler) reconcileStatusWithError(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
+	compiled *clabernetescompiler.CompiledTopology,
 	topologyError string,
 ) error {
 	ownedNodes := &clabernetesapisv1alpha1.NodeList{}

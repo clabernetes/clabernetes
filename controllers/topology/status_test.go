@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
@@ -166,10 +167,10 @@ func TestReconcileStatusRemainsBounded(t *testing.T) {
 			UID:       "topology-uid",
 		},
 	}
-	compiled := &CompiledTopology{
+	compiled := &clabernetescompiler.CompiledTopology{
 		Kind:  "containerlab",
 		Nodes: make(map[string]*clabernetesutilcontainerlab.NodeDefinition),
-		Links: make([]CompiledLink, 127),
+		Links: make([]clabernetescompiler.CompiledLink, 127),
 	}
 	objects := make([]ctrlruntimeclient.Object, 1, 129)
 	objects[0] = topology

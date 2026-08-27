@@ -1,4 +1,4 @@
-package topology_test
+package compiler_test
 
 import (
 	"errors"
@@ -9,21 +9,21 @@ import (
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 )
 
 func compileDefinition(
 	t *testing.T,
 	definition string,
-) (*clabernetescontrollerstopology.CompiledTopology, error) {
+) (*clabernetescompiler.CompiledTopology, error) {
 	t.Helper()
 
 	topology := &clabernetesapisv1alpha1.Topology{}
 	topology.Spec.Definition.Containerlab = definition
 
-	return clabernetescontrollerstopology.CompileTopology(
+	return clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)
@@ -78,7 +78,7 @@ topology:
     - endpoints: ["srl1:e1-2", "host:ens5"]
 `
 
-func compileFlattenTest(t *testing.T) *clabernetescontrollerstopology.CompiledTopology {
+func compileFlattenTest(t *testing.T) *clabernetescompiler.CompiledTopology {
 	t.Helper()
 
 	topology := &clabernetesapisv1alpha1.Topology{}
@@ -86,7 +86,7 @@ func compileFlattenTest(t *testing.T) *clabernetescontrollerstopology.CompiledTo
 	topology.Namespace = "clabernetes"
 	topology.Spec.Definition.Containerlab = flattenTestDefinition
 
-	compiled, err := clabernetescontrollerstopology.CompileTopology(
+	compiled, err := clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)
@@ -327,7 +327,7 @@ topology:
         c9s.run/exposePorts: "9273/tcp, not-a-port"
 `
 
-	_, err := clabernetescontrollerstopology.CompileTopology(
+	_, err := clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)
@@ -335,7 +335,7 @@ topology:
 		t.Fatal("expected invalid exposePorts entry to fail compilation")
 	}
 
-	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
 	}
@@ -372,7 +372,7 @@ topology:
         c9s.run/exposePorts: "57400"
 `
 
-	compiled, err := clabernetescontrollerstopology.CompileTopology(
+	compiled, err := clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)
@@ -435,7 +435,7 @@ topology:
         c9s.run/exposePorts: %q
 `, test.value)
 
-			_, err := clabernetescontrollerstopology.CompileTopology(
+			_, err := clabernetescompiler.CompileTopology(
 				&claberneteslogging.FakeInstance{},
 				topology,
 			)
@@ -443,7 +443,7 @@ topology:
 				t.Fatal("expected invalid exposePorts entries to fail compilation")
 			}
 
-			unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+			unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 			if !errors.As(err, &unsupported) {
 				t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
 			}
@@ -493,7 +493,7 @@ func TestCompileContainerlabLabels(t *testing.T) {
 func TestCompileContainerlabLinks(t *testing.T) {
 	compiled := compileFlattenTest(t)
 
-	expected := []clabernetescontrollerstopology.CompiledLink{
+	expected := []clabernetescompiler.CompiledLink{
 		{
 			EndpointA: clabernetesapisv1alpha1.LinkEndpointSpec{
 				NodeName:      "srl1",
@@ -643,7 +643,7 @@ topology:
 		t.Fatal("strict compilation accepted lossy topology")
 	}
 
-	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
 	}
@@ -771,7 +771,7 @@ topology:
 		t.Fatal("unportable vocabulary values must fail compilation")
 	}
 
-	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
 	}
@@ -815,7 +815,7 @@ topology:
 		t.Fatal("rejected vocabulary must fail compilation")
 	}
 
-	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
 	}
@@ -891,11 +891,11 @@ topology:
     n1: {kind: linux, image: alpine}
 `
 
-	_, err := clabernetescontrollerstopology.CompileTopologyWithOptions(
+	_, err := clabernetescompiler.CompileTopologyWithOptions(
 		&claberneteslogging.FakeInstance{},
 		topology,
-		clabernetescontrollerstopology.CompileOptions{
-			UnsupportedFieldPolicy: clabernetescontrollerstopology.UnsupportedFieldPolicy("warn"),
+		clabernetescompiler.CompileOptions{
+			UnsupportedFieldPolicy: clabernetescompiler.UnsupportedFieldPolicy("warn"),
 		},
 	)
 	if err == nil {
@@ -921,12 +921,12 @@ topology:
 	if err == nil {
 		t.Fatal("compiler accepted lossy Link metadata")
 	}
-	unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 	if !errors.As(err, &unsupported) {
 		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
 	}
 
-	want := []clabernetescontrollerstopology.CompilerDiagnostic{
+	want := []clabernetescompiler.Diagnostic{
 		{
 			Code: "unsupported-link-labels", Path: "topology.links[0].labels",
 			Message: "link labels are not preserved by the c9s Link API",
@@ -1004,7 +1004,7 @@ topology:
 			topology := &clabernetesapisv1alpha1.Topology{}
 			topology.Spec.Definition.Containerlab = definition
 
-			_, err := clabernetescontrollerstopology.CompileTopology(
+			_, err := clabernetescompiler.CompileTopology(
 				&claberneteslogging.FakeInstance{},
 				topology,
 			)
@@ -1012,7 +1012,7 @@ topology:
 				t.Fatal("compiler accepted structurally unsupported topology")
 			}
 
-			unsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+			unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 			if !errors.As(err, &unsupported) {
 				t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
 			}

@@ -1,4 +1,4 @@
-package topology_test
+package compiler_test
 
 import (
 	"encoding/json"
@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	k8scorev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -18,7 +18,7 @@ import (
 
 func renderTestTopology(t *testing.T) (
 	*clabernetesapisv1alpha1.Topology,
-	*clabernetescontrollerstopology.CompiledTopology,
+	*clabernetescompiler.CompiledTopology,
 ) {
 	t.Helper()
 
@@ -69,7 +69,7 @@ func renderTestTopology(t *testing.T) (
 	}
 	topology.Spec.ImagePull.Policy = string(k8scorev1.PullAlways)
 
-	compiled, err := clabernetescontrollerstopology.CompileTopology(
+	compiled, err := clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)
@@ -84,7 +84,7 @@ func renderTestTopology(t *testing.T) (
 func TestRenderNodes(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	nodes := clabernetescontrollerstopology.RenderNodes(
+	nodes := clabernetescompiler.RenderNodes(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -188,24 +188,24 @@ topology:
 		"primary": {{FilePath: "/etc/device/blob", URL: "https://example.test/blob"}},
 	}
 
-	compiled, err := clabernetescontrollerstopology.CompileTopology(
+	compiled, err := clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes := clabernetescontrollerstopology.RenderNodes(
+	nodes := clabernetescompiler.RenderNodes(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
-	links := clabernetescontrollerstopology.RenderLinks(
+	links := clabernetescompiler.RenderLinks(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
-	profiles := clabernetescontrollerstopology.RenderNodeProfiles(
+	profiles := clabernetescompiler.RenderNodeProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -276,7 +276,7 @@ topology:
         c9s.run/exposePorts: "9273/tcp"
 `
 
-	compiled, err := clabernetescontrollerstopology.CompileTopology(
+	compiled, err := clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)
@@ -284,7 +284,7 @@ topology:
 		t.Fatalf("unexpected error compiling topology: %s", err)
 	}
 
-	nodes := clabernetescontrollerstopology.RenderNodes(
+	nodes := clabernetescompiler.RenderNodes(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -310,7 +310,7 @@ topology:
 func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	nodes := clabernetescontrollerstopology.RenderNodes(
+	nodes := clabernetescompiler.RenderNodes(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -349,7 +349,7 @@ func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
 func TestRenderLinks(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	links := clabernetescontrollerstopology.RenderLinks(
+	links := clabernetescompiler.RenderLinks(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -378,7 +378,7 @@ func TestRenderLinks(t *testing.T) {
 func TestRenderNodeProfiles(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	profiles := clabernetescontrollerstopology.RenderNodeProfiles(
+	profiles := clabernetescompiler.RenderNodeProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -445,7 +445,7 @@ func TestRenderNodeProfilesPreservesAffinity(t *testing.T) {
 	}
 	topology.Spec.Deployment.Scheduling.Affinity = affinity
 
-	profiles := clabernetescontrollerstopology.RenderNodeProfiles(
+	profiles := clabernetescompiler.RenderNodeProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -484,7 +484,7 @@ func TestRenderNodeProfilesOmitsUnusedSharedProfile(t *testing.T) {
 		},
 	}
 
-	profiles := clabernetescontrollerstopology.RenderNodeProfiles(
+	profiles := clabernetescompiler.RenderNodeProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,

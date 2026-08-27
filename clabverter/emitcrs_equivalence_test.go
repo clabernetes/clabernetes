@@ -12,10 +12,10 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesclabverter "github.com/clabernetes/clabernetes/clabverter"
+	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
-	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
@@ -60,7 +60,7 @@ func TestDirectManifestCanonicalPlanningInputMatchesTopologyCompilation(t *testi
 
 	topology := controllerTopology(t, directManifestEquivalenceDefinition)
 
-	compiled, err := clabernetescontrollerstopology.CompileTopology(
+	compiled, err := clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)
@@ -68,17 +68,17 @@ func TestDirectManifestCanonicalPlanningInputMatchesTopologyCompilation(t *testi
 		t.Fatal(err)
 	}
 
-	controllerProfiles := clabernetescontrollerstopology.RenderNodeProfiles(
+	controllerProfiles := clabernetescompiler.RenderNodeProfiles(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
-	controllerLinks := clabernetescontrollerstopology.RenderLinks(
+	controllerLinks := clabernetescompiler.RenderLinks(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
-	controllerNodes := clabernetescontrollerstopology.RenderNodes(
+	controllerNodes := clabernetescompiler.RenderNodes(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -122,13 +122,13 @@ topology:
 	}
 
 	topology := controllerTopology(t, definition)
-	_, controllerErr := clabernetescontrollerstopology.CompileTopology(
+	_, controllerErr := clabernetescompiler.CompileTopology(
 		&claberneteslogging.FakeInstance{},
 		topology,
 	)
-	directUnsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	directUnsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 
-	controllerUnsupported := &clabernetescontrollerstopology.UnsupportedFeaturesError{}
+	controllerUnsupported := &clabernetescompiler.UnsupportedFeaturesError{}
 	if !errors.As(directErr, &directUnsupported) ||
 		!errors.As(controllerErr, &controllerUnsupported) ||
 		!reflect.DeepEqual(directUnsupported.Diagnostics, controllerUnsupported.Diagnostics) {
