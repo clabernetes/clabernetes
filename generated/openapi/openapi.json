@@ -4140,6 +4140,11 @@
                                 "description": "NodeCount is the number of (containerlab) nodes this Topology compiled to.",
                                 "type": "integer"
                             },
+                            "observedGeneration": {
+                                "description": "ObservedGeneration is the metadata.generation of the Topology whose compiled child\nresources were most recently applied by the controller. Clients compare it against\nmetadata.generation to know whether the reported readiness refers to the current\ndefinition.",
+                                "format": "int64",
+                                "type": "integer"
+                            },
                             "readyNodeCount": {
                                 "description": "ReadyNodeCount is the number of nodes of this Topology that currently report ready.",
                                 "type": "integer"

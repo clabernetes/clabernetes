@@ -31,6 +31,7 @@ const (
 // topology file (ex: containerlab topology), and any associated configurations.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path="topologies"
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".status.kind",name=Kind,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.topologyState",name=State,type=string
 // +kubebuilder:printcolumn:JSONPath=".metadata.creationTimestamp",name=Age,type=date
@@ -87,6 +88,12 @@ type TopologyStatus struct {
 	// Kind is the topology kind this CR represents -- "containerlab".
 	// +kubebuilder:validation:Enum=containerlab
 	Kind string `json:"kind"`
+	// ObservedGeneration is the metadata.generation of the Topology whose compiled child
+	// resources were most recently applied by the controller. Clients compare it against
+	// metadata.generation to know whether the reported readiness refers to the current
+	// definition.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// NodeCount is the number of (containerlab) nodes this Topology compiled to.
 	// +optional
 	NodeCount int `json:"nodeCount,omitempty"`

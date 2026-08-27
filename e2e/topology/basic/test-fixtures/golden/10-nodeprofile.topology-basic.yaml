@@ -18,7 +18,6 @@ spec:
   expose:
     disableAutoExpose: false
     disableExpose: false
-    exposeType: LoadBalancer
     useNodeMgmtIpv4Address: false
     useNodeMgmtIpv6Address: false
   statusProbes:

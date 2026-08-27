@@ -46,15 +46,30 @@ func (r *countingTopologyReader) Get(
 
 var errInjectedTopologyConflict = errors.New("injected conflict")
 
-func (c *topologyConflictOnceClient) Update(
+// Status intercepts the status subresource writer -- the reconciler writes Topology status
+// exclusively through it.
+func (c *topologyConflictOnceClient) Status() ctrlruntimeclient.SubResourceWriter {
+	return &topologyConflictOnceStatusWriter{
+		SubResourceWriter: c.Client.Status(),
+		parent:            c,
+	}
+}
+
+type topologyConflictOnceStatusWriter struct {
+	ctrlruntimeclient.SubResourceWriter
+
+	parent *topologyConflictOnceClient
+}
+
+func (w *topologyConflictOnceStatusWriter) Update(
 	ctx context.Context,
 	obj ctrlruntimeclient.Object,
-	opts ...ctrlruntimeclient.UpdateOption,
+	opts ...ctrlruntimeclient.SubResourceUpdateOption,
 ) error {
-	c.updateCalls++
-	if c.updateCalls == 1 {
-		if c.beforeConflict != nil {
-			err := c.beforeConflict(ctx, obj)
+	w.parent.updateCalls++
+	if w.parent.updateCalls == 1 {
+		if w.parent.beforeConflict != nil {
+			err := w.parent.beforeConflict(ctx, obj)
 			if err != nil {
 				return err
 			}
@@ -67,7 +82,7 @@ func (c *topologyConflictOnceClient) Update(
 		)
 	}
 
-	return c.Client.Update(ctx, obj, opts...)
+	return w.SubResourceWriter.Update(ctx, obj, opts...)
 }
 
 func TestUpdateTopologyStatusRetriesResourceVersionConflict(t *testing.T) {
@@ -86,6 +101,7 @@ func TestUpdateTopologyStatusRetriesResourceVersionConflict(t *testing.T) {
 	baseClient := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(topology).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Topology{}).
 		Build()
 	client := &topologyConflictOnceClient{
 		Client: baseClient,
@@ -99,7 +115,7 @@ func TestUpdateTopologyStatusRetriesResourceVersionConflict(t *testing.T) {
 
 			current.Status.TopologyState = clabernetesapisv1alpha1.TopologyStateDegraded
 
-			return baseClient.Update(ctx, current)
+			return baseClient.Status().Update(ctx, current)
 		},
 	}
 	apiReader := &countingTopologyReader{Reader: baseClient}
@@ -186,6 +202,7 @@ func TestReconcileStatusRemainsBounded(t *testing.T) {
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(objects...).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Topology{}).
 		Build()
 	reconciler := &Reconciler{
 		Log:    &claberneteslogging.FakeInstance{},
