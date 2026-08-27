@@ -150,6 +150,7 @@ func TestReconcileChildConflictBlocksChildrenAndClearsAfterResolution(t *testing
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(topology, foreignNode, foreignLink, foreignProfile).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Topology{}).
 		Build()
 	reconciler := &Reconciler{
 		Log:                 &claberneteslogging.FakeInstance{},

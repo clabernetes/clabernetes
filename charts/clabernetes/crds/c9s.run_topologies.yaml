@@ -1573,6 +1573,14 @@ spec:
                 description: NodeCount is the number of (containerlab) nodes this
                   Topology compiled to.
                 type: integer
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the metadata.generation of the Topology whose compiled child
+                  resources were most recently applied by the controller. Clients compare it against
+                  metadata.generation to know whether the reported readiness refers to the current
+                  definition.
+                format: int64
+                type: integer
               readyNodeCount:
                 description: ReadyNodeCount is the number of nodes of this Topology
                   that currently report ready.
@@ -1599,4 +1607,5 @@ spec:
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}

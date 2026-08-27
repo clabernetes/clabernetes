@@ -3833,6 +3833,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyStatus(
 							Format:      "",
 						},
 					},
+					"observedGeneration": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedGeneration is the metadata.generation of the Topology whose compiled child resources were most recently applied by the controller. Clients compare it against metadata.generation to know whether the reported readiness refers to the current definition.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
 					"nodeCount": {
 						SchemaProps: spec.SchemaProps{
 							Description: "NodeCount is the number of (containerlab) nodes this Topology compiled to.",

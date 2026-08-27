@@ -16,20 +16,7 @@ spec:
             image: ghcr.io/nokia/srlinux
             labels:
               c9s.run/exposePorts: "9273/tcp"
-  deployment:
-    persistence:
-      enabled: false
-    scheduling: {}
-  expose:
-    disableAutoExpose: false
-    disableExpose: false
-    exposeType: LoadBalancer
-  imagePull: {}
   naming: global
-  statusProbes:
-    enabled: false
-    probeConfiguration:
-      startupSeconds: 0
 status:
   kind: containerlab
   nodeCount: 1

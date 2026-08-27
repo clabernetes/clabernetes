@@ -56,10 +56,11 @@ func (r *Reconciler) reconcileStatusWithError(
 	}
 
 	desiredStatus := clabernetesapisv1alpha1.TopologyStatus{
-		Kind:           compiled.Kind,
-		NodeCount:      len(compiled.Nodes),
-		ReadyNodeCount: readyNodeCount,
-		LinkCount:      len(compiled.Links),
+		Kind:               compiled.Kind,
+		ObservedGeneration: topology.GetGeneration(),
+		NodeCount:          len(compiled.Nodes),
+		ReadyNodeCount:     readyNodeCount,
+		LinkCount:          len(compiled.Links),
 		TopologyReady: topologyError == "" &&
 			len(compiled.Nodes) > 0 &&
 			readyNodeCount == len(compiled.Nodes),
@@ -131,7 +132,9 @@ func (r *Reconciler) updateTopologyStatus(
 
 		current.Status = *desiredStatus
 
-		updateErr := r.Client.Update(ctx, current)
+		// The Topology CRD serves status as a subresource, so this write can never touch the
+		// spec -- api-server defaulted spec fields stay exactly as stored.
+		updateErr := r.Client.Status().Update(ctx, current)
 		if updateErr == nil {
 			updated = current
 		}
