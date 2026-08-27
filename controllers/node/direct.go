@@ -733,6 +733,11 @@ func compileDirectExposedPorts(
 		}
 	}
 	portsByNode := map[string]map[string]clabernetesapisv1alpha1.NodeExposedPort{}
+	// portOwners tracks which member holds each Pod destination port. Group members share one
+	// Pod network namespace, so a port can only belong to one member: explicitly declared ports
+	// take precedence over image-derived ones, image-derived duplicates follow first-member-wins
+	// exactly like containerlab's first-come allocation on a shared namespace.
+	portOwners := map[string]string{}
 	for _, container := range plan.Containers {
 		if nodesByID[container.NodeID] == nil {
 			return nil, planInputError(
@@ -750,6 +755,20 @@ func compileDirectExposedPorts(
 			if profile.DisableAutoExpose && !explicit[container.NodeID][key] {
 				continue
 			}
+			if owner, taken := portOwners[key]; taken && owner != container.NodeID {
+				if explicit[container.NodeID][key] && explicit[owner][key] {
+					return nil, planInputError(
+						clabernetesinternaldeviceplan.ErrorUnsupported,
+						"services.ports",
+						"grouped direct Nodes expose the same Pod destination port",
+					)
+				}
+				if !explicit[container.NodeID][key] {
+					continue
+				}
+				delete(portsByNode[owner], key)
+			}
+			portOwners[key] = container.NodeID
 			portsByNode[container.NodeID][key] = clabernetesapisv1alpha1.NodeExposedPort{
 				DestinationPort: planned.Number,
 				ExposePort:      planned.Number,
