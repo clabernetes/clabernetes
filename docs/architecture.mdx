@@ -8,8 +8,8 @@ import { ArchitectureReactFlowDiagram } from '@/components/architecture-react-fl
 
 ## Overview
 
-clabernetes is a collection of kubernetes custom resources and controllers that reconcile those
-resources. The ultimate goal of the controllers is to render a network topology in the cluster:
+clabernetes is a collection of Kubernetes custom resources and controllers that reconcile those
+resources. The goal of the controllers is to render a network topology in the cluster:
 one device Pod per (containerlab) node running the actual network-device image as a regular
 application container, network node interfaces stitched together across pods, and the management
 interfaces of the nodes exposed.
@@ -27,12 +27,12 @@ The model in one picture:
 Everything below the "PRIMARY API" line works identically whether the custom resources
 were written by a person, by tooling, or by the Topology compiler.
 
-## The Primary API: Nodes and Links
+## The primary API: Nodes and Links
 
-A `Node` custom resource represents a single containerlab node: its spec is simply what a
+A `Node` custom resource represents a single containerlab node: its spec is what a
 human would write for that node in a containerlab topology file (flat, verbatim containerlab
-vocabulary). A `Link` custom resource represents a single wire between two nodes. That's the
-whole authoritative api: apply Node and Link objects and the controllers render a running,
+vocabulary). A `Link` custom resource represents a single wire between two nodes. That is the
+whole authoritative API: apply Node and Link objects and the controllers render a running,
 wired lab, with no Topology object required.
 
 The object name of a Node *is* the containerlab node name: the device pod hostname and the
@@ -53,9 +53,9 @@ large labs should use clabverter's direct primitive output instead of persisting
 
 ## Components
 
-### Controllers & Custom Resource Definitions
+### Controllers and custom resource definitions
 
-The "brains" of clabernetes is the manager deployment which runs three cooperating controllers:
+The manager Deployment runs three cooperating controllers:
 
 - the **node controller** turns every Node (or `network-mode: container:<primary>` group of
   Nodes) into one Recreate Deployment of a direct device Pod, a per-node "fabric" service
@@ -136,7 +136,7 @@ VM-backed kinds stay ordinary application containers running their packaged qemu
 entrypoint; the plan grants `/dev/kvm`, tap access, and resources, and clabernetes does not
 launch the VM itself.
 
-### Inter-Node Connectivity
+### Inter-node connectivity
 
 The device always sees a plain interface leg; every kind tolerates that, including kinds
 that adopt the interfaces presented to them. All connectivity is realized by the Pod's own
@@ -190,7 +190,7 @@ identity, and gateway traffic never crosses the mesh. Lab members also resolve e
 node name through namespace-local Services; declared `aliases` add extra headless Services
 bound to the same Pod.
 
-### Exposing Nodes
+### Exposing nodes
 
 Ports listed in a node definition (plus a sensible default set unless auto-expose is
 disabled) are allocated into the Node status and exposed through a per-node service,
@@ -208,22 +208,14 @@ and failing typed action.
 
 ### Clabverter
 
-While the goal of clabernetes is to take a containerlab topology and "directly" translate it
-into a running clabernetes topology in your cluster, there are a few things that cannot be
-translated directly. Chief among those is startup configurations or any other type of file
-that you would like to mount to some path on one of your nodes. Containerlab solves this
-problem by letting you run binaries on your local machine and then mounting/copying files
-relative to where you ran the command into their appropriate location(s).
+Containerlab labs often mount local files into nodes: startup configurations, licenses,
+scripts, anything that lives next to the topology file on the host. clabernetes only sees the
+Kubernetes API, so those local files must become Kubernetes objects before the cluster can
+mount them.
 
-As clabernetes is not running on your machine, and you only interact with it via the
-kubernetes api, we don't have any way to automagically copy or mount any files from your
-machine.
-
-To work around this, the "clabverter" tool was created. This is a very simple cli tool that
-can be pointed at a containerlab topology (either locally or at a URL). This tool determines
-if any files would be mounted when using this topology file, and if so renders kubernetes
-configmaps containing the file contents and a Topology that appropriately mounts them into
-the pods.
+clabverter is the CLI tool that does this. Pointed at a containerlab topology (a local path or
+a URL), it finds every file the topology would mount, renders ConfigMaps with their contents,
+and emits a Topology that mounts them into the right places in the Pods.
 
 clabverter can also skip the Topology object entirely: `--emit-crs` renders the primitive
 NodeProfile/Link/Node manifests directly, using the same compile and render pipeline as the

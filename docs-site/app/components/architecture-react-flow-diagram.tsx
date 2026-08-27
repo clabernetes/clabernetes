@@ -18,7 +18,6 @@ import {
   ScrollText,
   Server,
   Settings,
-  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -123,7 +122,7 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
       icon: Box,
       title: 'Node controller',
       tone: 'cyan',
-      chips: ['fabric <name>-vx', 'expose svc', 'alias svc'],
+      chips: ['fabric <name>-wire', 'expose svc', 'alias svc'],
     },
   },
   {
@@ -133,7 +132,7 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
     style: { width: 300 },
     data: {
       badge: 'reconcile',
-      detail: 'validates links · allocates cluster-wide tunnel ids',
+      detail: 'validates links · allocates namespace-unique wire ids',
       icon: Cable,
       title: 'Link controller',
       tone: 'indigo',
@@ -166,7 +165,7 @@ const flowNodes: Node<ArchitectureFlowNodeData>[] = [
       tone: 'emerald',
       chips: [
         'preparation init',
-        'connectivity sidecar · in-Pod VXLAN',
+        'connectivity sidecar · fabric wire',
         'device container(s)',
       ],
     },
@@ -259,7 +258,7 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
-    label: 'tunnel ids',
+    label: 'wire ids',
   },
 ];
 
@@ -344,13 +343,6 @@ export function ArchitectureReactFlowDiagram() {
       role={isFullscreen ? 'dialog' : undefined}
     >
       <div className="c9s-react-flow-heading">
-        {/* <div>
-          <p className="c9s-react-flow-kicker">
-            <Sparkles aria-hidden="true" className="size-3" />
-            comparison
-          </p>
-          <p className="c9s-react-flow-title-large">React Flow · smoothstep edges</p>
-        </div> */}
         {isFullscreen ? (
           <span className="c9s-react-flow-status">press esc to exit</span>
         ) : null}
@@ -366,7 +358,6 @@ export function ArchitectureReactFlowDiagram() {
           defaultEdgeOptions={{
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              // color: '#20d9e7',
             },
           }}
           edges={flowEdges}
@@ -402,7 +393,7 @@ export function ArchitectureReactFlowDiagram() {
       </div>
       <figcaption className="sr-only">
         Topology compiles into NodeProfile, Node, and Link resources; the node controller
-        runs planning pods and renders device pods, while the link controller allocates tunnel
+        runs planning pods and renders device pods, while the link controller allocates wire
         ids consumed by each pod's connectivity sidecar to wire the pods together.
       </figcaption>
     </figure>

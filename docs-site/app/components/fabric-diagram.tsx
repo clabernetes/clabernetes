@@ -1,5 +1,4 @@
 import c9sLogo from '@/assets/c9s-logo-clean.png';
-import containerlabMark from '@/assets/clab-chevron.svg';
 import kubernetesLogo from '@/assets/kubernetes-logo.svg';
 import { SwitchIcon } from '@/components/switch-icon';
 import { Laptop } from 'lucide-react';
@@ -48,9 +47,9 @@ function FabricNode({
 }: (typeof fabricNodes)[number]) {
   return (
     <div
-      className={`c9s-fabric-node absolute z-20 flex h-[36%] w-[27%] flex-col overflow-hidden rounded-xl border bg-fd-background/90 p-2 shadow-lg backdrop-blur sm:rounded-2xl sm:p-3 ${position}`}
+      className={`c9s-fabric-node absolute z-20 flex h-[36%] w-[27%] flex-col overflow-hidden rounded-xl border bg-fd-background p-2 shadow-sm sm:rounded-2xl sm:p-3 ${position}`}
     >
-      <div className="relative flex items-center justify-between gap-1">
+      <div className="relative flex items-center gap-1">
         <span className="flex items-center gap-1 text-[8px] font-medium text-fd-muted-foreground sm:text-[10px]">
           <img
             alt=""
@@ -60,18 +59,9 @@ function FabricNode({
           />
           <span>pod</span>
         </span>
-        <span className="flex items-center gap-1 text-[8px] font-medium text-fd-muted-foreground sm:text-[10px]">
-          <img
-            alt=""
-            aria-hidden="true"
-            className="size-4 sm:size-5"
-            src={containerlabMark}
-          />
-          <span>clab</span>
-        </span>
       </div>
       <SwitchIcon
-        className={`relative mx-auto mt-1.5 size-8 shadow-sm sm:mt-3 sm:size-11 ${tone}`}
+        className={`relative mx-auto mt-1.5 size-8 sm:mt-3 sm:size-11 ${tone}`}
       />
       <p className="mt-1 truncate text-center font-mono text-[8px] font-semibold sm:mt-1.5 sm:text-[10px]">
         {name}
@@ -80,27 +70,25 @@ function FabricNode({
   );
 }
 
-export function IntroFabricDiagram() {
+/**
+ * `fill` makes the stage take the height of its grid cell instead of its own
+ * aspect ratio, so it can align exactly with the column beside it.
+ */
+export function IntroFabricDiagram({ fill = false }: { fill?: boolean }) {
   return (
-    <div className="not-prose relative mx-auto w-full max-w-[34rem]">
+    <div
+      className={`not-prose relative mx-auto w-full ${
+        fill ? 'h-full max-w-[32rem]' : 'max-w-[30rem]'
+      }`}
+    >
       <div
-        aria-hidden="true"
-        className="absolute inset-12 -z-10 rounded-full bg-cyan-400/20 blur-3xl dark:bg-cyan-400/15"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute -top-8 right-4 -z-10 size-48 rounded-full bg-fuchsia-500/20 blur-3xl"
-      />
-
-      <div className="c9s-fabric-stage relative aspect-square overflow-hidden rounded-[2.25rem] border border-white/50 bg-white/55 shadow-2xl shadow-cyan-950/10 backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.035] dark:shadow-black/30">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-gradient-to-br from-fuchsia-500/10 via-transparent to-cyan-400/15"
-        />
-
+        className={`c9s-fabric-stage relative overflow-hidden rounded-2xl border bg-fd-card shadow-md ${
+          fill ? 'h-full min-h-[24rem]' : 'aspect-[6/5]'
+        }`}
+      >
         <div className="absolute inset-x-5 top-5 z-30 flex items-center justify-between gap-3 sm:inset-x-7 sm:top-7">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border bg-fd-background/80 p-1.5 shadow-sm backdrop-blur">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border bg-fd-background p-1.5">
               <img
                 alt=""
                 aria-hidden="true"
@@ -110,20 +98,17 @@ export function IntroFabricDiagram() {
             </div>
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold sm:text-sm">
-                Distributed labs
+                Distributed lab
               </p>
               <p className="truncate text-[9px] text-fd-muted-foreground sm:text-[10px]">
-                Declaratively defined, intelligently distributed
+                One device Pod per network node
               </p>
             </div>
           </div>
-          <span className="shrink-0 rounded-full border bg-fd-background/75 px-2 py-1 text-[9px] font-semibold text-fd-muted-foreground backdrop-blur sm:px-2.5 sm:text-[10px]">
-            A pod per network node
-          </span>
         </div>
 
         <div
-          aria-label="A leaf-spine datacenter fabric with two spine switches and three leaf switches distributed across five Kubernetes pods, each running containerlab"
+          aria-label="A leaf-spine datacenter fabric with two spine switches and three leaf switches, each running in its own Kubernetes pod"
           className="absolute inset-x-5 top-[21%] bottom-5 sm:inset-x-7 sm:bottom-7"
           role="img"
         >
@@ -195,12 +180,12 @@ function TryC9sNode({
 }: (typeof tryC9sNodes)[number]) {
   return (
     <div
-      className={`c9s-fabric-node absolute z-20 flex aspect-square w-[28%] flex-col items-center justify-center overflow-visible rounded-xl border bg-fd-background/90 p-2 shadow-lg backdrop-blur sm:w-[18%] sm:rounded-2xl sm:px-3 sm:py-4 ${position}`}
+      className={`c9s-fabric-node absolute z-20 flex aspect-square w-[28%] flex-col items-center justify-center overflow-visible rounded-xl border bg-fd-background p-2 shadow-sm sm:w-[18%] sm:rounded-2xl sm:px-3 sm:py-4 ${position}`}
     >
       <span className="text-center text-[8px] font-medium text-fd-muted-foreground sm:text-[10px]">
         {kind}
       </span>
-      <div className="mt-2 flex size-9 items-center justify-center rounded-lg border bg-fd-background/80 p-1.5 shadow-sm sm:mt-3 sm:size-11">
+      <div className="mt-2 flex size-9 items-center justify-center rounded-lg border bg-fd-background p-1.5 sm:mt-3 sm:size-11">
         <Icon className={`size-full ${tone}`} />
       </div>
       <p className="mt-2 text-center font-mono text-[9px] leading-none font-semibold sm:text-[10px]">
@@ -225,7 +210,7 @@ function TryC9sNode({
 export function TryC9sDiagram() {
   return (
     <div className="not-prose relative w-full">
-      <div className="c9s-polka-canvas relative aspect-[4/3] w-full overflow-hidden rounded-[2.25rem] sm:aspect-[3/1]">
+      <div className="c9s-polka-canvas relative aspect-[4/3] w-full overflow-hidden rounded-2xl border sm:aspect-[3/1]">
         <div className="absolute inset-x-5 bottom-5 z-30 text-center sm:inset-x-7 sm:bottom-7">
           <p className="truncate text-xs font-semibold sm:text-sm">
             try-c9s sample topology

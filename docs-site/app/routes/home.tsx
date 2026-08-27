@@ -7,27 +7,30 @@ import {
   Network,
   Rocket,
   Server,
-  Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router';
+import c9sLogo from '@/assets/c9s-logo-clean.png';
+import { ClabLogo3D } from '@/components/clab-logo-3d';
 import { IntroFabricDiagram } from '@/components/fabric-diagram';
 import { baseOptions } from '@/lib/layout.shared';
+
+const accent = 'text-cyan-600 dark:text-cyan-400';
 
 const highlights = [
   {
     icon: Network,
     eyebrow: 'Primary API',
-    title: 'Node and Link first',
+    title: 'One resource per node and wire',
     description:
-      'Model each network node and wire as an independently reconciled Kubernetes resource.',
+      'Each network node and each point-to-point link is an independently reconciled Kubernetes resource, so labs are not bounded by one aggregate object.',
     href: '/docs/concepts/nodes-and-links',
   },
   {
     icon: Boxes,
     eyebrow: 'Kubernetes native',
-    title: 'Policy that composes',
+    title: 'Kubernetes manages the lab',
     description:
-      'Use node profiles, scheduling, persistence, services, and familiar cluster workflows.',
+      'Node profiles carry resources, scheduling, persistence, and service exposure. The cluster owns image pulls, lifecycle, logs, and status.',
     href: '/docs/concepts/node-profiles',
   },
   {
@@ -35,26 +38,26 @@ const highlights = [
     eyebrow: 'Easy adoption',
     title: 'Containerlab compatible',
     description:
-      'Run existing topologies through the supported Topology compiler or emit primitive resources.',
+      'Embed a containerlab definition in a Topology resource, or generate Node and Link manifests from a topology file with clabverter.',
     href: '/docs/concepts/topology',
   },
 ];
 
-const architecture = [
+const steps = [
   {
     icon: Boxes,
     label: 'Describe',
-    detail: 'Topology or direct CRs',
+    detail: 'Apply a Topology, or author Node and Link resources directly.',
   },
   {
     icon: Cable,
     label: 'Reconcile',
-    detail: 'Nodes, links, and policy',
+    detail: 'Controllers validate the lab, plan each node, and allocate wires.',
   },
   {
     icon: Server,
     label: 'Run',
-    detail: 'One device Pod per node',
+    detail: 'One device Pod per node, wired together across the cluster.',
   },
 ];
 
@@ -68,45 +71,48 @@ export default function Home() {
       />
 
       <div className="c9s-home relative isolate overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="c9s-grid pointer-events-none absolute inset-0 -z-20"
-        />
-
-        <section className="relative mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-7xl items-center gap-12 px-6 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-24">
-          <div className="relative z-10">
-            <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-fd-primary/20 bg-fd-primary/5 px-3 py-1.5 text-xs font-semibold tracking-wide text-fd-primary uppercase backdrop-blur">
-              <Sparkles className="size-3.5" />
+        {/* Hero */}
+        <section className="mx-auto grid w-full max-w-7xl items-center gap-10 px-6 py-16 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14 lg:px-8 lg:py-20">
+          <div>
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-fd-card py-1.5 pr-3.5 pl-2.5 text-xs font-semibold tracking-wide uppercase">
+              <img
+                alt=""
+                aria-hidden="true"
+                className="size-6 object-contain"
+                src={c9sLogo}
+              />
               containerlab, distributed
             </div>
 
-            <h1 className="max-w-4xl text-5xl leading-[1.02] font-bold tracking-[-0.045em] text-balance sm:text-6xl lg:text-7xl xl:text-[5.4rem]">
-              Distributed containerlabs,{' '}
-              <span className="c9s-gradient-text">powered by Kubernetes.</span>
+            <h1 className="text-4xl leading-[1.08] font-bold tracking-[-0.035em] xl:text-5xl">
+              <span className="block">Distributed containerlabs,</span>
+              <span className={`block ${accent}`}>powered by Kubernetes.</span>
             </h1>
 
-            <p className="mt-7 max-w-2xl text-lg leading-8 text-fd-muted-foreground md:text-xl">
-              Clabernetes or c9s (<small><span className="italic">pronounced: see-nines</span></small>) turns every network node and wire into an independently
-              reconciled resource, then runs your containerlab workloads across
-              the cluster.
+            <p className="mt-6 max-w-xl text-lg leading-8 text-fd-muted-foreground">
+              Clabernetes, or c9s (
+              <span className="italic">pronounced see-nines</span>), turns each
+              network node and wire into its own Kubernetes resource: one device
+              Pod per node, links wired across the cluster, and management
+              reachable through Services.
             </p>
 
-            <div className="mt-10 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
-                className="group inline-flex items-center gap-2 rounded-xl bg-fd-primary px-5 py-3 font-semibold text-fd-primary-foreground shadow-lg shadow-fd-primary/20 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-fd-primary/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary"
+                className="group inline-flex items-center gap-2 rounded-xl bg-fd-primary px-5 py-3 font-semibold text-fd-primary-foreground shadow-lg shadow-fd-primary/20 transition hover:-translate-y-0.5 hover:shadow-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary"
                 to="/docs/quickstart"
               >
                 Launch your first lab
                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
               <Link
-                className="inline-flex items-center rounded-xl border bg-fd-card/70 px-5 py-3 font-semibold backdrop-blur transition hover:-translate-y-0.5 hover:bg-fd-accent"
+                className="inline-flex items-center rounded-xl border bg-fd-card px-5 py-3 font-semibold transition hover:-translate-y-0.5 hover:bg-fd-accent"
                 to="/docs"
               >
                 Explore the docs
               </Link>
               <a
-                className="inline-flex items-center gap-2 px-3 py-3 text-sm font-medium text-fd-muted-foreground transition hover:text-fd-foreground"
+                className="inline-flex items-center gap-2 px-3 py-3 text-sm font-medium text-fd-muted-foreground transition-colors hover:text-fd-foreground"
                 href="https://github.com/clabernetes/clabernetes"
                 rel="noreferrer"
                 target="_blank"
@@ -116,147 +122,151 @@ export default function Home() {
               </a>
             </div>
 
-            <div className="mt-12 flex flex-wrap gap-x-7 gap-y-3 text-sm text-fd-muted-foreground">
+            <div className="mt-8 flex flex-wrap gap-x-7 gap-y-3 text-sm text-fd-muted-foreground">
               {[
-                'Node + Link API',
+                'Node and Link API',
                 'Topology compiler',
-                'Kubernetes reconciliation',
+                'No custom CNI required',
               ].map((item) => (
                 <span className="flex items-center gap-2" key={item}>
-                  <span className="size-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.85)]" />
+                  <span className="size-1.5 rounded-full bg-cyan-500" />
                   {item}
                 </span>
               ))}
             </div>
           </div>
 
-          <IntroFabricDiagram />
+          <ClabLogo3D className="mx-auto aspect-square w-full max-w-[24rem] lg:max-w-[28rem]" />
         </section>
 
-        <section className="mx-auto w-full max-w-7xl px-6 pb-24 lg:px-8">
-          <div className="grid overflow-hidden rounded-2xl border bg-fd-card/55 shadow-sm backdrop-blur md:grid-cols-3">
-            {[
-              ['One resource', 'per network node'],
-              ['One resource', 'per point-to-point wire'],
-              ['One cluster', 'for distributed labs'],
-            ].map(([value, label], index) => (
-              <div
-                className={`px-6 py-6 text-center ${index > 0 ? 'border-t md:border-t-0 md:border-l' : ''
-                  }`}
-                key={label}
+        {/* What it is */}
+        <section className="mx-auto w-full max-w-7xl px-6 py-16 lg:px-8">
+          <div className="max-w-2xl">
+            <p className="text-sm font-semibold tracking-wide text-fd-muted-foreground uppercase">
+              Designed for real labs
+            </p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+              A Kubernetes API for network infrastructure.
+            </h2>
+            <p className="mt-3 text-lg leading-8 text-fd-muted-foreground">
+              Keep containerlab vocabulary for nodes and links, and let
+              Kubernetes handle scheduling, storage, access, and lifecycle.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-5 md:grid-cols-3">
+            {highlights.map(({ icon: Icon, eyebrow, title, description, href }) => (
+              <Link
+                className="group flex flex-col rounded-2xl border bg-fd-card p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+                key={title}
+                to={href}
               >
-                <p className="text-xl font-bold tracking-tight">{value}</p>
-                <p className="mt-1 text-sm text-fd-muted-foreground">{label}</p>
-              </div>
+                <div className="mb-5 flex size-10 items-center justify-center rounded-xl border bg-fd-background">
+                  <Icon className={`size-5 ${accent}`} />
+                </div>
+                <p className="text-xs font-semibold tracking-wide text-fd-muted-foreground uppercase">
+                  {eyebrow}
+                </p>
+                <h3 className="mt-1.5 text-lg font-semibold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-fd-muted-foreground">
+                  {description}
+                </p>
+                <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold">
+                  Learn more
+                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                </span>
+              </Link>
             ))}
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-7xl px-6 py-20 lg:px-8">
-          <div className="max-w-2xl">
-            <p className="text-sm font-semibold tracking-wide text-fd-primary uppercase">
-              Designed for real labs
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-              A Kubernetes API for network infrastructure.
-            </h2>
-            <p className="mt-4 text-lg leading-8 text-fd-muted-foreground">
-              Keep containerlab vocabulary while gaining the reconciliation,
-              policy, and distribution model of Kubernetes.
-            </p>
-          </div>
+        {/* How it works, paired with the fabric it produces */}
+        <section className="mx-auto w-full max-w-7xl px-6 py-16 lg:px-8">
+          <div className="grid gap-12 lg:grid-cols-[1fr_1fr]">
+            <div>
+              <p className="text-sm font-semibold tracking-wide text-fd-muted-foreground uppercase">
+                How it works
+              </p>
+              <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+                From definition to running lab.
+              </h2>
+              <p className="mt-3 text-lg leading-8 text-fd-muted-foreground">
+                Author direct resources or bring an existing containerlab
+                topology. The controllers take it from there.
+              </p>
 
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
-            {highlights.map(
-              ({ icon: Icon, eyebrow, title, description, href }) => (
-                <Link
-                  className="group relative overflow-hidden rounded-2xl border bg-fd-card/65 p-7 shadow-sm backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-fd-primary/35 hover:shadow-xl hover:shadow-fd-primary/5"
-                  key={title}
-                  to={href}
-                >
-                  <div
-                    aria-hidden="true"
-                    className="absolute -top-16 -right-16 size-36 rounded-full bg-fd-primary/0 blur-2xl transition group-hover:bg-fd-primary/10"
-                  />
-                  <div className="mb-8 flex size-11 items-center justify-center rounded-xl border bg-fd-background shadow-sm">
-                    <Icon className="size-5 text-fd-primary" />
-                  </div>
-                  <p className="text-xs font-semibold tracking-wide text-fd-primary uppercase">
-                    {eyebrow}
-                  </p>
-                  <h3 className="mt-2 text-xl font-semibold">{title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-fd-muted-foreground">
-                    {description}
-                  </p>
-                  <span className="mt-7 inline-flex items-center gap-1.5 text-sm font-semibold">
-                    Learn more
-                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                  </span>
-                </Link>
-              ),
-            )}
-          </div>
-        </section>
-
-        <section className="mx-auto w-full max-w-7xl px-6 py-20 lg:px-8">
-          <div className="rounded-3xl border bg-fd-card/60 p-7 shadow-sm backdrop-blur sm:p-10 lg:p-12">
-            <div className="grid gap-10 lg:grid-cols-[0.7fr_1.3fr] lg:items-center">
-              <div>
-                <p className="text-sm font-semibold tracking-wide text-fd-primary uppercase">
-                  How it works
-                </p>
-                <h2 className="mt-3 text-3xl font-bold tracking-tight">
-                  From intent to running lab.
-                </h2>
-                <p className="mt-4 leading-7 text-fd-muted-foreground">
-                  Author direct resources or bring an existing topology. c9s
-                  handles the controller and device Pod lifecycle.
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                {architecture.map(({ icon: Icon, label, detail }, index) => (
-                  <div className="relative" key={label}>
-                    <div className="h-full rounded-2xl border bg-fd-background/80 p-5">
-                      <div className="flex items-center justify-between">
-                        <Icon className="size-5 text-fd-primary" />
-                        <span className="font-mono text-xs text-fd-muted-foreground">
+              <ol className="mt-7 space-y-3">
+                {steps.map(({ icon: Icon, label, detail }, index) => (
+                  <li
+                    className="flex items-start gap-4 rounded-xl border bg-fd-card p-4"
+                    key={label}
+                  >
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-fd-background">
+                      <Icon className={`size-5 ${accent}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 font-semibold">
+                        {label}
+                        <span className="font-mono text-xs font-normal text-fd-muted-foreground">
                           0{index + 1}
                         </span>
-                      </div>
-                      <p className="mt-7 font-semibold">{label}</p>
-                      <p className="mt-1 text-sm text-fd-muted-foreground">
+                      </p>
+                      <p className="mt-0.5 text-sm leading-6 text-fd-muted-foreground">
                         {detail}
                       </p>
                     </div>
-                    {index < architecture.length - 1 ? (
-                      <ArrowRight className="absolute top-1/2 -right-2.5 z-10 hidden size-5 rounded-full bg-fd-card text-fd-primary sm:block" />
-                    ) : null}
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ol>
             </div>
+
+            <IntroFabricDiagram fill />
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-5xl px-6 py-24 text-center lg:px-8">
-          <p className="text-sm font-semibold tracking-wide text-fd-primary uppercase">
-            Ready to build?
+        {/* Get started */}
+        <section className="mx-auto w-full max-w-3xl px-6 py-20 text-center lg:px-8">
+          <p className="text-sm font-semibold tracking-wide text-fd-muted-foreground uppercase">
+            Get started
           </p>
-          <h2 className="mt-3 text-4xl font-bold tracking-tight text-balance sm:text-5xl">
-            Your first distributed lab is one quickstart away.
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+            Your first distributed lab is one command away.
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-fd-muted-foreground">
-            Launch a disposable KinD cluster, install c9s, and connect your first
-            network nodes.
+          <p className="mx-auto mt-3 max-w-xl text-lg text-fd-muted-foreground">
+            A disposable KinD cluster, c9s, and a sample SR Linux lab, built
+            locally end to end.
           </p>
-          <Link
-            className="group mt-8 inline-flex items-center gap-2 rounded-xl bg-fd-primary px-6 py-3.5 font-semibold text-fd-primary-foreground shadow-lg shadow-fd-primary/20 transition hover:-translate-y-0.5"
-            to="/docs/quickstart"
-          >
-            Open the quickstart
-            <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+
+          <div className="mx-auto mt-7 max-w-lg overflow-hidden rounded-xl border bg-fd-card text-left shadow-sm">
+            <div
+              aria-hidden="true"
+              className="flex items-center gap-1.5 border-b px-4 py-2.5"
+            >
+              <span className="size-2.5 rounded-full bg-red-400/80" />
+              <span className="size-2.5 rounded-full bg-yellow-400/80" />
+              <span className="size-2.5 rounded-full bg-green-400/80" />
+            </div>
+            <div className="space-y-1 overflow-x-auto px-4 py-3.5 font-mono text-xs whitespace-nowrap sm:text-sm">
+              <p>
+                <span className="text-fd-muted-foreground select-none">$ </span>
+                git clone https://github.com/clabernetes/clabernetes
+              </p>
+              <p>
+                <span className="text-fd-muted-foreground select-none">$ </span>
+                make try-c9s
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-7">
+            <Link
+              className="group inline-flex items-center gap-2 rounded-xl bg-fd-primary px-6 py-3.5 font-semibold text-fd-primary-foreground shadow-lg shadow-fd-primary/20 transition hover:-translate-y-0.5"
+              to="/docs/quickstart"
+            >
+              Open the quickstart
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          </div>
         </section>
       </div>
     </HomeLayout>

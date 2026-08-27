@@ -1,24 +1,24 @@
 ---
 title: Overview
 description: Run containerlab network topologies across a Kubernetes cluster.
-icon: Sparkles
+icon: House
 ---
 
-Clabernetes, also known as **c9s** <span className='text-fd-muted-foreground text-sm'>(pronounced "see-nines")</span> allows you to run containerlab network topologies across a K8s cluster, achieving scalability, flexibility, and diverse deployment options.
+Clabernetes, or **c9s** <span className='text-fd-muted-foreground text-sm'>(pronounced "see-nines")</span>, runs containerlab network topologies across a Kubernetes cluster.
 
-While Containerlab is constrained by the resources of a single node (VM or bare metal), c9s creates a K8s deployment for each topology node, connects interfaces across them, and exposes management services through Kubernetes services API.
+A containerlab host is bounded by the resources of a single machine. c9s removes that bound: it runs each topology node in its own Kubernetes Deployment, wires the node interfaces together across Pods, and exposes management access through Kubernetes Services.
 
 <IntroFabricDiagram />
 
-C9s can be installed on any K8s cluster and **does not** require a custom CNI.
+c9s installs on any Kubernetes cluster and does not require a custom CNI.
 
-If you want to try c9s with a throw-away KinD cluster, follow the quickstart guide. If you want to install c9s into an existing cluster, follow the installation guide.
+To try c9s in a throw-away KinD cluster, follow the quickstart. To install c9s into an existing cluster, follow the installation guide.
 
 <Cards>
   <Card icon={<Rocket />} href="/docs/quickstart" title="Quickstart">
-    Launch C9s in a disposable KinD cluster, fully automated.
+    Create a disposable KinD cluster with c9s and a sample lab.
   </Card>
   <Card icon={<Download />} href="/docs/installation" title="Installation">
-    Install C9s into an existing cluster.
+    Install c9s into an existing cluster.
   </Card>
 </Cards>

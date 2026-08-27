@@ -4,9 +4,7 @@ description: Install c9s into an existing Kubernetes cluster.
 icon: Download
 ---
 
-
-
-C9s can be installed into an existing Kubernetes cluster with version 1.31 or higher. No custom CNI, no additional storage class, no special tuning.
+c9s can be installed into an existing Kubernetes cluster with version 1.31 or higher. No custom CNI, no additional storage class, no special tuning.
 
 A typical installation method uses the [c9s Helm chart](https://github.com/clabernetes/clabernetes/pkgs/container/clabernetes%2Fclabernetes) distributed as an OCI artifact.
 
@@ -36,11 +34,11 @@ The charts are versioned with semantic versioning and the available versions can
 - browsing the published charts on [Artifact Hub](https://artifacthub.io/packages/helm/clabernetes/clabernetes?modal=values)
 - browsing the tags of the `clabernetes` OCI artifact on [GitHub](https://github.com/clabernetes/clabernetes/pkgs/container/clabernetes%2Fclabernetes)
 
-You don't need to know the exact version to just install c9s, however, if you need to install a specific version, that's how to know what is available.
+Installing the latest release does not require a version at all; use these lists when you need a specific one.
 
 ## With helm
 
-A common way to install applications on Kubernetes typically uses `helm`:
+Install the chart with Helm:
 
 <Tabs items={['Latest release', 'Specific version']}>
   <Tab>
@@ -61,28 +59,26 @@ helm upgrade --install --create-namespace --namespace c9s --version 0.7.0 \
 </Tabs>
 
 <Accordions>
-<Accordion className="text-sm" title={<>Don't have <code>helm</code> installed? We got you.</>}>
-Don't worry. The `Makefile` in the [clabernetes](https://github.com/clabernetes/clabernetes) repository provides a convenient way to install Helm for your architecture.
+<Accordion className="text-sm" title={<>Don't have <code>helm</code> installed?</>}>
+The `Makefile` in the [clabernetes](https://github.com/clabernetes/clabernetes) repository installs Helm for your architecture into `~/.local/bin`:
 
 ```bash
 make install-helm
 ```
-
-This will install Helm for your architecture in `~/.local/bin`.
 
 </Accordion>
 </Accordions>
 
 ## With make
 
-While users can install c9s directly with Helm, the Makefile provided in the [clabernetes repository](https://github.com/clabernetes/clabernetes) offers a convenient way to install c9s into an existing Kubernetes cluster.
+The Makefile in the [clabernetes repository](https://github.com/clabernetes/clabernetes) wraps the same Helm installation and downloads the tools it needs at pinned versions.
 
 ```bash title="clone the clabernetes repository if you haven't already"
 git clone https://github.com/clabernetes/clabernetes
 cd clabernetes
 ```
 
-The Makefile takes care of all the dependencies and tools, so you can just relax:
+Then install:
 
 <Tabs items={['Latest release', 'Specific version', 'From main branch']}>
   <Tab>
@@ -100,7 +96,7 @@ make install VERSION=0.7.0
   </Tab>
 
   <Tab>
-You can install the latest c9s version from the main branch. This is useful if you want to try the latest features until a release is published.
+Install the latest c9s version from the main branch to try features that have not been released yet.
 ```bash
 make install VERSION=main
 ```
@@ -111,7 +107,7 @@ make install VERSION=main
 specific context:
 
 ```bash
- C9S_CONTEXT=my-cluster make install
+C9S_CONTEXT=my-cluster make install
 ```
 
 ## Upgrade

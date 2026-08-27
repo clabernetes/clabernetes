@@ -14,7 +14,7 @@ function DiscordIcon() {
 export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
-      title: <span className="c9s-gradient-text">c9s</span>,
+      title: <span className="font-semibold">c9s</span>,
       url: '/',
     },
     links: [

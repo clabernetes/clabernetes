@@ -3,15 +3,8 @@ title: File mounting
 description: Mount configuration, licenses, and other files into network nodes.
 ---
 
-This guide explains how to mount external files into Clabernetes topology nodes using ConfigMaps, Secrets, and URLs.
-
-## Overview
-
-Clabernetes supports three sources for placing files into device pods:
-
-1. **ConfigMaps**: Mount files from Kubernetes ConfigMaps
-2. **Secrets**: Mount sensitive files from Kubernetes Secrets
-3. **URLs**: Download files from HTTP/HTTPS endpoints
+c9s places files into device Pods from three sources: Kubernetes ConfigMaps, Kubernetes
+Secrets, and HTTP(S) URLs.
 
 Every declared file is a payload of the node's device plan: its content digest is recorded in
 the accepted plan, and the preparation init container stages it into plan-scoped volumes and
@@ -19,11 +12,9 @@ verifies every path, mode, and digest before the device containers start. Changi
 content therefore produces a new plan and recreates the Pod. Arbitrary host binds are rejected
 before a workload is created.
 
-## Mounting Files from ConfigMaps
+## Files from ConfigMaps
 
-### Creating the ConfigMap
-
-First, create a ConfigMap with your file content:
+Create a ConfigMap with the file content:
 
 ```yaml
 apiVersion: v1
@@ -33,19 +24,18 @@ metadata:
   namespace: default
 data:
   license.key: |
-    # Your license content here
+    # license content
     AAAAB3NzaC1yc2EAAA...
 ```
 
-Or create from a file:
+Or create it from a file:
 
 ```bash
 kubectl create configmap srl-license --from-file=license.key=/path/to/license.key
 ```
 
-### Mounting in Topology
-
-Reference the ConfigMap in your topology:
+Reference the ConfigMap from a Topology under `spec.deployment.filesFromConfigMap`, keyed by
+node name:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -55,7 +45,7 @@ metadata:
 spec:
   deployment:
     filesFromConfigMap:
-      srl1:  # Node name
+      srl1:  # node name
         - filePath: /opt/srlinux/etc/license.key
           configMapName: srl-license
           configMapPath: license.key
@@ -70,12 +60,11 @@ spec:
             image: ghcr.io/nokia/srlinux:latest
 ```
 
-Topology remains a supported auxiliary input. The compiler moves each map entry onto the
-corresponding generated Node; it does not create a one-off NodeProfile just to carry payload.
+The compiler moves each map entry onto the corresponding generated Node; it does not create a
+one-off NodeProfile just to carry payload.
 
-### Mounting on a Direct Node
-
-For directly authored primitive resources, payload attachments live in the Node spec:
+For directly authored primitive resources, payload attachments live on the Node spec itself
+(NodeProfile carries deployment policy only, never per-node files):
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -96,20 +85,7 @@ spec:
       digest: sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
 
-NodeProfile contains deployment policy only; it does not own per-node files.
-
-### FileFromConfigMap Fields
-
-| Field | Required | Description |
-| ------- | ---------- | ------------- |
-| `filePath` | Yes | Destination path inside the pod |
-| `configMapName` | Yes | Name of the ConfigMap |
-| `configMapPath` | No | Specific key in ConfigMap (mounts entire CM if omitted) |
-| `mode` | No | `read` (0o444) or `execute` (0o555), default: `read` |
-
-### Multiple Files
-
-Mount multiple files to the same node:
+A node can mount any number of files, from any mix of ConfigMaps:
 
 ```yaml
 filesFromConfigMap:
@@ -123,28 +99,19 @@ filesFromConfigMap:
     - filePath: /tmp/custom-script.sh
       configMapName: scripts
       configMapPath: init.sh
-      mode: execute  # Make script executable
+      mode: execute
 ```
 
-### Files for Multiple Nodes
+### FileFromConfigMap fields
 
-```yaml
-filesFromConfigMap:
-  srl1:
-    - filePath: /opt/srlinux/etc/license.key
-      configMapName: srl-license
-      configMapPath: license.key
-  srl2:
-    - filePath: /opt/srlinux/etc/license.key
-      configMapName: srl-license
-      configMapPath: license.key
-  srl3:
-    - filePath: /opt/srlinux/etc/license.key
-      configMapName: srl-license
-      configMapPath: license.key
-```
+| Field | Required | Description |
+| ------- | ---------- | ------------- |
+| `filePath` | Yes | Destination path inside the pod |
+| `configMapName` | Yes | Name of the ConfigMap |
+| `configMapPath` | No | Specific key in the ConfigMap (mounts the entire ConfigMap if omitted) |
+| `mode` | No | `read` (0o444) or `execute` (0o555), default: `read` |
 
-## Mounting Files from Secrets
+## Files from Secrets
 
 Sensitive payloads (credentials, private keys, licenses under NDA) belong in Secrets rather
 than ConfigMaps. Secret-backed payloads are marked sensitive: only their digest reaches the
@@ -166,7 +133,7 @@ spec:
 
 In a Topology, the equivalent map is `spec.deployment.filesFromSecret` keyed by node name.
 
-### FileFromSecret Fields
+### FileFromSecret fields
 
 | Field | Required | Description |
 | ------- | ---------- | ------------- |
@@ -175,9 +142,7 @@ In a Topology, the equivalent map is `spec.deployment.filesFromSecret` keyed by 
 | `secretPath` | No | Secret data key (all keys are projected beneath `filePath` if omitted) |
 | `mode` | No | `read` (0o444) or `execute` (0o555), default: `read` |
 
-## Mounting Files from URLs
-
-### Basic URL Mount
+## Files from URLs
 
 ```yaml
 spec:
@@ -189,7 +154,7 @@ spec:
           digest: sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
 
-### FileFromURL Fields
+### FileFromURL fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -200,106 +165,24 @@ spec:
 The digest pins the payload: a mutable URL cannot change a device's content without a matching
 change to the accepted plan. Compute it with `sha256sum <file>`.
 
-### URL Requirements
+### URL requirements
 
-- Must be a direct file download (not HTML page)
-- GitHub: Use "raw" URLs
-- Must be an absolute HTTP(S) URL without embedded credentials
-- Must be a publicly resolvable endpoint: the fetch runs from the planning worker and again from
-  the preparation init container, and hosts that resolve to private, loopback, or otherwise
-  non-public addresses are rejected
-- Downloads are capped at 64 MB
-
-**Good URLs:**
-
-```
-https://raw.githubusercontent.com/user/repo/main/config.json
-https://files.example.com/configs/router1.cfg
-```
-
-**Bad URLs:**
-
-```
-https://github.com/user/repo/blob/main/config.json  # HTML page
-https://drive.google.com/file/d/xxx               # Requires auth
-```
-
-### Authentication
+- The URL must be a direct file download, not an HTML page. For GitHub content use the "raw"
+  URL (`raw.githubusercontent.com/...`), not the `github.com/.../blob/...` page.
+- It must be an absolute HTTP(S) URL without embedded credentials.
+- The endpoint must be publicly resolvable: the fetch runs from the planning worker and again
+  from the preparation init container, and hosts that resolve to private, loopback, or
+  otherwise non-public addresses are rejected.
+- Downloads are capped at 64 MB.
 
 URL payloads are fetched anonymously. For content behind authentication, load it into a
 ConfigMap or Secret and reference that instead. Registry credentials belong in Kubernetes
 `imagePull.pullSecrets`, not in file mounting.
 
-## Common Use Cases
+## Inline startup configurations with clabverter
 
-### License Files
-
-```yaml
-# ConfigMap with license
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: nokia-licenses
-data:
-  srl-license.key: |
-    <license-content>
-  sros-license.txt: |
-    <license-content>
----
-apiVersion: c9s.run/v1alpha1
-kind: Topology
-spec:
-  deployment:
-    filesFromConfigMap:
-      srl1:
-        - filePath: /opt/srlinux/etc/license.key
-          configMapName: nokia-licenses
-          configMapPath: srl-license.key
-      sros1:
-        - filePath: /tftpboot/license.txt
-          configMapName: nokia-licenses
-          configMapPath: sros-license.txt
-```
-
-### Startup Configurations
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: startup-configs
-data:
-  srl1.json: |
-    {
-      "system": {
-        "name": {"host-name": "srl1-lab"}
-      }
-    }
-  srl2.json: |
-    {
-      "system": {
-        "name": {"host-name": "srl2-lab"}
-      }
-    }
----
-spec:
-  deployment:
-    filesFromConfigMap:
-      srl1:
-        - filePath: /etc/opt/srlinux/config.json
-          configMapName: startup-configs
-          configMapPath: srl1.json
-      srl2:
-        - filePath: /etc/opt/srlinux/config.json
-          configMapName: startup-configs
-          configMapPath: srl2.json
-```
-
-### Inline Startup Configurations (Clabverter)
-
-When using clabverter to convert containerlab topologies, startup-config can be specified in two ways:
-
-**File path reference** (points to external file):
+When converting containerlab topologies with clabverter, `startup-config` can be a file path
+reference:
 
 ```yaml
 nodes:
@@ -308,7 +191,7 @@ nodes:
     startup-config: configs/srl1.cfg
 ```
 
-**Inline configuration** (embedded in YAML):
+or an inline configuration embedded in the YAML:
 
 ```yaml
 nodes:
@@ -320,135 +203,47 @@ nodes:
       set / network-instance default interface ethernet-1/1.0
 ```
 
-Clabverter automatically detects inline configurations (by checking for newlines in the value) and creates ConfigMaps without attempting to read from the filesystem. Both styles are converted to the same Kubernetes ConfigMap format.
+Clabverter detects inline configurations (by checking for newlines in the value) and creates
+ConfigMaps without attempting to read from the filesystem. Both styles are converted to the
+same Kubernetes ConfigMap format.
 
-### TLS Certificates
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: lab-certs
-data:
-  ca.crt: |
-    -----BEGIN CERTIFICATE-----
-    ...
-    -----END CERTIFICATE-----
-  server.crt: |
-    -----BEGIN CERTIFICATE-----
-    ...
-    -----END CERTIFICATE-----
-  server.key: |
-    -----BEGIN PRIVATE KEY-----
-    ...
-    -----END PRIVATE KEY-----
----
-spec:
-  deployment:
-    filesFromConfigMap:
-      srl1:
-        - filePath: /etc/ssl/certs/ca.crt
-          configMapName: lab-certs
-          configMapPath: ca.crt
-        - filePath: /etc/ssl/certs/server.crt
-          configMapName: lab-certs
-          configMapPath: server.crt
-        - filePath: /etc/ssl/private/server.key
-          configMapName: lab-certs
-          configMapPath: server.key
-```
-
-### Custom Scripts
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: init-scripts
-data:
-  setup.sh: |
-    #!/bin/bash
-    echo "Running initialization..."
-    # Your setup commands
----
-spec:
-  deployment:
-    filesFromConfigMap:
-      srl1:
-        - filePath: /tmp/setup.sh
-          configMapName: init-scripts
-          configMapPath: setup.sh
-          mode: execute  # 0o555 permissions
-```
-
-## ConfigMap vs URL
+## ConfigMap or URL?
 
 | Aspect | ConfigMap | URL |
 | -------- | ----------- | ----- |
 | Size limit | 1 MB | 64 MB |
 | Updates | New content = new plan, Pod recreated | Change file *and* `digest` together |
 | Security | In-cluster (use Secrets for sensitive bytes) | Public endpoint required |
-| Versioning | Via K8s | Via URL versioning |
 | Best for | Small configs | Large files, external sources |
+
+If a ConfigMap payload exceeds the 1 MB limit, switch to URL-based mounting or split the
+content across multiple ConfigMaps.
 
 ## Troubleshooting
 
-### File Not Appearing
-
-Check ConfigMap exists:
+If a file does not appear in the device, confirm the ConfigMap exists and check the Pod
+events:
 
 ```bash
 kubectl get configmap <name>
-```
-
-Check pod events:
-
-```bash
 kubectl describe pod <pod-name>
 ```
 
-### Permission Issues
-
-Ensure correct mode:
-
-- Scripts: `mode: execute`
-- Config files: `mode: read` (default)
-
-### ConfigMap Size Limit
-
-If exceeding 1MB:
-
-- Use URL-based mounting
-- Split into multiple ConfigMaps
-- Compress content
-
-### URL Download Failures
-
-A fetch or digest failure during planning is reported on the Node before any workload exists; a
-failure during staging shows up in the preparation init container:
+A URL fetch or digest failure during planning is reported on the Node before any workload
+exists; a failure during staging shows up in the preparation init container:
 
 ```bash
 kubectl describe nodes.c9s.run <node>
 kubectl logs deploy/<node> -c planner
 ```
 
-Verify URL accessibility:
+Verify URL accessibility from inside the cluster:
 
 ```bash
 kubectl run curl-test --rm -it --image=curlimages/curl -- curl -I <url>
 ```
 
-## Best Practices
-
-1. **Use Secrets for sensitive data**: Licenses, credentials, certificates
-2. **Use URLs for large files**: Configurations beyond the ConfigMap limit (up to 64 MB)
-3. **Version your ConfigMaps**: Include version in name for traceability
-4. **Use descriptive paths**: Match vendor conventions for file locations
-5. **Test file accessibility**: Verify URLs work before deploying
-
 ## Related
 
 - [Example: with-configmap-files.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-configmap-files.yaml)
-- [CRD Reference: FilesFromConfigMap](/docs/crd/node)
-- [CRD Reference: FilesFromSecret](/docs/crd/node)
-- [CRD Reference: FilesFromURL](/docs/crd/node)
+- [Node CRD reference](/docs/crd/node)
