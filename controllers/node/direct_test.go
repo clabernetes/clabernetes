@@ -1855,8 +1855,12 @@ func TestCompileDirectExposedPortsKeepsAutoExposeParity(t *testing.T) {
 }
 
 func TestCompileDirectExposedPortsRejectsGroupedNamespaceCollision(t *testing.T) {
+	// Both members explicitly claim the same Pod destination port: that is contradictory user
+	// intent on one shared network namespace and must fail closed.
 	first := planInputTestNode("future-a", "uid-future-a", "opaque-package-kind", "example/a:1")
+	first.Spec.Ports = []string{"22/tcp"}
 	second := planInputTestNode("future-b", "uid-future-b", "another-package-kind", "example/b:1")
+	second.Spec.Ports = []string{"22/tcp"}
 	plan := clabernetesinternaldeviceplan.Plan{
 		Containers: []clabernetesinternaldeviceplan.ContainerPlan{
 			{
@@ -1885,6 +1889,88 @@ func TestCompileDirectExposedPortsRejectsGroupedNamespaceCollision(t *testing.T)
 		planningErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported ||
 		planningErr.Field != "services.ports" {
 		t.Fatalf("compileDirectExposedPorts() error = %#v, want grouped collision", err)
+	}
+}
+
+func TestCompileDirectExposedPortsGroupedImagePortsFirstMemberWins(t *testing.T) {
+	// Image-derived (implicit) duplicate ports across group members are not user intent: the
+	// first member claims the port and later members skip it, matching containerlab's
+	// first-come allocation on a shared network namespace.
+	first := planInputTestNode("future-a", "uid-future-a", "opaque-package-kind", "example/a:1")
+	second := planInputTestNode("future-b", "uid-future-b", "another-package-kind", "example/b:1")
+	plan := clabernetesinternaldeviceplan.Plan{
+		Containers: []clabernetesinternaldeviceplan.ContainerPlan{
+			{
+				ID:     "container-a",
+				NodeID: string(first.GetUID()),
+				Ports:  []clabernetesinternaldeviceplan.Port{{Number: 80, Protocol: "TCP"}},
+			},
+			{
+				ID:     "container-b",
+				NodeID: string(second.GetUID()),
+				Ports:  []clabernetesinternaldeviceplan.Port{{Number: 80, Protocol: "TCP"}},
+			},
+		},
+	}
+
+	result, err := compileDirectExposedPorts(
+		plan,
+		&ResolvedProfile{DisableAutoExpose: true},
+		[]string{first.GetName(), second.GetName()},
+		map[string]*clabernetesapisv1alpha1.Node{
+			first.GetName(): first, second.GetName(): second,
+		},
+	)
+	if err != nil {
+		t.Fatalf("compileDirectExposedPorts() error = %v, want first member to claim the port", err)
+	}
+
+	if result[second.GetName()] != nil {
+		t.Fatalf("second member ports = %+v, want none", result[second.GetName()])
+	}
+}
+
+func TestCompileDirectExposedPortsExplicitPortDisplacesImplicitOwner(t *testing.T) {
+	// An explicit declaration outranks another member's image-derived claim on the same port.
+	first := planInputTestNode("future-a", "uid-future-a", "opaque-package-kind", "example/a:1")
+	second := planInputTestNode("future-b", "uid-future-b", "another-package-kind", "example/b:1")
+	second.Spec.Ports = []string{"80/tcp"}
+	plan := clabernetesinternaldeviceplan.Plan{
+		Containers: []clabernetesinternaldeviceplan.ContainerPlan{
+			{
+				ID:     "container-a",
+				NodeID: string(first.GetUID()),
+				Ports:  []clabernetesinternaldeviceplan.Port{{Number: 80, Protocol: "TCP"}},
+			},
+			{
+				ID:     "container-b",
+				NodeID: string(second.GetUID()),
+				Ports:  []clabernetesinternaldeviceplan.Port{{Number: 80, Protocol: "TCP"}},
+			},
+		},
+	}
+
+	result, err := compileDirectExposedPorts(
+		plan,
+		&ResolvedProfile{DisableAutoExpose: true},
+		[]string{first.GetName(), second.GetName()},
+		map[string]*clabernetesapisv1alpha1.Node{
+			first.GetName(): first, second.GetName(): second,
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"compileDirectExposedPorts() error = %v, want explicit member to claim the port",
+			err,
+		)
+	}
+
+	if result[first.GetName()] != nil {
+		t.Fatalf("implicit member ports = %+v, want displaced", result[first.GetName()])
+	}
+
+	if result[second.GetName()] == nil || len(result[second.GetName()].Ports) != 1 {
+		t.Fatalf("explicit member ports = %+v, want port 80", result[second.GetName()])
 	}
 }
 
