@@ -1,8 +1,9 @@
-package util
+package ctrlruntime
 
 import (
 	"fmt"
 
+	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 )
 
@@ -10,7 +11,7 @@ import (
 func MustSetupWithManager(setup func(mgr ctrlruntime.Manager) error, mgr ctrlruntime.Manager) {
 	err := setup(mgr)
 	if err != nil {
-		Panic(
+		clabernetesutil.Panic(
 			fmt.Sprintf("failed registerring controller with manager, err: %s", err),
 		)
 	}

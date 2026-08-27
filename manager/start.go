@@ -8,7 +8,7 @@ import (
 	clabernetescontrollerslink "github.com/clabernetes/clabernetes/controllers/link"
 	clabernetescontrollersnode "github.com/clabernetes/clabernetes/controllers/node"
 	clabernetescontrollerstopology "github.com/clabernetes/clabernetes/controllers/topology"
-	clabernetesutil "github.com/clabernetes/clabernetes/util"
+	clabernetesutilctrlruntime "github.com/clabernetes/clabernetes/util/ctrlruntime"
 )
 
 func (c *clabernetes) startLeading(ctx context.Context) {
@@ -50,7 +50,7 @@ func (c *clabernetes) startLeading(ctx context.Context) {
 	for _, newF := range controllersToRegisterFuncs {
 		ctrl := newF(c)
 
-		clabernetesutil.MustSetupWithManager(ctrl.SetupWithManager, c.mgr)
+		clabernetesutilctrlruntime.MustSetupWithManager(ctrl.SetupWithManager, c.mgr)
 	}
 
 	c.logger.Debug("controllers registered...")
