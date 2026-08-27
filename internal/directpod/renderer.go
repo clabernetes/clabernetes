@@ -14,6 +14,7 @@ import (
 	"math"
 	"path"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -662,6 +663,7 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 					Hostname:           options.Name,
 					DNSPolicy:          dns.policy,
 					DNSConfig:          dns.config,
+					HostAliases:        renderHostAliases(normalized, options.Name),
 					InitContainers:     initContainers,
 					Containers:         containers,
 					Volumes:            volumes,
@@ -669,6 +671,86 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 			},
 		},
 	}, nil
+}
+
+// renderHostAliases resolves the imported runtime identities that Docker DNS would resolve in
+// local containerlab: chassis component runtime names (e.g. "sros-a") and grouped logical Node
+// names other than the Pod hostname map to their Node's management address. Imported package
+// hooks (save, post-deploy) dial devices by these names.
+func renderHostAliases(
+	plan clabernetesinternaldeviceplan.Plan,
+	workloadName string,
+) []k8scorev1.HostAlias {
+	addressByNode := make(map[string]string, len(plan.Management))
+	for _, management := range plan.Management {
+		address := bareManagementAddress(management.IPv4)
+		if address == "" {
+			address = bareManagementAddress(management.IPv6)
+		}
+
+		if address == "" {
+			continue
+		}
+
+		addressByNode[management.NodeID] = address
+	}
+
+	hostnamesByAddress := map[string][]string{}
+	seen := map[string]bool{workloadName: true}
+	addHost := func(name, nodeID string) {
+		if name == "" || seen[name] {
+			return
+		}
+
+		address, resolved := addressByNode[nodeID]
+		if !resolved {
+			return
+		}
+
+		seen[name] = true
+		hostnamesByAddress[address] = append(hostnamesByAddress[address], name)
+	}
+
+	for _, node := range plan.Nodes {
+		addHost(node.Name, node.ID)
+	}
+
+	for _, container := range plan.Containers {
+		addHost(container.RuntimeID, container.NodeID)
+	}
+
+	if len(hostnamesByAddress) == 0 {
+		return nil
+	}
+
+	addresses := make([]string, 0, len(hostnamesByAddress))
+	for address := range hostnamesByAddress {
+		addresses = append(addresses, address)
+	}
+
+	sort.Strings(addresses)
+
+	aliases := make([]k8scorev1.HostAlias, 0, len(addresses))
+	for _, address := range addresses {
+		hostnames := hostnamesByAddress[address]
+		sort.Strings(hostnames)
+		aliases = append(aliases, k8scorev1.HostAlias{IP: address, Hostnames: hostnames})
+	}
+
+	return aliases
+}
+
+func bareManagementAddress(cidr string) string {
+	if cidr == "" {
+		return ""
+	}
+
+	address, _, found := strings.Cut(cidr, "/")
+	if !found {
+		return cidr
+	}
+
+	return address
 }
 
 func defaultApplicationContainer(
