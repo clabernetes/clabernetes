@@ -1198,6 +1198,10 @@ func runConnectivity(
 		return err
 	}
 
+	// The owned hosts entries are asserted before readiness gates application containers, so
+	// the device process boots with its own identity and the namespace peers resolvable.
+	assertOwnedHosts(effectivePlan)
+
 	if err = reconcileLocalInterfaces(&effectivePlan, operations, options.PodUID); err != nil {
 		return err
 	}
@@ -1510,6 +1514,12 @@ func waitForConnectivityRevisions(
 			if err := reconcileInterposition(basePlan, options, operations); err != nil {
 				return err
 			}
+
+			// Re-asserting the owned hosts entries every tick delivers peer-directory updates
+			// to a running Pod (lab membership changes never restart Pods) and heals the
+			// kubelet's file rewrite after any container (re)start. The write only happens
+			// when the realized content differs.
+			assertOwnedHosts(basePlan)
 
 			nextRevision, nextReady, err := applyProjectedConnectivityRevision(
 				ctx,

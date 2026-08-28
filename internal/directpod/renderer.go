@@ -47,6 +47,7 @@ const (
 	connectivityStateName            = "clabwire-state"
 	connectivityStatePath            = "/var/run/clabernetes/connectivity"
 	connectivityRevisionVolumeName   = "clabwire-revision"
+	peerDirectoryVolumeName          = "node-peer-directory"
 	connectivityRevisionMountPath    = "/var/run/clabernetes/connectivity-revision"
 	hostNetworkNamespaceName         = "worker-host-network-namespace"
 	hostNetworkNamespaceSourcePath   = "/proc/1/ns"
@@ -450,6 +451,22 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 		Name:         connectivityStateName,
 		VolumeSource: k8scorev1.VolumeSource{EmptyDir: &k8scorev1.EmptyDirVolumeSource{}},
 	})
+
+	// The peer directory is deliberately a namespace-scoped ConfigMap volume rather than
+	// rendered HostAliases: lab membership changes update the ConfigMap only, which the
+	// kubelet syncs into running Pods, so adding or removing a node never recreates Pods.
+	// Optional, so a Pod can start before the directory exists.
+	peerDirectoryOptional := true
+
+	volumes = append(volumes, k8scorev1.Volume{
+		Name: peerDirectoryVolumeName,
+		VolumeSource: k8scorev1.VolumeSource{ConfigMap: &k8scorev1.ConfigMapVolumeSource{
+			LocalObjectReference: k8scorev1.LocalObjectReference{
+				Name: clabernetesinternaldirectruntime.PeerDirectoryConfigMapName,
+			},
+			Optional: &peerDirectoryOptional,
+		}},
+	})
 	if options.ConnectivityRevisionConfigMapName != "" {
 		volumes = append(volumes, k8scorev1.Volume{
 			Name: connectivityRevisionVolumeName,
@@ -709,7 +726,9 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 // renderHostAliases resolves the imported runtime identities that Docker DNS would resolve in
 // local containerlab: chassis component runtime names (e.g. "sros-a") and grouped logical Node
 // names other than the Pod hostname map to their Node's management address. Imported package
-// hooks (save, post-deploy) dial devices by these names.
+// hooks (save, post-deploy) dial devices by these names. Namespace peers deliberately do not
+// ride HostAliases — they arrive through the peer-directory ConfigMap at runtime, so lab
+// membership changes never touch the Deployment spec (which would recreate the Pod).
 func renderHostAliases(
 	plan clabernetesinternaldeviceplan.Plan,
 	workloadName string,
@@ -1374,6 +1393,11 @@ func renderApplicationLifecycle(
 			{Name: lifecycleVolumeName, MountPath: lifecycleBinaryRoot, ReadOnly: true},
 			{Name: planVolumeName, MountPath: lifecyclePlanRoot, ReadOnly: true},
 			{Name: lifecycleScratchName, MountPath: lifecycleScratchRoot},
+			{
+				Name:      peerDirectoryVolumeName,
+				MountPath: clabernetesinternaldirectruntime.ApplicationPeerDirectoryRoot,
+				ReadOnly:  true,
+			},
 		}
 		if readinessTargets[containerID] || postStartTargets[containerID] ||
 			importedSaveTargets[containerID] {
@@ -2476,6 +2500,11 @@ func renderHelpers(
 		planMount,
 		inputMount,
 		stateMount,
+		{
+			Name:      peerDirectoryVolumeName,
+			MountPath: clabernetesinternaldirectruntime.ConnectivityPeerDirectoryRoot,
+			ReadOnly:  true,
+		},
 	}
 
 	if options.ConnectivityRevisionConfigMapName != "" {

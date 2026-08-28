@@ -165,6 +165,13 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	if err = r.reconcileDirectPeerDirectory(
+		ctx,
+		node.GetNamespace(),
+		compileNamespaceManagementIdentities(nodesByName, profile.Mgmt),
+	); err != nil {
+		return err
+	}
 	baseRequest := PlanInputCompileRequest{
 		Primary: node, GroupMembers: groupMembers, NodesByName: nodesByName,
 		Links: links.Items, Compatibility: compatibility, Payloads: payloads,

@@ -197,6 +197,89 @@ func TestRenderGivesEveryApplicationContainerThePodAddress(t *testing.T) {
 	}
 }
 
+func TestRenderMountsPeerDirectoryIntoEveryDeviceContainer(t *testing.T) {
+	t.Parallel()
+
+	plan := renderablePlan()
+
+	deployment, err := clabernetesinternaldirectpod.Render(
+		plan,
+		clabernetesinternaldirectpod.Options{
+			Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+			InputConfigMapName:                "device-a-plan-input-abc",
+			ConnectivityRevisionConfigMapName: "device-a-connectivity",
+			PreparationImage:                  "example/c9s@sha256:1111",
+			ConnectivityImage:                 "example/c9s@sha256:1111",
+			EnableContainerStopSignals:        true,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pod := deployment.Spec.Template.Spec
+
+	// Namespace peers must never ride the Deployment spec: a lab membership change would
+	// recreate the Pod. They arrive through the peer-directory ConfigMap at runtime instead.
+	volumeFound := false
+
+	for _, volume := range pod.Volumes {
+		if volume.Name != "node-peer-directory" {
+			continue
+		}
+
+		volumeFound = true
+
+		if volume.ConfigMap == nil ||
+			volume.ConfigMap.Name != clabernetesinternaldirectruntime.PeerDirectoryConfigMapName ||
+			volume.ConfigMap.Optional == nil || !*volume.ConfigMap.Optional {
+			t.Fatalf("peer directory volume = %#v", volume)
+		}
+	}
+
+	if !volumeFound {
+		t.Fatalf("peer directory volume is absent: %#v", pod.Volumes)
+	}
+
+	mountedAt := func(mounts []k8scorev1.VolumeMount, path string) bool {
+		for _, mount := range mounts {
+			if mount.Name == "node-peer-directory" && mount.MountPath == path && mount.ReadOnly {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	for _, container := range pod.Containers {
+		if container.Name == clabernetesinternaldirectpod.ConnectivityContainerName {
+			continue
+		}
+
+		if !mountedAt(
+			container.VolumeMounts,
+			clabernetesinternaldirectruntime.ApplicationPeerDirectoryRoot,
+		) {
+			t.Fatalf("device container %q misses the peer directory: %#v",
+				container.Name, container.VolumeMounts)
+		}
+	}
+
+	for _, container := range pod.InitContainers {
+		if container.Name != clabernetesinternaldirectpod.ConnectivityContainerName {
+			continue
+		}
+
+		if !mountedAt(
+			container.VolumeMounts,
+			clabernetesinternaldirectruntime.ConnectivityPeerDirectoryRoot,
+		) {
+			t.Fatalf("connectivity sidecar misses the peer directory: %#v",
+				container.VolumeMounts)
+		}
+	}
+}
+
 func TestRenderCreatesDirectApplicationContainersFromGenericPlan(t *testing.T) {
 	t.Parallel()
 

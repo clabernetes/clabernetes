@@ -12,6 +12,7 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 )
 
 type directManagementPool struct {
@@ -160,6 +161,129 @@ func allocateDirectManagementAddresses(
 	}
 
 	return result, nil
+}
+
+// compileNamespaceManagementIdentities derives every namespace node's management addresses —
+// the same explicit-or-allocated values compileDirectManagement realizes for its own group —
+// into the peer directory device Pods realize into /etc/hosts at runtime. Allocation is a
+// deterministic function of the namespace node set, so every reconcile derives the same
+// directory. Best effort by design: a peer whose declaration cannot be normalized is skipped
+// here and surfaces on that peer's own reconcile instead.
+func compileNamespaceManagementIdentities(
+	nodesByName map[string]*clabernetesapisv1alpha1.Node,
+	mgmt *clabernetesapisv1alpha1.ManagementPolicy,
+) []clabernetesinternaldirectruntime.PeerIdentity {
+	settings := clabernetesapisv1alpha1.ManagementPolicy{}
+	if mgmt != nil {
+		settings = *mgmt
+	}
+
+	if err := applyDefaultManagementPolicy(&settings); err != nil {
+		return nil
+	}
+
+	ipv4Pool, err := newDirectManagementPool(settings.IPv4Subnet, settings.IPv4Range, true)
+	if err != nil {
+		return nil
+	}
+
+	ipv6Pool, err := newDirectManagementPool(settings.IPv6Subnet, settings.IPv6Range, false)
+	if err != nil {
+		return nil
+	}
+
+	ipv4Allocations, err := allocateDirectManagementAddresses(
+		nodesByName,
+		ipv4Pool,
+		func(node *clabernetesapisv1alpha1.Node) string { return node.Spec.MgmtIPv4 },
+		settings.IPv4Gw,
+	)
+	if err != nil {
+		ipv4Allocations = nil
+	}
+
+	ipv6Allocations, err := allocateDirectManagementAddresses(
+		nodesByName,
+		ipv6Pool,
+		func(node *clabernetesapisv1alpha1.Node) string { return node.Spec.MgmtIPv6 },
+		settings.IPv6Gw,
+	)
+	if err != nil {
+		ipv6Allocations = nil
+	}
+
+	result := []clabernetesinternaldirectruntime.PeerIdentity(nil)
+
+	for name, node := range nodesByName {
+		if node == nil || strings.HasPrefix(node.Spec.NetworkMode, "container:") {
+			// Container-network-mode members carry no management identity of their own; their
+			// names alias the namespace owner through the group plan.
+			continue
+		}
+
+		identity := clabernetesinternaldirectruntime.PeerIdentity{
+			Name:    name,
+			Aliases: slices.Clone(node.Spec.Aliases),
+		}
+
+		// Chassis component runtime names ("pe1-a", "pe1-1") resolve through Docker DNS in
+		// local containerlab, and automation stacks dial devices by them.
+		for _, component := range node.Spec.Components {
+			if component == nil || component.Slot == "" {
+				continue
+			}
+
+			identity.Aliases = append(
+				identity.Aliases,
+				name+"-"+strings.ToLower(component.Slot),
+			)
+		}
+
+		ipv4, normalizeErr := normalizeDirectManagementAddress(node.Spec.MgmtIPv4, ipv4Pool)
+		if normalizeErr == nil {
+			if ipv4 == "" {
+				ipv4 = ipv4Allocations[name]
+			}
+
+			identity.IPv4 = bareDirectManagementAddress(ipv4)
+		}
+
+		ipv6, normalizeErr := normalizeDirectManagementAddress(node.Spec.MgmtIPv6, ipv6Pool)
+		if normalizeErr == nil {
+			if ipv6 == "" {
+				ipv6 = ipv6Allocations[name]
+			}
+
+			identity.IPv6 = bareDirectManagementAddress(ipv6)
+		}
+
+		if identity.IPv4 == "" && identity.IPv6 == "" {
+			continue
+		}
+
+		result = append(result, identity)
+	}
+
+	slices.SortFunc(result, func(
+		left, right clabernetesinternaldirectruntime.PeerIdentity,
+	) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+
+	return result
+}
+
+func bareDirectManagementAddress(cidr string) string {
+	if cidr == "" {
+		return ""
+	}
+
+	address, _, found := strings.Cut(cidr, "/")
+	if !found {
+		return cidr
+	}
+
+	return address
 }
 
 func validateUniqueExplicitManagementAddresses(
