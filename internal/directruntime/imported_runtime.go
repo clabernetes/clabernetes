@@ -87,6 +87,10 @@ func newImportedApplicationRuntime(
 			runtime.management = &clabtypes.MgmtNet{
 				IPv4Gw: management.IPv4Gateway,
 				IPv6Gw: management.IPv6Gateway,
+				// Imported packages size their management interface from the runtime's
+				// management network. The realized path is bounded by the Pod underlay minus
+				// the mesh encapsulation, well below the 1500 bytes a device assumes.
+				MTU: clabernetesinternaldeviceplan.ManagementPathMTU(plan, runtime.target.NodeID),
 			}
 		}
 	}

@@ -405,6 +405,9 @@ func (a Adapter) rehydrateImportedDeployment(
 			return nil, fmt.Errorf("constructing imported post-deploy Node: %w", constructErr)
 		}
 		managementNetwork := runtimeManagement(management)
+		// The device configures its management interface from the runtime's management network;
+		// tell it the size the mesh can actually carry.
+		managementNetwork.MTU = ManagementPathMTU(normalizedPlan, nodeInput.ID)
 		if initErr := runImportedRuntimeHook(
 			nodeInput.ID,
 			"postDeployment.initialization",
