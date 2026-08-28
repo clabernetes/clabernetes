@@ -1113,7 +1113,7 @@ func appendExecActions(
 				NamespaceOwnerID: containerNamespaceOwner(plan, containerID),
 			},
 			Kind: ActionExec,
-			Exec: &ExecAction{Command: command, Wait: true},
+			Exec: &ExecAction{Command: command, Wait: true, ContinueOnError: true},
 		})
 	}
 

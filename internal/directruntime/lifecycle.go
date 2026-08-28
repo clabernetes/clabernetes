@@ -22,6 +22,9 @@ const (
 	maxLifecycleFileBytes    = 64 << 20
 	maxLifecycleBinaryBytes  = 256 << 20
 	applicationRestartMarker = "request"
+	// containerLogPath is the application process' stdout, which the kubelet collects as the
+	// container log.
+	containerLogPath = "/proc/1/fd/1"
 )
 
 // ApplicationRestartOperations is the narrow process boundary used to restart a kubelet-owned
@@ -315,7 +318,11 @@ func runLifecycle(
 			}
 		case clabernetesinternaldeviceplan.ActionExec:
 			if err = runLifecycleExec(ctx, action); err != nil {
-				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, err)
+				if action.Exec == nil || !action.Exec.ContinueOnError {
+					return fmt.Errorf("lifecycle action %q failed: %w", action.ID, err)
+				}
+
+				reportContinuedLifecycleFailure(normalized, action, err)
 			}
 		case clabernetesinternaldeviceplan.ActionFile:
 			if err = runLifecycleFile(action, files, root); err != nil {
@@ -387,6 +394,49 @@ func runLifecycleExec(ctx context.Context, action clabernetesinternaldeviceplan.
 	process.Stderr = os.Stderr
 
 	return process.Run()
+}
+
+// reportContinuedLifecycleFailure records a lifecycle command that failed without taking its
+// container down. A lifecycle hook's own output is discarded once the hook succeeds, so the
+// report is also written to the application container's log -- the one place an operator reading
+// `kubectl logs` will find it.
+func reportContinuedLifecycleFailure(
+	plan clabernetesinternaldeviceplan.Plan,
+	action clabernetesinternaldeviceplan.Action,
+	failure error,
+) {
+	message := fmt.Sprintf(
+		"c9s: exec command %q on node %q failed and was skipped: %s\n",
+		strings.Join(action.Exec.Command, " "),
+		planNodeName(plan, action.Target.NodeID),
+		failure,
+	)
+
+	_, _ = os.Stderr.WriteString(message)
+
+	// Best effort: PID 1 is the application process the kubelet started, so its stdout is the
+	// container log. A container that does not expose it simply keeps the report on the hook's
+	// own stderr.
+	log, err := os.OpenFile(containerLogPath, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return
+	}
+
+	defer func() { _ = log.Close() }()
+
+	_, _ = log.WriteString(message)
+}
+
+// planNodeName resolves the containerlab node name behind a plan-internal node identity, so a
+// report names the node its author wrote rather than an opaque identifier.
+func planNodeName(plan clabernetesinternaldeviceplan.Plan, nodeID string) string {
+	for _, node := range plan.Nodes {
+		if node.ID == nodeID && node.Name != "" {
+			return node.Name
+		}
+	}
+
+	return nodeID
 }
 
 func runLifecycleFile(

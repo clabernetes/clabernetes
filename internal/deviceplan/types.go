@@ -453,10 +453,15 @@ type ActionTarget struct {
 
 // ExecAction executes an existing user- or kind-declared command without a shell by default.
 type ExecAction struct {
-	Command        []string `json:"command"`
-	Shell          bool     `json:"shell,omitempty"`
-	Wait           bool     `json:"wait"`
-	TimeoutSeconds int      `json:"timeoutSeconds,omitempty"`
+	Command []string `json:"command"`
+	Shell   bool     `json:"shell,omitempty"`
+	Wait    bool     `json:"wait"`
+	// ContinueOnError keeps the lifecycle phase running when the command fails. The topology's
+	// own exec list is best effort in containerlab -- a failing command is reported and the node
+	// keeps running -- and a PostStart hook that fails would instead take the whole container
+	// down. Commands a kind's own deployment recorded stay fail-closed.
+	ContinueOnError bool `json:"continueOnError,omitempty"`
+	TimeoutSeconds  int  `json:"timeoutSeconds,omitempty"`
 }
 
 // FileWriteMode describes how one staged artifact is applied to an existing container path.

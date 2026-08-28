@@ -65,6 +65,10 @@ diagnostic. Nothing is silently dropped.
 - **Containers restart with their Pod.** `restart-policy` accepts `always` and
   `unless-stopped`; Docker's `no` and `on-failure` cannot exist in a shared Pod and are
   rejected at compile time.
+- **A failing `exec` command does not stop the node.** The topology's `exec` list runs as a
+  Kubernetes PostStart hook, and a failed hook would take the container down; a command that
+  fails is instead reported on the node's container log and the remaining commands still run,
+  which is what containerlab does. Commands a kind's own deployment records stay fail-closed.
 - **`stages` are rejected.** Multi-node boot orchestration gates the nodes of one lab against
   each other on a single host; direct device Pods start independently. `startup-delay` is
   honored per node.
