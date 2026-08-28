@@ -3,23 +3,21 @@ title: Nokia SR-SIM
 description: Deploy integrated and distributed Nokia SR-SIM systems with Clabernetes.
 ---
 
-This guide explains how to deploy Nokia SR-SIM (SR OS Simulator) topologies with Clabernetes, including supported configurations.
-
-## Overview
-
-Nokia SR-SIM is a containerized version of Nokia SR OS, replacing the legacy VM-based vSIM variant (`vr-sros`). SR-SIM is identified by the `nokia_srsim` kind in containerlab topology files.
+Nokia SR-SIM is a containerized version of Nokia SR OS, replacing the legacy VM-based vSIM
+variant (`vr-sros`). SR-SIM is identified by the `nokia_srsim` kind in containerlab topology
+files. This page covers the supported integrated and distributed configurations and their
+Kubernetes specifics.
 
 ## Prerequisites
 
-1. **License**: A valid SR-SIM license file is mandatory. The `license` directive must point to the
-   path where Clabernetes mounts the license, or the deployment will fail.
+- A valid SR-SIM license file is mandatory. The `license` directive must point to the path
+  where Clabernetes mounts the license, or the deployment will fail.
+- The SR-SIM image must be reachable by the kubelet on every eligible worker. Loading an image
+  only on the workstation is not sufficient for a remote Kubernetes cluster.
+- SR-SIM nodes require significant CPU and memory; see the
+  [resource recommendations](#resource-recommendations) below.
 
-2. **Image**: The SR-SIM image must be reachable by the kubelet on every eligible worker. Loading
-   an image only on the workstation is not sufficient for a remote Kubernetes cluster.
-
-3. **Resources**: SR-SIM nodes require significant resources. Ensure your cluster nodes have adequate CPU and memory.
-
-### Private Registry Images
+### Private registry images
 
 Create a Kubernetes Docker registry Secret in the same namespace as the Topology:
 
@@ -43,15 +41,15 @@ The kubelet receives this name through `Pod.spec.imagePullSecrets`. Configure re
 private CAs, or HTTP endpoints in the worker container runtime; c9s has no nested Docker or image
 import fallback.
 
-## Supported Configurations
+## Supported configurations
 
-### Integrated Systems
+### Integrated systems
 
 Integrated SR-SIM systems run as a single container. Nokia supports the integrated model only
 for these platform types. Every other chassis, including the FP5 small fixed platforms such
 as `sr-1-92s`, must run distributed (declare `components`):
 
-| Platform Type | Description                      |
+| Platform type | Description                      |
 | ------------- | -------------------------------- |
 | `sr-1`        | SR-1 integrated system (default) |
 | `sr-1s`       | SR-1s integrated system          |
@@ -63,7 +61,7 @@ as `sr-1-92s`, must run distributed (declare `components`):
 A componentless node of any other type boots a single simulator container that never attaches
 its data-path ports: the Node reports ready on management but forwards nothing.
 
-**Example topology:**
+An integrated two-node example:
 
 ```yaml
 apiVersion: v1
@@ -108,7 +106,7 @@ spec:
             type: sr-1s
 ```
 
-### Distributed Chassis Systems
+### Distributed chassis systems
 
 Distributed chassis-based SR-SIM systems (SR-7, SR-14s, etc.) simulate a single chassis using
 multiple containers, one for each card slot (CPM-A, CPM-B, IOMs). In the explicit-card form,
@@ -116,7 +114,7 @@ secondary containers share a network namespace via `network-mode: container:<nam
 component form, the imported containerlab package expands the node into card containers during
 planning.
 
-| Platform Type | Description |
+| Platform type | Description |
 | --------------- | ------------- |
 | `sr-2s` | SR-2s chassis system |
 | `sr-2se` | SR-2se chassis system |
@@ -124,12 +122,10 @@ planning.
 | `sr-14s` | SR-14s chassis system |
 | `sr-1-92s` | SR-1-92s system |
 
-**Terminology:**
-
-- **Chassis**: A single SR OS router (e.g., one SR-7). In Clabernetes, a chassis is represented by a group of containers deployed in the same pod.
-- **Cards/Slots**: Components within a chassis (CPM-A, CPM-B, IOM-1, etc.). Each card runs as a separate container sharing the chassis's network namespace.
-
-**How it works:**
+A *chassis* is a single SR OS router (one SR-7, for example); in Clabernetes it is a group of
+containers deployed in the same Pod. *Cards* are the components within a chassis (CPM-A,
+CPM-B, IOM-1, and so on), each running as a separate container sharing the chassis's network
+namespace.
 
 Containerlab supports two ways to describe the cards. A single logical node can use a `components`
 block, in which case the imported containerlab package expands it into card containers and
@@ -205,7 +201,7 @@ The same Containerlab definition can be converted with `clabverter --emit-crs`. 
 containerlab package remains responsible for component expansion and fabric construction, while
 Clabernetes owns the Kubernetes Node, device Pod, readiness, and shared payload lifecycle.
 
-**Example distributed topology:**
+The explicit-card form of the same idea:
 
 ```yaml
 apiVersion: v1
@@ -271,19 +267,21 @@ spec:
           - endpoints: ["srsim-iom1:1/1/c1/1", "external-router:e1-1"]
 ```
 
-**Key points for distributed mode:**
+In distributed mode:
 
-1. **Primary card**: The card without `network-mode` (typically CPM-A) is the primary. The Deployment/Pod and its resource policy are associated with this card's name.
+- The card without `network-mode` (typically CPM-A) is the primary. The Deployment/Pod and
+  its resource policy are associated with this card's name.
+- Cards with `network-mode: container:<primary>` (CPM-B, IOMs) are grouped with their primary
+  and deployed in the same Pod.
+- Links between cards in the same chassis stay inside the Pod's shared network namespace.
+  Links to other chassis or external nodes cross the cluster fabric: veth legs whose sidecar
+  side feeds the Pod's fabric wire riding the cluster network.
+- Every card Node receives its own Services, all selecting the shared chassis Pod; the primary
+  card name always works when connecting from other Pods.
+- Each distributed chassis gets its own Pod, so two SR-7 routers can be scheduled on
+  different Kubernetes worker nodes.
 
-2. **Secondary cards**: Cards with `network-mode: container:<primary>` (CPM-B, IOMs) are grouped with their primary and deployed in the same pod.
-
-3. **Links**: Links between cards in the same chassis stay inside the Pod's shared network namespace. Links to other chassis or external nodes cross the cluster fabric: veth legs whose sidecar side feeds the Pod's fabric wire riding the cluster network.
-
-4. **Service names**: Every card Node receives its own services, all selecting the shared chassis pod; the primary card name always works when connecting from other pods.
-
-5. **Multiple chassis**: If you deploy multiple distributed chassis (e.g., two SR-7 routers), each chassis gets its own pod. Different chassis can be scheduled on different Kubernetes worker nodes.
-
-### Card and Component Configuration
+### Card and component configuration
 
 For integrated systems, you can customize MDAs (Media Dependent Adapters) using environment variables:
 
@@ -319,7 +317,7 @@ A component entry containing only `slot` starts that card's simulator container 
 containerlab which SR OS card, SFM, or MDA to provision. Supply `type`, `sfm`, and `mda` inventory
 when automatic card provisioning is required.
 
-### Platform Rules Cheat Sheet
+### Platform rules cheat sheet
 
 Modular chassis follow real SR OS equipage semantics, so a lab that skips them fails with exact
 SR OS diagnostics rather than booting degraded:
@@ -348,7 +346,7 @@ SR OS diagnostics rather than booting degraded:
   each in-place restart as a failure and applies exponential backoff while the card
   containers crash-loop until their CPM is back.
 
-## Interface Naming
+## Interface naming
 
 SR-SIM uses a specific interface naming convention:
 
@@ -356,13 +354,13 @@ SR-SIM uses a specific interface naming convention:
 L/xX/M/cC/P
 ```
 
-- `L` - Line card slot
-- `X` - MDA slot (optional for some platforms)
-- `M` - MDA number
-- `C` - Connector number
-- `P` - Port number
+- `L`: line card slot
+- `X`: MDA slot (optional for some platforms)
+- `M`: MDA number
+- `C`: connector number
+- `P`: port number
 
-**Example:** `1/1/c1/1` = Card 1, MDA 1, Connector 1, Port 1
+For example, `1/1/c1/1` is card 1, MDA 1, connector 1, port 1.
 
 In topology links:
 
@@ -371,7 +369,7 @@ links:
   - endpoints: ["sr1:1/1/c1/1", "sr2:1/1/c1/1"]
 ```
 
-## Resource Recommendations
+## Resource recommendations
 
 SR-SIM nodes are resource-intensive. Configure appropriate resource limits:
 
@@ -415,7 +413,7 @@ spec:
           cpu: "8"
 ```
 
-## License File Mounting
+## License file mounting
 
 The license file must be accessible to the SR-SIM container. Use ConfigMaps to mount the license:
 
@@ -462,29 +460,24 @@ attachment stops reconciliation instead of silently choosing one license.
 
 ## Limitations
 
-### Cards Within a Chassis Must Be Co-located
+### Cards within a chassis must be co-located
 
-All cards (CPM-A, CPM-B, IOMs) within a single distributed chassis must run on the same Kubernetes worker node. This is a fundamental constraint of Linux network namespaces: they cannot span multiple hosts.
+All cards (CPM-A, CPM-B, IOMs) within a single distributed chassis must run on the same
+Kubernetes worker node. This is a fundamental constraint of Linux network namespaces: they
+cannot span multiple hosts. One worker therefore needs enough CPU and memory for every card in
+a chassis. Use node selectors or tolerations to schedule chassis Pods onto appropriately sized
+workers, or use the integrated types (`sr-1`, `sr-1s`) when resources are tight.
 
-**Impact:** A single Kubernetes worker must have sufficient resources (CPU, memory) for all cards in a chassis.
+Different chassis (routers) in a topology can still land on different workers: two SR-7
+routers can run on two workers, as long as the cards of each individual router share one.
 
-**Mitigations:**
-
-- Use Kubernetes node selectors or taints/tolerations to ensure chassis pods are scheduled on appropriately sized nodes
-- Consider using integrated SR-SIM types (sr-1, sr-1s) when resource constraints are a concern
-- Plan cluster capacity with distributed chassis resource requirements in mind
-
-### Different Chassis Can Be Distributed
-
-While cards within a chassis must be co-located, different chassis (routers) in your topology can be scheduled on different Kubernetes worker nodes. For example, if you have two SR-7 routers in your topology, each can run on a different worker node; only the cards within each individual router must share a node.
-
-### Port Publishing
+### Port publishing
 
 All cards of one chassis share a single network namespace, so exposed ports are chassis-wide rather than per-card: every card Node's expose service targets that shared namespace, and the default auto-exposed port set is allocated once across the group.
 
-## Related Resources
+## Related
 
-- [Containerlab SR-SIM Documentation](https://containerlab.dev/manual/kinds/sros/)
-- [SR-SIM Lab Examples](https://github.com/srl-labs/containerlab/tree/main/lab-examples/sr-sim)
-- [File Mounting Guide](/docs/guides/file-mounting)
-- [Resource Management Guide](/docs/guides/resource-management)
+- [Containerlab SR-SIM documentation](https://containerlab.dev/manual/kinds/sros/)
+- [SR-SIM lab examples](https://github.com/srl-labs/containerlab/tree/main/lab-examples/sr-sim)
+- [File mounting guide](/docs/guides/file-mounting)
+- [Resources and scheduling guide](/docs/guides/resource-management)

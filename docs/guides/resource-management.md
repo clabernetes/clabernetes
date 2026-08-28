@@ -3,21 +3,16 @@ title: Resources and scheduling
 description: Configure device Pod resources, node selection, tolerations, and affinity.
 ---
 
-This guide explains how to configure resource limits, requests, node scheduling, and tolerations for Clabernetes topologies.
+Device Pods accept the usual Kubernetes placement and sizing controls: resource requests and
+limits, node selectors, tolerations, and affinity. This page covers where each control lives
+and how the different levels interact.
 
-## Overview
+## Resource configuration
 
-Clabernetes allows fine-grained control over:
+### Per-Topology resources
 
-- **Resource requests/limits**: CPU and memory for device Pods
-- **Node selectors**: Control which Kubernetes nodes run your topology
-- **Tolerations**: Run on tainted nodes
-
-## Resource Configuration
-
-### Per-Topology Resources
-
-Set resources at the topology level:
+Set resources at the topology level; `default` applies to all nodes and a node-name key
+overrides it:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -27,28 +22,13 @@ metadata:
 spec:
   deployment:
     resources:
-      default:  # Applied to all nodes
+      default:
         requests:
           memory: "2Gi"
           cpu: "1"
         limits:
           memory: "4Gi"
           cpu: "2"
-```
-
-### Per-Node Resources
-
-Override resources for specific nodes:
-
-```yaml
-spec:
-  deployment:
-    resources:
-      default:
-        requests:
-          memory: "2Gi"
-          cpu: "1"
-      # High-resource node
       core-router:
         requests:
           memory: "16Gi"
@@ -56,7 +36,6 @@ spec:
         limits:
           memory: "32Gi"
           cpu: "16"
-      # Minimal resource node
       host:
         requests:
           memory: "512Mi"
@@ -67,7 +46,7 @@ For a Topology, the compiler emits one shared NodeProfile for the default policy
 complete dedicated NodeProfile only for a Node whose resource policy differs. Every emitted
 Node receives an explicit `profileRef`; profiles do not inherit from one another.
 
-### Direct Node and NodeProfile Resources
+### Direct Node and NodeProfile resources
 
 When authoring the primary API directly, put resource policy on a NodeProfile and reference
 it explicitly from each intended Node. Profile resources apply to each logical Node's primary
@@ -98,9 +77,9 @@ spec:
 The reference is same-namespace and singular. NodeProfiles are never selected by labels or
 merged by priority.
 
-### Global Resources (Config CRD)
+### Global defaults (Config CRD)
 
-Set default resources globally:
+Set cluster-wide default resources in the singleton Config:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -115,24 +94,9 @@ spec:
         cpu: "1"
 ```
 
-### Resources by Containerlab Kind
-
 Per-kind resource defaults are no longer configured in c9s: the imported containerlab package
-owns kind requirements, and generic defaults come from `config.deployment.resourcesDefault`. Use
-a `NodeProfile` when a specific group of nodes needs different sizing:
-
-```yaml
-apiVersion: c9s.run/v1alpha1
-kind: Config
-metadata:
-  name: clabernetes
-spec:
-  deployment:
-    resourcesDefault:
-      requests:
-        memory: "512Mi"
-        cpu: "250m"
-```
+owns kind requirements, and generic defaults come from `config.deployment.resourcesDefault`.
+Use a NodeProfile when a specific group of nodes needs different sizing.
 
 ### Containerlab `cpu` and `memory`
 
@@ -154,7 +118,7 @@ spec:
   memory: 4Gb
 ```
 
-### Resource Priority
+### Resource priority
 
 The effective NodeProfile (explicitly authored or generated from Topology policy) overrides
 global Config fields it sets. Omitted profile fields continue to use Config resolution:
@@ -162,9 +126,9 @@ global Config fields it sets. Omitted profile fields continue to use Config reso
 1. Referenced/generated NodeProfile resources
 2. Global default resources (`config.deployment.resourcesDefault`)
 
-## Recommended Resource Values
+### Sizing reference
 
-| Device Type | Memory Request | CPU Request | Notes |
+| Device type | Memory request | CPU request | Notes |
 | ------------- | ---------------- | ------------- | ------- |
 | SR Linux | 4Gi | 2 | Standard variant |
 | SR Linux (IXR-10) | 16Gi | 8 | Large variant |
@@ -172,11 +136,13 @@ global Config fields it sets. Omitted profile fields continue to use Config reso
 | cEOS | 2Gi | 1 | Arista container |
 | Linux | 512Mi | 250m | Basic containers |
 
-## Node Scheduling
+Always set requests so the scheduler can place device Pods sensibly, and adjust from observed
+usage (`kubectl top pods`).
 
-### Node Selectors
+## Node selectors
 
-Schedule pods on specific Kubernetes nodes:
+Constrain device Pods to Kubernetes nodes carrying specific labels; a Pod runs only on nodes
+matching all of them:
 
 ```yaml
 spec:
@@ -185,25 +151,13 @@ spec:
       nodeSelector:
         kubernetes.io/arch: amd64
         node-type: network-lab
-        disktype: ssd
 ```
 
-Pods will only run on nodes with ALL specified labels.
+Label the target nodes with `kubectl label node <name> node-type=network-lab`.
 
-### Label Your Nodes
+### Global node selectors by image
 
-```bash
-# Add labels to nodes
-kubectl label node worker-1 node-type=network-lab
-kubectl label node worker-2 node-type=network-lab
-
-# Verify labels
-kubectl get nodes --show-labels
-```
-
-### Global Node Selectors by Image
-
-In the Config CRD, map node selectors to image patterns:
+In the Config CRD, map node selectors to image patterns; the longest matching pattern wins:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -223,11 +177,10 @@ spec:
         node-type: standard
 ```
 
-The longest matching pattern takes precedence.
-
 ## Tolerations
 
-Run pods on tainted nodes:
+Tolerations let device Pods run on tainted Kubernetes nodes, for example workers dedicated to
+network labs:
 
 ```yaml
 spec:
@@ -238,49 +191,13 @@ spec:
           operator: "Equal"
           value: "network-lab"
           effect: "NoSchedule"
-        - key: "nvidia.com/gpu"
-          operator: "Exists"
-          effect: "NoSchedule"
 ```
 
-### Toleration Examples
+Taint the dedicated nodes with
+`kubectl taint nodes <name> dedicated=network-lab:NoSchedule`. The entries are ordinary
+Kubernetes tolerations; `operator: Exists` and `tolerationSeconds` work as they do on any Pod.
 
-```yaml
-# Tolerate specific taint
-tolerations:
-  - key: "node-role.kubernetes.io/network"
-    operator: "Equal"
-    value: "true"
-    effect: "NoSchedule"
-
-# Tolerate any value for a key
-tolerations:
-  - key: "dedicated"
-    operator: "Exists"
-    effect: "NoSchedule"
-
-# Tolerate with time limit
-tolerations:
-  - key: "node.kubernetes.io/unreachable"
-    operator: "Exists"
-    effect: "NoExecute"
-    tolerationSeconds: 300
-```
-
-### Taint Your Nodes
-
-```bash
-# Add taint
-kubectl taint nodes worker-1 dedicated=network-lab:NoSchedule
-
-# Verify taints
-kubectl describe node worker-1 | grep Taints
-
-# Remove taint
-kubectl taint nodes worker-1 dedicated=network-lab:NoSchedule-
-```
-
-## Affinity Rules
+## Affinity rules
 
 Affinity rules apply to direct device Pods and use the native Kubernetes affinity structure. They
 can require or prefer particular Kubernetes nodes with `nodeAffinity`, or place device Pods in
@@ -361,9 +278,9 @@ One NodeProfile can be referenced by multiple Nodes. If Nodes share one Pod thro
 Affinity `labelSelector` fields select peer Pods for pod affinity or anti-affinity; they do not
 select which Nodes receive a NodeProfile.
 
-## Complete Example
+## Complete example
 
-Comprehensive scheduling configuration:
+Resources, node selection, and tolerations combined on one Topology:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -388,7 +305,6 @@ spec:
       nodeSelector:
         kubernetes.io/arch: amd64
         node-type: network-lab
-        storage: nvme
       tolerations:
         - key: "dedicated"
           operator: "Equal"
@@ -409,48 +325,17 @@ spec:
 
 ## Troubleshooting
 
-### Pods Stuck in Pending
-
-Check events:
+A device Pod stuck in `Pending` usually means no Kubernetes node matches the selector, the
+matching nodes lack free resources, or a taint is not tolerated. The Pod events name the exact
+reason:
 
 ```bash
 kubectl describe pod <pod-name>
-```
-
-Common causes:
-
-- No nodes match selector
-- Insufficient resources
-- Node taints not tolerated
-
-### Finding Suitable Nodes
-
-```bash
-# List nodes with labels
-kubectl get nodes -L node-type,disktype
-
-# Check node resources
-kubectl describe node <node-name> | grep -A10 "Allocated resources"
-```
-
-### Resource Pressure
-
-Check if nodes have capacity:
-
-```bash
+kubectl get nodes -L node-type
 kubectl top nodes
-kubectl describe node <node-name> | grep -A5 "Allocated"
 ```
 
-## Best Practices
-
-1. **Always set requests**: Ensure scheduler knows resource needs
-2. **Set appropriate limits**: Prevent runaway resource usage
-3. **Use node selectors wisely**: Don't over-constrain scheduling
-4. **Test tolerations**: Verify pods can run on intended nodes
-5. **Monitor resource usage**: Adjust based on actual consumption
-
-## Privileged Mode
+## Privileged mode
 
 There is no privileged wrapper pod and no `privilegedLauncher` knob. Each device container
 receives exactly the privilege, capabilities, and devices its imported containerlab kind plan
@@ -461,5 +346,5 @@ definition itself. Privilege is per-container plan output, never profile or Conf
 
 - [Example: with-resources.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-resources.yaml)
 - [Example: with-scheduling.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-scheduling.yaml)
-- [CRD Reference: Deployment](/docs/crd/topology)
-- [CRD Reference: Scheduling](/docs/guides/resource-management)
+- [NodeProfile CRD reference](/docs/crd/node-profile)
+- [Topology CRD reference](/docs/crd/topology)

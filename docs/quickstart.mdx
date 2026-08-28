@@ -5,15 +5,15 @@ icon: Rocket
 ---
 
 The [repository](https://github.com/clabernetes/clabernetes) includes an automated workflow that creates a single-node [KinD](https://kind.sigs.k8s.io/) cluster, installs the
-selected c9s Helm chart, configures MetalLB, and deploys a sample network topology consisting of an Nokia SR Linux node connected to a Network Multitool node.
+selected c9s Helm chart, configures MetalLB, and deploys a sample network topology: a Nokia SR Linux node connected to a Network Multitool node.
 
 ## Requirements
 
-The `Makefile` provided in the repository automates all steps required to create the KinD cluster and deploy the sample network topology. All you have to ensure is that:
+The `Makefile` provided in the repository automates all steps required to create the KinD cluster and deploy the sample network topology. You only need:
 
-- `git` is installed
-- you have enough local CPU and memory to run KinD cluster and the sample network node.  
-8GB of RAM and 4 CPUs should be enough.
+- `git`
+- enough local CPU and memory for the KinD cluster and the sample nodes.
+8GB of RAM and 4 CPUs are enough.
 
 KinD, `kubectl`, Helm, yq, UV, and GitHub CLI are downloaded into `build/try-c9s/bin` at the
 repository-pinned versions. Host executables with the same names are not used by this workflow.
@@ -35,7 +35,7 @@ From the repository root, run:
 make try-c9s
 ```
 
-This command creates a single-node KinD cluster, installs c9s, configures Kubernetes load balancer (MetalLB) and deploys a sample network topology consisting of an Nokia SR Linux node connected to a Network Multitool node.
+This creates the KinD cluster, installs c9s, configures the MetalLB load balancer, and deploys the sample topology.
 
 A successful run ends with the following output:
 
@@ -55,12 +55,12 @@ The previous step ends with the list of commands to use to connect to the two no
 
 <TryC9sDiagram />
 
-The list of connection commands show you how to connect:
+The access commands show how to connect:
 
-- with SSH/gNMI/NETCONF to the Nokia SR Linux node deployed in the lab and
-- with SSH to the Network Multitool node deployed in the lab.
+- with SSH/gNMI/NETCONF to the Nokia SR Linux node and
+- with SSH to the Network Multitool node.
 
-Connect to the SR Linux node using SSH, you should see the login prompt for the admin user, enter the `NokiaSrl1!` to log in.
+Connect to the SR Linux node with SSH and log in as the admin user with the password `NokiaSrl1!`.
 
 ## Test the datapath [step]
 
@@ -76,11 +76,11 @@ PING 192.0.2.1 (192.0.2.1) 56(84) bytes of data.
 
 ## Explore the deployment
 
-Provided the datapath is working, you can continue exploring the deployment using `kubectl` that is downloaded into `build/try-c9s/bin` at the repository root.
+Once the datapath works, explore the deployment with the `kubectl` downloaded into `build/try-c9s/bin` at the repository root.
 
 ## Clean up
 
-When you are done exploring c9s, you can clean up the whole deployment by removing the KinD cluster:
+When you are done exploring c9s, remove the KinD cluster:
 
 ```bash
 make try-c9s-clean
@@ -88,7 +88,7 @@ make try-c9s-clean
 
 ## Next steps
 
-- [Understand Nodes and Links API](/docs/concepts/nodes-and-links)
+- [Understand the Nodes and Links API](/docs/concepts/nodes-and-links)
 - [See what differs from containerlab](/docs/concepts/containerlab-differences)
 - [Read the architecture overview](/docs/architecture)
 - [Browse complete examples](/docs/examples)

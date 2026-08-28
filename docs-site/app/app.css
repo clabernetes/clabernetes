@@ -65,57 +65,12 @@ body {
 }
 
 .c9s-home {
-  background:
-    radial-gradient(circle at top,
-      color-mix(in oklab, var(--color-fd-primary) 8%, transparent),
-      transparent 32rem),
-    var(--color-fd-background);
+  background: var(--color-fd-background);
 }
 
 :root {
   --c9s-cyan: #20d9e7;
   --c9s-magenta: #d21b71;
-}
-
-.c9s-home::before,
-.c9s-home::after {
-  position: absolute;
-  z-index: -10;
-  width: 28rem;
-  height: 28rem;
-  border-radius: 9999px;
-  content: '';
-  filter: blur(100px);
-  opacity: 0.12;
-  pointer-events: none;
-}
-
-.c9s-home::before {
-  top: 8rem;
-  left: -16rem;
-  background: var(--c9s-magenta);
-}
-
-.c9s-home::after {
-  top: 34rem;
-  right: -16rem;
-  background: var(--c9s-cyan);
-}
-
-.c9s-grid {
-  background-image:
-    linear-gradient(to right, color-mix(in oklab, var(--color-fd-border) 55%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--color-fd-border) 55%, transparent) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: linear-gradient(to bottom, black, transparent 68%);
-  opacity: 0.45;
-}
-
-.c9s-gradient-text {
-  color: transparent;
-  background: linear-gradient(115deg, var(--c9s-magenta) 10%, #f43f8d 42%, var(--c9s-cyan) 90%);
-  background-clip: text;
-  -webkit-background-clip: text;
 }
 
 .c9s-polka-canvas {
@@ -135,16 +90,6 @@ body {
   pointer-events: none;
 }
 
-.c9s-fabric-stage::before {
-  position: absolute;
-  inset: 15% 10% 5%;
-  border-radius: 9999px;
-  background: color-mix(in oklab, var(--c9s-cyan) 10%, transparent);
-  content: '';
-  filter: blur(48px);
-  pointer-events: none;
-}
-
 .c9s-fabric-node {
   transition:
     border-color 180ms ease,
@@ -153,7 +98,7 @@ body {
 
 .c9s-fabric-node:hover {
   border-color: color-mix(in oklab, var(--c9s-cyan) 38%, var(--color-fd-border));
-  box-shadow: 0 14px 32px rgb(0 195 215 / 12%);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 8%);
 }
 
 .c9s-fabric-link {
