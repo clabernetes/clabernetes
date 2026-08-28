@@ -265,7 +265,40 @@ func validateNormalizedPlan(plan clabernetesinternaldeviceplan.Plan) error {
 		}
 	}
 
+	mountDestinations := map[string]string{}
+
+	for mountIndex, mount := range plan.Mounts {
+		key := mount.ContainerID + "\x00" + mount.Destination
+		if existing := mountDestinations[key]; existing != "" {
+			return &clabernetesinternaldeviceplan.Error{
+				Code:     clabernetesinternaldeviceplan.ErrorInvariant,
+				Field:    fmt.Sprintf("mounts[%d].destination", mountIndex),
+				NodeID:   containerNodeID(plan, mount.ContainerID),
+				Behavior: "kubernetes-workload-preflight",
+				Message: fmt.Sprintf(
+					"mounts %q and %q both land on container path %q; "+
+						"a Kubernetes container cannot mount one path twice",
+					existing,
+					mount.ID,
+					mount.Destination,
+				),
+			}
+		}
+
+		mountDestinations[key] = mount.ID
+	}
+
 	return nil
+}
+
+func containerNodeID(plan clabernetesinternaldeviceplan.Plan, containerID string) string {
+	for _, container := range plan.Containers {
+		if container.ID == containerID {
+			return container.NodeID
+		}
+	}
+
+	return ""
 }
 
 func directPlanPreflightError(nodeID, field, message string) error {

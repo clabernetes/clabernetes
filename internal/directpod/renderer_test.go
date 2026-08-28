@@ -98,6 +98,32 @@ func TestValidatePlanRejectsUnportableHostDeviceAndSecurityInputs(t *testing.T) 
 	}
 }
 
+func TestValidatePlanRejectsDuplicateContainerMountDestinations(t *testing.T) {
+	t.Parallel()
+
+	plan := renderablePlan()
+	plan.Mounts = append(plan.Mounts,
+		clabernetesinternaldeviceplan.MountPlan{
+			ID: "mount/payload-hosts", ContainerID: "node-a/root",
+			VolumeID: "node-a/artifacts", SourcePath: "payloads/a", Destination: "/etc/hosts",
+		},
+		clabernetesinternaldeviceplan.MountPlan{
+			ID: "mount/bind-hosts", ContainerID: "node-a/root",
+			VolumeID: "node-a/artifacts", SourcePath: "payloads/a", Destination: "/etc/hosts",
+		},
+	)
+
+	err := clabernetesinternaldirectpod.ValidatePlan(plan)
+
+	var planningErr *clabernetesinternaldeviceplan.Error
+	if !errors.As(err, &planningErr) ||
+		planningErr.Code != clabernetesinternaldeviceplan.ErrorInvariant ||
+		planningErr.NodeID != "node-a" ||
+		!strings.Contains(planningErr.Message, "/etc/hosts") {
+		t.Fatalf("ValidatePlan() error = %#v", err)
+	}
+}
+
 func TestRenderAppliesProfilePullDefaultWithoutOverwritingExplicitNodePolicy(t *testing.T) {
 	t.Parallel()
 

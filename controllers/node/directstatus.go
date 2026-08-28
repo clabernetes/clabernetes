@@ -16,6 +16,7 @@ import (
 	clabernetesinternalocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
+	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -65,6 +66,18 @@ func directPreflightDiagnostic(err error) (reason, message string, report bool) 
 	var metadataErr *clabernetesinternalocimetadata.Error
 	if errors.As(err, &metadataErr) {
 		return "OCIMetadata" + string(metadataErr.Code), metadataErr.Error(), true
+	}
+
+	var applyErr *deploymentApplyError
+	if errors.As(err, &applyErr) {
+		// The API server rejecting the rendered Deployment is terminal until the spec changes;
+		// anything else (a timeout, a conflict) is retried and may clear on its own.
+		if apimachineryerrors.IsInvalid(applyErr.cause) ||
+			apimachineryerrors.IsBadRequest(applyErr.cause) {
+			return "DeploymentInvalid", applyErr.Error(), true
+		}
+
+		return "DeploymentApplyFailed", applyErr.Error(), true
 	}
 
 	return "", "", false

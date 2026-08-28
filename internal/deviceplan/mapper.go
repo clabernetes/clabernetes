@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	"github.com/dustin/go-humanize"
 	"github.com/google/shlex"
 	clabtypes "github.com/srl-labs/containerlab/types"
@@ -178,7 +179,9 @@ func appendEvaluatedNode(
 	// than making its existence depend on kind-specific file generation.
 	ensureArtifactsVolume(plan, node.Input.ID)
 	artifactFileIDs := appendGeneratedArtifactPlans(plan, node)
-	appendPayloadPlans(plan, node, input.Payloads, primaryContainerID)
+	if err := appendPayloadPlans(plan, node, input.Payloads, primaryContainerID); err != nil {
+		return err
+	}
 	recordedActionCount, err := appendRecordedDeploymentActions(
 		plan,
 		node,
@@ -805,10 +808,23 @@ func appendPayloadPlans(
 	node *EvaluatedNode,
 	payloads []PayloadInput,
 	containerID string,
-) {
+) error {
 	for _, payload := range payloads {
 		if payload.NodeID != node.Input.ID {
 			continue
+		}
+		if reason, reserved := clabernetesutilkubernetes.ReservedContainerPathReason(
+			payload.Destination,
+		); reserved {
+			return nodeMappingError(
+				node.Input.ID,
+				"files",
+				fmt.Sprintf(
+					"file destination %q collides with a reserved container path: %s",
+					payload.Destination,
+					reason,
+				),
+			)
 		}
 		volumeID := ensureArtifactsVolume(plan, node.Input.ID)
 		fileID := "file/" + payload.ID
@@ -821,15 +837,17 @@ func appendPayloadPlans(
 			Destination: payload.Destination,
 			Mode:        payload.Mode, Sensitive: payload.Sensitive,
 		})
-		plan.Mounts = append(plan.Mounts, MountPlan{
-			ID:          mountID,
-			ContainerID: containerID,
-			VolumeID:    volumeID,
-			SourcePath:  "payloads/" + payload.ID,
-			Destination: payload.Destination,
-			ReadOnly:    true,
-		})
-		appendContainerMountID(plan, containerID, mountID)
+		if !planHasEquivalentMount(plan, containerID, volumeID, payload) {
+			plan.Mounts = append(plan.Mounts, MountPlan{
+				ID:          mountID,
+				ContainerID: containerID,
+				VolumeID:    volumeID,
+				SourcePath:  "payloads/" + payload.ID,
+				Destination: payload.Destination,
+				ReadOnly:    true,
+			})
+			appendContainerMountID(plan, containerID, mountID)
+		}
 		plan.Actions = append(plan.Actions, Action{
 			ID: "prepare/" + payload.ID, Phase: PhasePrepare,
 			Target: ActionTarget{NodeID: node.Input.ID},
@@ -837,6 +855,28 @@ func appendPayloadPlans(
 			File:   &FileAction{FileID: fileID},
 		})
 	}
+
+	return nil
+}
+
+// planHasEquivalentMount reports whether a user bind already realized this payload's content at
+// the payload's own destination in the same container (a bind whose source and target are the
+// same path). Rendering the payload projection again would produce an invalid Deployment with
+// a duplicate mountPath.
+func planHasEquivalentMount(
+	plan *Plan,
+	containerID string,
+	volumeID string,
+	payload PayloadInput,
+) bool {
+	for _, mount := range plan.Mounts {
+		if mount.ContainerID == containerID && mount.Destination == payload.Destination &&
+			mount.VolumeID == volumeID && mount.SourcePath == "payloads/"+payload.ID {
+			return true
+		}
+	}
+
+	return false
 }
 
 func appendStoragePlans(
@@ -966,6 +1006,17 @@ func appendUserBindPlan(
 		source = "/" + source
 	}
 	target := path.Clean(parts[1])
+	if reason, reserved := clabernetesutilkubernetes.ReservedContainerPathReason(target); reserved {
+		return nodeMappingError(
+			node.Input.ID,
+			"definition.binds",
+			fmt.Sprintf(
+				"user bind target %q collides with a reserved container path: %s",
+				target,
+				reason,
+			),
+		)
+	}
 	volumeID := ensureArtifactsVolume(plan, node.Input.ID)
 	matched := false
 	for _, payload := range payloads {

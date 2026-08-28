@@ -1522,7 +1522,9 @@ func (r *Reconciler) reconcileDirectDeployment(
 	err := r.Client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(rendered), existing)
 	if apimachineryerrors.IsNotFound(err) {
 		if err = r.Client.Create(ctx, rendered); err != nil {
-			return nil, fmt.Errorf("creating direct device Deployment: %w", err)
+			return nil, &deploymentApplyError{
+				operation: "creating direct device Deployment", cause: err,
+			}
 		}
 
 		return rendered, nil
@@ -1541,10 +1543,27 @@ func (r *Reconciler) reconcileDirectDeployment(
 	}
 	rendered.SetResourceVersion(existing.GetResourceVersion())
 	if err = r.Client.Update(ctx, rendered); err != nil {
-		return nil, fmt.Errorf("updating direct device Deployment: %w", err)
+		return nil, &deploymentApplyError{
+			operation: "updating direct device Deployment", cause: err,
+		}
 	}
 
 	return rendered, nil
+}
+
+// deploymentApplyError marks a failure to apply the rendered device Deployment to the cluster,
+// so the reconciler can surface it on the Node status instead of only in the manager log.
+type deploymentApplyError struct {
+	operation string
+	cause     error
+}
+
+func (e *deploymentApplyError) Error() string {
+	return e.operation + ": " + e.cause.Error()
+}
+
+func (e *deploymentApplyError) Unwrap() error {
+	return e.cause
 }
 
 func directDeploymentConforms(existing, rendered *k8sappsv1.Deployment) bool {
