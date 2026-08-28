@@ -165,6 +165,13 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	if err = r.reconcileDirectPeerDirectory(
+		ctx,
+		node.GetNamespace(),
+		compileNamespaceManagementIdentities(nodesByName, profile.Mgmt),
+	); err != nil {
+		return err
+	}
 	baseRequest := PlanInputCompileRequest{
 		Primary: node, GroupMembers: groupMembers, NodesByName: nodesByName,
 		Links: links.Items, Compatibility: compatibility, Payloads: payloads,
@@ -1259,9 +1266,11 @@ func appendDirectPayload(
 	seen map[string]bool,
 	payload clabernetesinternaldeviceplan.PayloadInput,
 ) error {
-	signature := strings.Join([]string{
-		string(payload.Kind), payload.Reference, payload.Digest, fmt.Sprintf("%o", payload.Mode),
-	}, "\x00")
+	// Declarations landing on one destination conflict only when their content or mode
+	// differs. Grouped nodes legitimately declare the same file — a shared license is staged
+	// once per member ConfigMap, so the references differ while the bytes are identical — and
+	// identical bytes cannot conflict.
+	signature := payload.Digest + "\x00" + fmt.Sprintf("%o", payload.Mode)
 	if existing, exists := destinations[payload.Destination]; exists && existing != signature {
 		return planInputError(
 			clabernetesinternaldeviceplan.ErrorInvalidInput,
@@ -1522,7 +1531,9 @@ func (r *Reconciler) reconcileDirectDeployment(
 	err := r.Client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(rendered), existing)
 	if apimachineryerrors.IsNotFound(err) {
 		if err = r.Client.Create(ctx, rendered); err != nil {
-			return nil, fmt.Errorf("creating direct device Deployment: %w", err)
+			return nil, &deploymentApplyError{
+				operation: "creating direct device Deployment", cause: err,
+			}
 		}
 
 		return rendered, nil
@@ -1541,10 +1552,27 @@ func (r *Reconciler) reconcileDirectDeployment(
 	}
 	rendered.SetResourceVersion(existing.GetResourceVersion())
 	if err = r.Client.Update(ctx, rendered); err != nil {
-		return nil, fmt.Errorf("updating direct device Deployment: %w", err)
+		return nil, &deploymentApplyError{
+			operation: "updating direct device Deployment", cause: err,
+		}
 	}
 
 	return rendered, nil
+}
+
+// deploymentApplyError marks a failure to apply the rendered device Deployment to the cluster,
+// so the reconciler can surface it on the Node status instead of only in the manager log.
+type deploymentApplyError struct {
+	operation string
+	cause     error
+}
+
+func (e *deploymentApplyError) Error() string {
+	return e.operation + ": " + e.cause.Error()
+}
+
+func (e *deploymentApplyError) Unwrap() error {
+	return e.cause
 }
 
 func directDeploymentConforms(existing, rendered *k8sappsv1.Deployment) bool {

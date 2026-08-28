@@ -56,6 +56,27 @@ One floor applies: the wire never sizes fragments below 1200 bytes of payload, s
 network smaller than roughly 1250 bytes the outer datagrams fall back to ordinary IP
 fragmentation. Links still work there; the wire just stops adapting below that point.
 
+## The management network is different
+
+Everything above is about lab **links**. A node's **management** interface is not a wire: it is
+a leg of the per-namespace management mesh, which rides the Pod network encapsulated, so it
+carries the Pod network MTU minus that encapsulation (about 1430 bytes on a 1500-byte Pod
+network). Two things keep that from surprising a device:
+
+- **The size is reported to the device.** A kind that configures its management interface from
+  the runtime's management network (SR Linux sets `mgmt0.0 ip-mtu`) receives the size the mesh
+  actually carries instead of assuming 1500.
+- **Management TCP handshakes are clamped to it.** Some devices present a management port whose
+  size the application fixes and cannot lower (SR OS presents 1514). Their handshakes crossing
+  the mesh have the advertised maximum segment lowered to what the mesh carries, so both peers
+  send segments that fit. Without it these flows are a black hole: the connection completes and
+  then stalls on the first full-size segment -- a TLS certificate, a NETCONF hello -- because a
+  drop on a veth produces no fragmentation-needed to learn from. The clamp only ever lowers a
+  size, and only on the management mesh; lab links keep the MTU the topology asked for.
+
+Nothing here is configurable, and raising the Pod network MTU raises the management path with
+it.
+
 ## Links that never cross the Pod network
 
 Links with both endpoints in the same Pod, loopbacks, and host links are plain kernel

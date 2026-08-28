@@ -190,7 +190,10 @@ func (c *Clabverter) handleStartupConfigs() error {
 			return err
 		}
 
-		configMapName := fmt.Sprintf("%s-%s-startup-config", c.clabConfig.Name, nodeName)
+		// The node name is the definition's, which Kubernetes may not be able to carry.
+		configMapName := clabernetesutilkubernetes.SanitizeName(
+			fmt.Sprintf("%s-%s-startup-config", c.clabConfig.Name, nodeName),
+		)
 
 		var rendered bytes.Buffer
 
@@ -549,7 +552,9 @@ func (c *Clabverter) handleExtraFiles() error {
 			return err
 		}
 
-		configMapName := fmt.Sprintf("%s-%s-files", c.clabConfig.Name, nodeName)
+		configMapName := clabernetesutilkubernetes.SanitizeName(
+			fmt.Sprintf("%s-%s-files", c.clabConfig.Name, nodeName),
+		)
 
 		templateVars := extraFilesConfigMapTemplateVars{
 			Name:       configMapName,

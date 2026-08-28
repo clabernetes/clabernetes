@@ -2231,3 +2231,67 @@ func reconcileDirectTestDeployment(
 
 	return nil
 }
+
+func TestAppendDirectPayloadToleratesContentIdenticalGroupDeclarations(t *testing.T) {
+	t.Parallel()
+
+	digest := clabernetesinternaldeviceplan.Digest([]byte("license-content"))
+	result := []clabernetesinternaldeviceplan.PayloadInput{}
+	destinations := map[string]string{}
+	seen := map[string]bool{}
+	license := "/opt/nokia/sros/license.key"
+
+	// Two grouped nodes stage the same license into their own ConfigMaps: the references
+	// differ, the bytes do not. Both declarations must survive so each member's container
+	// receives its mount.
+	for _, payload := range []clabernetesinternaldeviceplan.PayloadInput{
+		{
+			ID: "payload-a", NodeID: "uid-ce5",
+			Kind:      clabernetesinternaldeviceplan.PayloadConfigMap,
+			Reference: "ns/anysec-ce5-files:key", Digest: digest,
+			Destination: license, Mode: 0o444,
+		},
+		{
+			ID: "payload-b", NodeID: "uid-ce5-iom",
+			Kind:      clabernetesinternaldeviceplan.PayloadConfigMap,
+			Reference: "ns/anysec-ce5-iom-files:key", Digest: digest,
+			Destination: license, Mode: 0o444,
+		},
+	} {
+		if err := appendDirectPayload(&result, destinations, seen, payload); err != nil {
+			t.Fatalf("content-identical group declarations must not conflict: %v", err)
+		}
+	}
+
+	if len(result) != 2 {
+		t.Fatalf("payloads = %#v, want both group members", result)
+	}
+
+	// The same node re-declaring identical content collapses into the entry it already has.
+	if err := appendDirectPayload(&result, destinations, seen,
+		clabernetesinternaldeviceplan.PayloadInput{
+			ID: "payload-c", NodeID: "uid-ce5",
+			Kind:      clabernetesinternaldeviceplan.PayloadConfigMap,
+			Reference: "ns/other:key", Digest: digest,
+			Destination: license, Mode: 0o444,
+		}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result) != 2 {
+		t.Fatalf("payloads = %#v, want same-node duplicate collapsed", result)
+	}
+
+	// Different bytes on the same destination stay a conflict.
+	err := appendDirectPayload(&result, destinations, seen,
+		clabernetesinternaldeviceplan.PayloadInput{
+			ID: "payload-d", NodeID: "uid-ce5-iom",
+			Kind:        clabernetesinternaldeviceplan.PayloadConfigMap,
+			Reference:   "ns/anysec-ce5-iom-files:other",
+			Digest:      clabernetesinternaldeviceplan.Digest([]byte("different")),
+			Destination: license, Mode: 0o444,
+		})
+	if err == nil || !strings.Contains(err.Error(), license) {
+		t.Fatalf("content conflict error = %v", err)
+	}
+}

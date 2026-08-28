@@ -13,6 +13,7 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutil "github.com/clabernetes/clabernetes/util"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
@@ -385,6 +386,29 @@ func (c *Clabverter) load() error {
 
 	for _, unknownField := range unknownFields {
 		c.logger.Warn(unknownField)
+	}
+
+	// The lab name names the Topology object and its namespace, so it has to be a name Kubernetes
+	// can carry. The definition itself is emitted unchanged -- the compiler does not read the lab
+	// name out of it.
+	if sanitizedName := clabernetesutilkubernetes.SanitizeName(
+		c.clabConfig.Name,
+	); sanitizedName != c.clabConfig.Name {
+		if sanitizedName == "" {
+			return fmt.Errorf(
+				"%w: lab name %q holds no character a Kubernetes object name can be built from",
+				claberneteserrors.ErrParse,
+				c.clabConfig.Name,
+			)
+		}
+
+		c.logger.Warnf(
+			"lab name %q cannot name Kubernetes objects, using %q",
+			c.clabConfig.Name,
+			sanitizedName,
+		)
+
+		c.clabConfig.Name = sanitizedName
 	}
 
 	// set the destination namespace to the c9s-<topology name>

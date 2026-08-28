@@ -5,6 +5,7 @@ package directruntime
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -98,6 +99,59 @@ func (linuxLaunchOperations) MountFilesystem(
 	}
 
 	return nil
+}
+
+func (linuxLaunchOperations) UpdateFile(
+	path string,
+	update func(current []byte) (updated []byte, write bool),
+) error {
+	file, err := os.OpenFile(path, os.O_RDWR, 0) //nolint:gosec // fixed runtime-owned path.
+	if err != nil {
+		return fmt.Errorf("opening %q for in-place update: %w", path, err)
+	}
+
+	defer file.Close() //nolint:errcheck // read-modify-write is flushed by the explicit write.
+
+	// The advisory lock serializes sibling launch boundaries in the same Pod; the kubelet does
+	// not take it, but a kubelet rewrite is always followed by the (re)started container's own
+	// launch, which restores the content.
+	//nolint:gosec // kernel-issued fd.
+	if err = unix.Flock(int(file.Fd()), unix.LOCK_EX); err != nil {
+		return fmt.Errorf("locking %q: %w", path, err)
+	}
+
+	//nolint:errcheck,gosec // kernel-issued fd; the lock is released on close anyway.
+	defer unix.Flock(int(file.Fd()), unix.LOCK_UN)
+
+	current, err := io.ReadAll(file)
+	if err != nil {
+		return fmt.Errorf("reading %q: %w", path, err)
+	}
+
+	updated, write := update(current)
+	if !write {
+		return nil
+	}
+
+	// The file is a bind mount (kubelet-managed), so it cannot be replaced by rename; truncate
+	// and rewrite in place instead.
+	if err = file.Truncate(0); err != nil {
+		return fmt.Errorf("truncating %q: %w", path, err)
+	}
+
+	if _, err = file.WriteAt(updated, 0); err != nil {
+		return fmt.Errorf("rewriting %q: %w", path, err)
+	}
+
+	return nil
+}
+
+func (linuxLaunchOperations) ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path) //nolint:gosec // fixed runtime-owned path.
+}
+
+func (linuxLaunchOperations) Hostname() (string, error) {
+	return os.Hostname()
 }
 
 func (linuxLaunchOperations) LimitOpenFiles(limit uint64) error {

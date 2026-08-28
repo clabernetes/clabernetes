@@ -15,6 +15,7 @@ import (
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
+	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	clabtypes "github.com/srl-labs/containerlab/types"
 	"gopkg.in/yaml.v3"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -91,6 +92,7 @@ func compileContainerlabDefinition(
 
 	validateNodeNetworkModes(compiled.Nodes, diagnostics)
 	validateNodeVocabularyPolicies(compiled.Nodes, diagnostics)
+	validateNodeBinds(compiled.Nodes, diagnostics)
 	validateNodeAliases(compiled.Nodes, diagnostics)
 
 	compiled.Links, err = compileContainerlabLinks(containerlabConfig, diagnostics)
@@ -99,6 +101,10 @@ func compileContainerlabDefinition(
 
 		return nil, err
 	}
+
+	// Renaming last keeps every diagnostic above pointing at the node names the definition
+	// actually writes.
+	sanitizeCompiledNodeNames(logger, compiled, diagnostics)
 
 	for _, warning := range diagnostics.warnings() {
 		logger.Warnf("topology compile: %s", formatDiagnostic(warning))
@@ -217,7 +223,10 @@ func validateNodeNetworkModes(
 		primary := clabernetesutilcontainerlab.ParseNetworkModeContainer(networkMode)
 
 		path := fmt.Sprintf("topology.nodes.%s.network-mode", nodeName)
-		if primary == "" || len(k8svalidation.IsDNS1123Label(primary)) != 0 {
+		// The primary is a containerlab node name, and node names Kubernetes cannot carry are
+		// sanitized at the end of the compile -- so what has to hold here is that the value names
+		// a node at all, not that it is already a Kubernetes name.
+		if primary == "" || clabernetesutilkubernetes.SanitizeName(primary) == "" {
 			diagnostics.add(Diagnostic{
 				Code: "unsupported-network-mode",
 				Path: path,
@@ -344,6 +353,50 @@ func validateNodeVocabularyPolicies(
 					node.LinkApplyMode,
 				),
 			})
+		}
+	}
+}
+
+// validateNodeBinds rejects binds that land on container paths the kubelet or the direct
+// runtime owns: such a bind either renders an invalid Deployment (the kubelet already mounts
+// the path in every container) or silently shadows Pod-managed content. Docker containerlab
+// can bind these paths because it owns the container filesystem; direct device Pods cannot.
+func validateNodeBinds(
+	nodes map[string]*clabernetesutilcontainerlab.NodeDefinition,
+	diagnostics *compileDiagnostics,
+) {
+	const (
+		bindMinParts = 2
+		bindMaxParts = 3
+	)
+
+	for _, nodeName := range sortedNodeNames(nodes) {
+		for index, bind := range nodes[nodeName].Binds {
+			parts := strings.SplitN(bind, ":", bindMaxParts)
+			if len(parts) < bindMinParts {
+				continue
+			}
+
+			for _, half := range parts[:2] {
+				reason, reserved := clabernetesutilkubernetes.ReservedContainerPathReason(half)
+				if !reserved {
+					continue
+				}
+
+				diagnostics.add(Diagnostic{
+					Code: "reserved-bind-path",
+					Path: fmt.Sprintf("topology.nodes.%s.binds[%d]", nodeName, index),
+					Message: fmt.Sprintf(
+						"node %q bind %q uses reserved container path %q: %s",
+						nodeName,
+						bind,
+						half,
+						reason,
+					),
+				})
+
+				break
+			}
 		}
 	}
 }

@@ -230,6 +230,13 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		return err
 	}
 
+	// A device whose management port size is fixed by the application cannot be told the mesh
+	// MTU; clamping the segment size the handshake advertises keeps its management flows inside
+	// what the mesh carries.
+	if err := ensureMeshSegmentClamp(meshMTU); err != nil {
+		return err
+	}
+
 	if err := applyInterpositionSysctls(spec); err != nil {
 		return err
 	}

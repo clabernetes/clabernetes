@@ -78,8 +78,9 @@ func topologyOwnedObjectMetadata(
 }
 
 // RenderNodes renders the Node objects for the compiled topology, sorted by name. The emitted
-// node names are the containerlab node names verbatim -- the namespace is the topology
-// boundary.
+// node names are the containerlab node names, sanitized only where Kubernetes cannot carry them
+// -- the namespace is the topology boundary. Node-keyed policy on the Topology is written against
+// the definition's names, so it is looked up by the node's source name.
 func RenderNodes(
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
@@ -88,19 +89,20 @@ func RenderNodes(
 	nodes := make([]*clabernetesapisv1alpha1.Node, 0, len(compiled.Nodes))
 
 	for nodeName, nodeDefinition := range compiled.Nodes {
-		profileName := nodeProfileNameForNode(topology, nodeName)
+		sourceName := compiled.SourceNodeName(nodeName)
+		profileName := nodeProfileNameForNode(topology, compiled, nodeName)
 		node := &clabernetesapisv1alpha1.Node{
 			ObjectMeta: topologyOwnedObjectMetadata(topology, nodeName, configManagerGetter),
 			Spec: clabernetesapisv1alpha1.NodeSpec{
 				NodeDefinition: *nodeDefinition.DeepCopy(),
 				ProfileRef:     &k8scorev1.LocalObjectReference{Name: profileName},
 				FilesFromConfigMap: slices.Clone(
-					topology.Spec.Deployment.FilesFromConfigMap[nodeName],
+					topology.Spec.Deployment.FilesFromConfigMap[sourceName],
 				),
 				FilesFromSecret: slices.Clone(
-					topology.Spec.Deployment.FilesFromSecret[nodeName],
+					topology.Spec.Deployment.FilesFromSecret[sourceName],
 				),
-				FilesFromURL: slices.Clone(topology.Spec.Deployment.FilesFromURL[nodeName]),
+				FilesFromURL: slices.Clone(topology.Spec.Deployment.FilesFromURL[sourceName]),
 			},
 		}
 
@@ -128,9 +130,10 @@ func RenderNodes(
 
 func nodeProfileNameForNode(
 	topology *clabernetesapisv1alpha1.Topology,
+	compiled *CompiledTopology,
 	nodeName string,
 ) string {
-	if hasDistinctProfilePolicy(topology, nodeName) {
+	if hasDistinctProfilePolicy(topology, compiled.SourceNodeName(nodeName)) {
 		return clabernetesutilkubernetes.SafeConcatNameKubernetes(topology.GetName(), nodeName)
 	}
 
@@ -198,7 +201,7 @@ func RenderNodeProfiles(
 	sharedProfileNeeded := false
 
 	for nodeName := range compiled.Nodes {
-		if !hasDistinctProfilePolicy(topology, nodeName) {
+		if !hasDistinctProfilePolicy(topology, compiled.SourceNodeName(nodeName)) {
 			sharedProfileNeeded = true
 
 			continue
@@ -293,7 +296,9 @@ func renderTopologyNodeProfile(
 		spec.Deployment = deployment
 	}
 
-	spec.StatusProbes = topology.Spec.StatusProbes.DeepCopy()
+	// Probe policy is matched against Node object names, so the node names the author wrote have
+	// to follow the rename the compiler made.
+	spec.StatusProbes = compiledStatusProbes(topology, compiled)
 
 	if compiled.Mgmt != nil {
 		spec.Mgmt = &clabernetesapisv1alpha1.ManagementPolicy{
@@ -334,7 +339,8 @@ func renderPerNodeNodeProfile(
 		configManagerGetter,
 	)
 
-	if nodeResources, ok := topology.Spec.Deployment.Resources[nodeName]; ok {
+	if nodeResources, ok := topology.Spec.Deployment.
+		Resources[compiled.SourceNodeName(nodeName)]; ok {
 		profile.Spec.Resources = nodeResources.DeepCopy()
 	}
 
@@ -360,4 +366,46 @@ func imagePullIsZero(imagePull *clabernetesapisv1alpha1.NodeProfileImagePull) bo
 
 func deploymentIsZero(deployment *clabernetesapisv1alpha1.NodeProfileDeployment) bool {
 	return deployment.Persistence == nil
+}
+
+// compiledStatusProbes copies the Topology's probe policy with every node name it holds mapped
+// onto the compiled node name the Node objects carry.
+func compiledStatusProbes(
+	topology *clabernetesapisv1alpha1.Topology,
+	compiled *CompiledTopology,
+) *clabernetesapisv1alpha1.StatusProbes {
+	statusProbes := topology.Spec.StatusProbes.DeepCopy()
+	if len(compiled.NodeNameSources) == 0 {
+		return statusProbes
+	}
+
+	compiledNames := make(map[string]string, len(compiled.NodeNameSources))
+	for compiledName, sourceName := range compiled.NodeNameSources {
+		compiledNames[sourceName] = compiledName
+	}
+
+	for idx, nodeName := range statusProbes.ExcludedNodes {
+		if compiledName, renamed := compiledNames[nodeName]; renamed {
+			statusProbes.ExcludedNodes[idx] = compiledName
+		}
+	}
+
+	if len(statusProbes.NodeProbeConfigurations) != 0 {
+		nodeProbeConfigurations := make(
+			map[string]clabernetesapisv1alpha1.ProbeConfiguration,
+			len(statusProbes.NodeProbeConfigurations),
+		)
+
+		for nodeName, probeConfiguration := range statusProbes.NodeProbeConfigurations {
+			if compiledName, renamed := compiledNames[nodeName]; renamed {
+				nodeName = compiledName
+			}
+
+			nodeProbeConfigurations[nodeName] = probeConfiguration
+		}
+
+		statusProbes.NodeProbeConfigurations = nodeProbeConfigurations
+	}
+
+	return statusProbes
 }

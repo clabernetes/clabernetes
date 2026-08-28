@@ -794,6 +794,53 @@ topology:
 	}
 }
 
+func TestCompileTopologyRejectsBindsOnReservedContainerPaths(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: reserved-bind
+topology:
+  nodes:
+    panel:
+      kind: linux
+      image: alpine
+      binds:
+        - /etc/hosts:/etc/hosts:ro
+    ok:
+      kind: linux
+      image: alpine
+      binds:
+        - configs/app.yml:/app.yml:ro
+`)
+	if err == nil {
+		t.Fatal("a bind on a kubelet-managed path must fail compilation")
+	}
+
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	matched := false
+
+	for _, diagnostic := range unsupported.Diagnostics {
+		if diagnostic.Code != "reserved-bind-path" {
+			continue
+		}
+
+		matched = true
+
+		if !strings.Contains(diagnostic.Message, "/etc/hosts") ||
+			!strings.Contains(diagnostic.Message, "panel") {
+			t.Fatalf("diagnostic must name the node and path, got %q", diagnostic.Message)
+		}
+	}
+
+	if !matched {
+		t.Fatalf("expected reserved-bind-path diagnostic, got %+v", unsupported.Diagnostics)
+	}
+}
+
 func TestCompileTopologyDocumentsRejectedVocabulary(t *testing.T) {
 	t.Parallel()
 

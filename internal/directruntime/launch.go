@@ -23,6 +23,11 @@ const conventionalNoFileLimit = 1_048_576
 type LaunchOperations interface {
 	Delay(duration time.Duration) error
 	MountFilesystem(source, destination, filesystem string, options []string) error
+	// UpdateFile rewrites an existing file in place under an exclusive advisory lock; update
+	// receives the current content and returns the desired content plus whether to write.
+	UpdateFile(path string, update func(current []byte) (updated []byte, write bool)) error
+	ReadFile(path string) ([]byte, error)
+	Hostname() (string, error)
 	LimitOpenFiles(limit uint64) error
 	Exec(argv []string) error
 }
@@ -102,6 +107,12 @@ func RunLaunchWithOperations(
 			return fmt.Errorf("pre-start action %q failed: %w", action.ID, err)
 		}
 	}
+
+	applyOwnedHostsBestEffort(
+		normalized,
+		ApplicationPeerDirectoryRoot+"/"+PeerDirectoryConfigMapKey,
+		operations,
+	)
 
 	entrypoint := slices.Clone(target.Entrypoint)
 	if len(entrypoint) == 0 {

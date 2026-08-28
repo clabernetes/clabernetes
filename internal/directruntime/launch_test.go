@@ -1,6 +1,8 @@
 package directruntime_test
 
 import (
+	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +12,8 @@ import (
 	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 )
 
+var errHostsFileSealed = errors.New("hosts file is sealed")
+
 type recordingLaunchOperations struct {
 	source      string
 	destination string
@@ -18,6 +22,9 @@ type recordingLaunchOperations struct {
 	delays      []time.Duration
 	argv        []string
 	fileLimits  []uint64
+	hostname    string
+	files       map[string][]byte
+	updateErr   error
 }
 
 func (r *recordingLaunchOperations) Delay(duration time.Duration) error {
@@ -39,6 +46,43 @@ func (r *recordingLaunchOperations) MountFilesystem(
 	r.options = append([]string(nil), options...)
 
 	return nil
+}
+
+func (r *recordingLaunchOperations) UpdateFile(
+	path string,
+	update func(current []byte) (updated []byte, write bool),
+) error {
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+
+	updated, write := update(r.files[path])
+	if write {
+		if r.files == nil {
+			r.files = map[string][]byte{}
+		}
+
+		r.files[path] = updated
+	}
+
+	return nil
+}
+
+func (r *recordingLaunchOperations) ReadFile(path string) ([]byte, error) {
+	content, exists := r.files[path]
+	if !exists {
+		return nil, os.ErrNotExist
+	}
+
+	return content, nil
+}
+
+func (r *recordingLaunchOperations) Hostname() (string, error) {
+	if r.hostname == "" {
+		return "test-host", nil
+	}
+
+	return r.hostname, nil
 }
 
 func (r *recordingLaunchOperations) LimitOpenFiles(limit uint64) error {
@@ -107,6 +151,151 @@ func TestRunLaunchAppliesGenericMountBeforeImageProcess(t *testing.T) {
 		operations.argv,
 		want,
 	) {
+		t.Fatalf("application argv = %#v, want %#v", operations.argv, want)
+	}
+}
+
+func TestRunLaunchPrependsNodeIdentityAheadOfKubeletHostsEntry(t *testing.T) {
+	t.Parallel()
+
+	kubeletHosts := "# Kubernetes-managed hosts file.\n" +
+		"127.0.0.1\tlocalhost\n" +
+		"172.16.79.171\tnode-a\n" +
+		"# Entries added by HostAliases.\n" +
+		"172.90.90.42\tpeer-b\n"
+
+	plan := lifecycleTestPlan()
+	plan.Containers[0].ImageCommand = []string{"run"}
+	plan.Management = []clabernetesinternaldeviceplan.ManagementPlan{{
+		ID: "management/node-a", NodeID: "node-a", InterfaceName: "mgmt0",
+		IPv4: "172.90.90.41/24", IPv6: "fd00:90::41/64",
+	}}
+
+	operations := &recordingLaunchOperations{
+		hostname: "node-a",
+		files:    map[string][]byte{"/etc/hosts": []byte(kubeletHosts)},
+	}
+	if err := clabernetesinternaldirectruntime.RunLaunchWithOperations(
+		plan,
+		"container-a",
+		operations,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	want := "172.90.90.41\tnode-a\t# c9s-node-identity\n" +
+		"fd00:90::41\tnode-a\t# c9s-node-identity\n" +
+		kubeletHosts
+	if got := string(operations.files["/etc/hosts"]); got != want {
+		t.Fatalf("hosts content = %q, want %q", got, want)
+	}
+
+	// A container restart re-runs the launch against already-owned content; the rewrite must
+	// be idempotent rather than stacking identity lines.
+	if err := clabernetesinternaldirectruntime.RunLaunchWithOperations(
+		plan,
+		"container-a",
+		operations,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := string(operations.files["/etc/hosts"]); got != want {
+		t.Fatalf("hosts content after relaunch = %q, want %q", got, want)
+	}
+}
+
+func TestRunLaunchRealizesPeerDirectoryAheadOfKubeletContent(t *testing.T) {
+	t.Parallel()
+
+	directory, err := clabernetesinternaldirectruntime.RenderPeerDirectory(
+		[]clabernetesinternaldirectruntime.PeerIdentity{
+			// The own node's name is identity-owned, but its component alias still resolves.
+			{Name: "node-a", IPv4: "172.90.90.41", Aliases: []string{"node-a-a"}},
+			{Name: "r9", IPv4: "172.90.90.19", IPv6: "fd00:90::19"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	kubeletHosts := "# Kubernetes-managed hosts file.\n172.16.79.171\tnode-a\n"
+
+	plan := lifecycleTestPlan()
+	plan.Containers[0].ImageCommand = []string{"run"}
+	plan.Management = []clabernetesinternaldeviceplan.ManagementPlan{{
+		ID: "management/node-a", NodeID: "node-a", InterfaceName: "mgmt0",
+		IPv4: "172.90.90.41/24",
+	}}
+
+	operations := &recordingLaunchOperations{
+		hostname: "node-a",
+		files: map[string][]byte{
+			"/etc/hosts": []byte(kubeletHosts),
+			"/var/lib/clabernetes/peer-directory/peers.json": directory,
+		},
+	}
+	if err = clabernetesinternaldirectruntime.RunLaunchWithOperations(
+		plan,
+		"container-a",
+		operations,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	want := "172.90.90.41\tnode-a\t# c9s-node-identity\n" +
+		"172.90.90.41\tnode-a-a\t# c9s-peer\n" +
+		"172.90.90.19\tr9\t# c9s-peer\n" +
+		"fd00:90::19\tr9\t# c9s-peer\n" +
+		kubeletHosts
+	if got := string(operations.files["/etc/hosts"]); got != want {
+		t.Fatalf("hosts content = %q, want %q", got, want)
+	}
+}
+
+func TestRunLaunchSkipsNodeIdentityWithoutManagementAddress(t *testing.T) {
+	t.Parallel()
+
+	plan := lifecycleTestPlan()
+	plan.Containers[0].ImageCommand = []string{"run"}
+
+	operations := &recordingLaunchOperations{hostname: "node-a"}
+	if err := clabernetesinternaldirectruntime.RunLaunchWithOperations(
+		plan,
+		"container-a",
+		operations,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(operations.files) != 0 {
+		t.Fatalf("hosts files written without a management address: %#v", operations.files)
+	}
+}
+
+func TestRunLaunchStartsApplicationWhenNodeIdentityRewriteFails(t *testing.T) {
+	t.Parallel()
+
+	plan := lifecycleTestPlan()
+	plan.Containers[0].ImageCommand = []string{"run"}
+	plan.Management = []clabernetesinternaldeviceplan.ManagementPlan{{
+		ID: "management/node-a", NodeID: "node-a", InterfaceName: "mgmt0",
+		IPv4: "172.90.90.41/24",
+	}}
+
+	operations := &recordingLaunchOperations{
+		hostname:  "node-a",
+		updateErr: errHostsFileSealed,
+	}
+	if err := clabernetesinternaldirectruntime.RunLaunchWithOperations(
+		plan,
+		"container-a",
+		operations,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := []string{"run"}; !reflect.DeepEqual(operations.argv, want) {
 		t.Fatalf("application argv = %#v, want %#v", operations.argv, want)
 	}
 }

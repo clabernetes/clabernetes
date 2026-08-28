@@ -182,6 +182,94 @@ func TestRunLifecycleExecutesTypedActionsInsideTargetFilesystem(t *testing.T) {
 	}
 }
 
+// TestRunLifecycleContinuesPastFailingTopologyExec pins the containerlab behavior of the
+// topology's own exec list: a failing command is reported and the rest of the phase still runs.
+// A PostStart hook that failed would take the whole application container down instead.
+func TestRunLifecycleContinuesPastFailingTopologyExec(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "post-start-ran")
+
+	plan := lifecycleTestPlan()
+	plan.Actions = []clabernetesinternaldeviceplan.Action{
+		{
+			ID: "post-start/node-a/0", Phase: clabernetesinternaldeviceplan.PhasePostStart,
+			Order: 1,
+			Target: clabernetesinternaldeviceplan.ActionTarget{
+				NodeID: "node-a", ContainerID: "container-a",
+			},
+			Kind: clabernetesinternaldeviceplan.ActionExec,
+			Exec: &clabernetesinternaldeviceplan.ExecAction{
+				Command:         []string{"/bin/sh", "-c", "exit 7"},
+				Wait:            true,
+				ContinueOnError: true,
+			},
+		},
+		{
+			ID: "post-start/node-a/1", Phase: clabernetesinternaldeviceplan.PhasePostStart,
+			Order: 2,
+			Target: clabernetesinternaldeviceplan.ActionTarget{
+				NodeID: "node-a", ContainerID: "container-a",
+			},
+			Kind: clabernetesinternaldeviceplan.ActionExec,
+			Exec: &clabernetesinternaldeviceplan.ExecAction{
+				Command:         []string{"/bin/sh", "-c", "printf complete > " + marker},
+				Wait:            true,
+				ContinueOnError: true,
+			},
+		},
+	}
+
+	if err := clabernetesinternaldirectruntime.RunLifecycle(
+		context.Background(),
+		plan,
+		clabernetesinternaldeviceplan.PhasePostStart,
+		"container-a",
+		root,
+	); err != nil {
+		t.Fatalf("RunLifecycle() error = %v, want the failing exec command to be skipped", err)
+	}
+
+	if markerContent, err := os.ReadFile(marker); err != nil || //nolint:gosec // test-controlled path.
+		string(markerContent) != "complete" {
+		t.Fatalf("post-start marker = %q, %v", markerContent, err)
+	}
+}
+
+// TestRunLifecycleFailsOnFailingImportedExec keeps the commands a kind's own deployment recorded
+// fail-closed: those are part of bringing the node up, not user-declared best-effort work.
+func TestRunLifecycleFailsOnFailingImportedExec(t *testing.T) {
+	t.Parallel()
+
+	plan := lifecycleTestPlan()
+	plan.Actions = []clabernetesinternaldeviceplan.Action{
+		{
+			ID:    "imported-deploy-exec/node-a/000001",
+			Phase: clabernetesinternaldeviceplan.PhasePostStart,
+			Order: 1,
+			Target: clabernetesinternaldeviceplan.ActionTarget{
+				NodeID: "node-a", ContainerID: "container-a",
+			},
+			Kind: clabernetesinternaldeviceplan.ActionExec,
+			Exec: &clabernetesinternaldeviceplan.ExecAction{
+				Command: []string{"/bin/sh", "-c", "exit 7"}, Wait: true,
+			},
+		},
+	}
+
+	err := clabernetesinternaldirectruntime.RunLifecycle(
+		context.Background(),
+		plan,
+		clabernetesinternaldeviceplan.PhasePostStart,
+		"container-a",
+		t.TempDir(),
+	)
+	if err == nil {
+		t.Fatal("RunLifecycle() error = nil, want the failing imported command to fail the phase")
+	}
+}
+
 func TestRunLifecycleRejectsCrossNodeArtifactAccess(t *testing.T) {
 	t.Parallel()
 

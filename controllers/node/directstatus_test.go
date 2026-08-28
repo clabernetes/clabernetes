@@ -15,13 +15,93 @@ import (
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
+	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apimachineryschema "k8s.io/apimachinery/pkg/runtime/schema"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	apimachineryfield "k8s.io/apimachinery/pkg/util/validation/field"
 	clientgoevents "k8s.io/client-go/tools/events"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestReportDirectPreflightFailureStampsDeploymentApplyErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		cause      error
+		wantReason string
+	}{
+		{
+			name: "api server rejects the rendered deployment",
+			cause: apimachineryerrors.NewInvalid(
+				apimachineryschema.GroupKind{Group: "apps", Kind: "Deployment"},
+				"panel",
+				apimachineryfield.ErrorList{apimachineryfield.Invalid(
+					apimachineryfield.NewPath("spec", "template", "spec", "containers").
+						Index(0).Child("volumeMounts").Index(1).Child("mountPath"),
+					"/etc/hosts",
+					"must be unique",
+				)},
+			),
+			wantReason: "DeploymentInvalid",
+		},
+		{
+			name: "transient apply failure",
+			cause: apimachineryerrors.NewServerTimeout(
+				apimachineryschema.GroupResource{Group: "apps", Resource: "deployments"},
+				"create",
+				1,
+			),
+			wantReason: "DeploymentApplyFailed",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			scheme := nodeReconcileTestScheme(t)
+			node := nodeReconcileTestNode()
+			client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+				WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).Build()
+			reconciler := &Reconciler{Client: client, apiReader: client}
+
+			err := reconciler.reportDirectPreflightFailure(
+				context.Background(),
+				node,
+				&deploymentApplyError{
+					operation: "creating direct device Deployment",
+					cause:     test.cause,
+				},
+			)
+			if err != nil {
+				t.Fatalf("reportDirectPreflightFailure() error = %v", err)
+			}
+
+			stored := &clabernetesapisv1alpha1.Node{}
+			if err = client.Get(
+				context.Background(),
+				ctrlruntimeclient.ObjectKeyFromObject(node),
+				stored,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			condition := apimachinerymeta.FindStatusCondition(
+				stored.Status.Conditions,
+				clabernetesapisv1alpha1.NodeConditionPlanApplied,
+			)
+			if condition == nil || condition.Status != metav1.ConditionFalse ||
+				condition.Reason != test.wantReason ||
+				!strings.Contains(condition.Message, "creating direct device Deployment") {
+				t.Fatalf("PlanApplied condition = %#v, want reason %q", condition, test.wantReason)
+			}
+		})
+	}
+}
 
 func TestUpdateDirectStatusesUsesCurrentPlanPodAndKubernetesContainerState(t *testing.T) {
 	ctx := context.Background()

@@ -154,6 +154,20 @@ type CompiledTopology struct {
 	Links []CompiledLink
 	// Mgmt holds the containerlab management network settings (if any).
 	Mgmt *clabernetesutilcontainerlab.MgmtNet
+	// NodeNameSources maps the name of every node that had to be renamed for Kubernetes back to
+	// the name the definition uses. Node-keyed policy on the Topology (files, resources, probes)
+	// is written against the definition's names, so the renderers translate through this.
+	NodeNameSources map[string]string
+}
+
+// SourceNodeName returns the name the definition uses for a compiled node. It is the compiled name
+// itself for every node Kubernetes could carry as written.
+func (t *CompiledTopology) SourceNodeName(nodeName string) string {
+	if sourceName, renamed := t.NodeNameSources[nodeName]; renamed {
+		return sourceName
+	}
+
+	return nodeName
 }
 
 // CompileTopology parses and compiles the given Topology's definition.
