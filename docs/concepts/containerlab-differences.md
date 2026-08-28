@@ -47,8 +47,15 @@ diagnostic. Nothing is silently dropped.
 
 ## Naming and metadata
 
-- **Node names are Kubernetes object names.** They must be DNS-1123 labels, and the namespace
-  is the topology boundary.
+- **Node names are Kubernetes object names.** Kubernetes only takes lowercase DNS labels, so a
+  node name it cannot carry is sanitized: the name is lower-cased, every other character becomes
+  `-`, a name starting with a digit is prefixed with `clab-`, and a name longer than 63
+  characters is truncated and suffixed with a hash. `R1` becomes `r1`, `PE_1` becomes `pe-1`.
+  Every reference follows the node -- links, `network-mode: container:<node>`, and the node-keyed
+  policy on the Topology (`filesFromConfigMap`, `filesFromSecret`, `filesFromURL`, `resources`,
+  `statusProbes`) is still written with the name the definition uses. Two node names that differ
+  only in something Kubernetes cannot carry (`R1` and `r1`) would become one object, and that
+  fails compilation. The namespace is the topology boundary.
 - **`labels` become Kubernetes labels** on the emitted Node, its Deployment, and Pods
   (selectable with `kubectl`) instead of Docker container labels. Labels Kubernetes would
   reject, reserved `c9s.run/` keys, and controller-owned keys fail compilation.

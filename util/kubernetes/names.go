@@ -69,3 +69,45 @@ func EnforceDNSLabelConvention(s string) string {
 
 	return s
 }
+
+const (
+	// nameDigestLen is the number of digest characters appended to a name that had to be
+	// truncated to fit NameMaxLen.
+	nameDigestLen = 7
+	// leadingLetterPrefix prefixes a name that would otherwise start with a digit or a dash,
+	// which a DNS-1035 label cannot do.
+	leadingLetterPrefix = "clab-"
+)
+
+// nonNameChars matches every run of characters a DNS label cannot carry, once the name has been
+// lower-cased.
+var nonNameChars = regexp.MustCompile(`[^a-z0-9-]+`)
+
+// SanitizeName maps a containerlab name onto the DNS-1035 label Kubernetes can name an object
+// with: lower case, made up of a-z, 0-9 and '-', starting with a letter and at most 63 characters
+// long. A large share of public labs name their nodes R1/PE_1, and Kubernetes cannot carry those
+// names as they are.
+//
+// Unlike EnforceDNSLabelConvention this never rewrites a character a DNS label can carry, so a
+// name Kubernetes already accepts maps onto itself and the mapping is idempotent. The result is
+// empty only for a name holding nothing a Kubernetes name can be built from.
+func SanitizeName(name string) string {
+	sanitized := strings.Trim(nonNameChars.ReplaceAllString(strings.ToLower(name), "-"), "-")
+	if sanitized == "" {
+		return ""
+	}
+
+	if sanitized[0] < 'a' || sanitized[0] > 'z' {
+		sanitized = leadingLetterPrefix + sanitized
+	}
+
+	if len(sanitized) > NameMaxLen {
+		digest := sha256.Sum256([]byte(name))
+		sanitized = strings.TrimRight(
+			sanitized[:NameMaxLen-nameDigestLen-1],
+			"-",
+		) + "-" + hex.EncodeToString(digest[:])[:nameDigestLen]
+	}
+
+	return sanitized
+}
