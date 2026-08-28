@@ -1259,9 +1259,11 @@ func appendDirectPayload(
 	seen map[string]bool,
 	payload clabernetesinternaldeviceplan.PayloadInput,
 ) error {
-	signature := strings.Join([]string{
-		string(payload.Kind), payload.Reference, payload.Digest, fmt.Sprintf("%o", payload.Mode),
-	}, "\x00")
+	// Declarations landing on one destination conflict only when their content or mode
+	// differs. Grouped nodes legitimately declare the same file — a shared license is staged
+	// once per member ConfigMap, so the references differ while the bytes are identical — and
+	// identical bytes cannot conflict.
+	signature := payload.Digest + "\x00" + fmt.Sprintf("%o", payload.Mode)
 	if existing, exists := destinations[payload.Destination]; exists && existing != signature {
 		return planInputError(
 			clabernetesinternaldeviceplan.ErrorInvalidInput,
