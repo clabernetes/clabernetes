@@ -4,6 +4,7 @@
 package directruntime
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"runtime"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/nftables"
 	"github.com/google/nftables/expr"
+	"golang.org/x/sys/unix"
 )
 
 const segmentClampNetlinkChild = "C9S_SEGMENT_CLAMP_NETLINK_TEST_CHILD"
@@ -123,12 +125,13 @@ func testMeshSegmentClampProgramsOwnedTable(t *testing.T) {
 		t.Fatalf("listing segment clamp rules: %v", err)
 	}
 
-	if len(rules) != 2 {
-		t.Fatalf("expected one clamp rule per address family, got %d", len(rules))
+	if len(rules) != 6 {
+		t.Fatalf("expected one clamp rule per mesh port and address family, got %d", len(rules))
 	}
 
 	for _, rule := range rules {
 		assertClampRuleShape(t, rule)
+		assertClampRuleUsesGenericIngress(t, rule)
 	}
 }
 
@@ -182,6 +185,27 @@ func assertClampRuleShape(t *testing.T, rule *nftables.Rule) {
 	}
 }
 
+func assertClampRuleUsesGenericIngress(t *testing.T, rule *nftables.Rule) {
+	t.Helper()
+
+	for _, expression := range rule.Exprs {
+		meta, ok := expression.(*expr.Meta)
+		if !ok {
+			continue
+		}
+
+		if meta.Key == expr.MetaKeyBRIIIFNAME {
+			t.Fatal("clamp rule uses the optional bridge-specific meta module")
+		}
+
+		if meta.Key == expr.MetaKeyIIFNAME {
+			return
+		}
+	}
+
+	t.Fatal("clamp rule has no generic ingress interface match")
+}
+
 // TestMeshSegmentClampIsSkippedWithoutAMeshMTU keeps an unknown path size from programming a
 // clamp of zero, which would make every handshake advertise nothing usable.
 func TestMeshSegmentClampIsSkippedWithoutAMeshMTU(t *testing.T) {
@@ -189,5 +213,23 @@ func TestMeshSegmentClampIsSkippedWithoutAMeshMTU(t *testing.T) {
 
 	if err := ensureMeshSegmentClamp(0); err != nil {
 		t.Fatalf("ensureMeshSegmentClamp(0) error = %v, want no programming at all", err)
+	}
+}
+
+func TestUnsupportedMeshSegmentClampErrorsAreOptional(t *testing.T) {
+	t.Parallel()
+
+	for _, err := range []error{
+		unix.ENOENT,
+		unix.EOPNOTSUPP,
+		errors.Join(unix.EOPNOTSUPP, unix.ENOENT),
+	} {
+		if !isUnsupportedMeshSegmentClampError(err) {
+			t.Fatalf("isUnsupportedMeshSegmentClampError(%v) = false, want true", err)
+		}
+	}
+
+	if isUnsupportedMeshSegmentClampError(unix.EINVAL) {
+		t.Fatal("isUnsupportedMeshSegmentClampError(EINVAL) = true, want false")
 	}
 }

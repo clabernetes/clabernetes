@@ -63,9 +63,12 @@ a leg of the per-namespace management mesh, which rides the Pod network encapsul
 carries the Pod network MTU minus that encapsulation (about 1430 bytes on a 1500-byte Pod
 network). Two things keep that from surprising a device:
 
-- **The size is reported to the device.** A kind that configures its management interface from
-  the runtime's management network (SR Linux sets `mgmt0.0 ip-mtu`) receives the size the mesh
-  actually carries instead of assuming 1500.
+- **The size is reported safely to the device.** A kind that configures its management interface
+  from the runtime's management network (SR Linux sets `mgmt0.0 ip-mtu`) receives the smaller of
+  the mesh capacity and the conventional 1500-byte management IP MTU. A smaller mesh is therefore
+  honored, while a jumbo Pod network does not cause a device whose default management port is
+  1514 bytes to receive an invalid jumbo IP MTU. Raising a device management port above its
+  default is not currently part of the generic c9s contract.
 - **Management TCP handshakes are clamped to it.** Some devices present a management port whose
   size the application fixes and cannot lower (SR OS presents 1514). Their handshakes crossing
   the mesh have the advertised maximum segment lowered to what the mesh carries, so both peers

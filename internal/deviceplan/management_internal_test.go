@@ -138,3 +138,25 @@ func TestDefinitionManagementAddressMatches(t *testing.T) {
 		})
 	}
 }
+
+func TestCapAutomaticManagementIPMTU(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		mtu  int
+		want int
+	}{
+		{name: "path below conventional maximum", mtu: 1450, want: 1450},
+		{name: "path at conventional maximum", mtu: 1500, want: 1500},
+		{name: "jumbo path", mtu: 8084, want: 1500},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := capAutomaticManagementIPMTU(test.mtu); got != test.want {
+				t.Fatalf("capAutomaticManagementIPMTU(%d) = %d, want %d", test.mtu, got, test.want)
+			}
+		})
+	}
+}
