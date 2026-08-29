@@ -99,6 +99,13 @@ func TestReportDirectPreflightFailureStampsDeploymentApplyErrors(t *testing.T) {
 				!strings.Contains(condition.Message, "creating direct device Deployment") {
 				t.Fatalf("PlanApplied condition = %#v, want reason %q", condition, test.wantReason)
 			}
+
+			if stored.Status.Readiness != clabernetesconstants.NodeStatusNotReady {
+				t.Fatalf("readiness = %q, want %q",
+					stored.Status.Readiness,
+					clabernetesconstants.NodeStatusNotReady,
+				)
+			}
 		})
 	}
 }
@@ -168,6 +175,164 @@ func TestReportDirectPreflightFailureStampsImagePullSecretErrors(t *testing.T) {
 				t.Fatalf("PlanApplied condition = %#v, want reason %q", condition, test.wantReason)
 			}
 		})
+	}
+}
+
+func TestInvalidateStaleDirectStatusesMarksReadyGroupPending(t *testing.T) {
+	t.Parallel()
+
+	primary := nodeReconcileTestNode()
+	primary.Generation = 4
+	secondary := nodeReconcileTestNode().DeepCopy()
+	secondary.SetName("secondary")
+	secondary.SetUID("secondary-uid")
+	secondary.Generation = 7
+
+	readyConditions := func(generation int64) []metav1.Condition {
+		return []metav1.Condition{
+			{
+				Type:   clabernetesapisv1alpha1.NodeConditionPlanApplied,
+				Status: metav1.ConditionTrue, ObservedGeneration: generation,
+			},
+			{
+				Type:   clabernetesapisv1alpha1.NodeConditionPrepared,
+				Status: metav1.ConditionTrue, ObservedGeneration: generation,
+			},
+			{
+				Type:   clabernetesapisv1alpha1.NodeConditionConnectivityReady,
+				Status: metav1.ConditionTrue, ObservedGeneration: generation,
+			},
+			{
+				Type:   clabernetesapisv1alpha1.NodeConditionContainersReady,
+				Status: metav1.ConditionTrue, ObservedGeneration: generation,
+			},
+			{
+				Type:   clabernetesapisv1alpha1.NodeConditionLinkLifecycleAction,
+				Status: metav1.ConditionTrue, ObservedGeneration: generation,
+			},
+		}
+	}
+
+	primary.Status = clabernetesapisv1alpha1.NodeStatus{
+		Readiness:  clabernetesconstants.NodeStatusReady,
+		PlanDigest: "old-plan",
+		Conditions: readyConditions(primary.Generation),
+		DirectContainers: []clabernetesapisv1alpha1.NodeDirectContainerStatus{{
+			ID: "old-container", Name: "old-container", Ready: true,
+		}},
+	}
+	secondary.Status = clabernetesapisv1alpha1.NodeStatus{
+		Readiness:  clabernetesconstants.NodeStatusReady,
+		PlanDigest: "old-plan",
+		Conditions: readyConditions(secondary.Generation - 1),
+	}
+
+	scheme := nodeReconcileTestScheme(t)
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
+		WithObjects(primary, secondary).
+		Build()
+	reconciler := &Reconciler{Client: client, apiReader: client}
+
+	if err := reconciler.invalidateStaleDirectStatuses(
+		context.Background(),
+		[]string{primary.GetName(), secondary.GetName()},
+		map[string]*clabernetesapisv1alpha1.Node{
+			primary.GetName():   primary,
+			secondary.GetName(): secondary,
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, node := range []*clabernetesapisv1alpha1.Node{primary, secondary} {
+		stored := &clabernetesapisv1alpha1.Node{}
+		if err := client.Get(context.Background(), ctrlruntimeclient.ObjectKeyFromObject(node), stored); err != nil {
+			t.Fatal(err)
+		}
+
+		if stored.Status.Readiness != clabernetesconstants.NodeStatusNotReady ||
+			stored.Status.PlanDigest != "old-plan" {
+			t.Fatalf("pending status = %#v", stored.Status)
+		}
+
+		planApplied := apimachinerymeta.FindStatusCondition(
+			stored.Status.Conditions,
+			clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		)
+		if planApplied == nil || planApplied.Status != metav1.ConditionFalse ||
+			planApplied.Reason != directPlanPendingReason ||
+			planApplied.ObservedGeneration != node.GetGeneration() {
+			t.Fatalf("pending PlanApplied condition = %#v", planApplied)
+		}
+
+		for _, conditionType := range []string{
+			clabernetesapisv1alpha1.NodeConditionPrepared,
+			clabernetesapisv1alpha1.NodeConditionConnectivityReady,
+			clabernetesapisv1alpha1.NodeConditionContainersReady,
+		} {
+			condition := apimachinerymeta.FindStatusCondition(
+				stored.Status.Conditions,
+				conditionType,
+			)
+			if condition == nil || condition.Status != metav1.ConditionUnknown ||
+				condition.Reason != directPlanPendingReason ||
+				condition.ObservedGeneration != node.GetGeneration() {
+				t.Fatalf("pending %s condition = %#v", conditionType, condition)
+			}
+		}
+
+		if apimachinerymeta.FindStatusCondition(
+			stored.Status.Conditions,
+			clabernetesapisv1alpha1.NodeConditionLinkLifecycleAction,
+		) != nil {
+			t.Fatal("pending status retained the old link lifecycle condition")
+		}
+	}
+}
+
+func TestReconcileInvalidatesReadyStatusBeforeDirectPlanning(t *testing.T) {
+	t.Parallel()
+
+	node := nodeReconcileTestNode()
+	node.Generation = 2
+	node.Status.Readiness = clabernetesconstants.NodeStatusReady
+	node.Status.Conditions = []metav1.Condition{{
+		Type:   clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		Status: metav1.ConditionTrue, ObservedGeneration: 1,
+	}}
+
+	scheme := nodeReconcileTestScheme(t)
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
+		WithObjects(node).
+		Build()
+	reconciler := &Reconciler{Client: client, apiReader: client}
+
+	if err := reconciler.Reconcile(context.Background(), node); err == nil {
+		t.Fatal("Reconcile() succeeded without a configured direct runtime")
+	}
+
+	stored := &clabernetesapisv1alpha1.Node{}
+	if err := client.Get(
+		context.Background(),
+		ctrlruntimeclient.ObjectKeyFromObject(node),
+		stored,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	condition := apimachinerymeta.FindStatusCondition(
+		stored.Status.Conditions,
+		clabernetesapisv1alpha1.NodeConditionPlanApplied,
+	)
+	if stored.Status.Readiness != clabernetesconstants.NodeStatusNotReady ||
+		condition == nil || condition.Status != metav1.ConditionFalse ||
+		condition.Reason != directPlanPendingReason ||
+		condition.ObservedGeneration != node.GetGeneration() {
+		t.Fatalf("pre-planning status = %#v", stored.Status)
 	}
 }
 

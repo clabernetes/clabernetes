@@ -22,6 +22,124 @@ import (
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	directPlanPendingReason  = "PlanPending"
+	directPlanPendingMessage = "direct device plan is being reconciled for the current " +
+		"Node generation"
+)
+
+func (r *Reconciler) invalidateStaleDirectStatus(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+) error {
+	if node == nil || node.Status.Readiness != clabernetesconstants.NodeStatusReady ||
+		!directStatusNeedsReconciliation(node) {
+		return nil
+	}
+
+	return r.markDirectStatusPending(ctx, node)
+}
+
+func (r *Reconciler) invalidateStaleDirectStatuses(
+	ctx context.Context,
+	groupMembers []string,
+	nodesByName map[string]*clabernetesapisv1alpha1.Node,
+) error {
+	stale := false
+
+	for _, memberName := range groupMembers {
+		member := nodesByName[memberName]
+		if member != nil && directStatusNeedsReconciliation(member) {
+			stale = true
+
+			break
+		}
+	}
+
+	if !stale {
+		return nil
+	}
+
+	for _, memberName := range groupMembers {
+		member := nodesByName[memberName]
+		if member == nil || member.Status.Readiness != clabernetesconstants.NodeStatusReady {
+			continue
+		}
+
+		if err := r.markDirectStatusPending(ctx, member); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func directStatusNeedsReconciliation(node *clabernetesapisv1alpha1.Node) bool {
+	if node == nil {
+		return false
+	}
+
+	planApplied := apimachinerymeta.FindStatusCondition(
+		node.Status.Conditions,
+		clabernetesapisv1alpha1.NodeConditionPlanApplied,
+	)
+
+	return planApplied == nil ||
+		planApplied.Status != metav1.ConditionTrue ||
+		planApplied.ObservedGeneration != node.GetGeneration()
+}
+
+func (r *Reconciler) markDirectStatusPending(
+	ctx context.Context,
+	node *clabernetesapisv1alpha1.Node,
+) error {
+	previousConditions := slices.Clone(node.Status.Conditions)
+	desiredStatus := *node.Status.DeepCopy()
+	desiredStatus.Readiness = clabernetesconstants.NodeStatusNotReady
+
+	setDirectStatusCondition(
+		&desiredStatus,
+		node,
+		clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		metav1.ConditionFalse,
+		directPlanPendingReason,
+		directPlanPendingMessage,
+	)
+
+	for _, conditionType := range []string{
+		clabernetesapisv1alpha1.NodeConditionPrepared,
+		clabernetesapisv1alpha1.NodeConditionConnectivityReady,
+		clabernetesapisv1alpha1.NodeConditionContainersReady,
+	} {
+		setDirectStatusCondition(
+			&desiredStatus,
+			node,
+			conditionType,
+			metav1.ConditionUnknown,
+			directPlanPendingReason,
+			directPlanPendingMessage,
+		)
+	}
+
+	apimachinerymeta.RemoveStatusCondition(
+		&desiredStatus.Conditions,
+		clabernetesapisv1alpha1.NodeConditionLinkLifecycleAction,
+	)
+
+	if err := r.updateNodeStatus(ctx, node, desiredStatus); err != nil {
+		return fmt.Errorf("marking direct status pending: %w", err)
+	}
+
+	r.recordDirectConditionTransitions(
+		node,
+		previousConditions,
+		desiredStatus.Conditions,
+		desiredStatus.PlanDigest,
+	)
+
+	return nil
+}
+
 func (r *Reconciler) reportDirectPreflightFailure(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
@@ -34,6 +152,7 @@ func (r *Reconciler) reportDirectPreflightFailure(
 
 	previousConditions := slices.Clone(node.Status.Conditions)
 	desiredStatus := *node.Status.DeepCopy()
+	desiredStatus.Readiness = clabernetesconstants.NodeStatusNotReady
 	setDirectStatusCondition(
 		&desiredStatus,
 		node,

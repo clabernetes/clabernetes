@@ -166,6 +166,10 @@ func (r *Reconciler) Reconcile(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
 ) error {
+	if err := r.invalidateStaleDirectStatus(ctx, node); err != nil {
+		return err
+	}
+
 	err := r.reconcileDirect(ctx, node)
 	if err == nil {
 		return nil
