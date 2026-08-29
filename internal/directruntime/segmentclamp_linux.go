@@ -5,6 +5,7 @@ package directruntime
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/google/nftables"
 	"github.com/google/nftables/binaryutil"
@@ -84,12 +85,17 @@ func ensureMeshSegmentClamp(meshMTU int) error {
 				continue
 			}
 
+			if maxSegment > math.MaxUint16 {
+				maxSegment = math.MaxUint16
+			}
+
+			maxSegmentValue := uint16(maxSegment)
 			conn.AddRule(meshSegmentClampRule(
 				table,
 				chain,
 				ingressName,
 				family.etherType,
-				uint16(maxSegment), //nolint:gosec // Bounded by the mesh MTU, which is a DNS-sized int.
+				maxSegmentValue,
 			))
 		}
 	}
