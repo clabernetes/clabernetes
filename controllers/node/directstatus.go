@@ -14,6 +14,7 @@ import (
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 	clabernetesinternalocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	k8sappsv1 "k8s.io/api/apps/v1"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -25,7 +26,7 @@ import (
 const (
 	directPlanPendingReason  = "PlanPending"
 	directPlanPendingMessage = "direct device plan is being reconciled for the current " +
-		"Node generation"
+		"desired state"
 )
 
 func (r *Reconciler) invalidateStaleDirectStatus(
@@ -60,6 +61,52 @@ func (r *Reconciler) invalidateStaleDirectStatuses(
 		return nil
 	}
 
+	return r.markDirectGroupStatusesPending(ctx, groupMembers, nodesByName)
+}
+
+// markDirectStatusesPendingForNodes invalidates groups affected by an external object event.
+// Unlike generation-based invalidation, this is intentionally unconditional for ready members:
+// the event may change the rendered workload without changing any Node generation.
+func (r *Reconciler) markDirectStatusesPendingForNodes(
+	ctx context.Context,
+	namespace string,
+	nodeNames []string,
+) error {
+	if len(nodeNames) == 0 {
+		return nil
+	}
+
+	reader := ctrlruntimeclient.Reader(r.Client)
+	if r.apiReader != nil {
+		reader = r.apiReader
+	}
+
+	nodes := &clabernetesapisv1alpha1.NodeList{}
+	if err := reader.List(ctx, nodes, ctrlruntimeclient.InNamespace(namespace)); err != nil {
+		return fmt.Errorf("listing Nodes for direct status invalidation: %w", err)
+	}
+
+	nodesByName := clabernetesutilcontainerlab.NodesByName(nodes.Items)
+	primaryNames := make(map[string]struct{}, len(nodeNames))
+	for _, nodeName := range nodeNames {
+		primaryNames[clabernetesutilcontainerlab.ResolvePrimaryNode(nodesByName, nodeName)] = struct{}{}
+	}
+
+	for primaryName := range primaryNames {
+		groupMembers := clabernetesutilcontainerlab.ResolveGroupMembers(nodesByName, primaryName)
+		if err := r.markDirectGroupStatusesPending(ctx, groupMembers, nodesByName); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *Reconciler) markDirectGroupStatusesPending(
+	ctx context.Context,
+	groupMembers []string,
+	nodesByName map[string]*clabernetesapisv1alpha1.Node,
+) error {
 	for _, memberName := range groupMembers {
 		member := nodesByName[memberName]
 		if member == nil || member.Status.Readiness != clabernetesconstants.NodeStatusReady {
@@ -95,36 +142,7 @@ func (r *Reconciler) markDirectStatusPending(
 ) error {
 	previousConditions := slices.Clone(node.Status.Conditions)
 	desiredStatus := *node.Status.DeepCopy()
-	desiredStatus.Readiness = clabernetesconstants.NodeStatusNotReady
-
-	setDirectStatusCondition(
-		&desiredStatus,
-		node,
-		clabernetesapisv1alpha1.NodeConditionPlanApplied,
-		metav1.ConditionFalse,
-		directPlanPendingReason,
-		directPlanPendingMessage,
-	)
-
-	for _, conditionType := range []string{
-		clabernetesapisv1alpha1.NodeConditionPrepared,
-		clabernetesapisv1alpha1.NodeConditionConnectivityReady,
-		clabernetesapisv1alpha1.NodeConditionContainersReady,
-	} {
-		setDirectStatusCondition(
-			&desiredStatus,
-			node,
-			conditionType,
-			metav1.ConditionUnknown,
-			directPlanPendingReason,
-			directPlanPendingMessage,
-		)
-	}
-
-	apimachinerymeta.RemoveStatusCondition(
-		&desiredStatus.Conditions,
-		clabernetesapisv1alpha1.NodeConditionLinkLifecycleAction,
-	)
+	setDirectStatusPending(&desiredStatus, node, directPlanPendingReason, directPlanPendingMessage)
 
 	if err := r.updateNodeStatus(ctx, node, desiredStatus); err != nil {
 		return fmt.Errorf("marking direct status pending: %w", err)
@@ -138,6 +156,44 @@ func (r *Reconciler) markDirectStatusPending(
 	)
 
 	return nil
+}
+
+func setDirectStatusPending(
+	desiredStatus *clabernetesapisv1alpha1.NodeStatus,
+	node *clabernetesapisv1alpha1.Node,
+	reason,
+	message string,
+) {
+	desiredStatus.Readiness = clabernetesconstants.NodeStatusNotReady
+
+	setDirectStatusCondition(
+		desiredStatus,
+		node,
+		clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		metav1.ConditionFalse,
+		reason,
+		message,
+	)
+
+	for _, conditionType := range []string{
+		clabernetesapisv1alpha1.NodeConditionPrepared,
+		clabernetesapisv1alpha1.NodeConditionConnectivityReady,
+		clabernetesapisv1alpha1.NodeConditionContainersReady,
+	} {
+		setDirectStatusCondition(
+			desiredStatus,
+			node,
+			conditionType,
+			metav1.ConditionUnknown,
+			reason,
+			message,
+		)
+	}
+
+	apimachinerymeta.RemoveStatusCondition(
+		&desiredStatus.Conditions,
+		clabernetesapisv1alpha1.NodeConditionLinkLifecycleAction,
+	)
 }
 
 func (r *Reconciler) reportDirectPreflightFailure(

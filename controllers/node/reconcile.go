@@ -620,6 +620,7 @@ func (r *Reconciler) updateProfileResolutionFailure(
 		}
 
 		desiredStatus := *member.Status.DeepCopy()
+		setDirectStatusPending(&desiredStatus, member, reason, message)
 		apimachinerymeta.SetStatusCondition(&desiredStatus.Conditions, metav1.Condition{
 			Type:               clabernetesapisv1alpha1.NodeConditionProfileResolved,
 			Status:             metav1.ConditionFalse,

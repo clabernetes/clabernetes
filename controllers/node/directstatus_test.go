@@ -400,6 +400,68 @@ func TestReconcileSecondaryInvalidatesPrimaryGroupStatus(t *testing.T) {
 	}
 }
 
+func TestMarkDirectStatusesPendingForExternalEvent(t *testing.T) {
+	t.Parallel()
+
+	primary := nodeReconcileTestNode()
+	primary.Generation = 1
+	primary.Status.Readiness = clabernetesconstants.NodeStatusReady
+	primary.Status.Conditions = []metav1.Condition{{
+		Type:               clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: primary.GetGeneration(),
+	}}
+
+	secondary := nodeReconcileTestNode().DeepCopy()
+	secondary.SetName("secondary")
+	secondary.SetUID("secondary-uid")
+	secondary.Generation = 2
+	secondary.Spec.NetworkMode = "container:" + primary.GetName()
+	secondary.Status.Readiness = clabernetesconstants.NodeStatusReady
+	secondary.Status.Conditions = []metav1.Condition{{
+		Type:               clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: secondary.GetGeneration(),
+	}}
+
+	scheme := nodeReconcileTestScheme(t)
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
+		WithObjects(primary, secondary).
+		Build()
+	reconciler := &Reconciler{Client: client, apiReader: client}
+
+	if err := reconciler.markDirectStatusesPendingForNodes(
+		context.Background(),
+		primary.GetNamespace(),
+		[]string{secondary.GetName()},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, node := range []*clabernetesapisv1alpha1.Node{primary, secondary} {
+		stored := &clabernetesapisv1alpha1.Node{}
+		if err := client.Get(
+			context.Background(),
+			ctrlruntimeclient.ObjectKeyFromObject(node),
+			stored,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		condition := apimachinerymeta.FindStatusCondition(
+			stored.Status.Conditions,
+			clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		)
+		if stored.Status.Readiness != clabernetesconstants.NodeStatusNotReady ||
+			condition == nil || condition.Status != metav1.ConditionFalse ||
+			condition.Reason != directPlanPendingReason {
+			t.Fatalf("external event status for %q = %#v", node.GetName(), stored.Status)
+		}
+	}
+}
+
 func TestUpdateDirectStatusesUsesCurrentPlanPodAndKubernetesContainerState(t *testing.T) {
 	ctx := context.Background()
 	node := planInputTestNode(

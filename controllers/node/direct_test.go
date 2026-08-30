@@ -1500,6 +1500,13 @@ func TestDirectSecondaryPrunesOnlyItsObsoleteStandaloneWorkload(t *testing.T) {
 func TestDirectProfileFailureReportsConditionWithoutMutatingWorkload(t *testing.T) {
 	ctx := context.Background()
 	node := planInputTestNode("device-a", "node-uid", "opaque-package-kind", "example/a:1")
+	node.Generation = 1
+	node.Status.Readiness = clabernetesconstants.NodeStatusReady
+	node.Status.Conditions = []metav1.Condition{{
+		Type:               clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: node.GetGeneration(),
+	}}
 	node.Spec.ProfileRef = &k8scorev1.LocalObjectReference{Name: "missing-profile"}
 	owner := *metav1.NewControllerRef(
 		node,
@@ -1543,6 +1550,16 @@ func TestDirectProfileFailureReportsConditionWithoutMutatingWorkload(t *testing.
 	if condition == nil || condition.Status != metav1.ConditionFalse ||
 		condition.Reason != "NodeProfileNotFound" {
 		t.Fatalf("direct profile resolution condition = %#v", condition)
+	}
+
+	planCondition := apimachinerymeta.FindStatusCondition(
+		actualNode.Status.Conditions,
+		clabernetesapisv1alpha1.NodeConditionPlanApplied,
+	)
+	if actualNode.Status.Readiness != clabernetesconstants.NodeStatusNotReady ||
+		planCondition == nil || planCondition.Status != metav1.ConditionFalse ||
+		planCondition.Reason != "NodeProfileNotFound" {
+		t.Fatalf("direct profile failure readiness status = %#v", actualNode.Status)
 	}
 
 	actualDeployment := &k8sappsv1.Deployment{}

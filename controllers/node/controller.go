@@ -174,7 +174,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		Watches(
 			&clabernetesapisv1alpha1.NodeProfile{},
 			ctrlruntimehandler.EnqueueRequestsFromMapFunc(
-				c.enqueuePrimariesForNodeProfile,
+				c.enqueuePrimariesForNodeProfileAndInvalidate,
 			),
 		).
 		// links feed the connectivity plans of the primaries terminating them
@@ -185,7 +185,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// global config is the base of every profile resolution
 		Watches(
 			&clabernetesapisv1alpha1.Config{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueAllNodes),
+			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueAllNodesAndInvalidate),
 		).
 		// owned objects
 		Watches(
@@ -208,11 +208,15 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// pod group that consumes them.
 		Watches(
 			&k8scorev1.ConfigMap{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueuePrimariesForPayloadObject),
+			ctrlruntimehandler.EnqueueRequestsFromMapFunc(
+				c.enqueuePrimariesForPayloadObjectAndInvalidate,
+			),
 		).
 		Watches(
 			&k8scorev1.Secret{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueuePrimariesForPayloadObject),
+			ctrlruntimehandler.EnqueueRequestsFromMapFunc(
+				c.enqueuePrimariesForPayloadObjectAndInvalidate,
+			),
 		).
 		Watches(
 			&k8scorev1.Secret{},
@@ -252,6 +256,70 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueNodeForPod),
 		).
 		Complete(c)
+}
+
+func (c *Controller) invalidateDirectStatusesForRequests(
+	ctx context.Context,
+	requests []ctrlruntimereconcile.Request,
+) {
+	if c.reconciler == nil || len(requests) == 0 {
+		return
+	}
+
+	namesByNamespace := make(map[string]map[string]struct{}, len(requests))
+	for _, request := range requests {
+		names, ok := namesByNamespace[request.Namespace]
+		if !ok {
+			names = make(map[string]struct{})
+			namesByNamespace[request.Namespace] = names
+		}
+		names[request.Name] = struct{}{}
+	}
+
+	for namespace, names := range namesByNamespace {
+		nodeNames := make([]string, 0, len(names))
+		for name := range names {
+			nodeNames = append(nodeNames, name)
+		}
+
+		if err := c.reconciler.markDirectStatusesPendingForNodes(
+			ctx,
+			namespace,
+			nodeNames,
+		); err != nil && c.Log != nil {
+			c.Log.Criticalf("failed invalidating direct Node statuses, err: %s", err)
+		}
+	}
+}
+
+func (c *Controller) enqueuePrimariesForNodeProfileAndInvalidate(
+	ctx context.Context,
+	obj ctrlruntimeclient.Object,
+) []ctrlruntimereconcile.Request {
+	requests := c.enqueuePrimariesForNodeProfile(ctx, obj)
+	c.invalidateDirectStatusesForRequests(ctx, requests)
+
+	return requests
+}
+
+func (c *Controller) enqueueAllNodesAndInvalidate(
+	ctx context.Context,
+	obj ctrlruntimeclient.Object,
+) []ctrlruntimereconcile.Request {
+	requests := c.enqueueAllNodes(ctx, obj)
+	c.invalidateDirectStatusesForRequests(ctx, requests)
+
+	return requests
+}
+
+func (c *Controller) enqueuePrimariesForPayloadObjectAndInvalidate(
+	ctx context.Context,
+	obj ctrlruntimeclient.Object,
+) []ctrlruntimereconcile.Request {
+	requests := c.enqueuePrimariesForPayloadObject(ctx, obj)
+	c.invalidateDirectStatusesForRequests(ctx, requests)
+
+	return requests
 }
 
 // enqueuePrimaryFor resolves the primary node hosting the given node object and returns a
@@ -348,7 +416,10 @@ func (c *Controller) linkEnqueueHandler() ctrlruntimehandler.EventHandler {
 		queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
 		objects ...ctrlruntimeclient.Object,
 	) {
-		for _, request := range c.enqueuePrimariesForLinkObjects(ctx, objects...) {
+		requests := c.enqueuePrimariesForLinkObjects(ctx, objects...)
+		c.invalidateDirectStatusesForRequests(ctx, requests)
+
+		for _, request := range requests {
 			queue.Add(request)
 		}
 	}
