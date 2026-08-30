@@ -89,7 +89,8 @@ func (r *Reconciler) markDirectStatusesPendingForNodes(
 	nodesByName := clabernetesutilcontainerlab.NodesByName(nodes.Items)
 	primaryNames := make(map[string]struct{}, len(nodeNames))
 	for _, nodeName := range nodeNames {
-		primaryNames[clabernetesutilcontainerlab.ResolvePrimaryNode(nodesByName, nodeName)] = struct{}{}
+		primaryName := clabernetesutilcontainerlab.ResolvePrimaryNode(nodesByName, nodeName)
+		primaryNames[primaryName] = struct{}{}
 	}
 
 	for primaryName := range primaryNames {
@@ -233,18 +234,15 @@ func (r *Reconciler) reportDirectPreflightFailure(
 }
 
 func directPreflightDiagnostic(err error) (reason, message string, report bool) {
-	var planningErr *clabernetesinternaldeviceplan.Error
-	if errors.As(err, &planningErr) {
+	if planningErr, ok := errors.AsType[*clabernetesinternaldeviceplan.Error](err); ok {
 		return "Plan" + string(planningErr.Code), planningErr.Error(), true
 	}
 
-	var metadataErr *clabernetesinternalocimetadata.Error
-	if errors.As(err, &metadataErr) {
+	if metadataErr, ok := errors.AsType[*clabernetesinternalocimetadata.Error](err); ok {
 		return "OCIMetadata" + string(metadataErr.Code), metadataErr.Error(), true
 	}
 
-	var pullSecretErr *imagePullSecretError
-	if errors.As(err, &pullSecretErr) {
+	if pullSecretErr, ok := errors.AsType[*imagePullSecretError](err); ok {
 		// A referenced pull Secret the resolver cannot read blocks planning exactly like bad
 		// registry credentials do; without a condition the Node would sit with an empty status
 		// while the reconciler retries invisibly.
@@ -255,8 +253,7 @@ func directPreflightDiagnostic(err error) (reason, message string, report bool) 
 		return "ImagePullSecretUnreadable", pullSecretErr.Error(), true
 	}
 
-	var applyErr *deploymentApplyError
-	if errors.As(err, &applyErr) {
+	if applyErr, ok := errors.AsType[*deploymentApplyError](err); ok {
 		// The API server rejecting the rendered Deployment is terminal until the spec changes;
 		// anything else (a timeout, a conflict) is retried and may clear on its own.
 		if apimachineryerrors.IsInvalid(applyErr.cause) ||

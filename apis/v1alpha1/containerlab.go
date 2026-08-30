@@ -204,7 +204,7 @@ type NodeDefinition struct {
 
 // Vars is a mapping of containerlab config engine variable name to (arbitrary, so json.RawMessage
 // style) value.
-type Vars map[string]apiextensionsv1.JSON //nolint: recvcheck
+type Vars map[string]apiextensionsv1.JSON
 
 // MarshalYAML implements yaml marshalling for Vars -- the raw json values are unpacked so the
 // rendered (containerlab) yaml holds the plain values rather than the k8s JSON wrapper type.
@@ -369,7 +369,7 @@ type XIOM struct {
 }
 
 // XIOMS is a list of XIOM objects.
-type XIOMS []XIOM //nolint: recvcheck
+type XIOMS []XIOM
 
 // MDA holds a single mda configuration of a hardware component.
 type MDA struct {
@@ -382,7 +382,7 @@ type MDA struct {
 }
 
 // MDAS is a list of MDA objects.
-type MDAS []MDA //nolint: recvcheck
+type MDAS []MDA
 
 // UnmarshalYAML implements yaml unmarshalling with validation for MDAS.
 func (l *MDAS) UnmarshalYAML(unmarshal func(any) error) error {

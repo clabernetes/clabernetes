@@ -71,14 +71,14 @@ func (n *linuxEndpointNamespace) Execute(operation func() error) error {
 	}
 
 	return executeEndpointNamespace(
-		//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+
 		int(
 			n.target.Fd(),
-		), //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
-		//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		),
+
 		int(
 			n.host.Fd(),
-		), //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+		),
 		operation,
 		unix.Setns,
 		runtime.LockOSThread,

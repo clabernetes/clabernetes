@@ -84,7 +84,7 @@ func (f PayloadFetcher) FetchURLPayloads(
 			if Digest(content) != payload.Digest {
 				return &Error{
 					Code: ErrorInvariant, NodeID: payload.NodeID, Field: "payloadFetcher.digest",
-					Behavior: "url-payload",
+					Behavior: behaviorURLPayload,
 					Message:  "URL payload bytes differ from the accepted digest",
 				}
 			}
@@ -101,7 +101,7 @@ func (f PayloadFetcher) FetchURLPayloads(
 			nil,
 			nil,
 			nil,
-			"url-payload",
+			behaviorURLPayload,
 		); err != nil {
 			return withNodeID(err, payload.NodeID)
 		}
@@ -156,7 +156,7 @@ func readURLPayload(ctx context.Context, client *http.Client, reference string) 
 	if err != nil || parsed.Host == "" ||
 		(parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil {
 		return nil, &Error{
-			Code: ErrorInvalidInput, Field: "payloads.url", Behavior: "url-payload",
+			Code: ErrorInvalidInput, Field: fieldPayloadsURL, Behavior: behaviorURLPayload,
 			Message: "URL payload reference is not an absolute credential-free HTTP(S) URL",
 		}
 	}
@@ -165,7 +165,7 @@ func readURLPayload(ctx context.Context, client *http.Client, reference string) 
 	if err != nil {
 		return nil, planningError(
 			ErrorInvalidInput,
-			"payloads.url",
+			fieldPayloadsURL,
 			"cannot create URL request",
 			err,
 		)
@@ -175,33 +175,38 @@ func readURLPayload(ctx context.Context, client *http.Client, reference string) 
 
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, planningError(ErrorSideEffect, "payloads.url", "URL request failed", err)
+		return nil, planningError(ErrorSideEffect, fieldPayloadsURL, "URL request failed", err)
 	}
 
 	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, &Error{
-			Code: ErrorSideEffect, Field: "payloads.url", Behavior: "url-payload",
+			Code: ErrorSideEffect, Field: fieldPayloadsURL, Behavior: behaviorURLPayload,
 			Message: fmt.Sprintf("URL payload returned HTTP status %d", response.StatusCode),
 		}
 	}
 
 	if response.ContentLength > maxPreparedPayloadBytes {
 		return nil, &Error{
-			Code: ErrorUnsupported, Field: "payloads.url", Behavior: "url-payload",
+			Code: ErrorUnsupported, Field: fieldPayloadsURL, Behavior: behaviorURLPayload,
 			Message: "URL payload exceeds the size limit",
 		}
 	}
 
 	content, err := io.ReadAll(io.LimitReader(response.Body, maxPreparedPayloadBytes+1))
 	if err != nil {
-		return nil, planningError(ErrorSideEffect, "payloads.url", "cannot read URL response", err)
+		return nil, planningError(
+			ErrorSideEffect,
+			fieldPayloadsURL,
+			"cannot read URL response",
+			err,
+		)
 	}
 
 	if len(content) > maxPreparedPayloadBytes {
 		return nil, &Error{
-			Code: ErrorUnsupported, Field: "payloads.url", Behavior: "url-payload",
+			Code: ErrorUnsupported, Field: fieldPayloadsURL, Behavior: behaviorURLPayload,
 			Message: "URL payload exceeds the size limit",
 		}
 	}

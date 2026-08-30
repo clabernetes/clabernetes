@@ -1245,7 +1245,7 @@ func sendFabricWireDatagrams(fd int, peer netip.Addr, datagrams [][]byte) (int, 
 
 		n, _, errno := unix.Syscall6(
 			unix.SYS_SENDMMSG,
-			uintptr(fd), //nolint:gosec // kernel-issued descriptor.
+			uintptr(fd),
 			vector,
 			uintptr(len(headers)-sent),
 			unix.MSG_DONTWAIT,
@@ -1264,7 +1264,7 @@ func sendFabricWireDatagrams(fd int, peer netip.Addr, datagrams [][]byte) (int, 
 			return sent, errno
 		}
 
-		sent += int(n) //nolint:gosec // kernel-reported message count.
+		sent += int(n)
 
 		if n == 0 {
 			break
@@ -1323,7 +1323,7 @@ func (b *fabricWireReceiveBatch) receive(fd int) (int, error) {
 	for {
 		n, _, errno := unix.Syscall6(
 			unix.SYS_RECVMMSG,
-			uintptr(fd), //nolint:gosec // kernel-issued descriptor.
+			uintptr(fd),
 			vector,
 			uintptr(len(b.headers)),
 			unix.MSG_DONTWAIT,
@@ -1342,7 +1342,7 @@ func (b *fabricWireReceiveBatch) receive(fd int) (int, error) {
 		runtime.KeepAlive(b.vectors)
 		runtime.KeepAlive(b.addresses)
 
-		return int(n), nil //nolint:gosec // kernel-reported message count.
+		return int(n), nil
 	}
 }
 

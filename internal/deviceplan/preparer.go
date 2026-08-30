@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 
 	clabnodes "github.com/srl-labs/containerlab/nodes"
@@ -53,8 +54,9 @@ func (p Preparer) Prepare(
 		!reflect.DeepEqual(normalizedPlan.Compatibility, normalizedInput.Compatibility) ||
 		normalizedPlan.Planner.Revision != p.Adapter.Revision {
 		return &Error{
-			Code: ErrorInvariant, Field: "preparation.identity", Behavior: "artifact-generation",
-			Message: "plan and normalized preparation input identities differ",
+			Code: ErrorInvariant, Field: "preparation.identity",
+			Behavior: behaviorArtifactGeneration,
+			Message:  "plan and normalized preparation input identities differ",
 		}
 	}
 	finishEntropy, err := p.Adapter.beginEntropy(normalizedInput)
@@ -73,7 +75,7 @@ func (p Preparer) Prepare(
 	if !filepath.IsAbs(artifactRoot) || artifactRoot == string(filepath.Separator) {
 		return &Error{
 			Code: ErrorInvalidInput, Field: "preparation.artifactRoot",
-			Behavior: "artifact-generation",
+			Behavior: behaviorArtifactGeneration,
 			Message:  "artifact root must be a scoped absolute path",
 		}
 	}
@@ -137,7 +139,7 @@ func (p Preparer) Prepare(
 			if mismatch := preparedArtifactMismatch(file, artifact, exists); mismatch != "" {
 				return &Error{
 					Code: ErrorInvariant, NodeID: node.Input.ID, Field: "preparation.artifacts",
-					Behavior: "artifact-generation",
+					Behavior: behaviorArtifactGeneration,
 					Message:  "generated artifact " + mismatch + " differs from the accepted plan",
 				}
 			}
@@ -147,8 +149,9 @@ func (p Preparer) Prepare(
 	}
 	if len(expected) != 0 {
 		return &Error{
-			Code: ErrorInvariant, Field: "preparation.artifacts", Behavior: "artifact-generation",
-			Message: "planned preparation artifact was not regenerated",
+			Code: ErrorInvariant, Field: "preparation.artifacts",
+			Behavior: behaviorArtifactGeneration,
+			Message:  "planned preparation artifact was not regenerated",
 		}
 	}
 	// The verified render above used the exact planning inputs and is the determinism proof. A
@@ -186,8 +189,7 @@ func (p Preparer) Prepare(
 			return withNodeID(err, item.node.Input.ID)
 		}
 	}
-	for index := len(accepted) - 1; index >= 0; index-- {
-		item := accepted[index]
+	for _, item := range slices.Backward(accepted) {
 		if item.artifact.Kind != ArtifactDirectory {
 			continue
 		}
@@ -299,7 +301,7 @@ func (p Preparer) renderRuntimeManagementArtifacts(
 			if !exists {
 				return nil, nil, cleanup, &Error{
 					Code: ErrorInvariant, NodeID: node.Input.ID,
-					Field: "preparation.runtimeArtifacts", Behavior: "artifact-generation",
+					Field: fieldPreparationRuntimeArtifacts, Behavior: behaviorArtifactGeneration,
 					Message: "management completion added an artifact absent from the plan",
 				}
 			}
@@ -308,7 +310,8 @@ func (p Preparer) renderRuntimeManagementArtifacts(
 				if mismatch := preparedArtifactMismatch(file, artifact, true); mismatch != "" {
 					return nil, nil, cleanup, &Error{
 						Code: ErrorInvariant, NodeID: node.Input.ID,
-						Field: "preparation.runtimeArtifacts", Behavior: "artifact-generation",
+						Field:    fieldPreparationRuntimeArtifacts,
+						Behavior: behaviorArtifactGeneration,
 						Message: "management completion changed " + mismatch +
 							" of artifact " + artifact.Path,
 					}
@@ -322,7 +325,7 @@ func (p Preparer) renderRuntimeManagementArtifacts(
 				preparedArtifactMismatch(file, metadataOnly, true) != "" {
 				return nil, nil, cleanup, &Error{
 					Code: ErrorInvariant, NodeID: node.Input.ID,
-					Field: "preparation.runtimeArtifacts", Behavior: "artifact-generation",
+					Field: fieldPreparationRuntimeArtifacts, Behavior: behaviorArtifactGeneration,
 					Message: "management completion may change only regular generator content" +
 						"; artifact " + artifact.Path,
 				}
@@ -332,8 +335,8 @@ func (p Preparer) renderRuntimeManagementArtifacts(
 	}
 	if len(planned) != 0 {
 		return nil, nil, cleanup, &Error{
-			Code: ErrorInvariant, Field: "preparation.runtimeArtifacts",
-			Behavior: "artifact-generation",
+			Code: ErrorInvariant, Field: fieldPreparationRuntimeArtifacts,
+			Behavior: behaviorArtifactGeneration,
 			Message:  "management completion removed a planned artifact",
 		}
 	}
@@ -350,7 +353,7 @@ func preparedArtifactMismatch(file FilePlan, artifact GeneratedArtifact, exists 
 	}{
 		{file.Digest == artifact.Digest, "digest"},
 		{file.Mode == artifact.Mode, "mode"},
-		{file.ArtifactKind == artifact.Kind, "kind"},
+		{file.ArtifactKind == artifact.Kind, fieldKind},
 		{file.LinkTarget == artifact.LinkTarget, "link target"},
 		{file.SourceReference == artifact.SourceReference, "provenance"},
 		{reflect.DeepEqual(file.UID, artifact.UID), "owner"},
@@ -383,8 +386,9 @@ func (p Preparer) stagePayloads(
 	payloadRoot := filepath.Clean(p.PayloadRoot)
 	if !filepath.IsAbs(payloadRoot) || payloadRoot == string(filepath.Separator) {
 		return &Error{
-			Code: ErrorInvalidInput, Field: "preparation.payloadRoot", Behavior: "payload-staging",
-			Message: "payload root must be a scoped absolute path",
+			Code: ErrorInvalidInput, Field: "preparation.payloadRoot",
+			Behavior: behaviorPayloadStaging,
+			Message:  "payload root must be a scoped absolute path",
 		}
 	}
 	files := map[string]FilePlan{}
@@ -395,8 +399,9 @@ func (p Preparer) stagePayloads(
 		}
 		if _, exists := files[file.SourceReference]; exists {
 			return &Error{
-				Code: ErrorInvariant, Field: "preparation.payloads", Behavior: "payload-staging",
-				Message: "one payload identity is referenced by multiple file plans",
+				Code: ErrorInvariant, Field: fieldPreparationPayloads,
+				Behavior: behaviorPayloadStaging,
+				Message:  "one payload identity is referenced by multiple file plans",
 			}
 		}
 		files[file.SourceReference] = file
@@ -406,8 +411,8 @@ func (p Preparer) stagePayloads(
 		if !exists || file.NodeID != payload.NodeID || file.Destination != payload.Destination ||
 			file.Mode != payload.Mode || file.Digest != payload.Digest {
 			return &Error{
-				Code: ErrorInvariant, NodeID: payload.NodeID, Field: "preparation.payloads",
-				Behavior: "payload-staging",
+				Code: ErrorInvariant, NodeID: payload.NodeID, Field: fieldPreparationPayloads,
+				Behavior: behaviorPayloadStaging,
 				Message:  "payload input differs from the accepted file plan",
 			}
 		}
@@ -425,8 +430,8 @@ func (p Preparer) stagePayloads(
 		}
 		if Digest(content) != payload.Digest {
 			return &Error{
-				Code: ErrorInvariant, NodeID: payload.NodeID, Field: "preparation.payloads",
-				Behavior: "payload-staging",
+				Code: ErrorInvariant, NodeID: payload.NodeID, Field: fieldPreparationPayloads,
+				Behavior: behaviorPayloadStaging,
 				Message:  "payload bytes do not match the accepted digest",
 			}
 		}
@@ -439,7 +444,7 @@ func (p Preparer) stagePayloads(
 			file.UID,
 			file.GID,
 			nil,
-			"payload-staging",
+			behaviorPayloadStaging,
 		); stageErr != nil {
 			return withNodeID(stageErr, payload.NodeID)
 		}
@@ -447,7 +452,7 @@ func (p Preparer) stagePayloads(
 	}
 	if len(files) != 0 {
 		return &Error{
-			Code: ErrorInvariant, Field: "preparation.payloads", Behavior: "payload-staging",
+			Code: ErrorInvariant, Field: fieldPreparationPayloads, Behavior: behaviorPayloadStaging,
 			Message: "accepted file plan references an unavailable payload input",
 		}
 	}
@@ -469,7 +474,7 @@ func (p Preparer) readPayload(
 		if err != nil {
 			return nil, planningError(
 				ErrorSideEffect,
-				"preparation.payloads",
+				fieldPreparationPayloads,
 				"cannot read mounted payload source",
 				err,
 			)
@@ -485,8 +490,9 @@ func (p Preparer) readPayload(
 		return readURLPayload(ctx, client, payload.Reference)
 	default:
 		return nil, &Error{
-			Code: ErrorUnsupported, Field: "preparation.payloads", Behavior: "payload-staging",
-			Message: "payload source has no direct preparation reader",
+			Code: ErrorUnsupported, Field: fieldPreparationPayloads,
+			Behavior: behaviorPayloadStaging,
+			Message:  "payload source has no direct preparation reader",
 		}
 	}
 }
@@ -507,7 +513,7 @@ func stagePreparedArtifact(
 			artifact.UID,
 			artifact.GID,
 			artifact.ExtendedAttributes,
-			"artifact-generation",
+			behaviorArtifactGeneration,
 		)
 	}
 	if artifact.Kind == ArtifactSymlink {
@@ -515,8 +521,9 @@ func stagePreparedArtifact(
 		if err != nil || target != artifact.LinkTarget ||
 			Digest([]byte(target)) != artifact.Digest {
 			return &Error{
-				Code: ErrorInvariant, Field: "preparation.source", Behavior: "artifact-generation",
-				Message: "regenerated symbolic link changed after inventory", cause: err,
+				Code: ErrorInvariant, Field: "preparation.source",
+				Behavior: behaviorArtifactGeneration,
+				Message:  "regenerated symbolic link changed after inventory", cause: err,
 			}
 		}
 
@@ -528,7 +535,7 @@ func stagePreparedArtifact(
 			artifact.UID,
 			artifact.GID,
 			artifact.ExtendedAttributes,
-			"artifact-generation",
+			behaviorArtifactGeneration,
 		)
 	}
 	content, err := os.ReadFile( //nolint:gosec // reads are confined to plan-scoped roots.
@@ -544,7 +551,7 @@ func stagePreparedArtifact(
 	}
 	if Digest(content) != artifact.Digest {
 		return &Error{
-			Code: ErrorInvariant, Field: "preparation.source", Behavior: "artifact-generation",
+			Code: ErrorInvariant, Field: "preparation.source", Behavior: behaviorArtifactGeneration,
 			Message: "regenerated artifact changed after inventory",
 		}
 	}
@@ -558,7 +565,7 @@ func stagePreparedArtifact(
 		artifact.UID,
 		artifact.GID,
 		artifact.ExtendedAttributes,
-		"artifact-generation",
+		behaviorArtifactGeneration,
 	)
 }
 
@@ -586,7 +593,7 @@ func stageArtifactContent(
 	if err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot create staged artifact",
 			err,
 		)
@@ -621,7 +628,7 @@ func stageArtifactContent(
 	if err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot write staged artifact",
 			err,
 		)
@@ -629,13 +636,13 @@ func stageArtifactContent(
 	if existing, statErr := os.Lstat(destination); statErr == nil &&
 		!existing.Mode().IsRegular() {
 		return &Error{
-			Code: ErrorUnsupported, Field: "preparation.destination",
+			Code: ErrorUnsupported, Field: fieldPreparationDestination,
 			Behavior: behavior, Message: "artifact destination is not a regular file",
 		}
 	} else if statErr != nil && !os.IsNotExist(statErr) {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot inspect artifact destination",
 			statErr,
 		)
@@ -643,7 +650,7 @@ func stageArtifactContent(
 	if err = os.Rename(temporaryName, destination); err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot publish staged artifact",
 			err,
 		)
@@ -674,13 +681,13 @@ func stageArtifactSymlink(
 	if existing, statErr := os.Lstat(destination); statErr == nil &&
 		existing.Mode()&os.ModeSymlink == 0 {
 		return &Error{
-			Code: ErrorUnsupported, Field: "preparation.destination",
+			Code: ErrorUnsupported, Field: fieldPreparationDestination,
 			Behavior: behavior, Message: "symbolic-link destination has another file type",
 		}
 	} else if statErr != nil && !os.IsNotExist(statErr) {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot inspect symbolic-link destination",
 			statErr,
 		)
@@ -689,7 +696,7 @@ func stageArtifactSymlink(
 	if err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot reserve staged symbolic link",
 			err,
 		)
@@ -713,7 +720,7 @@ func stageArtifactSymlink(
 	if err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot create staged symbolic link",
 			err,
 		)
@@ -722,7 +729,7 @@ func stageArtifactSymlink(
 	if err = os.Rename(temporaryName, destination); err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot publish staged symbolic link",
 			err,
 		)
@@ -761,7 +768,7 @@ func stageArtifactDirectory(
 		if err = os.MkdirAll(destination, 0o700); err != nil {
 			return planningError(
 				ErrorSideEffect,
-				"preparation.destination",
+				fieldPreparationDestination,
 				"cannot create artifact directory",
 				err,
 			)
@@ -771,14 +778,14 @@ func stageArtifactDirectory(
 	if err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot inspect artifact directory",
 			err,
 		)
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return &Error{
-			Code: ErrorUnsupported, Field: "preparation.destination",
+			Code: ErrorUnsupported, Field: fieldPreparationDestination,
 			Behavior: behavior, Message: "artifact directory destination has another file type",
 		}
 	}
@@ -803,7 +810,7 @@ func stageArtifactDirectory(
 	if err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot apply artifact directory metadata",
 			err,
 		)
@@ -824,7 +831,7 @@ func prepareArtifactDestination(
 	if err != nil || relative == "." || relative == ".." || filepath.IsAbs(relative) ||
 		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return "", &Error{
-			Code: ErrorInvalidInput, Field: "preparation.destination",
+			Code: ErrorInvalidInput, Field: fieldPreparationDestination,
 			Behavior: behavior, Message: "artifact path escapes its Node root",
 		}
 	}
@@ -834,7 +841,7 @@ func prepareArtifactDestination(
 	if err = os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 		return "", planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot create artifact directory",
 			err,
 		)
@@ -847,7 +854,7 @@ func ensureNoSymlinkParents(root, directory string) error {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot create Node root",
 			err,
 		)
@@ -856,22 +863,23 @@ func ensureNoSymlinkParents(root, directory string) error {
 	if err != nil {
 		return planningError(
 			ErrorSideEffect,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot inspect Node root",
 			err,
 		)
 	}
 	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
 		return &Error{
-			Code: ErrorUnsupported, Field: "preparation.destination",
-			Behavior: "artifact-generation", Message: "artifact Node root is not a real directory",
+			Code: ErrorUnsupported, Field: fieldPreparationDestination,
+			Behavior: behaviorArtifactGeneration,
+			Message:  "artifact Node root is not a real directory",
 		}
 	}
 	relative, err := filepath.Rel(root, directory)
 	if err != nil {
 		return planningError(
 			ErrorInvalidInput,
-			"preparation.destination",
+			fieldPreparationDestination,
 			"cannot resolve path",
 			err,
 		)
@@ -889,15 +897,16 @@ func ensureNoSymlinkParents(root, directory string) error {
 		if statErr != nil {
 			return planningError(
 				ErrorSideEffect,
-				"preparation.destination",
+				fieldPreparationDestination,
 				"cannot inspect artifact path",
 				statErr,
 			)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return &Error{
-				Code: ErrorUnsupported, Field: "preparation.destination",
-				Behavior: "artifact-generation", Message: "artifact path contains a symbolic link",
+				Code: ErrorUnsupported, Field: fieldPreparationDestination,
+				Behavior: behaviorArtifactGeneration,
+				Message:  "artifact path contains a symbolic link",
 			}
 		}
 	}

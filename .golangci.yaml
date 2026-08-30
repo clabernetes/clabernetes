@@ -10,6 +10,7 @@ linters:
     - cyclop # already using gocyclo, and its good enough!
     - depguard
     - exhaustruct
+    - exhaustruct_v5 # successor of exhaustruct (golangci-lint v2.13+), disabled likewise
     - gomodguard # deprecated, gomodguard_v2 included in all ofc
     - ireturn
     - musttag # also probably should remove but... for now
@@ -21,6 +22,7 @@ linters:
     - varnamelen
     - wrapcheck
     - wsl # deprecated, wsl_v5 included in all ofc
+    - wsl_v5 # successor of wsl (golangci-lint v2.13+), disabled likewise
   settings:
     funlen:
       lines: 150

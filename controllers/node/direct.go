@@ -428,7 +428,7 @@ func (r *Reconciler) reconcileDirect(
 	labels, annotations := r.directMetadata(node)
 	annotations[clabernetesinternaldirectpod.NodeUIDAnnotation] = string(node.GetUID())
 	owner := *metav1.NewControllerRef(node,
-		clabernetesapisv1alpha1.SchemeGroupVersion.WithKind("Node"))
+		clabernetesapisv1alpha1.SchemeGroupVersion.WithKind(nodeCRKind))
 	primaryContainerResources := r.directPrimaryContainerResources(profile)
 	renderOptions := clabernetesinternaldirectpod.Options{
 		Name: node.GetName(), Namespace: node.GetNamespace(),

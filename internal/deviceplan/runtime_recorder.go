@@ -274,7 +274,7 @@ func (r *recordingRuntime) PullImage(
 	r.calls = append(r.calls, operation)
 	if _, exists := r.images[imageName]; !exists {
 		return r.failLocked(&Error{
-			Code: ErrorMissingInput, Field: "images", Behavior: operation,
+			Code: ErrorMissingInput, Field: string(WorkerFrameImages), Behavior: operation,
 			Message: "explicit OCI metadata is unavailable for the requested image pull",
 		})
 	}
@@ -290,18 +290,18 @@ func (r *recordingRuntime) CreateContainer(
 	defer r.mu.Unlock()
 
 	if !r.recordingMutations {
-		return "", r.blockedLocked("runtime.CreateContainer")
+		return "", r.blockedLocked(behaviorRuntimeCreateContainer)
 	}
 
 	if config == nil {
 		return "", r.failLocked(&Error{
 			Code: ErrorInvariant, Field: "container.config",
-			Behavior: "runtime.CreateContainer",
+			Behavior: behaviorRuntimeCreateContainer,
 			Message:  "imported code supplied no container config",
 		})
 	}
 
-	r.calls = append(r.calls, "runtime.CreateContainer")
+	r.calls = append(r.calls, behaviorRuntimeCreateContainer)
 
 	runtimeID := config.LongName
 	if runtimeID == "" {
@@ -311,7 +311,7 @@ func (r *recordingRuntime) CreateContainer(
 	if runtimeID == "" {
 		return "", r.failLocked(&Error{
 			Code: ErrorInvariant, Field: "container.name",
-			Behavior: "runtime.CreateContainer", Message: "imported container has no identity",
+			Behavior: behaviorRuntimeCreateContainer, Message: "imported container has no identity",
 		})
 	}
 
@@ -319,7 +319,7 @@ func (r *recordingRuntime) CreateContainer(
 		if container.RuntimeID == runtimeID {
 			return "", r.failLocked(&Error{
 				Code: ErrorInvariant, Field: "container.name",
-				Behavior: "runtime.CreateContainer",
+				Behavior: behaviorRuntimeCreateContainer,
 				Message:  "imported container identity is duplicated",
 			})
 		}
@@ -499,7 +499,7 @@ func (r *recordingRuntime) GetHostsPath(_ context.Context, runtimeID string) (st
 	controlledPath := filepath.Join(r.artifactRoot, filepath.FromSlash(artifactPath))
 	if err := os.MkdirAll(filepath.Dir(controlledPath), 0o700); err != nil {
 		return "", r.failLocked(&Error{
-			Code: ErrorSideEffect, Field: "hosts.snapshot", Behavior: operation,
+			Code: ErrorSideEffect, Field: fieldHostsSnapshot, Behavior: operation,
 			Message: "cannot create a controlled hosts-file artifact directory", cause: err,
 		})
 	}
@@ -511,14 +511,14 @@ func (r *recordingRuntime) GetHostsPath(_ context.Context, runtimeID string) (st
 	)
 	if err != nil {
 		return "", r.failLocked(&Error{
-			Code: ErrorSideEffect, Field: "hosts.snapshot", Behavior: operation,
+			Code: ErrorSideEffect, Field: fieldHostsSnapshot, Behavior: operation,
 			Message: "cannot create a controlled hosts-file artifact", cause: err,
 		})
 	}
 
 	if err = file.Close(); err != nil {
 		return "", r.failLocked(&Error{
-			Code: ErrorSideEffect, Field: "hosts.snapshot", Behavior: operation,
+			Code: ErrorSideEffect, Field: fieldHostsSnapshot, Behavior: operation,
 			Message: "cannot close a controlled hosts-file artifact", cause: err,
 		})
 	}
@@ -688,7 +688,7 @@ func (r *recordingRuntime) InspectImage(
 
 		err := &Error{
 			Code:     ErrorMissingInput,
-			Field:    "images",
+			Field:    string(WorkerFrameImages),
 			Behavior: "runtime.InspectImage",
 			Message:  "explicit OCI metadata is unavailable for the requested image",
 		}
@@ -738,14 +738,14 @@ func (r *recordingRuntime) CopyToContainer(
 	info, err := os.Lstat(source)
 	if err != nil {
 		return r.failLocked(&Error{
-			Code: ErrorMissingInput, Field: "copy.source", Behavior: operation,
+			Code: ErrorMissingInput, Field: fieldCopySource, Behavior: operation,
 			Message: "imported runtime copy source is unavailable", cause: err,
 		})
 	}
 
 	if !info.Mode().IsRegular() {
 		return r.failLocked(&Error{
-			Code: ErrorUnsupported, Field: "copy.source", Behavior: operation,
+			Code: ErrorUnsupported, Field: fieldCopySource, Behavior: operation,
 			Message: "imported runtime copy source is not a regular file",
 		})
 	}
@@ -755,7 +755,7 @@ func (r *recordingRuntime) CopyToContainer(
 	)
 	if err != nil {
 		return r.failLocked(&Error{
-			Code: ErrorMissingInput, Field: "copy.source", Behavior: operation,
+			Code: ErrorMissingInput, Field: fieldCopySource, Behavior: operation,
 			Message: "imported runtime copy source cannot be read", cause: err,
 		})
 	}
@@ -782,7 +782,7 @@ func (r *recordingRuntime) CopyToContainer(
 	snapshotPath := filepath.Join(r.artifactRoot, filepath.FromSlash(artifactPath))
 	if err = os.MkdirAll(filepath.Dir(snapshotPath), 0o700); err != nil {
 		return r.failLocked(&Error{
-			Code: ErrorSideEffect, Field: "copy.snapshot", Behavior: operation,
+			Code: ErrorSideEffect, Field: fieldCopySnapshot, Behavior: operation,
 			Message: "cannot create a controlled runtime-copy artifact directory", cause: err,
 		})
 	}
@@ -800,7 +800,7 @@ func (r *recordingRuntime) CopyToContainer(
 	)
 	if err != nil {
 		return r.failLocked(&Error{
-			Code: ErrorSideEffect, Field: "copy.snapshot", Behavior: operation,
+			Code: ErrorSideEffect, Field: fieldCopySnapshot, Behavior: operation,
 			Message: "cannot create a controlled runtime-copy artifact", cause: err,
 		})
 	}
@@ -815,7 +815,7 @@ func (r *recordingRuntime) CopyToContainer(
 
 	if err != nil {
 		return r.failLocked(&Error{
-			Code: ErrorSideEffect, Field: "copy.snapshot", Behavior: operation,
+			Code: ErrorSideEffect, Field: fieldCopySnapshot, Behavior: operation,
 			Message: "cannot write a controlled runtime-copy artifact", cause: err,
 		})
 	}

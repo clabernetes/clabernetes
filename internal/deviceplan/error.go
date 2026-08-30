@@ -2,6 +2,41 @@ package deviceplan
 
 import "fmt"
 
+// Field and behavior identifiers attached to planning errors. They are part of the
+// machine-readable plan contract consumed by renderers and tooling.
+const (
+	fieldDefinitionStartupConfig       = "definition.startup-config"
+	fieldKind                          = "kind"
+	fieldDeploymentComponents          = "deployment.components"
+	fieldDeploymentOperationsTarget    = "deployment.operations.target"
+	fieldWorkspace                     = "workspace"
+	fieldPayloads                      = "payloads"
+	fieldPayloadsURL                   = "payloads.url"
+	fieldCertificates                  = "certificates"
+	fieldPreparationRuntimeArtifacts   = "preparation.runtimeArtifacts"
+	fieldPreparationPayloads           = "preparation.payloads"
+	fieldPreparationDestination        = "preparation.destination"
+	fieldHostsSnapshot                 = "hosts.snapshot"
+	fieldCopySource                    = "copy.source"
+	fieldCopySnapshot                  = "copy.snapshot"
+	behaviorImportedStartupConfig      = "imported-startup-config"
+	behaviorImportedInit               = "imported-init"
+	behaviorImportedDeploy             = "imported-deploy"
+	behaviorImportedComponents         = "imported-components"
+	behaviorImportedCertificateRequest = "imported-certificate-request"
+	behaviorPayloadWorkspace           = "payload-workspace"
+	behaviorPayloadStaging             = "payload-staging"
+	behaviorArtifactGeneration         = "artifact-generation"
+	behaviorCertificateMaterial        = "certificate-material"
+	behaviorNetworkNamespace           = "network-namespace"
+	behaviorRuntimeCreateContainer     = "runtime.CreateContainer"
+	behaviorURLPayload                 = "url-payload"
+	filesystemTmpfs                    = "tmpfs"
+	// plannerIdentity is the planner name recorded in discovered image and mapper identities and
+	// used as the certificate organization, identifying clabernetes-issued material.
+	plannerIdentity = "clabernetes"
+)
+
 // Error is a stable, structured planning diagnostic. It contains identities and field paths but
 // never rejected values, payload content, credentials, or other secret material.
 type Error struct {

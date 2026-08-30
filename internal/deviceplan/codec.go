@@ -1019,7 +1019,7 @@ func validateActionPayload(
 
 		valid = exists && volumeExists && volume.Kind == VolumeEmptyDir &&
 			strings.EqualFold(volume.Medium, "Memory") &&
-			action.Mount.Filesystem == "tmpfs" && action.Mount.Source == "tmpfs" &&
+			action.Mount.Filesystem == filesystemTmpfs && action.Mount.Source == filesystemTmpfs &&
 			action.Phase == PhasePreStart && action.Target.ContainerID == mount.ContainerID
 		if valid {
 			for _, option := range action.Mount.Options {

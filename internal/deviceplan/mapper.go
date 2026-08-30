@@ -30,7 +30,7 @@ func (a Adapter) Plan(ctx context.Context, input Input) (*Plan, error) {
 		Compatibility: evaluation.Input.Compatibility,
 		InputDigest:   evaluation.InputDigest,
 		Planner: PlannerIdentity{
-			Name:     "clabernetes",
+			Name:     plannerIdentity,
 			Revision: a.Revision,
 		},
 	}
@@ -266,8 +266,8 @@ func mapReadinessContainerIDs(
 		containerID, exists := runtimeContainerIDs[runtimeID]
 		if !exists || !slices.Contains(nodeContainerIDs, containerID) || seen[containerID] {
 			return nil, &Error{
-				Code: ErrorInvariant, NodeID: node.Input.ID, Field: "deployment.components",
-				Behavior: "imported-components",
+				Code: ErrorInvariant, NodeID: node.Input.ID, Field: fieldDeploymentComponents,
+				Behavior: behaviorImportedComponents,
 				Message:  "imported component inventory does not match recorded containers",
 			}
 		}
@@ -276,8 +276,8 @@ func mapReadinessContainerIDs(
 	}
 	if len(result) == 0 {
 		return nil, &Error{
-			Code: ErrorInvariant, NodeID: node.Input.ID, Field: "deployment.components",
-			Behavior: "imported-components",
+			Code: ErrorInvariant, NodeID: node.Input.ID, Field: fieldDeploymentComponents,
+			Behavior: behaviorImportedComponents,
 			Message:  "imported component inventory has no readiness-owning container",
 		}
 	}
@@ -354,7 +354,8 @@ func appendRecordedDeploymentActions(
 	if node.recorder == nil {
 		return 0, &Error{
 			Code: ErrorInvariant, NodeID: node.Input.ID, Field: "deployment.operations",
-			Behavior: "imported-deploy", Message: "imported deployment recorder is unavailable",
+			Behavior: behaviorImportedDeploy,
+			Message:  "imported deployment recorder is unavailable",
 		}
 	}
 	execs := node.recorder.Execs()
@@ -377,7 +378,7 @@ func appendRecordedDeploymentActions(
 		containerID, exists := runtimeContainerIDs[runtimeID]
 		if !exists {
 			return ActionTarget{}, &Error{
-				Code: ErrorInvariant, NodeID: node.Input.ID, Field: "deployment.operations.target",
+				Code: ErrorInvariant, NodeID: node.Input.ID, Field: fieldDeploymentOperationsTarget,
 				Behavior: behavior,
 				Message:  "imported deployment operation targets an unknown container",
 			}
@@ -389,14 +390,14 @@ func appendRecordedDeploymentActions(
 			if container.NodeID != node.Input.ID {
 				return ActionTarget{}, &Error{
 					Code: ErrorInvariant, NodeID: node.Input.ID,
-					Field: "deployment.operations.target", Behavior: behavior,
+					Field: fieldDeploymentOperationsTarget, Behavior: behavior,
 					Message: "imported deployment operation crosses logical Node ownership",
 				}
 			}
 			if containerID != lifecycleContainerID {
 				return ActionTarget{}, &Error{
 					Code: ErrorUnsupported, NodeID: node.Input.ID,
-					Field: "deployment.operations.target", Behavior: "cross-container-lifecycle",
+					Field: fieldDeploymentOperationsTarget, Behavior: "cross-container-lifecycle",
 					Message: "ordered imported deployment operations span application containers",
 				}
 			}
@@ -408,7 +409,7 @@ func appendRecordedDeploymentActions(
 		}
 
 		return ActionTarget{}, &Error{
-			Code: ErrorInvariant, NodeID: node.Input.ID, Field: "deployment.operations.target",
+			Code: ErrorInvariant, NodeID: node.Input.ID, Field: fieldDeploymentOperationsTarget,
 			Behavior: behavior, Message: "imported deployment target has no planned container",
 		}
 	}
@@ -482,7 +483,7 @@ func appendRecordedDeploymentActions(
 	if len(orders) != operationCount {
 		return 0, &Error{
 			Code: ErrorInvariant, NodeID: node.Input.ID, Field: "deployment.operations.order",
-			Behavior: "imported-deploy",
+			Behavior: behaviorImportedDeploy,
 			Message:  "imported deployment operation order is incomplete",
 		}
 	}
@@ -534,7 +535,7 @@ func namespaceOwnerForContainer(
 		if !exists {
 			return "", &Error{
 				Code: ErrorMissingInput, NodeID: node.Input.ID, Field: "deployment.network-mode",
-				Behavior: "network-namespace",
+				Behavior: behaviorNetworkNamespace,
 				Message:  "imported container references an unknown namespace owner",
 			}
 		}
@@ -546,7 +547,8 @@ func namespaceOwnerForContainer(
 		if len(owners) == 0 {
 			return "", &Error{
 				Code: ErrorMissingInput, NodeID: node.Input.ID, Field: "groupOwner",
-				Behavior: "network-namespace", Message: "group owner has no application container",
+				Behavior: behaviorNetworkNamespace,
+				Message:  "group owner has no application container",
 			}
 		}
 
@@ -635,7 +637,7 @@ func validateDefinitionNetworkMode(node *EvaluatedNode, nodes []NodeInput) error
 	if node.Input.GroupOwner == "" {
 		return &Error{
 			Code: ErrorMissingInput, NodeID: node.Input.ID, Field: "definition.network-mode",
-			Behavior: "network-namespace",
+			Behavior: behaviorNetworkNamespace,
 			Message:  "shared network namespace has no resolved group owner",
 		}
 	}
@@ -648,7 +650,7 @@ func validateDefinitionNetworkMode(node *EvaluatedNode, nodes []NodeInput) error
 
 	return &Error{
 		Code: ErrorInvariant, NodeID: node.Input.ID, Field: "definition.network-mode",
-		Behavior: "network-namespace",
+		Behavior: behaviorNetworkNamespace,
 		Message:  "shared network namespace differs from the resolved group owner",
 	}
 }
@@ -895,7 +897,7 @@ func appendStoragePlans(
 		!slices.Equal(config.Binds[:len(definitionBinds)], definitionBinds) {
 		return &Error{
 			Code: ErrorInvariant, NodeID: node.Input.ID, Field: "definition.binds",
-			Behavior: "imported-init", Message: "kind initializer rewrote user bind intent",
+			Behavior: behaviorImportedInit, Message: "kind initializer rewrote user bind intent",
 		}
 	}
 	for index, raw := range definitionBinds {
@@ -934,7 +936,8 @@ func appendStoragePlans(
 				Target: ActionTarget{NodeID: node.Input.ID, ContainerID: containerID},
 				Kind:   ActionMount,
 				Mount: &MountAction{
-					MountID: mountID, Filesystem: "tmpfs", Source: "tmpfs", Options: mountOptions,
+					MountID: mountID, Filesystem: filesystemTmpfs, Source: filesystemTmpfs,
+					Options: mountOptions,
 				},
 			})
 		}
@@ -1343,7 +1346,7 @@ func imageInputForContainer(inputs []ImageInput, nodeID, reference string) (Imag
 		}
 		if match != nil && match.DigestReference != image.DigestReference {
 			return ImageInput{}, &Error{
-				Code: ErrorInvalidInput, NodeID: nodeID, Field: "images",
+				Code: ErrorInvalidInput, NodeID: nodeID, Field: string(WorkerFrameImages),
 				Behavior: "container-image",
 				Message:  "multiple image metadata entries ambiguously match an imported container",
 			}
@@ -1356,7 +1359,7 @@ func imageInputForContainer(inputs []ImageInput, nodeID, reference string) (Imag
 	}
 
 	return ImageInput{}, &Error{
-		Code: ErrorMissingInput, NodeID: nodeID, Field: "images",
+		Code: ErrorMissingInput, NodeID: nodeID, Field: string(WorkerFrameImages),
 		Behavior: "container-image", Message: "container image metadata is missing",
 	}
 }

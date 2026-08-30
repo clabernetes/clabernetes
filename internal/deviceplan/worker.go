@@ -315,8 +315,7 @@ func writeWorkerError(output io.Writer, err error) error {
 		Message: "isolated worker failed without a structured diagnostic",
 	}
 
-	var structured *Error
-	if errors.As(err, &structured) {
+	if structured, ok := errors.AsType[*Error](err); ok {
 		diagnostic = &Error{
 			Code: structured.Code, NodeID: structured.NodeID, Field: structured.Field,
 			Behavior: structured.Behavior, Message: structured.Message,

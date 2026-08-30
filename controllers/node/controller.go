@@ -35,6 +35,9 @@ import (
 
 const profileReferenceField = "spec.profileRef.name"
 
+// nodeCRKind is the Node CR kind used for owner references and watch setup.
+const nodeCRKind = "Node"
+
 // Controller is the clabernetes Node controller -- it turns each (primary) Node into a
 // deployment (plus services/pvc) and stamps observations/allocations into the Node status.
 type Controller struct {

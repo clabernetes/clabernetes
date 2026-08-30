@@ -399,8 +399,7 @@ func (r *importedApplicationRuntime) Exec(
 	if err == nil {
 		return result, nil
 	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		result.SetReturnCode(exitErr.ExitCode())
 
 		return result, nil

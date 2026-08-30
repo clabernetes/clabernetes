@@ -49,7 +49,7 @@ func mountedCertificateInfrastructure(
 	if !filepath.IsAbs(root) || root == string(filepath.Separator) {
 		return nil, planningError(
 			ErrorMissingInput,
-			"certificates",
+			fieldCertificates,
 			"package-requested certificates require a scoped Secret projection",
 			nil,
 		)
@@ -73,8 +73,8 @@ func mountedCertificateInfrastructure(
 		if Digest(caCertificate) != input.CACertificateDigest ||
 			Digest(caPrivateKey) != input.CAPrivateKeyDigest {
 			return nil, &Error{
-				Code: ErrorInvariant, NodeID: input.NodeID, Field: "certificates",
-				Behavior: "certificate-material",
+				Code: ErrorInvariant, NodeID: input.NodeID, Field: fieldCertificates,
+				Behavior: behaviorCertificateMaterial,
 				Message:  "mounted certificate authority differs from accepted metadata",
 			}
 		}
@@ -94,8 +94,8 @@ func mountedCertificateInfrastructure(
 		if Digest(certificate) != input.CertificateDigest ||
 			Digest(privateKey) != input.PrivateKeyDigest {
 			return nil, &Error{
-				Code: ErrorInvariant, NodeID: input.NodeID, Field: "certificates",
-				Behavior: "certificate-material",
+				Code: ErrorInvariant, NodeID: input.NodeID, Field: fieldCertificates,
+				Behavior: behaviorCertificateMaterial,
 				Message:  "mounted node certificate differs from accepted metadata",
 			}
 		}
@@ -103,7 +103,7 @@ func mountedCertificateInfrastructure(
 		if _, exists := storage.nodes[input.StorageName]; exists {
 			return nil, &Error{
 				Code: ErrorInvariant, NodeID: input.NodeID, Field: "certificates.storageName",
-				Behavior: "certificate-material",
+				Behavior: behaviorCertificateMaterial,
 				Message:  "package certificate storage name is ambiguous across the workload group",
 			}
 		}
@@ -131,7 +131,7 @@ func readCertificateFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, planningError(
 			ErrorMissingInput,
-			"certificates",
+			fieldCertificates,
 			"cannot read projected certificate material",
 			err,
 		)
@@ -144,7 +144,7 @@ func readCertificateFile(path string) ([]byte, error) {
 		info.Size() > maxCertificateBytes {
 		return nil, planningError(
 			ErrorInvalidInput,
-			"certificates",
+			fieldCertificates,
 			"projected certificate material is not a bounded regular file",
 			err,
 		)
@@ -154,7 +154,7 @@ func readCertificateFile(path string) ([]byte, error) {
 	if err != nil || len(content) < 1 || len(content) > maxCertificateBytes {
 		return nil, planningError(
 			ErrorSideEffect,
-			"certificates",
+			fieldCertificates,
 			"cannot read complete projected certificate material",
 			err,
 		)
@@ -201,7 +201,7 @@ func newRecordingCertificateInfrastructure() (*clabcert.Cert, *recordingCertific
 
 	caCertificate, err := ca.GenerateCACert(&clabcert.CACSRInput{
 		CommonName: "disposable package certificate discovery CA",
-		Country:    "US", Organization: "clabernetes", Expiry: 24 * time.Hour, KeySize: 2048,
+		Country:    "US", Organization: plannerIdentity, Expiry: 24 * time.Hour, KeySize: 2048,
 	})
 	if err != nil {
 		return nil, nil, planningError(
@@ -384,8 +384,8 @@ func discoverCertificateRequests(
 		config := node.implementation.Config()
 		if config == nil {
 			return &Error{
-				Code: ErrorInvariant, NodeID: node.Input.ID, Field: "certificates",
-				Behavior: "imported-certificate-request",
+				Code: ErrorInvariant, NodeID: node.Input.ID, Field: fieldCertificates,
+				Behavior: behaviorImportedCertificateRequest,
 				Message:  "package node returned no configuration during certificate discovery",
 			}
 		}
@@ -398,8 +398,8 @@ func discoverCertificateRequests(
 		overwrites, ok := node.implementation.(clabnodes.NodeOverwrites)
 		if !ok {
 			return &Error{
-				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: "certificates",
-				Behavior: "imported-certificate-request",
+				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: fieldCertificates,
+				Behavior: behaviorImportedCertificateRequest,
 				Message:  "certificate-issuing package node lacks the generic overwrite interface",
 			}
 		}
@@ -420,8 +420,8 @@ func discoverCertificateRequests(
 
 		err := invokeImported(
 			node.Input.ID,
-			"certificates",
-			"imported-certificate-request",
+			fieldCertificates,
+			behaviorImportedCertificateRequest,
 			"containerlab generic certificate request panicked",
 			func() error {
 				_, issueErr := genericNode.LoadOrGenerateCertificate(infrastructure, topologyName)
@@ -431,8 +431,8 @@ func discoverCertificateRequests(
 		)
 		if err != nil {
 			return &Error{
-				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: "certificates",
-				Behavior: "imported-certificate-request",
+				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: fieldCertificates,
+				Behavior: behaviorImportedCertificateRequest,
 				Message:  "containerlab generic certificate request could not be discovered",
 				cause:    err,
 			}

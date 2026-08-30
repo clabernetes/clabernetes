@@ -74,6 +74,16 @@ const (
 	directWorkloadLabel              = clabernetesconstants.LabelDirectWorkload
 	directMeshMemberLabel            = clabernetesconstants.LabelDirectMeshMember
 	planDigestAnnotation             = "c9s.run/node-plan-digest"
+	// node-runtime CLI invocation tokens.
+	runtimeCommandName   = "node-runtime"
+	runtimeFlagPlan      = "--plan"
+	runtimeFlagInput     = "--input"
+	runtimeFlagContainer = "--containerID"
+	runtimeFlagArtifacts = "--artifacts"
+	runtimeFlagScratch   = "--scratch"
+	runtimeFlagRevision  = "--revision"
+	runtimeFlagState     = "--state"
+	podAddressFieldPath  = "status.podIP"
 )
 
 // Stable direct workload identities consumed by the status reconciler.
@@ -191,8 +201,7 @@ func ValidatePlan(plan clabernetesinternaldeviceplan.Plan) error {
 
 func validateNormalizedPlan(plan clabernetesinternaldeviceplan.Plan) error {
 	if err := clabernetesinternaldirectruntime.ValidatePlanCapabilities(plan); err != nil {
-		var planningErr *clabernetesinternaldeviceplan.Error
-		if errors.As(err, &planningErr) {
+		if _, ok := errors.AsType[*clabernetesinternaldeviceplan.Error](err); ok {
 			return err
 		}
 
@@ -1498,11 +1507,11 @@ func renderApplicationLifecycle(
 		// packages assume before exec-ing the image's real process.
 		container.Command = []string{
 			lifecycleBinaryPath,
-			"node-runtime",
+			runtimeCommandName,
 			"launch",
-			"--plan",
+			runtimeFlagPlan,
 			lifecyclePlanRoot + "/plan.json",
-			"--containerID",
+			runtimeFlagContainer,
 			containerID,
 		}
 
@@ -1515,21 +1524,21 @@ func renderApplicationLifecycle(
 			container.Lifecycle.PostStart = &k8scorev1.LifecycleHandler{
 				Exec: &k8scorev1.ExecAction{Command: []string{
 					lifecycleBinaryPath,
-					"node-runtime",
+					runtimeCommandName,
 					"lifecycle",
-					"--plan",
+					runtimeFlagPlan,
 					lifecyclePlanRoot + "/plan.json",
-					"--input",
+					runtimeFlagInput,
 					lifecycleInputRoot + "/input.json",
 					"--phase",
 					string(clabernetesinternaldeviceplan.PhasePostStart),
-					"--containerID",
+					runtimeFlagContainer,
 					containerID,
-					"--artifacts",
+					runtimeFlagArtifacts,
 					lifecycleArtifactRoot,
-					"--scratch",
+					runtimeFlagScratch,
 					lifecycleScratchRoot,
-					"--revision",
+					runtimeFlagRevision,
 					plan.Planner.Revision,
 				}},
 			}
@@ -1564,17 +1573,17 @@ func renderApplicationLifecycle(
 
 			command := []string{
 				lifecycleBinaryPath,
-				"node-runtime",
+				runtimeCommandName,
 				"readiness",
-				"--plan",
+				runtimeFlagPlan,
 				lifecyclePlanRoot + "/plan.json",
-				"--input",
+				runtimeFlagInput,
 				lifecycleInputRoot + "/input.json",
-				"--containerID",
+				runtimeFlagContainer,
 				containerID,
-				"--scratch",
+				runtimeFlagScratch,
 				lifecycleScratchRoot,
-				"--revision",
+				runtimeFlagRevision,
 				plan.Planner.Revision,
 			}
 			if hasEntropy {
@@ -1630,11 +1639,11 @@ func ApplicationRestartCommand(
 
 	command := []string{
 		lifecycleBinaryPath,
-		"node-runtime",
+		runtimeCommandName,
 		"restart",
 		"--request",
 		requestDigest,
-		"--state",
+		runtimeFlagState,
 		path.Join(lifecycleScratchRoot, "link-restarts", dnsName("container", container.ID)),
 	}
 	if container.StopSignal != "" {
@@ -1705,21 +1714,21 @@ func ApplicationSaveCommand(
 
 	return []string{
 		lifecycleBinaryPath,
-		"node-runtime",
+		runtimeCommandName,
 		"lifecycle",
-		"--plan",
+		runtimeFlagPlan,
 		lifecyclePlanRoot + "/plan.json",
-		"--input",
+		runtimeFlagInput,
 		lifecycleInputRoot + "/input.json",
 		"--phase",
 		string(clabernetesinternaldeviceplan.PhaseSave),
-		"--containerID",
+		runtimeFlagContainer,
 		containerID,
-		"--artifacts",
+		runtimeFlagArtifacts,
 		lifecycleArtifactRoot,
-		"--scratch",
+		runtimeFlagScratch,
 		lifecycleScratchRoot,
-		"--revision",
+		runtimeFlagRevision,
 		normalized.Planner.Revision,
 		"--entropy",
 		lifecycleEntropyRoot,
@@ -1749,11 +1758,11 @@ func PacketCaptureCommand(
 
 	command := []string{
 		runtimeBinaryPath,
-		"node-runtime",
+		runtimeCommandName,
 		"packet-capture",
-		"--plan",
+		runtimeFlagPlan,
 		planMountPath + "/plan.json",
-		"--input",
+		runtimeFlagInput,
 		inputMountPath + "/input.json",
 		"--connectivityRevision",
 		connectivityRevisionMountPath + "/revision.json",
@@ -1888,7 +1897,7 @@ func renderContainer(
 	container.Env = append(container.Env, k8scorev1.EnvVar{
 		Name: clabernetesinternaldirectruntime.PodAddressEnvironmentVariable,
 		ValueFrom: &k8scorev1.EnvVarSource{FieldRef: &k8scorev1.ObjectFieldSelector{
-			FieldPath: "status.podIP",
+			FieldPath: podAddressFieldPath,
 		}},
 	})
 	for _, variable := range planned.Environment {
@@ -2388,11 +2397,11 @@ func renderHelpers(
 		{Name: preparationScratchName, MountPath: preparationScratchPath},
 	}
 	preparationArgs := []string{
-		"--plan", planMountPath + "/plan.json",
-		"--input", inputMountPath + "/input.json",
-		"--artifacts", artifactRootPath,
+		runtimeFlagPlan, planMountPath + "/plan.json",
+		runtimeFlagInput, inputMountPath + "/input.json",
+		runtimeFlagArtifacts, artifactRootPath,
 		"--payloads", payloadRootPath,
-		"--revision", plan.Planner.Revision,
+		runtimeFlagRevision, plan.Planner.Revision,
 	}
 
 	if options.CertificateSecretName != "" {
@@ -2483,18 +2492,18 @@ func renderHelpers(
 	rootUser := int64(0)
 	always := k8scorev1.ContainerRestartPolicyAlways
 	connectivityArgs := []string{
-		"--plan", planMountPath + "/plan.json",
-		"--input", inputMountPath + "/input.json",
-		"--state", connectivityStatePath,
+		runtimeFlagPlan, planMountPath + "/plan.json",
+		runtimeFlagInput, inputMountPath + "/input.json",
+		runtimeFlagState, connectivityStatePath,
 		"--podNamespace", "$(C9S_POD_NAMESPACE)",
 		"--podName", "$(C9S_POD_NAME)",
 		"--podUID", "$(C9S_POD_UID)",
 		"--podAddress", "$(C9S_POD_ADDRESS)",
 	}
 	connectivityReadyCommand := []string{
-		"/clabernetes/manager", "node-runtime", "connectivity-ready",
-		"--plan", planMountPath + "/plan.json",
-		"--state", connectivityStatePath,
+		runtimeBinaryPath, runtimeCommandName, "connectivity-ready",
+		runtimeFlagPlan, planMountPath + "/plan.json",
+		runtimeFlagState, connectivityStatePath,
 	}
 	connectivityMounts := []k8scorev1.VolumeMount{
 		planMount,
@@ -2532,7 +2541,7 @@ func renderHelpers(
 		{name: "C9S_POD_NAMESPACE", fieldPath: "metadata.namespace"},
 		{name: "C9S_POD_NAME", fieldPath: "metadata.name"},
 		{name: "C9S_POD_UID", fieldPath: "metadata.uid"},
-		{name: "C9S_POD_ADDRESS", fieldPath: "status.podIP"},
+		{name: "C9S_POD_ADDRESS", fieldPath: podAddressFieldPath},
 	} {
 		connectivityEnvironment = append(connectivityEnvironment, k8scorev1.EnvVar{
 			Name: item.name,
@@ -2564,8 +2573,8 @@ func renderHelpers(
 	if endpointLifecycle {
 		connectivityArgs = append(
 			connectivityArgs,
-			"--artifacts", artifactRootPath,
-			"--revision", plan.Planner.Revision,
+			runtimeFlagArtifacts, artifactRootPath,
+			runtimeFlagRevision, plan.Planner.Revision,
 			"--hostNetworkNamespace", clabernetesinternaldirectruntime.HostNetworkNamespacePath,
 		)
 		connectivityMounts = append(
@@ -2616,14 +2625,14 @@ func renderHelpers(
 	return []k8scorev1.Container{
 		{
 			Name: preparationName, Image: options.PreparationImage,
-			Command: []string{"/clabernetes/manager", "node-runtime", "prepare"},
+			Command: []string{runtimeBinaryPath, runtimeCommandName, "prepare"},
 			Args:    preparationArgs,
 			// Preparation records the Pod's prefixed management identity while the primary
 			// interface is still pristine; devices may strip it at boot.
 			Env: []k8scorev1.EnvVar{{
 				Name: clabernetesinternaldirectruntime.PodAddressEnvironmentVariable,
 				ValueFrom: &k8scorev1.EnvVarSource{FieldRef: &k8scorev1.ObjectFieldSelector{
-					FieldPath: "status.podIP",
+					FieldPath: podAddressFieldPath,
 				}},
 			}},
 			SecurityContext: &k8scorev1.SecurityContext{
@@ -2641,7 +2650,7 @@ func renderHelpers(
 		},
 		{
 			Name: connectivityName, Image: options.ConnectivityImage,
-			Command:       []string{"/clabernetes/manager", "node-runtime", "connectivity"},
+			Command:       []string{runtimeBinaryPath, runtimeCommandName, "connectivity"},
 			Args:          connectivityArgs,
 			Env:           connectivityEnvironment,
 			RestartPolicy: &always,
