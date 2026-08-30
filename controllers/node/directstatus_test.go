@@ -336,6 +336,70 @@ func TestReconcileInvalidatesReadyStatusBeforeDirectPlanning(t *testing.T) {
 	}
 }
 
+func TestReconcileSecondaryInvalidatesPrimaryGroupStatus(t *testing.T) {
+	t.Parallel()
+
+	primary := nodeReconcileTestNode()
+	primary.Generation = 1
+	primary.Status.Readiness = clabernetesconstants.NodeStatusReady
+	primary.Status.Conditions = []metav1.Condition{{
+		Type:               clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: primary.GetGeneration(),
+	}}
+
+	secondary := nodeReconcileTestNode().DeepCopy()
+	secondary.SetName("secondary")
+	secondary.SetUID("secondary-uid")
+	secondary.Generation = 2
+	secondary.Spec.NetworkMode = "container:" + primary.GetName()
+	secondary.Status.Readiness = clabernetesconstants.NodeStatusReady
+	secondary.Status.Conditions = []metav1.Condition{{
+		Type:               clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: secondary.GetGeneration() - 1,
+	}}
+
+	scheme := nodeReconcileTestScheme(t)
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
+		WithObjects(primary, secondary).
+		Build()
+	reconciler := NewReconciler(
+		&claberneteslogging.FakeInstance{},
+		client,
+		client,
+		"clabernetes",
+		clabernetesconfig.GetFakeManager,
+	)
+	reconciler.DirectRuntimeImage = "example/c9s-manager:1"
+
+	if err := reconciler.Reconcile(context.Background(), secondary); err != nil {
+		t.Fatal(err)
+	}
+
+	stored := &clabernetesapisv1alpha1.Node{}
+	if err := client.Get(
+		context.Background(),
+		ctrlruntimeclient.ObjectKeyFromObject(primary),
+		stored,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	condition := apimachinerymeta.FindStatusCondition(
+		stored.Status.Conditions,
+		clabernetesapisv1alpha1.NodeConditionPlanApplied,
+	)
+	if stored.Status.Readiness != clabernetesconstants.NodeStatusNotReady ||
+		condition == nil || condition.Status != metav1.ConditionFalse ||
+		condition.Reason != directPlanPendingReason ||
+		condition.ObservedGeneration != primary.GetGeneration() {
+		t.Fatalf("primary group status = %#v", stored.Status)
+	}
+}
+
 func TestUpdateDirectStatusesUsesCurrentPlanPodAndKubernetesContainerState(t *testing.T) {
 	ctx := context.Background()
 	node := planInputTestNode(

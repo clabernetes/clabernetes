@@ -102,7 +102,7 @@ func (r *Reconciler) reconcileDirect(
 	nodesByName := clabernetesutilcontainerlab.NodesByName(namespaceNodes.Items)
 	nodesByName[node.GetName()] = node
 	primaryName := clabernetesutilcontainerlab.ResolvePrimaryNode(nodesByName, node.GetName())
-	groupMembers := clabernetesutilcontainerlab.ResolveGroupMembers(nodesByName, node.GetName())
+	groupMembers := clabernetesutilcontainerlab.ResolveGroupMembers(nodesByName, primaryName)
 	if err := r.invalidateStaleDirectStatuses(ctx, groupMembers, nodesByName); err != nil {
 		return err
 	}
