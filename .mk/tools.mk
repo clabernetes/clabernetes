@@ -123,7 +123,7 @@ install-devspace: ## Download pinned devspace (version from .github/vars.env) in
 install-golangci-lint: ## Download pinned golangci-lint (version from .github/vars.env) into TOOLS_BIN_DIR
 	@mkdir -p "$(TOOLS_BIN_DIR)"
 	@set -a; . $(C9S_VARS_ENV); set +a; \
-	$(CURL) https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | \
+	$(CURL) https://golangci-lint.run/install.sh | \
 		sh -s -- -b $(TOOLS_BIN_DIR) $$GOLANGCI_LINT_VERSION
 
 .PHONY: install-ci-tools
