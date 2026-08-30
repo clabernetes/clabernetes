@@ -206,6 +206,13 @@ func (r *Reconciler) updateNodeStatus(
 		if err != nil {
 			return err
 		}
+		if current.GetGeneration() != node.GetGeneration() {
+			// This reconcile loaded a stale object. Do not let its projected status overwrite a
+			// newer generation; the newer reconcile request owns that projection.
+			updated = current
+
+			return nil
+		}
 
 		if reflect.DeepEqual(current.Status, desiredStatus) {
 			updated = current
