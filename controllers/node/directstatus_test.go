@@ -103,6 +103,74 @@ func TestReportDirectPreflightFailureStampsDeploymentApplyErrors(t *testing.T) {
 	}
 }
 
+func TestReportDirectPreflightFailureStampsImagePullSecretErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		cause      error
+		wantReason string
+	}{
+		{
+			name: "referenced pull secret does not exist",
+			cause: apimachineryerrors.NewNotFound(
+				apimachineryschema.GroupResource{Resource: "secrets"},
+				"regcred",
+			),
+			wantReason: "ImagePullSecretMissing",
+		},
+		{
+			name: "referenced pull secret cannot be read",
+			cause: apimachineryerrors.NewForbidden(
+				apimachineryschema.GroupResource{Resource: "secrets"},
+				"regcred",
+				nil,
+			),
+			wantReason: "ImagePullSecretUnreadable",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			scheme := nodeReconcileTestScheme(t)
+			node := nodeReconcileTestNode()
+			client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+				WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).Build()
+			reconciler := &Reconciler{Client: client, apiReader: client}
+
+			err := reconciler.reportDirectPreflightFailure(
+				context.Background(),
+				node,
+				&imagePullSecretError{namespace: "lab", name: "regcred", cause: test.cause},
+			)
+			if err != nil {
+				t.Fatalf("reportDirectPreflightFailure() error = %v", err)
+			}
+
+			stored := &clabernetesapisv1alpha1.Node{}
+			if err = client.Get(
+				context.Background(),
+				ctrlruntimeclient.ObjectKeyFromObject(node),
+				stored,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			condition := apimachinerymeta.FindStatusCondition(
+				stored.Status.Conditions,
+				clabernetesapisv1alpha1.NodeConditionPlanApplied,
+			)
+			if condition == nil || condition.Status != metav1.ConditionFalse ||
+				condition.Reason != test.wantReason ||
+				!strings.Contains(condition.Message, "lab/regcred") {
+				t.Fatalf("PlanApplied condition = %#v, want reason %q", condition, test.wantReason)
+			}
+		})
+	}
+}
+
 func TestUpdateDirectStatusesUsesCurrentPlanPodAndKubernetesContainerState(t *testing.T) {
 	ctx := context.Background()
 	node := planInputTestNode(

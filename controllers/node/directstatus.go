@@ -68,6 +68,18 @@ func directPreflightDiagnostic(err error) (reason, message string, report bool) 
 		return "OCIMetadata" + string(metadataErr.Code), metadataErr.Error(), true
 	}
 
+	var pullSecretErr *imagePullSecretError
+	if errors.As(err, &pullSecretErr) {
+		// A referenced pull Secret the resolver cannot read blocks planning exactly like bad
+		// registry credentials do; without a condition the Node would sit with an empty status
+		// while the reconciler retries invisibly.
+		if apimachineryerrors.IsNotFound(pullSecretErr.cause) {
+			return "ImagePullSecretMissing", pullSecretErr.Error(), true
+		}
+
+		return "ImagePullSecretUnreadable", pullSecretErr.Error(), true
+	}
+
 	var applyErr *deploymentApplyError
 	if errors.As(err, &applyErr) {
 		// The API server rejecting the rendered Deployment is terminal until the spec changes;

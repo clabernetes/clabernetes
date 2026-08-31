@@ -164,8 +164,10 @@ be addressed by a DNS hostname instead.
 ## Troubleshooting
 
 Metadata authentication or trust failures are reported on the Node before a device workload is
-created. Kubelet pull failures appear on the device Pod as normal events such as `ErrImagePull` or
-`ImagePullBackOff`.
+created. A referenced pull Secret that does not exist or cannot be read is reported the same way:
+`PlanApplied` goes `False` with reason `ImagePullSecretMissing` or `ImagePullSecretUnreadable`
+plus a Warning event, and planning resumes once the Secret is available. Kubelet pull failures
+appear on the device Pod as normal events such as `ErrImagePull` or `ImagePullBackOff`.
 
 Inspect the Node, Pod, events, and resolved profile:
 
