@@ -74,6 +74,22 @@ type OCIMetadataResolver interface {
 	) (*clabernetesinternalocimetadata.Metadata, error)
 }
 
+// imagePullSecretError marks a failure to read a referenced image pull Secret, so the preflight
+// reporter can stamp the Node instead of leaving only a manager log line behind.
+type imagePullSecretError struct {
+	namespace string
+	name      string
+	cause     error
+}
+
+func (e *imagePullSecretError) Error() string {
+	return fmt.Sprintf("resolving image pull Secret %s/%s: %v", e.namespace, e.name, e.cause)
+}
+
+func (e *imagePullSecretError) Unwrap() error {
+	return e.cause
+}
+
 // ImageMetadataResolution contains non-secret planner metadata plus sensitive values used only to
 // prove those bytes never appear in an immutable planner-input ConfigMap.
 type ImageMetadataResolution struct {
@@ -143,7 +159,7 @@ func (r ImageMetadataResolver) Resolve(
 			apimachinerytypes.NamespacedName{Namespace: namespace, Name: name},
 			secret,
 		); err != nil {
-			return nil, fmt.Errorf("resolving image pull Secret %s/%s: %w", namespace, name, err)
+			return nil, &imagePullSecretError{namespace: namespace, name: name, cause: err}
 		}
 		seenSecrets[name] = true
 		secrets = append(secrets, *secret)

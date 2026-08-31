@@ -13,6 +13,7 @@ import (
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternalocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
 	k8scorev1 "k8s.io/api/core/v1"
+	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -116,6 +117,47 @@ func TestImageMetadataResolverUsesImportedRolesAndSecretOnlyForRegistryAccess(t 
 		{Number: 22, Protocol: "TCP"}, {Number: 161, Protocol: "UDP"},
 	}) || config.Healthcheck == nil || config.Healthcheck.Interval != int64(5*time.Second) {
 		t.Fatalf("OCI runtime config mapping = %#v", config)
+	}
+}
+
+func TestImageMetadataResolverClassifiesUnreadablePullSecrets(t *testing.T) {
+	t.Parallel()
+
+	scheme := apimachineryruntime.NewScheme()
+	if err := k8scorev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).Build()
+	fake := &fakeOCIMetadataResolver{result: &clabernetesinternalocimetadata.Metadata{}}
+
+	discovery := clabernetesinternaldeviceplan.ImageDiscovery{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
+		Compatibility: planInputTestCompatibility(),
+		InputDigest:   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Planner: clabernetesinternaldeviceplan.PlannerIdentity{
+			Name:     "clabernetes",
+			Revision: "images-v1",
+		},
+		Images: []clabernetesinternaldeviceplan.ImageRequirement{
+			{NodeID: "node-a", Role: "control", SourceReference: "registry.example/device:1"},
+		},
+	}
+
+	_, err := (ImageMetadataResolver{
+		Client: client, Resolver: fake,
+		Platform: clabernetesinternalocimetadata.Platform{OS: "linux", Architecture: "amd64"},
+	}).Resolve(context.Background(), "lab", discovery, []string{"regcred"})
+
+	var pullSecretErr *imagePullSecretError
+	if !errors.As(err, &pullSecretErr) ||
+		!apimachineryerrors.IsNotFound(pullSecretErr.cause) ||
+		!strings.Contains(err.Error(), "lab/regcred") {
+		t.Fatalf("missing pull Secret error = %v, want classified NotFound", err)
+	}
+
+	if len(fake.requests) != 0 {
+		t.Fatalf("registry contacted despite unresolved pull Secret: %#v", fake.requests)
 	}
 }
 
