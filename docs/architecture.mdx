@@ -191,6 +191,14 @@ identity, and gateway traffic never crosses the mesh. Lab members also resolve e
 node name through namespace-local Services; declared `aliases` add extra headless Services
 bound to the same Pod.
 
+A device that firewalls its own network namespace (EOS installs a default-deny input policy)
+cannot sever these transports: the sidecar keeps accept rules for its mesh and wire UDP ports
+asserted at the head of any packet filter a device programs in the shared namespace, and
+re-asserts them on the reconcile tick when a device rewrites its firewall. On hardware the
+wire carrying management traffic is invisible to a control-plane ACL; these accepts preserve
+exactly that boundary, while the device keeps filtering its own management traffic above the
+transport.
+
 ### Exposing Nodes
 
 Ports listed in a node definition (plus a sensible default set unless auto-expose is
