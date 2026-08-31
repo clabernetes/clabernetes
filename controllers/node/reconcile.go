@@ -166,6 +166,10 @@ func (r *Reconciler) Reconcile(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
 ) error {
+	if err := r.invalidateStaleDirectStatus(ctx, node); err != nil {
+		return err
+	}
+
 	err := r.reconcileDirect(ctx, node)
 	if err == nil {
 		return nil
@@ -201,6 +205,13 @@ func (r *Reconciler) updateNodeStatus(
 		err := reader.Get(ctx, key, current)
 		if err != nil {
 			return err
+		}
+		if current.GetGeneration() != node.GetGeneration() {
+			// This reconcile loaded a stale object. Do not let its projected status overwrite a
+			// newer generation; the newer reconcile request owns that projection.
+			updated = current
+
+			return nil
 		}
 
 		if reflect.DeepEqual(current.Status, desiredStatus) {
@@ -616,6 +627,7 @@ func (r *Reconciler) updateProfileResolutionFailure(
 		}
 
 		desiredStatus := *member.Status.DeepCopy()
+		setDirectStatusPending(&desiredStatus, member, reason, message)
 		apimachinerymeta.SetStatusCondition(&desiredStatus.Conditions, metav1.Condition{
 			Type:               clabernetesapisv1alpha1.NodeConditionProfileResolved,
 			Status:             metav1.ConditionFalse,

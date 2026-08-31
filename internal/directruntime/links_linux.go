@@ -574,8 +574,7 @@ func lookupLink(name string) (netlink.Link, bool, error) {
 		return link, true, nil
 	}
 
-	var notFound netlink.LinkNotFoundError
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[netlink.LinkNotFoundError](err); ok {
 		return nil, false, nil
 	}
 
@@ -642,7 +641,7 @@ func (netlinkOperations) DisableTxChecksumOffload(interfaceName string) error {
 func ioctlEthtool(socket int, argument uintptr) error {
 	_, _, errno := syscall.RawSyscall(
 		syscall.SYS_IOCTL,
-		uintptr(socket), //nolint:gosec // non-negative fd.
+		uintptr(socket),
 		uintptr(ethtoolIoctlRequest),
 		argument,
 	)

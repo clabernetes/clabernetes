@@ -179,7 +179,7 @@ func (a Adapter) Evaluate(ctx context.Context, input Input) (*Evaluation, error)
 	if err != nil {
 		return nil, planningError(
 			ErrorSideEffect,
-			"workspace",
+			fieldWorkspace,
 			"cannot create controlled planning workspace",
 			err,
 		)
@@ -275,8 +275,7 @@ func recordDeploymentConditions(ctx context.Context, nodes []EvaluatedNode) erro
 			return withNodeID(recorderErr, node.Input.ID)
 		}
 		if hookErr != nil {
-			var planningErr *Error
-			if errors.As(hookErr, &planningErr) {
+			if planningErr, ok := errors.AsType[*Error](hookErr); ok {
 				return planningErr
 			}
 			return &Error{
@@ -306,19 +305,18 @@ func recordPreparations(
 		activateCertificateStorage(certificateInfrastructure, node.Input.ID)
 		verifyErr := invokeImported(
 			node.Input.ID,
-			"definition.startup-config",
-			"imported-startup-config",
+			fieldDefinitionStartupConfig,
+			behaviorImportedStartupConfig,
 			"containerlab startup-configuration verification panicked",
 			func() error { return node.implementation.VerifyStartupConfig(node.scratchLabDir) },
 		)
 		if verifyErr != nil {
-			var planningErr *Error
-			if errors.As(verifyErr, &planningErr) {
+			if planningErr, ok := errors.AsType[*Error](verifyErr); ok {
 				return planningErr
 			}
 			return &Error{
 				Code: ErrorMissingInput, NodeID: node.Input.ID,
-				Field: "definition.startup-config", Behavior: "imported-startup-config",
+				Field: fieldDefinitionStartupConfig, Behavior: behaviorImportedStartupConfig,
 				Message: "containerlab startup-configuration input could not be verified",
 				cause:   verifyErr,
 			}
@@ -334,8 +332,7 @@ func recordPreparations(
 			return withNodeID(recorderErr, node.Input.ID)
 		}
 		if hookErr != nil {
-			var planningErr *Error
-			if errors.As(hookErr, &planningErr) {
+			if planningErr, ok := errors.AsType[*Error](hookErr); ok {
 				return planningErr
 			}
 			return &Error{
@@ -365,7 +362,7 @@ func evaluateNode(
 		return nil, &Error{
 			Code:    ErrorInvalidInput,
 			NodeID:  nodeInput.ID,
-			Field:   "kind",
+			Field:   fieldKind,
 			Message: "kind is absent from the imported containerlab registry",
 		}
 	}
@@ -413,14 +410,14 @@ func evaluateNode(
 	implementation, err := registry.NewNodeOfKind(nodeInput.Kind)
 	if err != nil {
 		return nil, &Error{
-			Code: ErrorInvalidInput, NodeID: nodeInput.ID, Field: "kind",
+			Code: ErrorInvalidInput, NodeID: nodeInput.ID, Field: fieldKind,
 			Message: "cannot construct imported kind", cause: err,
 		}
 	}
 	err = invokeImported(
 		nodeInput.ID,
 		"definition",
-		"imported-init",
+		behaviorImportedInit,
 		"containerlab kind initialization panicked",
 		func() error {
 			return implementation.Init(
@@ -439,13 +436,12 @@ func evaluateNode(
 				}
 			}
 		}
-		var planningErr *Error
-		if errors.As(err, &planningErr) {
+		if planningErr, ok := errors.AsType[*Error](err); ok {
 			return nil, planningErr
 		}
 		return nil, &Error{
 			Code: ErrorInvalidInput, NodeID: nodeInput.ID, Field: "definition",
-			Behavior: "imported-init",
+			Behavior: behaviorImportedInit,
 			Message:  "containerlab kind initialization failed",
 			cause:    err,
 		}
@@ -464,7 +460,7 @@ func evaluateNode(
 
 	importedImages, err := evaluateImported(
 		nodeInput.ID,
-		"images",
+		string(WorkerFrameImages),
 		"imported-images",
 		"containerlab image discovery panicked",
 		func() map[string]string { return implementation.GetImages(ctx) },
@@ -498,7 +494,7 @@ func evaluateNode(
 	config = implementation.Config()
 	if config == nil {
 		return nil, &Error{
-			Code: ErrorInvariant, NodeID: nodeInput.ID, Field: "kind",
+			Code: ErrorInvariant, NodeID: nodeInput.ID, Field: fieldKind,
 			Behavior: "initializer", Message: "kind initializer returned no configuration",
 		}
 	}
@@ -579,8 +575,7 @@ func evaluateInterfacesWithRuntimeState(
 			func() error { return implementation.AddEndpoint(endpoint) },
 		)
 		if err != nil {
-			var planningErr *Error
-			if errors.As(err, &planningErr) {
+			if planningErr, ok := errors.AsType[*Error](err); ok {
 				return nil, planningErr
 			}
 			return nil, &Error{
@@ -603,8 +598,7 @@ func evaluateInterfacesWithRuntimeState(
 		implementation.CheckInterfaceName,
 	)
 	if err != nil {
-		var planningErr *Error
-		if errors.As(err, &planningErr) {
+		if planningErr, ok := errors.AsType[*Error](err); ok {
 			return nil, planningErr
 		}
 		return nil, &Error{
@@ -629,18 +623,17 @@ func recordDeployments(
 		node.recorder.BeginMutationRecording()
 		pullErr := invokeImported(
 			node.Input.ID,
-			"images",
+			string(WorkerFrameImages),
 			"imported-image-pull",
 			"containerlab image-pull hook panicked",
 			func() error { return node.implementation.PullImage(ctx) },
 		)
 		if pullErr != nil {
-			var planningErr *Error
-			if errors.As(pullErr, &planningErr) {
+			if planningErr, ok := errors.AsType[*Error](pullErr); ok {
 				return planningErr
 			}
 			return &Error{
-				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: "images",
+				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: string(WorkerFrameImages),
 				Behavior: "imported-image-pull",
 				Message:  "containerlab image-pull hook could not be recorded",
 				cause:    pullErr,
@@ -652,18 +645,17 @@ func recordDeployments(
 		err := invokeImported(
 			node.Input.ID,
 			"deployment",
-			"imported-deploy",
+			behaviorImportedDeploy,
 			"containerlab deployment hook panicked",
 			func() error { return node.implementation.Deploy(ctx, params) },
 		)
 		if err != nil {
-			var planningErr *Error
-			if errors.As(err, &planningErr) {
+			if planningErr, ok := errors.AsType[*Error](err); ok {
 				return planningErr
 			}
 			return &Error{
 				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: "deployment",
-				Behavior: "imported-deploy",
+				Behavior: behaviorImportedDeploy,
 				Message:  "containerlab deployment hook could not be recorded",
 				cause:    err,
 			}
@@ -679,8 +671,7 @@ func recordDeployments(
 			func() error { return node.implementation.UpdateConfigWithRuntimeInfo(ctx) },
 		)
 		if updateErr != nil {
-			var planningErr *Error
-			if errors.As(updateErr, &planningErr) {
+			if planningErr, ok := errors.AsType[*Error](updateErr); ok {
 				return planningErr
 			}
 			return &Error{
@@ -722,8 +713,8 @@ func importedContainerInventory(
 	var containers []clabruntime.GenericContainer
 	hookErr := invokeImported(
 		nodeID,
-		"deployment.components",
-		"imported-components",
+		fieldDeploymentComponents,
+		behaviorImportedComponents,
 		"containerlab component inventory hook panicked",
 		func() error {
 			var err error
@@ -736,22 +727,21 @@ func importedContainerInventory(
 		return nil, withNodeID(recorderErr, nodeID)
 	}
 	if hookErr != nil {
-		var planningErr *Error
-		if errors.As(hookErr, &planningErr) {
+		if planningErr, ok := errors.AsType[*Error](hookErr); ok {
 			return nil, planningErr
 		}
 
 		return nil, &Error{
-			Code: ErrorUnsupported, NodeID: nodeID, Field: "deployment.components",
-			Behavior: "imported-components",
+			Code: ErrorUnsupported, NodeID: nodeID, Field: fieldDeploymentComponents,
+			Behavior: behaviorImportedComponents,
 			Message:  "containerlab component inventory could not be recorded",
 			cause:    hookErr,
 		}
 	}
 	if len(containers) == 0 {
 		return nil, &Error{
-			Code: ErrorInvariant, NodeID: nodeID, Field: "deployment.components",
-			Behavior: "imported-components",
+			Code: ErrorInvariant, NodeID: nodeID, Field: fieldDeploymentComponents,
+			Behavior: behaviorImportedComponents,
 			Message:  "containerlab component inventory is empty",
 		}
 	}
@@ -765,8 +755,8 @@ func importedContainerInventory(
 	for _, container := range containers {
 		if container.ID == "" || !known[container.ID] || seen[container.ID] {
 			return nil, &Error{
-				Code: ErrorInvariant, NodeID: nodeID, Field: "deployment.components",
-				Behavior: "imported-components",
+				Code: ErrorInvariant, NodeID: nodeID, Field: fieldDeploymentComponents,
+				Behavior: behaviorImportedComponents,
 				Message:  "containerlab component inventory is absent, foreign, or duplicated",
 			}
 		}
@@ -914,7 +904,7 @@ func scanGeneratedArtifacts(root string) ([]GeneratedArtifact, error) {
 	} else if err != nil {
 		return nil, planningError(
 			ErrorSideEffect,
-			"workspace",
+			fieldWorkspace,
 			"cannot inspect imported generated-artifact root",
 			err,
 		)
@@ -960,7 +950,7 @@ func scanGeneratedArtifacts(root string) ([]GeneratedArtifact, error) {
 			if err != nil || target == "" || len(target) > maxGeneratedSymlinkTargetBytes ||
 				strings.ContainsRune(target, 0) {
 				return &Error{
-					Code: ErrorUnsupported, Field: "workspace",
+					Code: ErrorUnsupported, Field: fieldWorkspace,
 					Behavior: "generated-symlink",
 					Message:  "imported preparation generated an invalid symbolic link",
 					cause:    err,
@@ -976,7 +966,7 @@ func scanGeneratedArtifacts(root string) ([]GeneratedArtifact, error) {
 		}
 		if !info.Mode().IsRegular() {
 			return &Error{
-				Code: ErrorUnsupported, Field: "workspace",
+				Code: ErrorUnsupported, Field: fieldWorkspace,
 				Behavior: "generated-file-type",
 				Message:  "imported preparation generated a non-regular artifact",
 			}
@@ -992,14 +982,13 @@ func scanGeneratedArtifacts(root string) ([]GeneratedArtifact, error) {
 		return nil
 	})
 	if err != nil {
-		var planningErr *Error
-		if errors.As(err, &planningErr) {
+		if planningErr, ok := errors.AsType[*Error](err); ok {
 			return nil, planningErr
 		}
 
 		return nil, planningError(
 			ErrorSideEffect,
-			"workspace",
+			fieldWorkspace,
 			"cannot inventory imported generated artifacts",
 			err,
 		)
@@ -1027,8 +1016,8 @@ func materializeEmbeddedStartupConfig(nodeID string, config *clabtypes.NodeConfi
 	}
 	if err := os.MkdirAll(config.LabDir, 0o700); err != nil {
 		return &Error{
-			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
-			Behavior: "imported-startup-config",
+			Code: ErrorInvariant, NodeID: nodeID, Field: fieldDefinitionStartupConfig,
+			Behavior: behaviorImportedStartupConfig,
 			Message:  "cannot prepare the workspace for embedded startup configuration",
 			cause:    err,
 		}
@@ -1036,8 +1025,8 @@ func materializeEmbeddedStartupConfig(nodeID string, config *clabtypes.NodeConfi
 	destination := filepath.Join(config.LabDir, embeddedStartupConfigFilename)
 	if err := os.WriteFile(destination, []byte(config.StartupConfig), 0o600); err != nil {
 		return &Error{
-			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
-			Behavior: "imported-startup-config",
+			Code: ErrorInvariant, NodeID: nodeID, Field: fieldDefinitionStartupConfig,
+			Behavior: behaviorImportedStartupConfig,
 			Message:  "cannot materialize embedded startup configuration",
 			cause:    err,
 		}
@@ -1072,8 +1061,8 @@ func preserveStartupConfigPartialMarker(
 	content, err := os.ReadFile(config.StartupConfig)
 	if err != nil {
 		return &Error{
-			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
-			Behavior: "imported-startup-config",
+			Code: ErrorInvariant, NodeID: nodeID, Field: fieldDefinitionStartupConfig,
+			Behavior: behaviorImportedStartupConfig,
 			Message:  "cannot read rewritten partial startup configuration",
 			cause:    err,
 		}
@@ -1081,8 +1070,8 @@ func preserveStartupConfigPartialMarker(
 
 	if err := os.MkdirAll(config.LabDir, 0o700); err != nil {
 		return &Error{
-			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
-			Behavior: "imported-startup-config",
+			Code: ErrorInvariant, NodeID: nodeID, Field: fieldDefinitionStartupConfig,
+			Behavior: behaviorImportedStartupConfig,
 			Message:  "cannot prepare the workspace for partial startup configuration",
 			cause:    err,
 		}
@@ -1092,8 +1081,8 @@ func preserveStartupConfigPartialMarker(
 	// The destination is confined to the node's own workspace directory.
 	if err := os.WriteFile(destination, content, 0o600); err != nil { //nolint:gosec
 		return &Error{
-			Code: ErrorInvariant, NodeID: nodeID, Field: "definition.startup-config",
-			Behavior: "imported-startup-config",
+			Code: ErrorInvariant, NodeID: nodeID, Field: fieldDefinitionStartupConfig,
+			Behavior: behaviorImportedStartupConfig,
 			Message:  "cannot materialize partial startup configuration",
 			cause:    err,
 		}
@@ -1211,16 +1200,16 @@ func rewriteExplicitPayloadPaths(
 		if payload.Kind != PayloadConfigMap && payload.Kind != PayloadSecret &&
 			payload.Kind != PayloadURL {
 			return "", &Error{
-				Code: ErrorMissingInput, NodeID: nodeID, Field: "payloads",
-				Behavior: "payload-workspace",
+				Code: ErrorMissingInput, NodeID: nodeID, Field: fieldPayloads,
+				Behavior: behaviorPayloadWorkspace,
 				Message:  "imported planning requires payload bytes that are not locally projected",
 			}
 		}
 		root := filepath.Clean(payloadRoot)
 		if !filepath.IsAbs(root) || root == string(filepath.Separator) {
 			return "", &Error{
-				Code: ErrorMissingInput, NodeID: nodeID, Field: "payloads",
-				Behavior: "payload-workspace",
+				Code: ErrorMissingInput, NodeID: nodeID, Field: fieldPayloads,
+				Behavior: behaviorPayloadWorkspace,
 				Message:  "imported planning requires a scoped payload projection root",
 			}
 		}
@@ -1243,8 +1232,8 @@ func rewriteExplicitPayloadPaths(
 		}
 		if err != nil || !info.Mode().IsRegular() {
 			return "", &Error{
-				Code: ErrorMissingInput, NodeID: nodeID, Field: "payloads",
-				Behavior: "payload-workspace",
+				Code: ErrorMissingInput, NodeID: nodeID, Field: fieldPayloads,
+				Behavior: behaviorPayloadWorkspace,
 				Message:  "explicit payload projection is unavailable or not a regular file",
 				cause:    err,
 			}
@@ -1253,15 +1242,15 @@ func rewriteExplicitPayloadPaths(
 		if err != nil {
 			return "", planningError(
 				ErrorSideEffect,
-				"payloads",
+				fieldPayloads,
 				"cannot read explicit payload projection",
 				err,
 			)
 		}
 		if len(content) > maxPreparedPayloadBytes || Digest(content) != payload.Digest {
 			return "", &Error{
-				Code: ErrorInvariant, NodeID: nodeID, Field: "payloads",
-				Behavior: "payload-workspace",
+				Code: ErrorInvariant, NodeID: nodeID, Field: fieldPayloads,
+				Behavior: behaviorPayloadWorkspace,
 				Message:  "explicit payload projection differs from its accepted identity",
 			}
 		}
@@ -1620,7 +1609,7 @@ func validateImageInputs(nodeID string, images []ImageReference, inputs []ImageI
 			return &Error{
 				Code:     ErrorMissingInput,
 				NodeID:   nodeID,
-				Field:    "images",
+				Field:    string(WorkerFrameImages),
 				Behavior: "image-metadata",
 				Message: fmt.Sprintf(
 					"explicit OCI metadata is missing for image role %q",

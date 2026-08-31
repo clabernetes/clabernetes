@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	plannerInputName       = "planner-input"
 	plannerInputKey        = "input.json"
 	plannerInputMountPath  = "/var/run/clabernetes/planner/input"
 	plannerScratchPath     = "/var/run/clabernetes/planner/scratch"
@@ -187,7 +188,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 				},
 			},
 			VolumeMounts: []k8scorev1.VolumeMount{
-				{Name: "planner-input", MountPath: plannerInputMountPath, ReadOnly: true},
+				{Name: plannerInputName, MountPath: plannerInputMountPath, ReadOnly: true},
 				{Name: plannerURLPayloadName, MountPath: plannerPayloadRootPath},
 			},
 		})
@@ -204,7 +205,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 	}
 
 	workerMounts := []k8scorev1.VolumeMount{
-		{Name: "planner-input", MountPath: plannerInputMountPath, ReadOnly: true},
+		{Name: plannerInputName, MountPath: plannerInputMountPath, ReadOnly: true},
 		{Name: "planner-scratch", MountPath: plannerScratchPath},
 	}
 
@@ -229,7 +230,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 
 	volumes := []k8scorev1.Volume{
 		{
-			Name: "planner-input",
+			Name: plannerInputName,
 			VolumeSource: k8scorev1.VolumeSource{
 				ConfigMap: &k8scorev1.ConfigMapVolumeSource{
 					LocalObjectReference: k8scorev1.LocalObjectReference{
@@ -275,7 +276,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 			Name: input.Name, Namespace: input.Node.GetNamespace(), Labels: labels,
 			Annotations: map[string]string{plannerInputDigest: input.InputDigest},
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: "Node",
+				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: nodeCRKind,
 				Name: input.Node.GetName(), UID: input.Node.GetUID(),
 				Controller: &ownerController, BlockOwnerDeletion: &blockOwnerDeletion,
 			}},

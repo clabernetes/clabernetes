@@ -36,7 +36,7 @@ func writeRuntimeArtifactDigests(
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return planningError(
 				ErrorSideEffect,
-				"preparation.runtimeArtifacts",
+				fieldPreparationRuntimeArtifacts,
 				"cannot clear runtime artifact record",
 				err,
 			)
@@ -49,7 +49,7 @@ func writeRuntimeArtifactDigests(
 	if err != nil {
 		return planningError(
 			ErrorSerialization,
-			"preparation.runtimeArtifacts",
+			fieldPreparationRuntimeArtifacts,
 			"cannot serialize runtime artifact record",
 			err,
 		)
@@ -58,7 +58,7 @@ func writeRuntimeArtifactDigests(
 	if err = os.WriteFile(path, payload, 0o644); err != nil { //nolint:gosec // Digest record.
 		return planningError(
 			ErrorSideEffect,
-			"preparation.runtimeArtifacts",
+			fieldPreparationRuntimeArtifacts,
 			"cannot write runtime artifact record",
 			err,
 		)

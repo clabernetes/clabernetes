@@ -709,7 +709,7 @@ func (h *recordingHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 		writer.Header().Set("WWW-Authenticate", `Basic realm="test-registry"`)
 		writer.WriteHeader(http.StatusUnauthorized)
 		// The body is test-owned diagnostic text, not rendered browser content.
-		//nolint:gosec
+
 		_, _ = fmt.Fprint(
 			writer,
 			unauthorizedBody,

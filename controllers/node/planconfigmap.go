@@ -100,7 +100,7 @@ func (r *PlanConfigMapReconciler) Render(
 			},
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion:         clabernetesapisv1alpha1.SchemeGroupVersion.String(),
-				Kind:               "Node",
+				Kind:               nodeCRKind,
 				Name:               node.GetName(),
 				UID:                node.GetUID(),
 				Controller:         &controller,
@@ -301,7 +301,7 @@ func containsExpectedMetadata(existing, expected map[string]string) bool {
 func controlledByNodeUID(object metav1.Object, uid apimachinerytypes.UID) bool {
 	for _, owner := range object.GetOwnerReferences() {
 		matchesNodeType := owner.APIVersion ==
-			clabernetesapisv1alpha1.SchemeGroupVersion.String() && owner.Kind == "Node"
+			clabernetesapisv1alpha1.SchemeGroupVersion.String() && owner.Kind == nodeCRKind
 		if owner.Controller != nil && *owner.Controller && owner.UID == uid &&
 			matchesNodeType {
 			return true

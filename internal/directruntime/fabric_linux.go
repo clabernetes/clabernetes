@@ -572,7 +572,7 @@ func (o netlinkOperations) EnsureHostInterface(spec HostInterfaceSpec) error {
 
 	defer handleFile.Close() //nolint:errcheck // read-only handle.
 
-	if err = netlink.LinkSetNsFd(transfer, int(handleFile.Fd())); err != nil { //nolint:gosec // kernel-issued fd.
+	if err = netlink.LinkSetNsFd(transfer, int(handleFile.Fd())); err != nil {
 		cleanup()
 
 		return fmt.Errorf("moving host Link leg to the worker namespace: %w", err)

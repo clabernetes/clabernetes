@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	k8scorev1 "k8s.io/api/core/v1"
@@ -287,6 +288,74 @@ func TestPayloadObjectEventEnqueuesReferencingPodGroups(t *testing.T) {
 	)
 	if got := requestNames(configMapRequests); !reflect.DeepEqual(got, []string{"standalone"}) {
 		t.Fatalf("ConfigMap event primary requests = %v", got)
+	}
+}
+
+func TestPayloadObjectEventInvalidatesReadyGroupStatuses(t *testing.T) {
+	primary := nodeReconcileTestNode()
+	primary.SetName("primary")
+	primary.SetUID("primary-uid")
+	primary.Generation = 1
+	primary.Status.Readiness = clabernetesconstants.NodeStatusReady
+	primary.Status.Conditions = []metav1.Condition{{
+		Type:               clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: primary.GetGeneration(),
+	}}
+
+	secondary := nodeReconcileTestNode().DeepCopy()
+	secondary.SetName("secondary")
+	secondary.SetUID("secondary-uid")
+	secondary.Generation = 1
+	secondary.Spec.NetworkMode = "container:" + primary.GetName()
+	secondary.Spec.FilesFromSecret = []clabernetesapisv1alpha1.FileFromSecret{{
+		SecretName: "device-license",
+	}}
+	secondary.Status.Readiness = clabernetesconstants.NodeStatusReady
+	secondary.Status.Conditions = []metav1.Condition{{
+		Type:               clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: secondary.GetGeneration(),
+	}}
+
+	scheme := nodeReconcileTestScheme(t)
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
+		WithObjects(primary, secondary).
+		Build()
+	controller := &Controller{
+		BaseController: &clabernetescontrollers.BaseController{
+			Client: client,
+			Log:    &claberneteslogging.FakeInstance{},
+		},
+		reconciler: &Reconciler{Client: client, apiReader: client},
+	}
+
+	requests := controller.enqueuePrimariesForPayloadObjectAndInvalidate(
+		context.Background(),
+		&k8scorev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: "device-license", Namespace: primary.GetNamespace(),
+		}},
+	)
+	if got := requestNames(requests); !reflect.DeepEqual(got, []string{primary.GetName()}) {
+		t.Fatalf("Secret event primary requests = %v", got)
+	}
+
+	for _, node := range []*clabernetesapisv1alpha1.Node{primary, secondary} {
+		stored := &clabernetesapisv1alpha1.Node{}
+		if err := client.Get(
+			context.Background(),
+			ctrlruntimeclient.ObjectKeyFromObject(node),
+			stored,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if stored.Status.Readiness != clabernetesconstants.NodeStatusNotReady {
+			t.Fatalf("Node %q readiness = %q, want %q", node.GetName(),
+				stored.Status.Readiness, clabernetesconstants.NodeStatusNotReady)
+		}
 	}
 }
 

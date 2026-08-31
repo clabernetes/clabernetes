@@ -20,7 +20,7 @@ func applyGeneratedArtifactMetadata(
 ) error {
 	if uid != nil || gid != nil || len(attributes) != 0 {
 		return &Error{
-			Code: ErrorUnsupported, Field: "workspace",
+			Code: ErrorUnsupported, Field: fieldWorkspace,
 			Behavior: "generated-filesystem-metadata",
 			Message:  "imported artifact metadata requires Linux",
 		}

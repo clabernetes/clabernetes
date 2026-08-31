@@ -33,7 +33,7 @@ func readGeneratedArtifactMetadata(
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return nil, nil, nil, &Error{
-			Code: ErrorUnsupported, Field: "workspace",
+			Code: ErrorUnsupported, Field: fieldWorkspace,
 			Behavior: "generated-ownership",
 			Message:  "imported artifact ownership is unavailable",
 		}
@@ -197,7 +197,7 @@ func applyGeneratedArtifactMetadata(
 
 func generatedMetadataError(message string, cause error) *Error {
 	return &Error{
-		Code: ErrorUnsupported, Field: "workspace",
+		Code: ErrorUnsupported, Field: fieldWorkspace,
 		Behavior: "generated-filesystem-metadata", Message: message, cause: cause,
 	}
 }

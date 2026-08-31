@@ -157,7 +157,7 @@ func (r *Reconciler) resolveDirectProbePolicies(
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(
 					owner,
-					clabernetesapisv1alpha1.SchemeGroupVersion.WithKind("Node"),
+					clabernetesapisv1alpha1.SchemeGroupVersion.WithKind(nodeCRKind),
 				),
 			},
 		},

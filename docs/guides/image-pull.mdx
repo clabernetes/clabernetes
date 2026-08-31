@@ -28,16 +28,20 @@ over this profile default.
 
 ## Private registry credentials
 
-Create a Docker registry Secret in the same namespace as the Node:
+Create a Docker registry Secret in the same namespace as the target Node or Topology. In the example below, the Secret is named `regcred` is created in the `lab` namespace for a private registry at `registry.example.com` with username `myuser` and password `mypass`:
 
 ```bash
-kubectl -n lab create secret docker-registry device-registry \
+kubectl -n lab create secret docker-registry regcred \
   --docker-server=registry.example.com \
   --docker-username=myuser \
   --docker-password=mypass
 ```
 
-Reference it from a NodeProfile:
+The created registry credentials Secret can be referenced in a NodeProfile or Topology to allow the kubelet to pull images from the private registry.
+
+<Tabs items={['NodeProfile', 'Topology']}>
+<Tab>
+Here is an example of a NodeProfile that uses the `regcred` Secret for image pulling:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -48,7 +52,7 @@ metadata:
 spec:
   imagePull:
     pullSecrets:
-      - device-registry
+      - regcred
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Node
@@ -61,6 +65,38 @@ spec:
   kind: nokia_srlinux
   image: registry.example.com/network/srlinux:latest
 ```
+</Tab>
+<Tab>
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: srsim-multitool
+  namespace: srsim-multitool
+spec:
+  imagePull:
+    pullSecrets:
+      - regcred
+  definition:
+    containerlab: |
+      name: example
+      topology:
+        nodes:
+          srsim:
+            kind: nokia_srsim
+            image: ghcr.io/private-registry/nokia_srsim:26.7.R1
+            type: sr-1
+
+          multitool:
+            kind: linux
+            image: ghcr.io/srl-labs/network-multitool:latest
+
+        links:
+          - endpoints: ["srsim:1/1/c1/1", "multitool:eth1"]
+```
+</Tab>
+</Tabs>
 
 c9s places the Secret name in `Pod.spec.imagePullSecrets`; credential bytes are never stored in a
 device plan or immutable ConfigMap. The controller accepts only Kubernetes Docker-config Secret
@@ -69,6 +105,25 @@ types when it needs the same credentials for OCI metadata access.
 Topology-level `spec.imagePull` is compiled into the shared NodeProfile generated for that
 Topology. Direct Node manifests select a profile explicitly through
 `Node.spec.profileRef`.
+
+### Centrally managed credentials
+
+If you want to create the Secret in a single namespace and have it mirrored to all or some namespaces, you can use a tool like [External Secrets Operator](https://external-secrets.io) or [kubernetes-reflector](https://github.com/emberstack/kubernetes-reflector) to automatically copy the Secret to the namespaces where your device Pods will run. This way, you can manage your registry credentials in one place and ensure that all relevant namespaces have access to them.
+
+With kubernetes-reflector, you can install it in your cluster in the `c9s` namespace where c9s operator runs as follows:
+
+```
+helm upgrade --namespace c9s --install reflector oci://ghcr.io/emberstack/helm-charts/reflector
+```
+
+Then create the `regred` Secret in the `c9s` namespace and configure the reflector to mirror it to all or some namespaces.
+
+```bash title="annotating the regred Secret to mirror it to all namespaces"
+kubectl -n c9s annotate secret regcred \
+  reflector.v1.k8s.emberstack.com/reflection-allowed=true \
+  reflector.v1.k8s.emberstack.com/reflection-auto-enabled=true
+
+```
 
 ## Registry mirrors, private CAs, HTTP, and proxies
 
@@ -182,7 +237,7 @@ Test the kubelet path independently:
 
 ```bash
 kubectl -n lab run image-pull-test --restart=Never --image=registry.example.com/network/srlinux:latest \
-  --overrides='{"spec":{"imagePullSecrets":[{"name":"device-registry"}]}}'
+  --overrides='{"spec":{"imagePullSecrets":[{"name":"regcred"}]}}'
 kubectl -n lab describe pod image-pull-test
 ```
 

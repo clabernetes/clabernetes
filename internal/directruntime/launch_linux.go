@@ -115,12 +115,12 @@ func (linuxLaunchOperations) UpdateFile(
 	// The advisory lock serializes sibling launch boundaries in the same Pod; the kubelet does
 	// not take it, but a kubelet rewrite is always followed by the (re)started container's own
 	// launch, which restores the content.
-	//nolint:gosec // kernel-issued fd.
+
 	if err = unix.Flock(int(file.Fd()), unix.LOCK_EX); err != nil {
 		return fmt.Errorf("locking %q: %w", path, err)
 	}
 
-	//nolint:errcheck,gosec // kernel-issued fd; the lock is released on close anyway.
+	//nolint:errcheck // the lock is released on close anyway.
 	defer unix.Flock(int(file.Fd()), unix.LOCK_UN)
 
 	current, err := io.ReadAll(file)

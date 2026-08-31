@@ -49,14 +49,10 @@ func runTerminalSession(binary string, command []string) error {
 	defer func() { _ = terminal.Close() }()
 	// Nothing this process writes may be echoed back into the forwarded stream; interactive
 	// CLIs perform their own application-level echo once running.
-	if state, termiosErr := unix.IoctlGetTermios(int(terminal.Fd()), unix.TCGETS); termiosErr == nil { //nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
+	state, termiosErr := unix.IoctlGetTermios(int(terminal.Fd()), unix.TCGETS)
+	if termiosErr == nil {
 		state.Lflag &^= unix.ECHO | unix.ECHONL
-		_ = unix.IoctlSetTermios(
-			//nolint:gosec // the value is bounded by validated plan input or a kernel interface width.
-			int(terminal.Fd()),
-			unix.TCSETS,
-			state,
-		)
+		_ = unix.IoctlSetTermios(int(terminal.Fd()), unix.TCSETS, state)
 	}
 
 	go func() {

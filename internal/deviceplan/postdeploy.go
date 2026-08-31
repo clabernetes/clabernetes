@@ -139,8 +139,7 @@ func (a Adapter) runPostDeployHookWithRetry(
 
 		// Typed errors are deterministic boundary or panic outcomes; only a plain hook error
 		// can describe a not-yet-initialized appliance worth waiting for.
-		var typed *Error
-		if errors.As(err, &typed) {
+		if _, ok := errors.AsType[*Error](err); ok {
 			return err
 		}
 
@@ -478,7 +477,7 @@ func (a Adapter) rehydrateImportedDeployment(
 	if err = runImportedRuntimeHook(
 		targetNode.ID,
 		"postDeployment.deployment",
-		"imported-deploy",
+		behaviorImportedDeploy,
 		"containerlab target deployment hook panicked",
 		"rehydrating imported target deployment",
 		replayRuntime,
@@ -857,7 +856,7 @@ func sameReplayedDeploymentOperation(
 func deploymentReplayError(nodeID, message string) error {
 	return &Error{
 		Code: ErrorInvariant, NodeID: nodeID, Field: "deployment.replay",
-		Behavior: "imported-deploy", Message: message,
+		Behavior: behaviorImportedDeploy, Message: message,
 	}
 }
 

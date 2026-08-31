@@ -105,7 +105,7 @@ func (r *PlannerInputConfigMapReconciler) Render(
 			},
 			Annotations: map[string]string{planInputDigestAnnotation: digest},
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: "Node",
+				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: nodeCRKind,
 				Name: node.GetName(), UID: node.GetUID(), Controller: &controller,
 				BlockOwnerDeletion: &blockOwnerDeletion,
 			}},

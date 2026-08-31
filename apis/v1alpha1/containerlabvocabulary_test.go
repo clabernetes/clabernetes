@@ -149,7 +149,7 @@ func collectYAMLTags(walk reflect.Type, into map[string][]string) {
 	into[walk.Name()] = tags
 
 	for field := range walk.Fields() {
-		tag := strings.Split(field.Tag.Get("yaml"), ",")[0]
+		tag, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
 		if tag != "" && tag != "-" {
 			tags = append(tags, tag)
 		}

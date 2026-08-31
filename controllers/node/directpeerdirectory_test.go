@@ -20,9 +20,12 @@ func TestReconcileDirectPeerDirectoryMaintainsNamespaceConfigMap(t *testing.T) {
 
 	scheme := nodeReconcileTestScheme(t)
 	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := &Reconciler{Client: client, configManagerGetter: func() clabernetesconfig.Manager {
-		return clabernetesconfig.NewFakeManager()
-	}}
+	reconciler := &Reconciler{
+		Client: client,
+		configManagerGetter: func() clabernetesconfig.Manager {
+			return clabernetesconfig.NewFakeManager()
+		},
+	}
 
 	peers := make([]clabernetesinternaldirectruntime.PeerIdentity, 0, 3)
 	peers = append(peers,

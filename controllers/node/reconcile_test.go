@@ -15,6 +15,7 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 	k8srbacv1 "k8s.io/api/rbac/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
+	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 	apimachineryschema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -139,6 +140,83 @@ func TestUpdateNodeStatusRetriesResourceVersionConflict(t *testing.T) {
 
 	if actual.Status.Readiness != clabernetesconstants.NodeStatusReady {
 		t.Fatalf("stored readiness = %q, want ready", actual.Status.Readiness)
+	}
+}
+
+func TestUpdateNodeStatusDropsStatusProjectedFromStaleGeneration(t *testing.T) {
+	t.Parallel()
+
+	scheme := nodeReconcileTestScheme(t)
+	staleNode := nodeReconcileTestNode()
+	staleNode.Generation = 1
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
+		WithObjects(staleNode).
+		Build()
+	reconciler := &Reconciler{Client: client, apiReader: client}
+
+	currentNode := &clabernetesapisv1alpha1.Node{}
+	if err := client.Get(
+		context.Background(),
+		ctrlruntimeclient.ObjectKeyFromObject(staleNode),
+		currentNode,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	currentNode.Generation = 2
+	currentNode.Spec.Image = "ghz.dev/clabernetes/example:2"
+	if err := client.Update(context.Background(), currentNode); err != nil {
+		t.Fatal(err)
+	}
+
+	currentNode.Status.Readiness = clabernetesconstants.NodeStatusNotReady
+	currentNode.Status.Conditions = []metav1.Condition{{
+		Type:               clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: currentNode.GetGeneration(),
+		Reason:             directPlanPendingReason,
+		Message:            directPlanPendingMessage,
+	}}
+	if err := client.Status().Update(context.Background(), currentNode); err != nil {
+		t.Fatal(err)
+	}
+
+	staleDesired := clabernetesapisv1alpha1.NodeStatus{
+		Readiness: clabernetesconstants.NodeStatusReady,
+		Conditions: []metav1.Condition{{
+			Type:               clabernetesapisv1alpha1.NodeConditionPlanApplied,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: staleNode.GetGeneration(),
+		}},
+	}
+
+	if err := reconciler.updateNodeStatus(
+		context.Background(),
+		staleNode,
+		staleDesired,
+	); err != nil {
+		t.Fatalf("stale status projection should be ignored, got %s", err)
+	}
+
+	actual := &clabernetesapisv1alpha1.Node{}
+	if err := client.Get(
+		context.Background(),
+		ctrlruntimeclient.ObjectKeyFromObject(staleNode),
+		actual,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	condition := apimachinerymeta.FindStatusCondition(
+		actual.Status.Conditions,
+		clabernetesapisv1alpha1.NodeConditionPlanApplied,
+	)
+	if actual.Status.Readiness != clabernetesconstants.NodeStatusNotReady ||
+		condition == nil || condition.Status != metav1.ConditionFalse ||
+		condition.ObservedGeneration != currentNode.GetGeneration() {
+		t.Fatalf("stale generation overwrote current status: %#v", actual.Status)
 	}
 }
 

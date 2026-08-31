@@ -102,13 +102,17 @@ func (r *Reconciler) reconcileDirect(
 	nodesByName := clabernetesutilcontainerlab.NodesByName(namespaceNodes.Items)
 	nodesByName[node.GetName()] = node
 	primaryName := clabernetesutilcontainerlab.ResolvePrimaryNode(nodesByName, node.GetName())
+	groupMembers := clabernetesutilcontainerlab.ResolveGroupMembers(nodesByName, primaryName)
+	if err := r.invalidateStaleDirectStatuses(ctx, groupMembers, nodesByName); err != nil {
+		return err
+	}
+
 	if primaryName != node.GetName() {
 		// The primary owns the shared direct workload. Remove only a stale standalone workload
 		// from this Node; its per-Node Service and persistence remain independently owned and are
 		// reconciled by the primary group.
 		return r.reconcileDirectSecondary(ctx, node)
 	}
-	groupMembers := clabernetesutilcontainerlab.ResolveGroupMembers(nodesByName, node.GetName())
 	profile, err := r.resolveDirectProfile(ctx, node, groupMembers, nodesByName)
 	if err != nil {
 		switch {
@@ -424,7 +428,7 @@ func (r *Reconciler) reconcileDirect(
 	labels, annotations := r.directMetadata(node)
 	annotations[clabernetesinternaldirectpod.NodeUIDAnnotation] = string(node.GetUID())
 	owner := *metav1.NewControllerRef(node,
-		clabernetesapisv1alpha1.SchemeGroupVersion.WithKind("Node"))
+		clabernetesapisv1alpha1.SchemeGroupVersion.WithKind(nodeCRKind))
 	primaryContainerResources := r.directPrimaryContainerResources(profile)
 	renderOptions := clabernetesinternaldirectpod.Options{
 		Name: node.GetName(), Namespace: node.GetNamespace(),

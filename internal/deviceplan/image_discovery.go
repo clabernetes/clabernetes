@@ -77,7 +77,7 @@ func DiscoverDeclaredImages(input Input, revision string) (*ImageDiscovery, erro
 		SchemaVersion: SchemaVersion,
 		Compatibility: normalized.Compatibility,
 		InputDigest:   inputDigest,
-		Planner:       PlannerIdentity{Name: "clabernetes", Revision: revision},
+		Planner:       PlannerIdentity{Name: plannerIdentity, Revision: revision},
 	}
 	for _, node := range normalized.Nodes {
 		definition, decodeErr := decodeNodeDefinition(node)
@@ -143,7 +143,7 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 	if err != nil {
 		return nil, planningError(
 			ErrorSideEffect,
-			"workspace",
+			fieldWorkspace,
 			"cannot create controlled image-discovery workspace",
 			err,
 		)
@@ -154,7 +154,7 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 	result := &ImageDiscovery{
 		SchemaVersion: SchemaVersion, Compatibility: normalized.Compatibility,
 		InputDigest: inputDigest,
-		Planner:     PlannerIdentity{Name: "clabernetes", Revision: a.Revision},
+		Planner:     PlannerIdentity{Name: plannerIdentity, Revision: a.Revision},
 	}
 	evaluatedNodes := make([]EvaluatedNode, 0, len(normalized.Nodes))
 	metadataComplete := true
@@ -171,8 +171,7 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 			false,
 		)
 		if evaluateErr != nil {
-			var metadataRequired *imageMetadataRequiredError
-			if errors.As(evaluateErr, &metadataRequired) {
+			if metadataRequired, ok := errors.AsType[*imageMetadataRequiredError](evaluateErr); ok {
 				metadataComplete = false
 
 				for _, reference := range metadataRequired.references {

@@ -135,7 +135,7 @@ func importedEntropyReader(nodeID, behavior string) io.Reader {
 func canonicalEntropyBehavior(behavior string) string {
 	switch behavior {
 	case "imported-post-deploy-init", "imported-readiness-init", "imported-save-init":
-		return "imported-init"
+		return behaviorImportedInit
 	case "imported-certificate-preparation":
 		return "imported-pre-deploy"
 	default:

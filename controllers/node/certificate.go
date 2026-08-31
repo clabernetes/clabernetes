@@ -268,7 +268,7 @@ func renderCertificateBundle(
 				directCertificateAuthorityID: clabernetesinternaldeviceplan.Digest(caCertificate),
 			},
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: "Node",
+				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: nodeCRKind,
 				Name: owner.GetName(), UID: owner.GetUID(),
 				Controller: &controller, BlockOwnerDeletion: &blockOwnerDeletion,
 			}},

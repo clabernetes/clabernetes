@@ -116,7 +116,7 @@ func (s workerOutputStore) Persist(
 			},
 			Annotations: map[string]string{workerCommandAnnotation: workerCommand},
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: "Node",
+				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: nodeCRKind,
 				Name: node.GetName(), UID: node.GetUID(), Controller: &controller,
 				BlockOwnerDeletion: &blockOwnerDeletion,
 			}},
