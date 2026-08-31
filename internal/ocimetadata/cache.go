@@ -220,6 +220,18 @@ func requestCacheKey(request *Request) string {
 		fingerprintValues(platform.OSFeatures...),
 		authenticationFingerprint(request.Authentication),
 		trustFingerprint(request.Trust),
+		mirrorFingerprint(request.Mirror),
+	)
+}
+
+func mirrorFingerprint(mirror *RegistryMirror) string {
+	if mirror == nil {
+		return "origin"
+	}
+	return fingerprintValues(
+		normalizeRegistry(mirror.Registry),
+		strings.TrimSpace(mirror.Endpoint),
+		strconv.FormatBool(mirror.OverridePath),
 	)
 }
 

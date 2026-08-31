@@ -136,6 +136,102 @@ func TestCompileRegistryMetadataTrustFailsClosed(t *testing.T) {
 	}
 }
 
+func TestCompileRegistryMetadataMirrorsFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileRegistryMetadataMirrors(
+		[]clabernetesapisv1alpha1.RegistryMetadataMirrorEntry{{
+			Registry: "registry.example", Endpoint: "https://harbor.example.test/v2/proxied",
+		}},
+	)
+
+	var planningErr *clabernetesinternaldeviceplan.Error
+	if !errors.As(err, &planningErr) ||
+		planningErr.Code != clabernetesinternaldeviceplan.ErrorInvalidInput ||
+		planningErr.Field != "config.imagePull.registryMetadataMirrors" {
+		t.Fatalf("compileRegistryMetadataMirrors() error = %#v", err)
+	}
+}
+
+// A mirrored reference carries its mirror on the metadata request, and its transport trust scopes
+// to the mirror endpoint host; unmirrored references keep the image-ref trust lookup.
+func TestImageMetadataResolverScopesTrustToSelectedMirror(t *testing.T) {
+	t.Parallel()
+
+	scheme := apimachineryruntime.NewScheme()
+	if err := k8scorev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).Build()
+	fake := &fakeOCIMetadataResolver{result: &clabernetesinternalocimetadata.Metadata{
+		SchemaVersion:   clabernetesinternalocimetadata.SchemaVersion,
+		DigestReference: "registry.example/device@sha256:aaaaaaaa",
+		Config: clabernetesinternalocimetadata.RuntimeConfig{
+			Entrypoint: []string{"/device"},
+		},
+	}}
+
+	trustPolicy, err := compileRegistryMetadataTrust(
+		[]clabernetesapisv1alpha1.RegistryMetadataTrustEntry{
+			{Registry: "harbor.example.test", PlainHTTP: true},
+			{Registry: "registry.example", PlainHTTP: true},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mirrorPolicy, err := compileRegistryMetadataMirrors(
+		[]clabernetesapisv1alpha1.RegistryMetadataMirrorEntry{{
+			Registry: "ghcr.io", Endpoint: "http://harbor.example.test",
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	discovery := clabernetesinternaldeviceplan.ImageDiscovery{
+		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
+		Compatibility: planInputTestCompatibility(),
+		InputDigest:   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		Planner: clabernetesinternaldeviceplan.PlannerIdentity{
+			Name:     "clabernetes",
+			Revision: "images-v1",
+		},
+		Images: []clabernetesinternaldeviceplan.ImageRequirement{
+			{NodeID: "node-a", Role: "control", SourceReference: "ghcr.io/devices/router:1"},
+			{NodeID: "node-b", Role: "control", SourceReference: "registry.example/device:1"},
+		},
+	}
+
+	_, err = (ImageMetadataResolver{
+		Client: client, Resolver: fake,
+		Platform:         clabernetesinternalocimetadata.Platform{OS: "linux", Architecture: "amd64"},
+		TrustFor:         trustPolicy.ForReference,
+		TrustForRegistry: trustPolicy.ForRegistry,
+		MirrorFor:        mirrorPolicy.ForReference,
+	}).Resolve(context.Background(), "lab", discovery, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(fake.requests) != 2 {
+		t.Fatalf("requests = %#v", fake.requests)
+	}
+
+	mirrored := fake.requests[0]
+	if mirrored.Mirror == nil || mirrored.Mirror.Endpoint != "http://harbor.example.test" ||
+		mirrored.Trust == nil || mirrored.Trust.Registry != "harbor.example.test" {
+		t.Fatalf("mirrored request = %#v trust %#v", mirrored.Mirror, mirrored.Trust)
+	}
+
+	direct := fake.requests[1]
+	if direct.Mirror != nil || direct.Trust == nil || direct.Trust.Registry != "registry.example" {
+		t.Fatalf("direct request = %#v trust %#v", direct.Mirror, direct.Trust)
+	}
+}
+
 func TestImageMetadataResolverRejectsUnrepresentableGenericOCIConfig(t *testing.T) {
 	t.Parallel()
 

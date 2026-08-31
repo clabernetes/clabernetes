@@ -172,6 +172,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.ProbeConfiguration": schema_clabernetes_clabernetes_apis_v1alpha1_ProbeConfiguration(
 			ref,
 		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.RegistryMetadataMirrorEntry": schema_clabernetes_clabernetes_apis_v1alpha1_RegistryMetadataMirrorEntry(
+			ref,
+		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.RegistryMetadataTrustEntry": schema_clabernetes_clabernetes_apis_v1alpha1_RegistryMetadataTrustEntry(
 			ref,
 		),
@@ -580,11 +583,34 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigImagePull(
 							},
 						},
 					},
+					"registryMetadataMirrors": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"registry",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "RegistryMetadataMirrors contains exact, controller-only registry mirrors for OCI metadata resolution, for clusters whose registry access flows through a CRI pull-through mirror the controller cannot see. It does not configure kubelets, and trust for a mirror connection comes from the RegistryMetadataTrust entry matching the mirror endpoint host.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.RegistryMetadataMirrorEntry",
+										),
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.RegistryMetadataTrustEntry"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.RegistryMetadataMirrorEntry", "github.com/clabernetes/clabernetes/apis/v1alpha1.RegistryMetadataTrustEntry"},
 	}
 }
 
@@ -3410,6 +3436,45 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ProbeConfiguration(
 		},
 		Dependencies: []string{
 			"github.com/clabernetes/clabernetes/apis/v1alpha1.SSHProbeConfiguration", "github.com/clabernetes/clabernetes/apis/v1alpha1.TCPProbeConfiguration"},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_RegistryMetadataMirrorEntry(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "RegistryMetadataMirrorEntry redirects the c9s controller's OCI metadata requests for one exact source registry to a mirror endpoint, mirroring a CRI pull-through configuration (containerd hosts.toml). Only the controller's HTTP hop is rewritten: image references, resolved digest identities, and Pod image strings keep the original registry, so kubelets keep using their own runtime mirror configuration. There is no origin fallback.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"registry": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Registry is the exact source registry host, optionally including a port. URL schemes and paths are not accepted. Docker Hub aliases (docker.io, index.docker.io, registry-1.docker.io) select one shared entry.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"endpoint": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Endpoint is the mirror URL: an https or http scheme, a host, and an optional path prefix. An endpoint path requires overridePath. The endpoint scheme selects the connection transport; add a RegistryMetadataTrust entry for the endpoint host when it needs a private CA.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"overridePath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OverridePath treats the endpoint path as the mirror's registry API root for this source registry, replacing the standard /v2 prefix on rewritten request paths (containerd hosts.toml override_path semantics, for example a Harbor proxy project at /v2/<project>).",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"registry", "endpoint"},
+			},
+		},
 	}
 }
 

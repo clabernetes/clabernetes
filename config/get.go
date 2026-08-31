@@ -96,6 +96,15 @@ func (m *manager) GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryM
 	return slices.Clone(m.config.ImagePull.RegistryMetadataTrust)
 }
 
+func (m *manager) GetRegistryMetadataMirrors() (
+	result []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry,
+) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	return slices.Clone(m.config.ImagePull.RegistryMetadataMirrors)
+}
+
 func (m *manager) GetRemoveTopologyPrefix() bool {
 	m.lock.RLock()
 	defer m.lock.RUnlock()

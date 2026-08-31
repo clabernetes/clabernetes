@@ -99,6 +99,20 @@ globalConfig:
     #   - registry: registry.lab.test:5001
     #     plainHTTP: true
     registryMetadataTrust: []
+    # registryMetadataMirrors redirects controller-only OCI metadata requests for exact source
+    # registries to a mirror endpoint, matching a CRI pull-through configuration (containerd
+    # hosts.toml). It does not configure kubelets, and never rewrites image references or Pod
+    # image strings. An endpoint path requires overridePath (Harbor proxy-project semantics);
+    # trust for the mirror connection comes from the registryMetadataTrust entry matching the
+    # endpoint host.
+    # registryMetadataMirrors:
+    #   - registry: docker.io
+    #     endpoint: https://harbor.example.test/v2/docker
+    #     overridePath: true
+    #   - registry: ghcr.io
+    #     endpoint: https://harbor.example.test/v2/ghcr
+    #     overridePath: true
+    registryMetadataMirrors: []
 
   deployment:
     # resourcesDefault hold the default resources to apply to each logical Node's primary direct

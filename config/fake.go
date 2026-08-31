@@ -17,14 +17,15 @@ func GetFakeManager() Manager {
 
 // fakeManager defined type alias to be used below.
 type fakeManager struct {
-	nodeSelectorsByImage  map[string]map[string]string
-	defaultResources      *k8scorev1.ResourceRequirements
-	imagePullPolicy       string
-	imagePullSecrets      []string
-	globalAnnotations     map[string]string
-	globalLabels          map[string]string
-	registryMetadataTrust []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
-	containerStopSignals  bool
+	nodeSelectorsByImage    map[string]map[string]string
+	defaultResources        *k8scorev1.ResourceRequirements
+	imagePullPolicy         string
+	imagePullSecrets        []string
+	globalAnnotations       map[string]string
+	globalLabels            map[string]string
+	registryMetadataTrust   []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
+	registryMetadataMirrors []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry
+	containerStopSignals    bool
 }
 
 // FakeOption defined type alias to be used below.
@@ -133,6 +134,12 @@ func (f fakeManager) GetRegistryMetadataTrust() (
 	result []clabernetesapisv1alpha1.RegistryMetadataTrustEntry,
 ) {
 	return slices.Clone(f.registryMetadataTrust)
+}
+
+func (f fakeManager) GetRegistryMetadataMirrors() (
+	result []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry,
+) {
+	return slices.Clone(f.registryMetadataMirrors)
 }
 
 func (f fakeManager) GetRemoveTopologyPrefix() bool {

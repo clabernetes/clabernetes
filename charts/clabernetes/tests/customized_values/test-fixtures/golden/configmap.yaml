@@ -37,4 +37,8 @@ data:
   registryMetadataTrust: |-
     - plainHTTP: true
       registry: registry.lab.example:5000
+  registryMetadataMirrors: |-
+    - endpoint: https://harbor.lab.example/v2/docker
+      overridePath: true
+      registry: docker.io
   naming: prefixed

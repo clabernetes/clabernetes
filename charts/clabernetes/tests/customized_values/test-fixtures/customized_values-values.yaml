@@ -13,6 +13,10 @@ globalConfig:
     registryMetadataTrust:
       - registry: registry.lab.example:5000
         plainHTTP: true
+    registryMetadataMirrors:
+      - registry: docker.io
+        endpoint: https://harbor.lab.example/v2/docker
+        overridePath: true
 manager:
   deploymentTolerations:
     - key: test_toleration_manager_only

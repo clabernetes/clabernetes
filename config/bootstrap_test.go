@@ -270,3 +270,40 @@ func TestMergeFromBootstrapConfigRegistryMetadataTrust(t *testing.T) {
 		t.Fatalf("merged registry metadata trust = %#v", got)
 	}
 }
+
+func TestMergeFromBootstrapConfigRegistryMetadataMirrors(t *testing.T) {
+	t.Parallel()
+
+	bootstrapConfigMap := &k8scorev1.ConfigMap{Data: map[string]string{
+		"registryMetadataMirrors": `
+- registry: docker.io
+  endpoint: https://harbor.example.test/v2/docker
+  overridePath: true
+- registry: ghcr.io
+  endpoint: https://harbor.example.test/v2/ghcr
+  overridePath: true
+`,
+	}}
+	config := &clabernetesapisv1alpha1.Config{Spec: clabernetesapisv1alpha1.ConfigSpec{
+		ImagePull: clabernetesapisv1alpha1.ConfigImagePull{
+			RegistryMetadataMirrors: []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry{{
+				Registry: "docker.io", Endpoint: "https://existing.example.test/v2/docker",
+				OverridePath: true,
+			}},
+		},
+	}}
+
+	if err := clabernetesconfig.MergeFromBootstrapConfig(
+		bootstrapConfigMap,
+		config,
+		true,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := config.Spec.ImagePull.RegistryMetadataMirrors; len(got) != 2 ||
+		got[0].Endpoint != "https://existing.example.test/v2/docker" ||
+		got[1].Registry != "ghcr.io" || !got[1].OverridePath {
+		t.Fatalf("merged registry metadata mirrors = %#v", got)
+	}
+}

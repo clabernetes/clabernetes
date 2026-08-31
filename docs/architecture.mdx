@@ -99,7 +99,8 @@ rather than performed, and the result is a deterministic, runtime-neutral **devi
 
 The plan's image configuration comes from a registry **metadata resolver** in the manager that
 fetches only manifests and config blobs (never layers) using same-namespace pull Secrets and
-the controller-only `Config.spec.imagePull.registryMetadataTrust` policy. The kubelet performs
+the controller-only `Config.spec.imagePull.registryMetadataTrust` and `registryMetadataMirrors`
+policies. The kubelet performs
 the only real image pull, and readiness fails on a material digest mismatch between the planned
 image and the kubelet-reported `imageID`.
 

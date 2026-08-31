@@ -337,7 +337,11 @@ func (r Resolver) transportForTrust(trust *RegistryTrust) (http.RoundTripper, er
 }
 
 //nolint:err113 // The returned ErrorCode is the stable public classification.
-func validateRequestSecurity(request *Request, registry string) (ErrorCode, error) {
+func validateRequestSecurity(
+	request *Request,
+	registry string,
+	mirror *registryMirrorTarget,
+) (ErrorCode, error) {
 	targetRegistry := normalizeRegistry(registry)
 	if request.Authentication != nil && request.Authentication.registry != targetRegistry {
 		return ErrorInvalidAuthentication, fmt.Errorf(
@@ -346,11 +350,21 @@ func validateRequestSecurity(request *Request, registry string) (ErrorCode, erro
 			targetRegistry,
 		)
 	}
-	if request.Trust != nil {
-		trustedRegistry := normalizeRegistryAddress(request.Trust.Registry)
-		if trustedRegistry == "" {
-			return ErrorInvalidTrust, errors.New("registry trust policy has no registry")
-		}
+	if mirror != nil && mirror.registry != targetRegistry {
+		return ErrorInvalidMirror, fmt.Errorf(
+			"registry metadata mirror is scoped to %s, not %s",
+			mirror.registry,
+			targetRegistry,
+		)
+	}
+	if request.Trust == nil {
+		return "", nil
+	}
+	trustedRegistry := normalizeRegistryAddress(request.Trust.Registry)
+	if trustedRegistry == "" {
+		return ErrorInvalidTrust, errors.New("registry trust policy has no registry")
+	}
+	if mirror == nil {
 		if trustedRegistry != targetRegistry {
 			return ErrorInvalidTrust, fmt.Errorf(
 				"registry trust policy is scoped to %s, not %s",
@@ -358,6 +372,28 @@ func validateRequestSecurity(request *Request, registry string) (ErrorCode, erro
 				targetRegistry,
 			)
 		}
+		return "", nil
+	}
+	// A mirror moves the connection to its endpoint host, so transport trust must scope to that
+	// host: one CA entry for the mirror instead of one per source registry.
+	if normalizeRegistry(trustedRegistry) != normalizeRegistry(mirror.host) {
+		return ErrorInvalidTrust, fmt.Errorf(
+			"registry trust policy is scoped to %s, not mirror endpoint %s",
+			trustedRegistry,
+			mirror.host,
+		)
+	}
+	if request.Trust.PlainHTTP && mirror.scheme != "http" {
+		return ErrorInvalidTrust, fmt.Errorf(
+			"plain-HTTP trust for %s conflicts with the HTTPS mirror endpoint",
+			trustedRegistry,
+		)
+	}
+	if len(request.Trust.CABundle) != 0 && mirror.scheme != "https" {
+		return ErrorInvalidTrust, fmt.Errorf(
+			"CA bundle trust for %s conflicts with the plain-HTTP mirror endpoint",
+			trustedRegistry,
+		)
 	}
 	return "", nil
 }
