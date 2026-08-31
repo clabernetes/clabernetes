@@ -11,19 +11,28 @@ import (
 // the caller's network namespace.
 const sysfsInterfaceRoot = "/sys/class/net"
 
-// ManagementPathMTU reports the MTU of the management path c9s realized for one logical Node, as
-// the device sees it. The management mesh is bounded by the Pod underlay minus the encapsulation
-// it rides in, which is smaller than the 1500 bytes a device assumes by default -- an imported
-// package that configures its management interface from the runtime's management network then
-// configures the size that actually fits, instead of black-holing every packet above the path
-// MTU (there is no router on the path to answer with fragmentation-needed).
+// maximumAutomaticManagementIPMTU keeps the runtime management value compatible with imported
+// device management ports whose default Ethernet MTU is 1514 bytes. Smaller realized paths remain
+// authoritative; a jumbo Pod underlay must not be advertised as an IP MTU unless the device port
+// was explicitly enlarged as well.
+const maximumAutomaticManagementIPMTU = 1500
+
+// ManagementPathMTU reports the automatic IP MTU advertised to an imported device for one logical
+// Node. It is the realized management mesh capacity, capped at 1500 bytes so a jumbo Pod underlay
+// does not exceed a device management port's conventional default; an imported package that
+// configures its management interface from the runtime's management network then receives a value
+// that fits both the mesh and the default device port.
 //
 // The value is read from the realized interface rather than carried in the plan because the
 // bound depends on the CNI MTU of the Kubernetes node the Pod landed on, which the controller
 // does not know when it plans. A management path this process cannot observe reports 0, which
 // leaves the imported package on its own default.
 func ManagementPathMTU(plan Plan, nodeID string) int {
-	return interfaceMTU(managementInterfaceName(plan, nodeID))
+	return capAutomaticManagementIPMTU(interfaceMTU(managementInterfaceName(plan, nodeID)))
+}
+
+func capAutomaticManagementIPMTU(mtu int) int {
+	return min(mtu, maximumAutomaticManagementIPMTU)
 }
 
 // managementInterfaceName returns the name the device's management interface has in the Pod

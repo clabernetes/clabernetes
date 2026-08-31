@@ -3,7 +3,9 @@
 package directruntime
 
 import (
+	"errors"
 	"fmt"
+	"math"
 
 	"github.com/google/nftables"
 	"github.com/google/nftables/binaryutil"
@@ -66,31 +68,54 @@ func ensureMeshSegmentClamp(meshMTU int) error {
 		Priority: nftables.ChainPriorityFilter,
 	})
 
-	for _, family := range []struct {
-		etherType   uint16
-		headerBytes int
-	}{
-		{etherType: unix.ETH_P_IP, headerBytes: ipv4HeaderBytes},
-		{etherType: unix.ETH_P_IPV6, headerBytes: ipv6HeaderBytes},
+	for _, ingressName := range []string{
+		MeshDevicePortName,
+		MeshGatewayPortName,
+		MeshVTEPName,
 	} {
-		maxSegment := meshMTU - family.headerBytes - tcpHeaderBytes
-		if maxSegment <= 0 {
-			continue
-		}
+		for _, family := range []struct {
+			etherType   uint16
+			headerBytes int
+		}{
+			{etherType: unix.ETH_P_IP, headerBytes: ipv4HeaderBytes},
+			{etherType: unix.ETH_P_IPV6, headerBytes: ipv6HeaderBytes},
+		} {
+			maxSegment := meshMTU - family.headerBytes - tcpHeaderBytes
+			if maxSegment <= 0 {
+				continue
+			}
 
-		conn.AddRule(meshSegmentClampRule(
-			table,
-			chain,
-			family.etherType,
-			uint16(maxSegment), //nolint:gosec // Bounded by the mesh MTU, which is a DNS-sized int.
-		))
+			if maxSegment > math.MaxUint16 {
+				maxSegment = math.MaxUint16
+			}
+
+			maxSegmentValue := uint16(maxSegment)
+			conn.AddRule(meshSegmentClampRule(
+				table,
+				chain,
+				ingressName,
+				family.etherType,
+				maxSegmentValue,
+			))
+		}
 	}
 
 	if err := conn.Flush(); err != nil {
+		// MSS clamping is an optimization for kernels that expose bridge-family nftables.
+		// Older kernels may reject that optional family or expression with ENOENT or
+		// EOPNOTSUPP; management connectivity must still use the realized mesh.
+		if isUnsupportedMeshSegmentClampError(err) {
+			return nil
+		}
+
 		return fmt.Errorf("programming management mesh segment clamp: %w", err)
 	}
 
 	return nil
+}
+
+func isUnsupportedMeshSegmentClampError(err error) bool {
+	return errors.Is(err, unix.ENOENT) || errors.Is(err, unix.EOPNOTSUPP)
 }
 
 // meshSegmentClampRule builds the clamp for one address family: a TCP SYN crossing the mesh
@@ -98,6 +123,7 @@ func ensureMeshSegmentClamp(meshMTU int) error {
 func meshSegmentClampRule(
 	table *nftables.Table,
 	chain *nftables.Chain,
+	ingressName string,
 	etherType uint16,
 	maxSegment uint16,
 ) *nftables.Rule {
@@ -107,12 +133,13 @@ func meshSegmentClampRule(
 		Table: table,
 		Chain: chain,
 		Exprs: []expr.Any{
-			// Only frames the mesh bridge forwards; the lab data plane never crosses it.
-			&expr.Meta{Key: expr.MetaKeyBRIIIFNAME, Register: 1},
+			// Match the fixed mesh ingress ports instead of the bridge-specific ibrname key:
+			// Talos enables NF_TABLES_BRIDGE without NFT_BRIDGE_META.
+			&expr.Meta{Key: expr.MetaKeyIIFNAME, Register: 1},
 			&expr.Cmp{
 				Op:       expr.CmpOpEq,
 				Register: 1,
-				Data:     interfaceName(MeshBridgeName),
+				Data:     interfaceName(ingressName),
 			},
 			&expr.Meta{Key: expr.MetaKeyPROTOCOL, Register: 1},
 			&expr.Cmp{
