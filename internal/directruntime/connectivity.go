@@ -875,6 +875,10 @@ type ConnectivityOptions struct {
 	// backend and tests inject fakes.
 	NATOperations NATOperations
 
+	// FilterOperations is the transport filter-accept seam; production wiring installs the
+	// nftables backend and tests inject fakes.
+	FilterOperations TransportFilterOperations
+
 	// hostEndpointPacer rate-limits steady-state host endpoint re-assertion; the sidecar owns
 	// drift correction, so unchanged ticks do not need a per-second reconcile fan-out.
 	hostEndpointPacer *hostEndpointPacer
@@ -1118,6 +1122,10 @@ func runConnectivity(
 		options.NATOperations = newNATOperations()
 	}
 
+	if options.FilterOperations == nil {
+		options.FilterOperations = newTransportFilterOperations()
+	}
+
 	if err := validateIdentity(input, plan); err != nil {
 		return err
 	}
@@ -1186,6 +1194,10 @@ func runConnectivity(
 	}
 
 	if err = reconcileInterposition(effectivePlan, options, operations); err != nil {
+		return err
+	}
+
+	if err = reconcileTransportFilter(effectivePlan, options); err != nil {
 		return err
 	}
 
@@ -1512,6 +1524,12 @@ func waitForConnectivityRevisions(
 			// is converged back on the next tick, and an unrecoverable divergence restarts the
 			// sidecar into a full fail-closed cold pass.
 			if err := reconcileInterposition(basePlan, options, operations); err != nil {
+				return err
+			}
+
+			// A device rebuilding its packet filter (EOS rewrites iptables on config changes)
+			// displaces the transport-port accepts; the tick re-asserts them.
+			if err := reconcileTransportFilter(basePlan, options); err != nil {
 				return err
 			}
 

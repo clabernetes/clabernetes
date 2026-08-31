@@ -198,7 +198,9 @@ func interpositionSpecForEntry(
 
 // reconcileInterposition converges the Pod namespace to the plan's interposed management
 // identity. It runs before any device container starts and again on every revision tick so
-// sidecar-owned state displaced by a device is re-asserted. It never mutates device-owned state.
+// sidecar-owned state displaced by a device is re-asserted. It never mutates device-owned state;
+// the one sanctioned write into device-programmed chains is the transport-port accept assertion,
+// which lives in reconcileTransportFilter with its rationale.
 func reconcileInterposition(
 	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
