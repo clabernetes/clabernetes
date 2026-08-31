@@ -604,10 +604,11 @@ func TestConnectivityHelperRestartRecoversEveryLinkFlavor(t *testing.T) {
 				cancel()
 
 				options := clabernetesinternaldirectruntime.ConnectivityOptions{
-					StateDirectory: state,
-					PodNamespace:   "lab",
-					PodName:        "router-pod",
-					PodUID:         "pod-uid-a",
+					StateDirectory:   state,
+					PodNamespace:     "lab",
+					PodName:          "router-pod",
+					PodUID:           "pod-uid-a",
+					FilterOperations: &fakeTransportFilterOperations{},
 				}
 
 				return clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
@@ -691,6 +692,7 @@ func TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness(t *testing.T)
 	cancel()
 
 	operations := &fakeLinkOperations{}
+	filter := &fakeTransportFilterOperations{}
 
 	state := t.TempDir()
 	if err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
@@ -698,11 +700,12 @@ func TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness(t *testing.T)
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodNamespace:   "lab",
-			PodName:        "router-pod",
-			PodUID:         "pod-uid-a",
-			PodAddress:     "10.244.0.12",
+			StateDirectory:   state,
+			PodNamespace:     "lab",
+			PodName:          "router-pod",
+			PodUID:           "pod-uid-a",
+			PodAddress:       "10.244.0.12",
+			FilterOperations: filter,
 		},
 		operations,
 		nil,
@@ -712,6 +715,11 @@ func TestFabricConnectivityRealizesPodLocalEndpointBeforeReadiness(t *testing.T)
 
 	if len(operations.fabricSpecs) != 1 {
 		t.Fatalf("fabric operations = %#v", operations.fabricSpecs)
+	}
+
+	if len(filter.specs) == 0 || len(filter.specs[0].UDPPorts) != 1 ||
+		filter.specs[0].UDPPorts[0] != 14790 {
+		t.Fatalf("wire plan must assert the fabric transport accept, got %#v", filter.specs)
 	}
 
 	spec := operations.fabricSpecs[0]
@@ -743,11 +751,12 @@ func TestFabricConnectivityStaysUnreadyUntilPeerResolves(t *testing.T) {
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodNamespace:   "lab",
-			PodName:        "router-pod",
-			PodUID:         "pod-uid-a",
-			PodAddress:     "10.244.0.12",
+			StateDirectory:   state,
+			PodNamespace:     "lab",
+			PodName:          "router-pod",
+			PodUID:           "pod-uid-a",
+			PodAddress:       "10.244.0.12",
+			FilterOperations: &fakeTransportFilterOperations{},
 		},
 		&fakeLinkOperations{fabricUnready: true},
 		nil,
@@ -2274,6 +2283,23 @@ func (f *fakeNATOperations) DeleteInterpositionNAT() error {
 	return nil
 }
 
+type fakeTransportFilterOperations struct {
+	specs []clabernetesinternaldirectruntime.TransportFilterSpec
+	err   error
+}
+
+func (f *fakeTransportFilterOperations) EnsureTransportFilterAccepts(
+	spec clabernetesinternaldirectruntime.TransportFilterSpec,
+) error {
+	if f.err != nil {
+		return f.err
+	}
+
+	f.specs = append(f.specs, spec)
+
+	return nil
+}
+
 func interposedConnectivityFixture(
 	t *testing.T,
 ) (clabernetesinternaldeviceplan.Input, clabernetesinternaldeviceplan.Plan) {
@@ -2321,6 +2347,7 @@ func TestInterposedManagementRealizesPodLocallyBeforeReadiness(t *testing.T) {
 
 	operations := &fakeLinkOperations{}
 	nat := &fakeNATOperations{}
+	filter := &fakeTransportFilterOperations{}
 
 	state := t.TempDir()
 	if err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
@@ -2328,14 +2355,20 @@ func TestInterposedManagementRealizesPodLocallyBeforeReadiness(t *testing.T) {
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodAddress:     "10.244.0.12",
-			NATOperations:  nat,
+			StateDirectory:   state,
+			PodAddress:       "10.244.0.12",
+			NATOperations:    nat,
+			FilterOperations: filter,
 		},
 		operations,
 		nil,
 	); err != nil {
 		t.Fatal(err)
+	}
+
+	if len(filter.specs) == 0 || len(filter.specs[0].UDPPorts) != 1 ||
+		filter.specs[0].UDPPorts[0] != 14789 {
+		t.Fatalf("mesh plan must assert the mesh transport accept, got %#v", filter.specs)
 	}
 
 	if len(operations.interpositions) != 1 {
