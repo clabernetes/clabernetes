@@ -43,5 +43,9 @@ data:
   registryMetadataTrust: |-
 {{ .Values.globalConfig.imagePull.registryMetadataTrust | toYaml | indent 4 }}
   {{- end }}
+  {{- if .Values.globalConfig.imagePull.registryMetadataMirrors }}
+  registryMetadataMirrors: |-
+{{ .Values.globalConfig.imagePull.registryMetadataMirrors | toYaml | indent 4 }}
+  {{- end }}
   naming: {{ .Values.globalConfig.naming }}
 {{- end }}

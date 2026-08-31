@@ -43,6 +43,29 @@ func compileRegistryMetadataTrust(
 	return policy, nil
 }
 
+func compileRegistryMetadataMirrors(
+	entries []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry,
+) (*clabernetesinternalocimetadata.RegistryMirrorPolicy, error) {
+	mirrors := make([]clabernetesinternalocimetadata.RegistryMirror, 0, len(entries))
+	for _, entry := range entries {
+		mirrors = append(mirrors, clabernetesinternalocimetadata.RegistryMirror{
+			Registry:     entry.Registry,
+			Endpoint:     entry.Endpoint,
+			OverridePath: entry.OverridePath,
+		})
+	}
+	policy, err := clabernetesinternalocimetadata.NewRegistryMirrorPolicy(mirrors)
+	if err != nil {
+		return nil, planInputError(
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
+			"config.imagePull.registryMetadataMirrors",
+			err.Error(),
+		)
+	}
+
+	return policy, nil
+}
+
 // OCIMetadataResolver is satisfied by the bounded metadata cache and by focused test fakes.
 type OCIMetadataResolver interface {
 	Resolve(
@@ -62,11 +85,15 @@ type ImageMetadataResolution struct {
 // ImageMetadataResolver resolves every imported package-owned image role without downloading a
 // layer. It has no kind/component catalog and scopes all credential reads to the Node namespace.
 type ImageMetadataResolver struct {
-	Client     ctrlruntimeclient.Reader
-	Resolver   OCIMetadataResolver
-	Platform   clabernetesinternalocimetadata.Platform
-	TrustFor   func(reference string) *clabernetesinternalocimetadata.RegistryTrust
-	MaxSecrets int
+	Client   ctrlruntimeclient.Reader
+	Resolver OCIMetadataResolver
+	Platform clabernetesinternalocimetadata.Platform
+	TrustFor func(reference string) *clabernetesinternalocimetadata.RegistryTrust
+	// TrustForRegistry selects trust by connection authority; a mirrored fetch trusts the mirror
+	// endpoint host instead of the image-ref registry.
+	TrustForRegistry func(registry string) *clabernetesinternalocimetadata.RegistryTrust
+	MirrorFor        func(reference string) *clabernetesinternalocimetadata.RegistryMirror
+	MaxSecrets       int
 }
 
 // Resolve converts one canonical discovery result into explicit device-plan image inputs.
@@ -136,17 +163,14 @@ func (r ImageMetadataResolver) Resolve(
 		if authErr != nil {
 			return nil, authErr
 		}
-		var trust *clabernetesinternalocimetadata.RegistryTrust
-		if r.TrustFor != nil {
-			trust = r.TrustFor(requirement.SourceReference)
-		}
+		mirror, trust := r.transportPolicyFor(requirement.SourceReference)
 		// The reconcile context carries no deadline, so bound each registry exchange here;
 		// a hung registry must fail this Node instead of stalling the shared worker.
 		resolveCtx, cancelResolve := context.WithTimeout(ctx, imageMetadataResolveTimeout)
 		metadata, resolveErr := r.Resolver.Resolve(resolveCtx,
 			clabernetesinternalocimetadata.Request{
 				Reference: requirement.SourceReference, Platform: r.Platform,
-				Authentication: authentication, Trust: trust,
+				Authentication: authentication, Trust: trust, Mirror: mirror,
 			})
 		cancelResolve()
 		if resolveErr != nil {
@@ -160,6 +184,30 @@ func (r ImageMetadataResolver) Resolve(
 	}
 
 	return result, nil
+}
+
+// transportPolicyFor selects the metadata mirror for a reference and the transport trust for the
+// connection it implies: the mirror endpoint host when mirrored, the image-ref registry otherwise.
+func (r ImageMetadataResolver) transportPolicyFor(
+	reference string,
+) (*clabernetesinternalocimetadata.RegistryMirror, *clabernetesinternalocimetadata.RegistryTrust) {
+	var mirror *clabernetesinternalocimetadata.RegistryMirror
+	if r.MirrorFor != nil {
+		mirror = r.MirrorFor(reference)
+	}
+
+	var trust *clabernetesinternalocimetadata.RegistryTrust
+
+	switch {
+	case mirror != nil:
+		if r.TrustForRegistry != nil {
+			trust = r.TrustForRegistry(mirror.EndpointHost())
+		}
+	case r.TrustFor != nil:
+		trust = r.TrustFor(reference)
+	}
+
+	return mirror, trust
 }
 
 func imageInputFromMetadata(

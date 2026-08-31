@@ -14,17 +14,18 @@ import (
 )
 
 type bootstrapConfig struct {
-	mergeMode             string
-	globalAnnotations     map[string]string
-	globalLabels          map[string]string
-	resourcesDefault      *k8scorev1.ResourceRequirements
-	nodeSelectorsByImage  map[string]map[string]string
-	containerStopSignals  bool
-	inClusterDNSSuffix    string
-	imagePullPolicy       string
-	imagePullSecrets      []string
-	registryMetadataTrust []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
-	naming                string
+	mergeMode               string
+	globalAnnotations       map[string]string
+	globalLabels            map[string]string
+	resourcesDefault        *k8scorev1.ResourceRequirements
+	nodeSelectorsByImage    map[string]map[string]string
+	containerStopSignals    bool
+	inClusterDNSSuffix      string
+	imagePullPolicy         string
+	imagePullSecrets        []string
+	registryMetadataTrust   []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
+	registryMetadataMirrors []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry
+	naming                  string
 }
 
 func bootstrapFromConfigMap( //nolint:gocyclo,funlen
@@ -104,16 +105,10 @@ func bootstrapFromConfigMap( //nolint:gocyclo,funlen
 		}
 	}
 
-	registryMetadataTrustData, registryMetadataTrustOk := inMap["registryMetadataTrust"]
-	if registryMetadataTrustOk {
-		err := sigsyaml.Unmarshal(
-			[]byte(registryMetadataTrustData),
-			&bc.registryMetadataTrust,
-		)
-		if err != nil {
-			outErrors = append(outErrors, err.Error())
-		}
-	}
+	outErrors = unmarshalBootstrapKey(inMap, "registryMetadataTrust",
+		&bc.registryMetadataTrust, outErrors)
+	outErrors = unmarshalBootstrapKey(inMap, "registryMetadataMirrors",
+		&bc.registryMetadataMirrors, outErrors)
 
 	naming, namingOk := inMap["naming"]
 	if namingOk {
@@ -133,6 +128,25 @@ func bootstrapFromConfigMap( //nolint:gocyclo,funlen
 	}
 
 	return bc, err
+}
+
+func unmarshalBootstrapKey(
+	inMap map[string]string,
+	key string,
+	out any,
+	outErrors []string,
+) []string {
+	data, ok := inMap[key]
+	if !ok {
+		return outErrors
+	}
+
+	err := sigsyaml.Unmarshal([]byte(data), out)
+	if err != nil {
+		outErrors = append(outErrors, err.Error())
+	}
+
+	return outErrors
 }
 
 // MergeFromBootstrapConfig accepts a bootstrap config configmap and the instance of the global
@@ -240,6 +254,26 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 		existingRegistryTrust[entry.Registry] = true
 	}
 
+	existingRegistryMirrors := make(
+		map[string]bool,
+		len(config.Spec.ImagePull.RegistryMetadataMirrors),
+	)
+	for _, entry := range config.Spec.ImagePull.RegistryMetadataMirrors {
+		existingRegistryMirrors[entry.Registry] = true
+	}
+
+	for _, entry := range bootstrap.registryMetadataMirrors {
+		if existingRegistryMirrors[entry.Registry] {
+			continue
+		}
+
+		config.Spec.ImagePull.RegistryMetadataMirrors = append(
+			config.Spec.ImagePull.RegistryMetadataMirrors,
+			entry,
+		)
+		existingRegistryMirrors[entry.Registry] = true
+	}
+
 	if config.Spec.Naming == "" {
 		config.Spec.Naming = bootstrap.naming
 	}
@@ -256,9 +290,10 @@ func mergeFromBootstrapConfigReplace(
 		},
 		InClusterDNSSuffix: bootstrap.inClusterDNSSuffix,
 		ImagePull: clabernetesapisv1alpha1.ConfigImagePull{
-			Policy:                bootstrap.imagePullPolicy,
-			PullSecrets:           append([]string{}, bootstrap.imagePullSecrets...),
-			RegistryMetadataTrust: bootstrap.registryMetadataTrust,
+			Policy:                  bootstrap.imagePullPolicy,
+			PullSecrets:             append([]string{}, bootstrap.imagePullSecrets...),
+			RegistryMetadataTrust:   bootstrap.registryMetadataTrust,
+			RegistryMetadataMirrors: bootstrap.registryMetadataMirrors,
 		},
 		Deployment: clabernetesapisv1alpha1.ConfigDeployment{
 			ResourcesDefault:     bootstrap.resourcesDefault,

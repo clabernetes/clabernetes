@@ -120,6 +120,8 @@ type Manager interface { //nolint: interfacebloat
 	GetInClusterDNSSuffix() string
 	// GetRegistryMetadataTrust returns exact controller-only OCI registry trust exceptions.
 	GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
+	// GetRegistryMetadataMirrors returns exact controller-only OCI registry metadata mirrors.
+	GetRegistryMetadataMirrors() []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry
 	// GetRemoveTopologyPrefix returns true if the topology prefix should be removed from Topology
 	// resources, otherwise false.
 	GetRemoveTopologyPrefix() bool

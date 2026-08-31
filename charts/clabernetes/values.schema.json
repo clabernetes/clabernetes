@@ -158,6 +158,18 @@
                   "plainHTTP": {"type": "boolean"}
                 }
               }
+            },
+            "registryMetadataMirrors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["registry", "endpoint"],
+                "properties": {
+                  "registry": {"type": "string", "minLength": 1},
+                  "endpoint": {"type": "string", "minLength": 1},
+                  "overridePath": {"type": "boolean"}
+                }
+              }
             }
           }
         },

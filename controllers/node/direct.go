@@ -189,7 +189,15 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	registryMetadataMirrors, err := compileRegistryMetadataMirrors(
+		r.configManagerGetter().GetRegistryMetadataMirrors(),
+	)
+	if err != nil {
+		return err
+	}
 	metadataResolver.TrustFor = registryMetadataTrust.ForReference
+	metadataResolver.TrustForRegistry = registryMetadataTrust.ForRegistry
+	metadataResolver.MirrorFor = registryMetadataMirrors.ForReference
 	declaredDiscovery, err := clabernetesinternaldeviceplan.DiscoverDeclaredImages(
 		declaredInput,
 		clabernetesconstants.Version,

@@ -39,6 +39,7 @@ const (
 	ErrorInvalidRequest        ErrorCode = "InvalidRequest"
 	ErrorInvalidAuthentication ErrorCode = "InvalidAuthentication"
 	ErrorInvalidTrust          ErrorCode = "InvalidTrust"
+	ErrorInvalidMirror         ErrorCode = "InvalidMirror"
 	ErrorResolveManifest       ErrorCode = "ResolveManifest"
 	ErrorUnsupportedMedia      ErrorCode = "UnsupportedMediaType"
 	ErrorSelectPlatform        ErrorCode = "SelectPlatform"
@@ -97,12 +98,15 @@ func (p Platform) String() string {
 	return result
 }
 
-// Request defines the image reference, platform, credentials, and trust policy to resolve.
+// Request defines the image reference, platform, credentials, trust policy, and optional
+// controller metadata mirror to resolve. With a mirror, Trust scopes to the mirror connection
+// host rather than the image-ref registry.
 type Request struct {
 	Reference      string
 	Platform       Platform
 	Authentication *Authentication
 	Trust          *RegistryTrust
+	Mirror         *RegistryMirror
 }
 
 // Resolver fetches only image manifests and configuration metadata.
@@ -216,26 +220,9 @@ func (r Resolver) Resolve(ctx context.Context, request Request) (*Metadata, erro
 		)
 	}
 
-	// References parse with Docker semantics: a missing tag selects "latest", matching how
-	// containerlab and the kubelet interpret the same value. Only malformed references fail.
-	nameOptions := []name.Option{}
-	if request.Trust != nil && request.Trust.PlainHTTP {
-		nameOptions = append(nameOptions, name.Insecure)
-	}
-	reference, err := name.ParseReference(request.Reference, nameOptions...)
-	if err != nil {
-		return nil, resolverError(ErrorInvalidRequest, request, errors.New("reference is invalid"))
-	}
-	securityCode, securityErr := validateRequestSecurity(
-		&request,
-		reference.Context().RegistryStr(),
-	)
-	if securityErr != nil {
-		return nil, resolverError(securityCode, request, securityErr)
-	}
-	transport, err := r.transportForTrust(request.Trust)
-	if err != nil {
-		return nil, resolverError(ErrorInvalidTrust, request, err)
+	reference, transport, prepareErr := r.prepareTransport(&request)
+	if prepareErr != nil {
+		return nil, prepareErr
 	}
 
 	platform := v1.Platform{
@@ -390,6 +377,54 @@ func (r Resolver) Resolve(ctx context.Context, request Request) (*Metadata, erro
 		Platform:          actualPlatform,
 		Config:            normalizeConfig(&configFile.Config),
 	}, nil
+}
+
+// prepareTransport parses the reference and assembles the secured, optionally mirrored transport.
+//
+//nolint:err113 // ErrorCode is the stable public classification.
+func (r Resolver) prepareTransport(
+	request *Request,
+) (name.Reference, http.RoundTripper, *Error) {
+	// References parse with Docker semantics: a missing tag selects "latest", matching how
+	// containerlab and the kubelet interpret the same value. Only malformed references fail.
+	// With a mirror, the endpoint URL alone selects the connection scheme, so the reference
+	// keeps its secure default.
+	nameOptions := []name.Option{}
+	if request.Trust != nil && request.Trust.PlainHTTP && request.Mirror == nil {
+		nameOptions = append(nameOptions, name.Insecure)
+	}
+	reference, err := name.ParseReference(request.Reference, nameOptions...)
+	if err != nil {
+		return nil, nil, resolverError(
+			ErrorInvalidRequest,
+			*request,
+			errors.New("reference is invalid"),
+		)
+	}
+	var mirrorTarget *registryMirrorTarget
+	if request.Mirror != nil {
+		mirrorTarget, err = request.Mirror.compile()
+		if err != nil {
+			return nil, nil, resolverError(ErrorInvalidMirror, *request, err)
+		}
+	}
+	securityCode, securityErr := validateRequestSecurity(
+		request,
+		reference.Context().RegistryStr(),
+		mirrorTarget,
+	)
+	if securityErr != nil {
+		return nil, nil, resolverError(securityCode, *request, securityErr)
+	}
+	transport, err := r.transportForTrust(request.Trust)
+	if err != nil {
+		return nil, nil, resolverError(ErrorInvalidTrust, *request, err)
+	}
+	if mirrorTarget != nil {
+		transport = mirrorTarget.wrap(transport, reference.Context().RepositoryStr())
+	}
+
+	return reference, transport, nil
 }
 
 //nolint:err113 // Copy request for a redacted diagnostic snapshot.
