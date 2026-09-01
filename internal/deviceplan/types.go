@@ -198,6 +198,9 @@ type NodePlan struct {
 	Aliases               []string `json:"aliases,omitempty"`
 	ContainerIDs          []string `json:"containerIDs"`
 	ReadinessContainerIDs []string `json:"readinessContainerIDs"`
+	// EnforceStartupConfig re-stages this Node's planned artifacts on every preparation run,
+	// overwriting device-written content, mirroring containerlab's enforce-startup-config.
+	EnforceStartupConfig bool `json:"enforceStartupConfig,omitempty"`
 }
 
 // ContainerPlan is one kubelet-managed device or component application container.

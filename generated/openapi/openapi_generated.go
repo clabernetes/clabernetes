@@ -3391,6 +3391,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Persistence(
 							Format:      "",
 						},
 					},
+					"reclaim": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reclaim controls the claim's lifetime relative to its Node. \"Delete\" (the default) owner-references the claim to the Node, so deleting the Node garbage-collects the claim and its data. \"Retain\" leaves the claim in place when the Node is deleted; an equivalent recreated Node adopts the retained claim and boots from its preserved state. Retained claims that are no longer wanted must be deleted by hand.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"enabled"},
 			},

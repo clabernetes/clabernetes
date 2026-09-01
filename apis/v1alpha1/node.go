@@ -22,6 +22,9 @@ const (
 	// NodeConditionLinkLifecycleAction reports the planner-declared action selected for the latest
 	// direct Link-only transition. ConnectivityReady and ContainersReady report convergence.
 	NodeConditionLinkLifecycleAction = "LinkLifecycleAction"
+	// NodeConditionDeviceStateReset reports the projected device-state reset token; it becomes
+	// True once the workload carrying the token completed preparation and re-seeded artifacts.
+	NodeConditionDeviceStateReset = "DeviceStateReset"
 )
 
 // +genclient

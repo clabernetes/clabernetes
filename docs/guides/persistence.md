@@ -1,17 +1,23 @@
 ---
 title: Persistent storage
-description: Preserve network-node state across device Pod restarts with Kubernetes PVCs.
+description: Preserve saved device configuration and node state across device Pod restarts with Kubernetes PVCs.
 ---
 
-This guide explains how to configure persistent storage for Clabernetes topologies, ensuring node state survives pod replacement.
+This guide explains how Clabernetes persists device state, what wins when the declared startup
+configuration and the device's saved configuration disagree, and how to reset a node back to its
+startup configuration.
 
 ## Overview
 
 By default, Clabernetes device Pods use ephemeral storage: each node's plan-scoped artifact tree
--- generated configuration and the directories its imported kind mounts from the lab directory
--- lives in an `emptyDir` volume, so anything the device saved there is lost when its Pod is
-replaced. Enabling persistence backs that artifact volume with a per-node PersistentVolumeClaim
-(PVC), named after the Node, instead.
+lives in an `emptyDir` volume, so every Pod start is a factory reset to exactly what the spec
+declares. Enabling persistence backs that artifact volume with a per-node PersistentVolumeClaim
+(PVC), named after the Node.
+
+With persistence enabled, Clabernetes follows the same contract as containerlab's
+[configuration artifacts](https://containerlab.dev/manual/conf-artifacts/): the startup
+configuration seeds the node once, and from then on the configuration the device saved wins. A
+Pod restart, an eviction, or an unrelated Topology change never silently reverts saved work.
 
 ## Enabling Persistence
 
@@ -98,19 +104,98 @@ spec:
     name: persistent
 ```
 
-## What Gets Persisted
+## What Persists, and What Wins
 
-The PVC backs the node's plan-owned artifact volume, meaning the persistent device artifacts
-the plan declares, not a containerlab working directory:
+The PVC backs the node's plan-owned artifact volume: the generated startup configuration and
+every directory the imported kind mounts from its lab directory, including files the device
+itself writes there, such as its saved configuration.
 
-- **Generated files**: startup configuration and other artifacts the imported kind renders
-- **Kind-mounted directories**: every path the kind mounts from its lab directory, including
-  files the device itself writes there (i.e. saved configuration)
+On every Pod start, preparation regenerates and verifies the planned artifacts, then decides
+per file what to publish:
 
-On every Pod start the preparation init container re-verifies and re-stages the package-planned
-artifacts by path, mode, and digest; files the device wrote at other paths inside those mounted
-directories are left in place. Anything the device writes outside the mounted paths lives in
-the container filesystem and is never persisted.
+- **A file the device has modified since it was last staged is left in place.** Saving your
+  configuration on the node (for example `tools system configuration save` on SR Linux, or the
+  Save lifecycle described below) makes that saved state the boot state of every later Pod,
+  regardless of whether the startup configuration was CLI-format or a full config file.
+- **A file the device never touched follows the spec.** Updated topology files, certificates,
+  and repo files keep propagating.
+- **Everything the device wrote at unplanned paths** inside the persisted directories (SSH host
+  keys, checkpoints, logs) is left in place, as before.
+
+Preparation records what it staged in a small ledger beside the artifacts and reports every
+preserved file in the preparation container's log.
+
+A consequence, identical to containerlab: once a saved configuration exists, editing the
+`startup-config` in your Topology or Node no longer changes the running node. Use
+`enforce-startup-config` or a device-state reset (both below) when you want the declared
+configuration to win again.
+
+## Enforcing the Startup Configuration
+
+Setting containerlab's `enforce-startup-config` on a node makes the declared startup
+configuration win on every Pod start, overwriting saved changes at the planned paths:
+
+```yaml
+srl1:
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+  startup-config: golden.json
+  enforce-startup-config: true
+```
+
+Declaring `enforce-startup-config` without a `startup-config` is rejected before any workload
+is created.
+
+## Resetting a Node to Its Startup Configuration
+
+To throw away one node's persistent state and re-seed it from the declared configuration,
+annotate the Node with an opaque token of your choice:
+
+```bash
+kubectl annotate node.c9s.run srl1 c9s.run/device-state-reset=$(date +%s) --overwrite
+```
+
+The Pod is replaced; its preparation wipes the node's plan-owned artifact tree and stages
+everything fresh. Each token value is honored exactly once, so the annotation can stay in
+place. Progress is visible on the Node as the `DeviceStateReset` condition, which becomes
+`True` once the replacement Pod finished preparation, and as the matching events.
+
+The reset affects only the annotated Node. Removing the annotation later is safe; it replaces
+the Pod once more without wiping anything.
+
+## Keeping Claims Past Node Deletion
+
+By default each PVC is owner-referenced to its Node: deleting the Node (or removing it from a
+Topology, which prunes the emitted Node) garbage-collects the claim and its data. Set
+`reclaim: Retain` to keep claims alive past Node deletion:
+
+```yaml
+spec:
+  deployment:
+    persistence:
+      enabled: true
+      reclaim: Retain
+```
+
+With retention, deleting and recreating a Topology behaves like `containerlab destroy` and
+`deploy` without `--cleanup`: each recreated Node adopts its retained claim by name and boots
+from the preserved state. Adoption refuses a claim whose storage class does not match the
+declared one instead of silently mounting it.
+
+Retained claims are never deleted by Clabernetes. Delete them by hand when a lab is truly gone:
+
+```bash
+kubectl delete pvc srl1
+```
+
+## Saving Configuration
+
+The Save lifecycle runs the imported kind's own save behavior (for SR Linux,
+`tools system configuration save`) inside the device container. Saving on the device directly
+works exactly as well; the lifecycle entrypoint simply gives every kind one uniform verb.
+
+Running a save against a node **without** persistence still succeeds, but its output carries a
+warning that the saved configuration cannot survive Pod replacement.
 
 ## Important Limitations
 
@@ -139,50 +224,11 @@ The storage class cannot be changed after PVC creation. To change storage class:
 2. Delete the topology
 3. Recreate with new storage class
 
-### Node Removal Removes the PVC
+### Node Removal Removes the Claim Unless Retained
 
-Each PVC is owner-referenced to its Node: deleting the Node (or removing it from a Topology,
-which prunes the emitted Node) garbage-collects the claim and its data. Disabling persistence
-on the effective profile also deletes the c9s-owned claim. Back up anything you need first.
-
-## Use Cases
-
-### Long-Running Development Labs
-
-Preserve configuration changes across pod restarts:
-
-```yaml
-spec:
-  deployment:
-    persistence:
-      enabled: true
-      claimSize: "10Gi"
-```
-
-### Production-Like Testing
-
-Maintain state for realistic testing scenarios:
-
-```yaml
-spec:
-  deployment:
-    persistence:
-      enabled: true
-      claimSize: "20Gi"
-      storageClassName: "production-ssd"
-```
-
-### Training Environments
-
-Allow students to continue from saved state:
-
-```yaml
-spec:
-  deployment:
-    persistence:
-      enabled: true
-      claimSize: "5Gi"
-```
+With the default `Delete` reclaim policy, deleting the Node garbage-collects the claim and its
+data, and disabling persistence on the effective profile deletes the c9s-owned claim. Retained
+claims survive both. Back up anything you need first.
 
 ## Checking PVC Status
 
@@ -258,6 +304,12 @@ Check if PVC is mounted:
 kubectl describe pod <pod-name> | grep -A10 "Volumes"
 ```
 
+### A Spec Change Does Not Reach the Node
+
+That is the saved-configuration-wins contract at work: a saved configuration shadows startup
+config updates. Set `enforce-startup-config: true` or run a device-state reset to make the
+declared configuration win.
+
 ### Slow Performance
 
 Consider:
@@ -271,10 +323,11 @@ Consider:
 1. **Size appropriately**: Start with recommended sizes, increase as needed
 2. **Use appropriate storage class**: Match performance requirements
 3. **Regular backups**: Persistence doesn't replace backups
-4. **Clean up old PVCs**: Remove unused PVCs to free resources
+4. **Clean up retained claims**: Remove unused PVCs to free resources
 5. **Monitor usage**: Watch for PVCs nearing capacity
 
 ## Related
 
 - [Example: with-persistence.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-persistence.yaml)
 - [CRD Reference: Persistence](/docs/crd/node-profile)
+- [Containerlab: configuration artifacts](https://containerlab.dev/manual/conf-artifacts/)

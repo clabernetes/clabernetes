@@ -3,6 +3,7 @@ package deviceplan
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,6 +25,14 @@ type Preparer struct {
 	Adapter     Adapter
 	PayloadRoot string
 	HTTPClient  *http.Client
+	// PersistentNodeIDs marks Nodes whose artifact volume is a PersistentVolumeClaim; their
+	// planned artifacts publish through the staging-ledger policy instead of unconditionally.
+	PersistentNodeIDs map[string]bool
+	// ResetTokens carries the projected device-state reset token per Node. A token that
+	// differs from the Node ledger's acknowledged token wipes and re-seeds its artifacts.
+	ResetTokens map[string]string
+	// Output receives human-readable preparation reports (preserved files, honored resets).
+	Output io.Writer
 }
 
 // Prepare verifies plan identity and materializes imported preparation artifacts below opaque,
@@ -170,6 +179,10 @@ func (p Preparer) Prepare(
 		return err
 	}
 	defer cleanupRuntime()
+	policy, err := p.newStagingPolicy(normalizedInput, normalizedPlan, artifactRoot)
+	if err != nil {
+		return err
+	}
 	// Leave parent directories preparation-writable while publishing leaves. Apply package
 	// directory modes, ownership, and extended attributes deepest-first after every leaf exists.
 	for _, item := range accepted {
@@ -180,6 +193,19 @@ func (p Preparer) Prepare(
 		if replacement, exists := divergent[item.node.Input.ID+"\x00"+item.artifact.Path]; exists {
 			source, artifact = runtimeLabDirs[item.node.Input.ID], replacement
 		}
+		publish, publishErr := policy.shouldPublish(
+			artifactRoot,
+			item.node.Input.ID,
+			artifact.Kind,
+			artifact.Path,
+			artifact.Digest,
+		)
+		if publishErr != nil {
+			return withNodeID(publishErr, item.node.Input.ID)
+		}
+		if !publish {
+			continue
+		}
 		if err = stagePreparedArtifact(
 			source,
 			artifactRoot,
@@ -188,6 +214,7 @@ func (p Preparer) Prepare(
 		); err != nil {
 			return withNodeID(err, item.node.Input.ID)
 		}
+		policy.recordPublished(item.node.Input.ID, artifact.Path, artifact.Digest)
 	}
 	for _, item := range slices.Backward(accepted) {
 		if item.artifact.Kind != ArtifactDirectory {
@@ -213,11 +240,12 @@ func (p Preparer) Prepare(
 			return withNodeID(err, node.ID)
 		}
 	}
-	if err = p.stagePayloads(ctx, normalizedInput, normalizedPlan, artifactRoot); err != nil {
+	err = p.stagePayloads(ctx, normalizedInput, normalizedPlan, artifactRoot, policy)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	return policy.flush(artifactRoot)
 }
 
 // renderRuntimeManagementArtifacts reruns imported generation with the Pod's runtime management
@@ -379,6 +407,7 @@ func (p Preparer) stagePayloads(
 	input Input,
 	plan Plan,
 	artifactRoot string,
+	policy *stagingPolicy,
 ) error {
 	if len(input.Payloads) == 0 {
 		return nil
@@ -435,18 +464,31 @@ func (p Preparer) stagePayloads(
 				Message:  "payload bytes do not match the accepted digest",
 			}
 		}
-		if stageErr := stageArtifactContent(
-			content,
+		publish, publishErr := policy.shouldPublish(
 			artifactRoot,
 			payload.NodeID,
+			ArtifactRegular,
 			file.ArtifactPath,
-			file.Mode,
-			file.UID,
-			file.GID,
-			nil,
-			behaviorPayloadStaging,
-		); stageErr != nil {
-			return withNodeID(stageErr, payload.NodeID)
+			payload.Digest,
+		)
+		if publishErr != nil {
+			return withNodeID(publishErr, payload.NodeID)
+		}
+		if publish {
+			if stageErr := stageArtifactContent(
+				content,
+				artifactRoot,
+				payload.NodeID,
+				file.ArtifactPath,
+				file.Mode,
+				file.UID,
+				file.GID,
+				nil,
+				behaviorPayloadStaging,
+			); stageErr != nil {
+				return withNodeID(stageErr, payload.NodeID)
+			}
+			policy.recordPublished(payload.NodeID, file.ArtifactPath, payload.Digest)
 		}
 		delete(files, payload.ID)
 	}

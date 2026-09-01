@@ -260,12 +260,16 @@ func (r *Reconciler) reconcilePersistentVolumeClaim(
 		existing = nil
 	}
 
+	retain := profile.Persistence.Reclaim == clabernetesapisv1alpha1.PersistenceReclaimRetain
+
 	if existing == nil {
 		rendered := r.PersistentVolumeClaimReconciler.Render(node, profile, nil)
 
-		err = ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
-		if err != nil {
-			return "", err
+		if !retain {
+			err = ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
+			if err != nil {
+				return "", err
+			}
 		}
 
 		r.Log.Infof("creating persistent volume claim for node %q", node.GetName())
@@ -275,12 +279,23 @@ func (r *Reconciler) reconcilePersistentVolumeClaim(
 
 	rendered := r.PersistentVolumeClaimReconciler.Render(node, profile, existing)
 
-	err = ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
-	if err != nil {
-		return "", err
+	if !retain {
+		err = ctrlruntimeutil.SetOwnerReference(node, rendered, r.Client.Scheme())
+		if err != nil {
+			return "", err
+		}
 	}
 
-	if r.PersistentVolumeClaimReconciler.Conforms(existing, rendered, node.GetUID()) {
+	if !ownedByUID(existing, node.GetUID()) {
+		// the claim predates this Node incarnation -- a retained claim being adopted, or a
+		// reclaim-policy transition. Refuse silently incompatible storage instead of mounting it.
+		err = r.PersistentVolumeClaimReconciler.AdoptionCompatible(existing, rendered)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if r.PersistentVolumeClaimReconciler.Conforms(existing, rendered, node.GetUID(), retain) {
 		return existing.GetName(), nil
 	}
 

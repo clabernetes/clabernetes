@@ -119,6 +119,7 @@ func appendEvaluatedNode(
 		Aliases:               slices.Clone(node.Config.Aliases),
 		ContainerIDs:          slices.Clone(nodeContainerIDs),
 		ReadinessContainerIDs: readinessContainerIDs,
+		EnforceStartupConfig:  node.Config.EnforceStartupConfig,
 	})
 	for index, recorded := range node.Containers {
 		containerID := nodeContainerIDs[index]
@@ -587,6 +588,27 @@ func validateMappedDefinition(node *EvaluatedNode, input Input) error {
 				Code: ErrorUnsupported, NodeID: node.Input.ID, Field: item.field,
 				Behavior: item.behavior,
 				Message:  "input has no direct-Pod plan mapping",
+			}
+		}
+	}
+
+	// Mirror containerlab's GenerateConfig contract generically: enforcing a startup
+	// configuration requires one, and cannot be combined with suppressing it.
+	if node.Config.EnforceStartupConfig {
+		if node.Config.StartupConfig == "" {
+			return &Error{
+				Code: ErrorInvalidInput, NodeID: node.Input.ID,
+				Field:    "definition.enforce-startup-config",
+				Behavior: behaviorImportedStartupConfig,
+				Message:  "enforce-startup-config requires a startup configuration",
+			}
+		}
+		if node.Config.SuppressStartupConfig {
+			return &Error{
+				Code: ErrorInvalidInput, NodeID: node.Input.ID,
+				Field:    "definition.enforce-startup-config",
+				Behavior: behaviorImportedStartupConfig,
+				Message:  "enforce-startup-config conflicts with suppress-startup-config",
 			}
 		}
 	}
