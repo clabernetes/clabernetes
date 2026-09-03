@@ -9,7 +9,7 @@ spec:
     persistence:
       # Enable PVC-backed storage for each node's lab directory
       enabled: true
-      # Size of the persistent volume (default: 5Gi)
+      # Size of the persistent volume (default: 512Mi)
       claimSize: "10Gi"
       # Optional: specify a storage class (uses default if not set)
       # storageClassName: "fast-ssd"

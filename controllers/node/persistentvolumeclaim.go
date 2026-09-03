@@ -86,7 +86,7 @@ func (r *PersistentVolumeClaimReconciler) Render(
 		storageClassName = new(persistence.StorageClassName)
 	}
 
-	pvcSize := resource.MustParse("5Gi")
+	pvcSize := resource.MustParse("512Mi")
 
 	if persistence.ClaimSize != "" {
 		userClaimSize, err := resource.ParseQuantity(persistence.ClaimSize)

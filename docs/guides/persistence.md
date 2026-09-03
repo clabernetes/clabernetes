@@ -42,7 +42,7 @@ spec:
             image: ghcr.io/nokia/srlinux:latest
 ```
 
-This creates a 5Gi PVC (default size) for each node using the cluster's default storage class.
+This creates a 512Mi PVC (default size) for each node using the cluster's default storage class.
 
 ### Custom Claim Size
 
@@ -56,9 +56,9 @@ spec:
 
 **Size considerations:**
 
-- SR Linux: 5-10Gi typically sufficient
-- SR OS: 10-20Gi recommended for larger VMs
-- Larger topologies with logging: Consider 20Gi+
+- The 512Mi default is intended for saved configurations and small generated artifacts
+- Increase the claim size when a device writes larger logs, checkpoints, or other state
+- The storage class may round the request up to its provider's minimum volume size
 
 ### Specifying Storage Class
 

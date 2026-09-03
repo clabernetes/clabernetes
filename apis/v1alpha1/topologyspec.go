@@ -60,7 +60,7 @@ type FileFromURL struct {
 type Persistence struct {
 	// Enabled indicates whether package-planned persistent artifacts are placed in a mounted PVC.
 	Enabled bool `json:"enabled"`
-	// ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 5Gi.
+	// ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 512Mi.
 	// If provided, the string value must be a valid kubernetes storage requests style string. Note
 	// the claim size *cannot be made smaller* once created, but it *can* be expanded. If you need
 	// to make the claim smaller you must delete the topology (or the node from the topology) and

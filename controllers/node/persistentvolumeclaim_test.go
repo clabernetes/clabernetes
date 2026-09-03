@@ -86,6 +86,10 @@ func TestReconcilePersistentVolumeClaimDefaultReclaimOwnsClaim(t *testing.T) {
 
 	claim := getReconciledClaim(t, reconciler, node)
 
+	if size := claim.Spec.Resources.Requests.Storage().String(); size != "512Mi" {
+		t.Fatalf("default claim size = %q, want 512Mi", size)
+	}
+
 	if !ownedByUID(claim, node.GetUID()) {
 		t.Fatalf("default-reclaim claim is not owned by its node: %#v", claim.OwnerReferences)
 	}
