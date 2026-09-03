@@ -1,62 +1,91 @@
 ---
 name: openspec-update-change
-description: Revise an OpenSpec change's planning artifacts while keeping them coherent. Use when requirements or design decisions change before implementation.
+description: Update an OpenSpec change by revising its existing planning artifacts and keeping them coherent with one another. Use when the user wants to revise a change's plan, fold new decisions into it, or reconcile its artifacts after an edit. Never edits code.
+allowed-tools: Bash(openspec:*)
+license: MIT
+compatibility: Requires openspec CLI.
+metadata:
+  author: openspec
+  version: "1.0"
+  generatedBy: "1.11.0"
 ---
 
-# Update an OpenSpec change
+Revise a change's existing planning artifacts and keep them coherent. Never edit code.
 
-Update an existing OpenSpec change's planning artifacts. This workflow edits planning artifacts only; it never edits application code.
+**Store selection:** If the user names a store (a store is a standalone OpenSpec repo registered on this machine) or the work lives in one, run `openspec store list --json` to discover registered store ids, then pass `--store <id>` on the commands that read or write specs and changes (`new change`, `status`, `instructions`, `list`, `show`, `validate`, `archive`, `doctor`, `context`, `schemas`, `view`). Once selected, treat `--store <id>` as sticky for the rest of the workflow. Every unscoped example of those commands below is shorthand: before running it, append the flag. For example, run `openspec status --change "<name>" --json --store "<id>"`, not the unscoped form shown below. Other commands do not take the flag. Hints printed by commands already carry the flag; keep it on follow-ups. Without a store, commands act on the nearest local `openspec/` root.
 
-## Input
+**Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
-Optionally specify a change name and the requested revision. If the change or revision is unclear, ask the user before editing.
+`/openspec-continue-change` is an optional workflow and may not be installed. Before suggesting it anywhere below, verify that it is available. If it is unavailable, `openspec status --change "<name>" --json` shows the next artifact and `openspec instructions "<artifact-id>" --change "<name>" --json` explains how to create it.
 
-## Steps
+**Steps**
 
-### 1. Select the change
+1. **Select the change**
 
-   If a change name is not provided, run:
+   If a name is provided, use it. Otherwise:
+   - Infer from conversation context if the user mentioned a change
+   - Auto-select if only one active change exists
+   - If ambiguous, run `openspec list --json` to get available changes sorted by most recently modified, and ask the user to select one
 
-   ```bash
-   openspec list --json
-   ```
+   When prompting, present the top 3-4 most recently modified changes as options, showing:
+   - Change name
+   - Schema (from `schema` field if present, otherwise "spec-driven")
+   - Status (e.g., "0/5 tasks", "complete", "no tasks")
+   - How recently it was modified (from `lastModified` field)
 
-   Ask the user to choose an active change when selection is ambiguous.
+   Mark the most recently modified change as "(Recommended)" since it's likely what the user wants to update.
 
-### 2. Resolve and read the change
+   Always announce: "Using change: <name>" and how to override (e.g., `/openspec-update-change <other>`).
 
-   Run:
-
+2. **Get the change's artifacts**
    ```bash
    openspec status --change "<name>" --json
    ```
+   Parse the JSON to understand current state. The response includes:
+   - `schemaName`: The workflow schema being used (e.g., "spec-driven")
+   - `artifacts`: Array of artifacts with their status ("done", "skipped", "ready", "blocked")
+   - `isPlanningComplete`: Boolean indicating if all planning artifacts are complete. Older CLI versions expose the same value as `isComplete`.
+   - `planningHome`, `changeRoot`, `artifactPaths`, and `actionContext`: path and scope context. Use these instead of assuming repo-local paths.
 
-   Use the returned `changeRoot`, `artifactPaths`, and `actionContext`; do not assume artifact paths. If the action context is `workspace-planning` and has no allowed edit roots, stop before editing.
+   The artifact ids and paths come from the active schema - do NOT assume them, and do NOT branch on hardcoded artifact names. Custom schemas must work unchanged.
 
-   Read every existing proposal, spec, design, and task artifact listed by the status output.
+   The files to edit are `artifactPaths.<id>.existingOutputPaths` - the concrete files that exist on disk, already glob-expanded for glob artifacts (e.g. `specs/**/*.md`). Do NOT write to `resolvedOutputPath`: for a glob artifact it is still the glob pattern, not a real file.
 
-### 3. Plan the revision
+3. **Understand the request**
+   - If the user asked for a specific revision ("the design now uses X"), that is the starting edit.
+   - If they only said "update" / "make this coherent", treat it as a coherence review: read the existing artifacts and check them against each other for contradictions, gaps, and duplication.
 
-   Identify which artifacts are affected and how the revision should propagate between them. Preserve content unrelated to the requested change.
+4. **Read and reconcile**
+   - Read the artifact(s) the request touches and the change's other existing artifacts.
+   - Apply the requested edit. Then check every other existing artifact against it - in ANY direction: an edit to a later artifact may require revising an earlier one, not only the other way around. Build order is a useful reading order, not a constraint on which artifacts may be revised.
+   - Note everything that is now inconsistent, missing, or contradictory.
+   - Revise only files that already exist (`existingOutputPaths`). Do NOT create artifacts that don't exist yet, and do NOT invent new files under a glob artifact - note them and point the user to `/openspec-continue-change` to create them.
+   - If the change is already coherent, say so and make no edits.
 
-   Before each file edit, show the proposed change and ask the user to confirm it. Do not change implementation files or mark tasks complete unless explicitly requested.
+5. **Confirm and apply, one artifact at a time**
+   - Show each proposed revision and why. Write only after the user confirms.
+   - If the user rejects a revision, do not write it - leave that artifact unchanged.
+   - When a substantial rewrite is needed, get that artifact's rules and template first:
+     ```bash
+     openspec instructions "<artifact-id>" --change "<name>" --json
+     ```
 
-### 4. Apply and check the revision
+6. **Point to the next step (guidance only - NEVER act on it)**
+   - Artifacts still missing -> suggest `/openspec-continue-change` to create them.
+   - Change already implemented (tasks checked off / already applied) -> the code may no longer match the revised plan; suggest `/openspec-apply-change` to carry the delta into code.
+   - Everything done and implemented -> suggest `/openspec-archive-change`.
 
-   Apply only the confirmed planning-artifact edits. Re-read the changed artifacts and check for contradictions between proposal, specs, design, and tasks.
+**Output**
 
-   Run:
+After each invocation, show:
+- Which artifacts were revised (and which proposed revisions were rejected)
+- Anything deferred to `/openspec-continue-change` (not-yet-created artifacts or files)
+- Where the change stands and the recommended next command
 
-   ```bash
-   openspec status --change "<name>"
-   ```
-
-   If appropriate, recommend `/opsx:continue` for missing artifacts, `/opsx:apply` for implementation, or `/opsx:archive` when the plan is complete.
-
-## Guardrails
-
-- Planning artifacts only; never edit application code.
-- Read all existing artifacts before proposing changes.
-- Confirm each artifact edit with the user.
-- Preserve scenarios, decisions, and tasks not affected by the revision.
-- Ask for clarification instead of guessing when the requested revision conflicts with the existing plan.
+**Guardrails**
+- Planning artifacts only - NEVER edit implementation code. If the revised plan implies code changes, stop and point to `/openspec-apply-change`.
+- Use the artifact ids and paths reported by `openspec status`; never branch on hardcoded artifact names.
+- Edit only the concrete files in `existingOutputPaths`; never write to a glob `resolvedOutputPath`.
+- Do not advance the build frontier: no new artifacts, no new files under glob artifacts - that is `/openspec-continue-change`'s job.
+- Confirm every edit with the user before writing.
+- If the request changes the change's *intent* rather than refining it, first verify whether the optional `/openspec-new-change` workflow is available. If it is, recommend starting fresh with `/openspec-new-change` (the "Update vs. Start Fresh" heuristic). If it is unavailable, ask for a distinct unused change name and recommend `openspec new change "<new-change-name>"` instead.
