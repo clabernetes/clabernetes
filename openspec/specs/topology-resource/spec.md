@@ -36,7 +36,12 @@ The compiler SHALL parse the source definition and expand topology defaults, kin
 
 ### Requirement: Compilation emits explicit NodeProfile references
 
-The compiler SHALL convert topology-level Kubernetes realization policy into one or more NodeProfiles and SHALL stamp each emitted Node with the appropriate `profileRef`. It MUST preserve supported direct management policy and MUST NOT emit Docker, launcher-image, nested-CRI, or containerlab-version policy.
+The compiler SHALL convert topology-level Kubernetes realization policy into one or more
+NodeProfiles and SHALL stamp each emitted Node with the appropriate `profileRef`. It SHALL copy
+`Topology.spec.expose.exposeType` into every generated NodeProfile that applies the Topology's
+exposure policy, and neither the Topology nor generated NodeProfiles SHALL contain a
+`disableExpose` field. It MUST preserve supported direct management policy and MUST NOT emit
+Docker, launcher-image, nested-CRI, or containerlab-version policy.
 
 #### Scenario: Nodes share topology policy
 
@@ -52,6 +57,11 @@ The compiler SHALL convert topology-level Kubernetes realization policy into one
 
 - **WHEN** an existing Topology defines management settings with supported direct semantics
 - **THEN** the compiler preserves those settings in the generated resources that own them
+
+#### Scenario: Topology disables expose Services
+
+- **WHEN** a Topology sets `spec.expose.exposeType: None`
+- **THEN** every generated NodeProfile carrying its exposure policy sets `exposeType: None`
 
 ### Requirement: Generated resources have deterministic identity and ownership
 
