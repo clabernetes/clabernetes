@@ -173,7 +173,10 @@ func (c *Clabverter) buildInMemoryTopology() (*clabernetesapisv1alpha1.Topology,
 	}
 
 	topology.Spec.Definition.Containerlab = c.rawClabConfig
-	topology.Spec.Expose.DisableExpose = c.disableExpose
+	topology.Spec.Expose.ExposeType = clabverterExposeType(
+		c.disableExpose,
+		topology.Spec.Expose.ExposeType,
+	)
 	topology.Spec.ImagePull.PullSecrets = c.imagePullSecrets
 
 	files := map[string][]topologyConfigMapTemplateVars{}
@@ -229,4 +232,12 @@ func (c *Clabverter) buildInMemoryTopology() (*clabernetesapisv1alpha1.Topology,
 	}
 
 	return topology, nil
+}
+
+func clabverterExposeType(disable bool, configured string) string {
+	if disable {
+		return "None"
+	}
+
+	return configured
 }

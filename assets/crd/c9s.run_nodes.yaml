@@ -515,7 +515,8 @@ spec:
               profileRef:
                 description: |-
                   ProfileRef optionally names the same-namespace NodeProfile supplying direct
-                  workload policy. When omitted, global Config defaults are used.
+                  workload policy. When omitted, built-in defaults and supported global Config defaults are
+                  used.
                 properties:
                   name:
                     default: ""
@@ -592,7 +593,7 @@ spec:
               appliedProfile:
                 description: |-
                   AppliedProfile identifies the NodeProfile revision successfully applied to the
-                  direct workload. It is nil when the Node uses only global Config defaults.
+                  direct workload. It is nil when the Node uses built-in and supported global Config defaults.
                 properties:
                   generation:
                     description: Generation is the applied NodeProfile generation.

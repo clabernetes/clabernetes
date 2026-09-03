@@ -25,8 +25,8 @@ spec:
       openAPIV3Schema:
         description: |-
           NodeProfile holds reusable Kubernetes realization policy for Nodes. A Node applies at most
-          one NodeProfile through spec.profileRef; fields omitted from the profile inherit the global
-          Config defaults.
+          one NodeProfile through spec.profileRef; fields omitted from the profile use built-in defaults
+          or, where supported, global Config defaults.
         properties:
           apiVersion:
             description: |-
@@ -84,10 +84,6 @@ spec:
                   disableAutoExpose:
                     description: DisableAutoExpose disables automatic exposure of
                       the default port list.
-                    type: boolean
-                  disableExpose:
-                    description: DisableExpose indicates if exposing Nodes via a Service
-                      should be disabled.
                     type: boolean
                   exposeType:
                     description: ExposeType configures the Service type used for exposing

@@ -145,7 +145,7 @@ func (r *ServiceReconciler) RenderExposeService(
 	exposedPorts *clabernetesapisv1alpha1.NodeExposedPorts,
 ) *k8scorev1.Service {
 	if exposedPorts == nil || len(exposedPorts.Ports) == 0 ||
-		resolvedProfile.DisableExpose || resolvedProfile.ExposeType == exposeTypeNone {
+		resolvedProfile.ExposeType == exposeTypeNone {
 		return nil
 	}
 

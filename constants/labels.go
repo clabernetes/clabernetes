@@ -59,7 +59,7 @@ const (
 	TopologyServiceTypeFabric = "fabric"
 	// TopologyServiceTypeExpose is one of the allowed values for the LabelTopologyServiceType label
 	// type -- this indicates that this service is of the type that is used for exposing ports on
-	// a containerlab node via a LoadBalancer service.
+	// a containerlab node.
 	TopologyServiceTypeExpose = "expose"
 	// TopologyServiceTypeAlias is one of the allowed values for the LabelTopologyServiceType
 	// label type -- this indicates that this service realizes one containerlab network alias as

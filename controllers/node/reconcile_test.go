@@ -271,6 +271,169 @@ func TestRenderDirectAliasService(t *testing.T) {
 	}
 }
 
+func TestRenderDirectExposeServiceTypes(t *testing.T) {
+	t.Parallel()
+
+	node := nodeReconcileTestNode()
+	exposedPorts := &clabernetesapisv1alpha1.NodeExposedPorts{
+		Ports: []clabernetesapisv1alpha1.NodeExposedPort{{
+			DestinationPort: 22,
+			ExposePort:      22,
+			Protocol:        string(k8scorev1.ProtocolTCP),
+		}},
+	}
+	reconciler := NewServiceReconciler(
+		&claberneteslogging.FakeInstance{},
+		clabernetesconfig.GetFakeManager,
+	)
+
+	tests := []struct {
+		name        string
+		exposeType  string
+		serviceType k8scorev1.ServiceType
+		headless    bool
+		nilService  bool
+	}{
+		{name: "built-in default", serviceType: k8scorev1.ServiceTypeLoadBalancer},
+		{
+			name:        "load balancer",
+			exposeType:  "LoadBalancer",
+			serviceType: k8scorev1.ServiceTypeLoadBalancer,
+		},
+		{name: "cluster ip", exposeType: "ClusterIP", serviceType: k8scorev1.ServiceTypeClusterIP},
+		{
+			name:        "headless",
+			exposeType:  "Headless",
+			serviceType: k8scorev1.ServiceTypeClusterIP,
+			headless:    true,
+		},
+		{name: "none", exposeType: "None", nilService: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			service := reconciler.RenderDirectExposeService(
+				node,
+				node.GetName(),
+				&ResolvedProfile{ExposeType: test.exposeType},
+				exposedPorts,
+			)
+			if test.nilService {
+				if service != nil {
+					t.Fatalf("service = %#v, want nil", service)
+				}
+
+				return
+			}
+
+			if service == nil || service.Spec.Type != test.serviceType ||
+				serviceIsHeadless(service) != test.headless {
+				t.Fatalf(
+					"service = %#v, want type %q headless=%t",
+					service,
+					test.serviceType,
+					test.headless,
+				)
+			}
+		})
+	}
+
+	if service := reconciler.RenderDirectExposeService(
+		node,
+		node.GetName(),
+		&ResolvedProfile{ExposeType: "ClusterIP"},
+		&clabernetesapisv1alpha1.NodeExposedPorts{},
+	); service != nil {
+		t.Fatalf("empty exposed ports rendered service %#v", service)
+	}
+}
+
+func TestNoneExposurePrunesOnlyExposeService(t *testing.T) {
+	t.Parallel()
+
+	scheme := nodeReconcileTestScheme(t)
+	node := nodeReconcileTestNode()
+	ownerReferences := []metav1.OwnerReference{{UID: node.GetUID()}}
+	expose := &k8scorev1.Service{ObjectMeta: metav1.ObjectMeta{
+		Name: node.GetName(), Namespace: node.GetNamespace(), OwnerReferences: ownerReferences,
+	}}
+	fabric := &k8scorev1.Service{ObjectMeta: metav1.ObjectMeta{
+		Name: FabricServiceName(node.GetName()), Namespace: node.GetNamespace(),
+		OwnerReferences: ownerReferences,
+	}}
+	alias := &k8scorev1.Service{ObjectMeta: metav1.ObjectMeta{
+		Name: "srl1-alt", Namespace: node.GetNamespace(), OwnerReferences: ownerReferences,
+	}}
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(node, expose, fabric, alias).Build()
+	reconciler := &Reconciler{
+		Log:    &claberneteslogging.FakeInstance{},
+		Client: client,
+	}
+
+	_, err := reconciler.reconcileRenderedExposeService(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name   string
+		exists bool
+	}{
+		{name: node.GetName()},
+		{name: FabricServiceName(node.GetName()), exists: true},
+		{name: alias.GetName(), exists: true},
+	} {
+		err = client.Get(
+			context.Background(),
+			apimachinerytypes.NamespacedName{Namespace: node.GetNamespace(), Name: test.name},
+			&k8scorev1.Service{},
+		)
+		if test.exists && err != nil {
+			t.Fatalf("service %q was removed: %s", test.name, err)
+		}
+		if !test.exists && !apimachineryerrors.IsNotFound(err) {
+			t.Fatalf("expose service %q was not removed: %v", test.name, err)
+		}
+	}
+}
+
+func TestServiceNeedsRecreateForHeadlessTransitions(t *testing.T) {
+	t.Parallel()
+
+	ordinary := &k8scorev1.Service{Spec: k8scorev1.ServiceSpec{
+		Type: k8scorev1.ServiceTypeClusterIP, ClusterIP: "10.96.0.20",
+	}}
+	headless := &k8scorev1.Service{Spec: k8scorev1.ServiceSpec{
+		Type: k8scorev1.ServiceTypeClusterIP, ClusterIP: k8scorev1.ClusterIPNone,
+	}}
+	loadBalancer := &k8scorev1.Service{Spec: k8scorev1.ServiceSpec{
+		Type: k8scorev1.ServiceTypeLoadBalancer, ClusterIP: "10.96.0.21",
+	}}
+
+	for _, test := range []struct {
+		name     string
+		existing *k8scorev1.Service
+		rendered *k8scorev1.Service
+		expected bool
+	}{
+		{name: "ordinary to headless", existing: ordinary, rendered: headless, expected: true},
+		{name: "headless to ordinary", existing: headless, rendered: ordinary, expected: true},
+		{name: "load balancer to ordinary", existing: loadBalancer, rendered: ordinary},
+		{name: "ordinary unchanged", existing: ordinary, rendered: ordinary},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			if actual := serviceNeedsRecreate(test.existing, test.rendered); actual != test.expected {
+				t.Fatalf("serviceNeedsRecreate() = %t, want %t", actual, test.expected)
+			}
+		})
+	}
+}
+
 func TestReconcileDirectAliasServicesCreatesAndPrunes(t *testing.T) {
 	t.Parallel()
 

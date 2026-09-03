@@ -9,8 +9,8 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // NodeProfile holds reusable Kubernetes realization policy for Nodes. A Node applies at most
-// one NodeProfile through spec.profileRef; fields omitted from the profile inherit the global
-// Config defaults.
+// one NodeProfile through spec.profileRef; fields omitted from the profile use built-in defaults
+// or, where supported, global Config defaults.
 // +k8s:openapi-gen=true
 // +kubebuilder:resource:path="nodeprofiles",shortName="c9sprofile"
 // +kubebuilder:printcolumn:JSONPath=".metadata.creationTimestamp",name=Age,type=date
@@ -50,9 +50,6 @@ type NodeProfileSpec struct {
 // NodeProfileExpose holds the expose policy fields of a NodeProfile. Pointers distinguish
 // an omitted value from an explicit false value.
 type NodeProfileExpose struct {
-	// DisableExpose indicates if exposing Nodes via a Service should be disabled.
-	// +optional
-	DisableExpose *bool `json:"disableExpose,omitempty"`
 	// DisableAutoExpose disables automatic exposure of the default port list.
 	// +optional
 	DisableAutoExpose *bool `json:"disableAutoExpose,omitempty"`

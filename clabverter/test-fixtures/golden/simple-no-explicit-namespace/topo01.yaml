@@ -84,8 +84,7 @@ spec:
       tolerations: null
   expose:
     disableAutoExpose: false
-    disableExpose: true
-    exposeType: LoadBalancer
+    exposeType: None
   imagePull:
     pullSecrets:
     - regcred
