@@ -427,6 +427,17 @@ func (r *Reconciler) reconcileDirect(
 	}
 	labels, annotations := r.directMetadata(node)
 	annotations[clabernetesinternaldirectpod.NodeUIDAnnotation] = string(node.GetUID())
+	deviceStateResets := map[string]string{}
+	for _, memberName := range groupMembers {
+		member := nodesByName[memberName]
+		if member == nil {
+			continue
+		}
+		token := member.GetAnnotations()[clabernetesinternaldirectpod.DeviceStateResetAnnotation]
+		if token != "" {
+			deviceStateResets[string(member.GetUID())] = token
+		}
+	}
 	owner := *metav1.NewControllerRef(node,
 		clabernetesapisv1alpha1.SchemeGroupVersion.WithKind(nodeCRKind))
 	primaryContainerResources := r.directPrimaryContainerResources(profile)
@@ -452,6 +463,7 @@ func (r *Reconciler) reconcileDirect(
 		ApplicationImagePullPolicy: profile.ImagePullPolicy,
 		Payloads:                   planInput.Payloads,
 		PersistentVolumeClaims:     persistentVolumeClaims,
+		DeviceStateResets:          deviceStateResets,
 		EnableContainerStopSignals: r.configManagerGetter().GetContainerStopSignals(),
 	}
 	existingDeployment, err := r.currentOwnedDirectDeployment(ctx, node)

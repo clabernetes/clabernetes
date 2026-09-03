@@ -199,11 +199,13 @@ func RunLifecycle(
 ) error {
 	return runLifecycle(ctx, clabernetesinternaldeviceplan.Input{},
 		plan, phase, containerID, artifactRoot,
-		"", "", "", "", false)
+		"", "", "", "", nil, false)
 }
 
 // RunLifecycleWithImported executes one plan phase from inside the target application container.
 // The immutable Input is required before any opaque imported package hook may run.
+// persistentNodeIDs marks the Nodes whose artifact volume is persistent; a Save against any
+// other Node warns that the saved configuration cannot survive Pod replacement.
 func RunLifecycleWithImported(
 	ctx context.Context,
 	input clabernetesinternaldeviceplan.Input,
@@ -215,9 +217,10 @@ func RunLifecycleWithImported(
 	certificateRoot,
 	entropyRoot,
 	revision string,
+	persistentNodeIDs []string,
 ) error {
 	return runLifecycle(ctx, input, plan, phase, containerID, artifactRoot, scratchRoot,
-		certificateRoot, entropyRoot, revision, true)
+		certificateRoot, entropyRoot, revision, persistentNodeIDs, true)
 }
 
 func runLifecycle(
@@ -231,6 +234,7 @@ func runLifecycle(
 	certificateRoot,
 	entropyRoot,
 	revision string,
+	persistentNodeIDs []string,
 	validateInput bool,
 ) error {
 	if ctx == nil {
@@ -356,6 +360,12 @@ func runLifecycle(
 				runtime,
 			); err != nil {
 				return fmt.Errorf("lifecycle action %q failed: %w", action.ID, err)
+			}
+			if warning := savePersistenceWarning(
+				persistentNodeIDs,
+				action.Target.NodeID,
+			); warning != "" {
+				_, _ = fmt.Fprintln(os.Stdout, warning)
 			}
 		default:
 			return fmt.Errorf(
@@ -626,7 +636,12 @@ func readLifecycleFile(
 			errors.New("cannot read bounded lifecycle source")
 	}
 	digest := clabernetesinternaldeviceplan.Digest(content)
-	if digest != file.Digest && !runtimeGeneratorContent(file, digest, artifactRoot) {
+	if digest != file.Digest && !runtimeGeneratorContent(file, digest, artifactRoot) &&
+		!clabernetesinternaldeviceplan.PreservedDeviceArtifact(
+			artifactRoot,
+			file.NodeID,
+			file.ArtifactPath,
+		) {
 		return clabernetesinternaldeviceplan.FilePlan{},
 			nil,
 			errors.New("lifecycle source digest differs from plan")
@@ -638,6 +653,21 @@ func readLifecycleFile(
 // runtimeGeneratorContent reports whether content is the preparation-recorded runtime render of
 // a generator file: preparation re-renders generator files with the Pod's runtime management
 // identity and records their digests beside the staged artifacts.
+// savePersistenceWarning returns the operator-visible Save output warning when the target
+// Node's artifact volume is not persistent, and an empty string otherwise. Device Pods hold no
+// Kubernetes credentials, so the Save output itself is the warning channel.
+func savePersistenceWarning(persistentNodeIDs []string, nodeID string) string {
+	if slices.Contains(persistentNodeIDs, nodeID) {
+		return ""
+	}
+
+	return fmt.Sprintf(
+		"WARNING: Node %s has no persistent artifact volume;"+
+			" the saved configuration will not survive Pod replacement",
+		nodeID,
+	)
+}
+
 func runtimeGeneratorContent(
 	file clabernetesinternaldeviceplan.FilePlan,
 	digest,

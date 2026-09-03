@@ -1,6 +1,8 @@
 package node
 
 import (
+	"errors"
+	"fmt"
 	"maps"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -13,6 +15,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 )
+
+// errRetainedClaimIncompatible refuses adopting a retained claim whose storage does not match
+// the declared persistence policy.
+var errRetainedClaimIncompatible = errors.New("retained claim is incompatible")
 
 // PersistentVolumeClaimReconciler renders/validates the optional PVC that is used to persist
 // the containerlab directory of a node -- exposed for testing purposes.
@@ -80,7 +86,7 @@ func (r *PersistentVolumeClaimReconciler) Render(
 		storageClassName = new(persistence.StorageClassName)
 	}
 
-	pvcSize := resource.MustParse("5Gi")
+	pvcSize := resource.MustParse("512Mi")
 
 	if persistence.ClaimSize != "" {
 		userClaimSize, err := resource.ParseQuantity(persistence.ClaimSize)
@@ -116,11 +122,14 @@ func (r *PersistentVolumeClaimReconciler) Render(
 	return pvc
 }
 
-// Conforms checks if the existing pvc conforms with the rendered pvc.
+// Conforms checks if the existing pvc conforms with the rendered pvc. With a Retain reclaim
+// policy the claim must carry no owner reference, so it survives Node deletion; otherwise it
+// must be owner-referenced to exactly the expected Node.
 func (r *PersistentVolumeClaimReconciler) Conforms(
 	existingPVC,
 	renderedPVC *k8scorev1.PersistentVolumeClaim,
 	expectedOwnerUID apimachinerytypes.UID,
+	retain bool,
 ) bool {
 	existingClaimSize := existingPVC.Spec.Resources.Requests.Storage().Value()
 	renderedClaimSize := renderedPVC.Spec.Resources.Requests.Storage().Value()
@@ -154,6 +163,11 @@ func (r *PersistentVolumeClaimReconciler) Conforms(
 		return false
 	}
 
+	if retain {
+		// a retained claim must not be garbage-collected with any Node
+		return len(existingPVC.ObjectMeta.OwnerReferences) == 0
+	}
+
 	if len(existingPVC.ObjectMeta.OwnerReferences) != 1 {
 		// we should have only one owner reference, the owning node
 		return false
@@ -167,4 +181,34 @@ func (r *PersistentVolumeClaimReconciler) Conforms(
 	// note: spec is immutable after creation so not bothering checking that
 
 	return true
+}
+
+// AdoptionCompatible verifies a retained claim may back the given rendered claim: the storage
+// class must match the declared one and the retained claim must not be smaller than requested.
+// Note that Conforms already treats a *larger* retained claim as acceptable.
+func (r *PersistentVolumeClaimReconciler) AdoptionCompatible(
+	existingPVC,
+	renderedPVC *k8scorev1.PersistentVolumeClaim,
+) error {
+	renderedStorageClass := ""
+	if renderedPVC.Spec.StorageClassName != nil {
+		renderedStorageClass = *renderedPVC.Spec.StorageClassName
+	}
+
+	existingStorageClass := ""
+	if existingPVC.Spec.StorageClassName != nil {
+		existingStorageClass = *existingPVC.Spec.StorageClassName
+	}
+
+	if renderedStorageClass != "" && existingStorageClass != renderedStorageClass {
+		return fmt.Errorf(
+			"%w: claim %q uses storage class %q but the persistence policy declares %q",
+			errRetainedClaimIncompatible,
+			existingPVC.GetName(),
+			existingStorageClass,
+			renderedStorageClass,
+		)
+	}
+
+	return nil
 }

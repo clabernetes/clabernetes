@@ -3379,7 +3379,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Persistence(
 					},
 					"claimSize": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 5Gi. If provided, the string value must be a valid kubernetes storage requests style string. Note the claim size *cannot be made smaller* once created, but it *can* be expanded. If you need to make the claim smaller you must delete the topology (or the node from the topology) and re-add it.",
+							Description: "ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 512Mi. If provided, the string value must be a valid kubernetes storage requests style string. Note the claim size *cannot be made smaller* once created, but it *can* be expanded. If you need to make the claim smaller you must delete the topology (or the node from the topology) and re-add it.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -3387,6 +3387,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Persistence(
 					"storageClassName": {
 						SchemaProps: spec.SchemaProps{
 							Description: "StorageClassName is the storage class to set in the PVC -- if not provided this will be left empty which will end up using your default storage class. Note that currently we assume you have (as default) or provide a dynamically provisionable storage class, hence no selector.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"reclaim": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Reclaim controls the claim's lifetime relative to its Node. \"Delete\" (the default) owner-references the claim to the Node, so deleting the Node garbage-collects the claim and its data. \"Retain\" leaves the claim in place when the Node is deleted; an equivalent recreated Node adopts the retained claim and boots from its preserved state. Retained claims that are no longer wanted must be deleted by hand.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

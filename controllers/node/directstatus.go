@@ -4,6 +4,7 @@ package node
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -447,6 +448,7 @@ func (r *Reconciler) updateDirectStatuses(
 			"NodeProfileResolved",
 			nodeProfileResolutionMessage(desiredStatus.AppliedProfile),
 		)
+		setDirectDeviceStateResetCondition(&desiredStatus, member, deployment, preparedStatus)
 
 		if err = r.updateNodeStatus(ctx, member, desiredStatus); err != nil {
 			return fmt.Errorf("updating direct status for Node %s: %w", memberName, err)
@@ -768,6 +770,57 @@ func setDirectStatusCondition(
 	})
 }
 
+// setDirectDeviceStateResetCondition reports the device-state reset token projected into the
+// direct workload template for this Node. The token is acknowledged once the workload carrying
+// it completed preparation, which is when the artifact re-seed actually happened.
+func setDirectDeviceStateResetCondition(
+	desiredStatus *clabernetesapisv1alpha1.NodeStatus,
+	node *clabernetesapisv1alpha1.Node,
+	deployment *k8sappsv1.Deployment,
+	preparedStatus metav1.ConditionStatus,
+) {
+	token := ""
+
+	if deployment != nil {
+		raw := deployment.Spec.Template.
+			Annotations[clabernetesinternaldirectpod.DeviceStateResetsAnnotation]
+		if raw != "" {
+			tokens := map[string]string{}
+			if json.Unmarshal([]byte(raw), &tokens) == nil {
+				token = tokens[string(node.GetUID())]
+			}
+		}
+	}
+
+	if token == "" {
+		apimachinerymeta.RemoveStatusCondition(
+			&desiredStatus.Conditions,
+			clabernetesapisv1alpha1.NodeConditionDeviceStateReset,
+		)
+
+		return
+	}
+
+	conditionStatus := metav1.ConditionFalse
+	reason := "DeviceStateResetPending"
+	message := fmt.Sprintf("device-state reset %q awaits Pod preparation", token)
+
+	if preparedStatus == metav1.ConditionTrue {
+		conditionStatus = metav1.ConditionTrue
+		reason = "DeviceStateResetAcknowledged"
+		message = fmt.Sprintf("device-state reset %q re-seeded plan-owned artifacts", token)
+	}
+
+	setDirectStatusCondition(
+		desiredStatus,
+		node,
+		clabernetesapisv1alpha1.NodeConditionDeviceStateReset,
+		conditionStatus,
+		reason,
+		message,
+	)
+}
+
 func (r *Reconciler) recordDirectConditionTransitions(
 	node *clabernetesapisv1alpha1.Node,
 	previous,
@@ -817,7 +870,8 @@ func isDirectStatusCondition(conditionType string) bool {
 		clabernetesapisv1alpha1.NodeConditionPrepared,
 		clabernetesapisv1alpha1.NodeConditionConnectivityReady,
 		clabernetesapisv1alpha1.NodeConditionContainersReady,
-		clabernetesapisv1alpha1.NodeConditionLinkLifecycleAction:
+		clabernetesapisv1alpha1.NodeConditionLinkLifecycleAction,
+		clabernetesapisv1alpha1.NodeConditionDeviceStateReset:
 		return true
 	default:
 		return false

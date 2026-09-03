@@ -60,7 +60,7 @@ type FileFromURL struct {
 type Persistence struct {
 	// Enabled indicates whether package-planned persistent artifacts are placed in a mounted PVC.
 	Enabled bool `json:"enabled"`
-	// ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 5Gi.
+	// ClaimSize is the size of the PVC for this topology -- if not provided this defaults to 512Mi.
 	// If provided, the string value must be a valid kubernetes storage requests style string. Note
 	// the claim size *cannot be made smaller* once created, but it *can* be expanded. If you need
 	// to make the claim smaller you must delete the topology (or the node from the topology) and
@@ -72,7 +72,23 @@ type Persistence struct {
 	// have (as default) or provide a dynamically provisionable storage class, hence no selector.
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
+	// Reclaim controls the claim's lifetime relative to its Node. "Delete" (the default)
+	// owner-references the claim to the Node, so deleting the Node garbage-collects the claim
+	// and its data. "Retain" leaves the claim in place when the Node is deleted; an equivalent
+	// recreated Node adopts the retained claim and boots from its preserved state. Retained
+	// claims that are no longer wanted must be deleted by hand.
+	// +kubebuilder:validation:Enum=Delete;Retain
+	// +optional
+	Reclaim string `json:"reclaim,omitempty"`
 }
+
+// Supported persistence reclaim policies.
+const (
+	// PersistenceReclaimDelete garbage-collects the claim with its Node.
+	PersistenceReclaimDelete = "Delete"
+	// PersistenceReclaimRetain keeps the claim, and its data, past Node deletion.
+	PersistenceReclaimRetain = "Retain"
+)
 
 // Definition holds the underlying topology definition for the Topology CR. A Topology *must* have
 // one -- and only one -- definition type defined.

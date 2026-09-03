@@ -8,6 +8,7 @@ package directpod
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -75,15 +76,17 @@ const (
 	directMeshMemberLabel            = clabernetesconstants.LabelDirectMeshMember
 	planDigestAnnotation             = "c9s.run/node-plan-digest"
 	// node-runtime CLI invocation tokens.
-	runtimeCommandName   = "node-runtime"
-	runtimeFlagPlan      = "--plan"
-	runtimeFlagInput     = "--input"
-	runtimeFlagContainer = "--containerID"
-	runtimeFlagArtifacts = "--artifacts"
-	runtimeFlagScratch   = "--scratch"
-	runtimeFlagRevision  = "--revision"
-	runtimeFlagState     = "--state"
-	podAddressFieldPath  = "status.podIP"
+	runtimeCommandName        = "node-runtime"
+	runtimeFlagPlan           = "--plan"
+	runtimeFlagInput          = "--input"
+	runtimeFlagContainer      = "--containerID"
+	runtimeFlagArtifacts      = "--artifacts"
+	runtimeFlagScratch        = "--scratch"
+	runtimeFlagRevision       = "--revision"
+	runtimeFlagPersistentNode = "--persistentNode"
+	runtimeFlagReset          = "--reset"
+	runtimeFlagState          = "--state"
+	podAddressFieldPath       = "status.podIP"
 )
 
 // Stable direct workload identities consumed by the status reconciler.
@@ -92,8 +95,14 @@ const (
 	NodeUIDAnnotation                 = "c9s.run/direct-node-uid"
 	LinkLifecycleModeAnnotation       = "c9s.run/link-lifecycle-mode"
 	LinkLifecyclePlanDigestAnnotation = "c9s.run/link-lifecycle-plan-digest"
-	PreparationContainerName          = preparationName
-	ConnectivityContainerName         = connectivityName
+	// DeviceStateResetAnnotation is the user-facing Node annotation requesting a device-state
+	// reset with an opaque token.
+	DeviceStateResetAnnotation = "c9s.run/device-state-reset"
+	// DeviceStateResetsAnnotation carries the projected per-Node reset tokens on the workload
+	// template as canonical JSON, keyed by Node ID.
+	DeviceStateResetsAnnotation = "c9s.run/device-state-resets"
+	PreparationContainerName    = preparationName
+	ConnectivityContainerName   = connectivityName
 	// KubectlDefaultContainerAnnotation makes unqualified kubectl exec/logs target the logical
 	// primary application container rather than a c9s helper or imported component.
 	KubectlDefaultContainerAnnotation = "kubectl.kubernetes.io/default-container"
@@ -125,6 +134,7 @@ type Options struct {
 	ProbeSecretName                   string
 	ProbePolicies                     map[string]ProbePolicy
 	PersistentVolumeClaims            map[string]string
+	DeviceStateResets                 map[string]string
 	EnableContainerStopSignals        bool
 	EnableApplicationLogBroker        bool
 	LinkLifecycleMode                 clabernetesinternaldeviceplan.LinkApplyMode
@@ -420,10 +430,20 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 
 	delete(annotations, LinkLifecycleModeAnnotation)
 	delete(annotations, LinkLifecyclePlanDigestAnnotation)
+	delete(annotations, DeviceStateResetsAnnotation)
 
 	if options.LinkLifecycleMode != "" {
 		annotations[LinkLifecycleModeAnnotation] = string(options.LinkLifecycleMode)
 		annotations[LinkLifecyclePlanDigestAnnotation] = options.LinkLifecyclePlanDigest
+	}
+
+	if len(options.DeviceStateResets) != 0 {
+		resetPayload, resetErr := json.Marshal(options.DeviceStateResets)
+		if resetErr != nil {
+			return nil, fmt.Errorf("serializing device-state reset annotation: %w", resetErr)
+		}
+
+		annotations[DeviceStateResetsAnnotation] = string(resetPayload)
 	}
 
 	annotations[planDigestAnnotation] = planDigest
@@ -601,6 +621,7 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 		enableApplicationLogBroker,
 		options.EntropySecretName != "",
 		options.ConnectivityRevisionConfigMapName != "",
+		slices.Sorted(maps.Keys(options.PersistentVolumeClaims)),
 	)
 	if err != nil {
 		return nil, err
@@ -1217,6 +1238,7 @@ func renderApplicationLifecycle(
 	enableApplicationLogBroker bool,
 	hasEntropy bool,
 	hasConnectivityRevision bool,
+	persistentNodeIDs []string,
 ) (bool, bool, error) {
 	containerIndexes := make(map[string]int, len(plan.Containers))
 
@@ -1521,26 +1543,36 @@ func renderApplicationLifecycle(
 				container.Lifecycle = &k8scorev1.Lifecycle{}
 			}
 
+			postStartCommand := []string{
+				lifecycleBinaryPath,
+				runtimeCommandName,
+				"lifecycle",
+				runtimeFlagPlan,
+				lifecyclePlanRoot + "/plan.json",
+				runtimeFlagInput,
+				lifecycleInputRoot + "/input.json",
+				"--phase",
+				string(clabernetesinternaldeviceplan.PhasePostStart),
+				runtimeFlagContainer,
+				containerID,
+				runtimeFlagArtifacts,
+				lifecycleArtifactRoot,
+				runtimeFlagScratch,
+				lifecycleScratchRoot,
+				runtimeFlagRevision,
+				plan.Planner.Revision,
+			}
+
+			for _, nodeID := range persistentNodeIDs {
+				postStartCommand = append(
+					postStartCommand,
+					runtimeFlagPersistentNode,
+					nodeID,
+				)
+			}
+
 			container.Lifecycle.PostStart = &k8scorev1.LifecycleHandler{
-				Exec: &k8scorev1.ExecAction{Command: []string{
-					lifecycleBinaryPath,
-					runtimeCommandName,
-					"lifecycle",
-					runtimeFlagPlan,
-					lifecyclePlanRoot + "/plan.json",
-					runtimeFlagInput,
-					lifecycleInputRoot + "/input.json",
-					"--phase",
-					string(clabernetesinternaldeviceplan.PhasePostStart),
-					runtimeFlagContainer,
-					containerID,
-					runtimeFlagArtifacts,
-					lifecycleArtifactRoot,
-					runtimeFlagScratch,
-					lifecycleScratchRoot,
-					runtimeFlagRevision,
-					plan.Planner.Revision,
-				}},
+				Exec: &k8scorev1.ExecAction{Command: postStartCommand},
 			}
 			if importedPostDeployTargets[containerID] &&
 				certificateNames[containerNodes[containerID]] != "" {
@@ -2402,6 +2434,18 @@ func renderHelpers(
 		runtimeFlagArtifacts, artifactRootPath,
 		"--payloads", payloadRootPath,
 		runtimeFlagRevision, plan.Planner.Revision,
+	}
+
+	for _, nodeID := range slices.Sorted(maps.Keys(options.PersistentVolumeClaims)) {
+		preparationArgs = append(preparationArgs, runtimeFlagPersistentNode, nodeID)
+	}
+
+	for _, nodeID := range slices.Sorted(maps.Keys(options.DeviceStateResets)) {
+		preparationArgs = append(
+			preparationArgs,
+			runtimeFlagReset,
+			nodeID+"="+options.DeviceStateResets[nodeID],
+		)
 	}
 
 	if options.CertificateSecretName != "" {

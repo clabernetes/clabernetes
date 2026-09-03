@@ -1,0 +1,25 @@
+---
+apiVersion: c9s.run/v1alpha1
+kind: NodeProfile
+metadata:
+  name: persistent
+spec:
+  expose:
+    disableAutoExpose: true
+  deployment:
+    persistence:
+      enabled: true
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+  labels:
+    c9s.run/mode: direct
+spec:
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux
+  profileRef:
+    name: persistent
+  startup-config: |
+    set / system information location seeded-by-startup-config

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 
 	clabernetesclicker "github.com/clabernetes/clabernetes/clicker"
@@ -68,6 +69,8 @@ const (
 	deviceRuntimeSignal               = "signal"
 	deviceRuntimeNodeID               = "nodeID"
 	deviceRuntimeInterface            = "interface"
+	deviceRuntimePersistentNode       = "persistentNode"
+	deviceRuntimeReset                = "reset"
 	deviceRuntimeSnapLength           = "snapLength"
 	deviceRuntimePacketLimit          = "packetLimit"
 	deviceRuntimeDuration             = "duration"
@@ -260,6 +263,8 @@ func deviceRuntimeCommand() *cli.Command {
 					&cli.StringFlag{Name: devicePlanEntropy},
 					&cli.StringFlag{Name: devicePlanRevision, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeBinary},
+					&cli.StringSliceFlag{Name: deviceRuntimePersistentNode},
+					&cli.StringSliceFlag{Name: deviceRuntimeReset},
 				},
 				Action: func(c *cli.Context) error {
 					inputRaw, err := readBoundedFile(c.String(deviceRuntimeInput), 4<<20)
@@ -287,6 +292,18 @@ func deviceRuntimeCommand() *cli.Command {
 						ctx = context.Background()
 					}
 
+					resetTokens, err := parseDeviceResetTokens(
+						c.StringSlice(deviceRuntimeReset),
+					)
+					if err != nil {
+						return err
+					}
+
+					persistentNodeIDs := map[string]bool{}
+					for _, nodeID := range c.StringSlice(deviceRuntimePersistentNode) {
+						persistentNodeIDs[nodeID] = true
+					}
+
 					err = (clabernetesinternaldeviceplan.Preparer{
 						Adapter: clabernetesinternaldeviceplan.Adapter{
 							Revision:        c.String(devicePlanRevision),
@@ -295,7 +312,10 @@ func deviceRuntimeCommand() *cli.Command {
 							PodDNSServers: clabernetesinternaldirectruntime.
 								RuntimePodDNSServers(),
 						},
-						PayloadRoot: c.String(deviceRuntimePayloads),
+						PayloadRoot:       c.String(deviceRuntimePayloads),
+						PersistentNodeIDs: persistentNodeIDs,
+						ResetTokens:       resetTokens,
+						Output:            c.App.Writer,
 					}).Prepare(ctx, input, plan, c.String(deviceRuntimeArtifacts))
 					if err != nil || c.String(deviceRuntimeBinary) == "" {
 						return err
@@ -361,6 +381,7 @@ func deviceRuntimeCommand() *cli.Command {
 					&cli.StringFlag{Name: deviceRuntimePhase, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeContainer, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeConnectivityRevision},
+					&cli.StringSliceFlag{Name: deviceRuntimePersistentNode},
 				},
 				Action: func(c *cli.Context) error {
 					input, plan, err := readRuntimePlanInput(
@@ -397,6 +418,7 @@ func deviceRuntimeCommand() *cli.Command {
 						c.String(devicePlanCertificates),
 						c.String(devicePlanEntropy),
 						c.String(devicePlanRevision),
+						c.StringSlice(deviceRuntimePersistentNode),
 					)
 				},
 			},
@@ -668,6 +690,22 @@ func openDevicePlanInput(path string) (io.Reader, func(), error) {
 	}
 
 	return file, func() { _ = file.Close() }, nil
+}
+
+// parseDeviceResetTokens decodes repeated "<nodeID>=<token>" device-state reset flags.
+func parseDeviceResetTokens(values []string) (map[string]string, error) {
+	tokens := map[string]string{}
+
+	for _, value := range values {
+		nodeID, token, found := strings.Cut(value, "=")
+		if !found || nodeID == "" || token == "" {
+			return nil, fmt.Errorf("reset flag %q is not <nodeID>=<token>", value)
+		}
+
+		tokens[nodeID] = token
+	}
+
+	return tokens, nil
 }
 
 func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
