@@ -84,7 +84,6 @@ spec:
       tolerations: null
   expose:
     disableAutoExpose: false
-    disableExpose: false
   imagePull:
     pullSecrets:
     - regcred

@@ -17,7 +17,6 @@ metadata:
 spec:
   expose:
     disableAutoExpose: false
-    disableExpose: false
     useNodeMgmtIpv4Address: false
     useNodeMgmtIpv6Address: false
   statusProbes:

@@ -734,7 +734,7 @@ func compileDirectExposedPorts(
 			"resolved profile is nil",
 		)
 	}
-	if profile.DisableExpose || profile.ExposeType == exposeTypeNone {
+	if profile.ExposeType == exposeTypeNone {
 		return result, nil
 	}
 	nodesByID := make(map[string]*clabernetesapisv1alpha1.Node, len(groupMembers))

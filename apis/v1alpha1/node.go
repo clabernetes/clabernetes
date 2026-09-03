@@ -70,7 +70,8 @@ type NodeSpec struct {
 	NodeDefinition `json:",inline" yaml:",inline"`
 
 	// ProfileRef optionally names the same-namespace NodeProfile supplying direct
-	// workload policy. When omitted, global Config defaults are used.
+	// workload policy. When omitted, built-in defaults and supported global Config defaults are
+	// used.
 	// +optional
 	ProfileRef *k8scorev1.LocalObjectReference `json:"profileRef,omitempty" yaml:"-"`
 	// FilesFromConfigMap holds files staged from ConfigMaps for this Node's application containers.
@@ -106,7 +107,7 @@ type NodeStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// AppliedProfile identifies the NodeProfile revision successfully applied to the
-	// direct workload. It is nil when the Node uses only global Config defaults.
+	// direct workload. It is nil when the Node uses built-in and supported global Config defaults.
 	// +optional
 	AppliedProfile *AppliedProfileStatus `json:"appliedProfile,omitempty"`
 	// PlanDigest identifies the immutable direct device plan observed by this status.

@@ -16,7 +16,6 @@ type ResolvedProfile struct {
 	AppliedProfile *clabernetesapisv1alpha1.AppliedProfileStatus
 
 	// expose policy
-	DisableExpose          bool
 	DisableAutoExpose      bool
 	ExposeType             string
 	UseNodeMgmtIpv4Address bool
@@ -116,10 +115,6 @@ func applyProfileExpose(
 ) {
 	if expose == nil {
 		return
-	}
-
-	if expose.DisableExpose != nil {
-		resolved.DisableExpose = *expose.DisableExpose
 	}
 
 	if expose.DisableAutoExpose != nil {

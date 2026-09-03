@@ -99,13 +99,9 @@ type Definition struct {
 
 // Expose holds configurations relevant to how clabernetes exposes a topology.
 type Expose struct {
-	// DisableExpose indicates if exposing nodes via LoadBalancer service should be disabled, by
-	// default any mapped ports in a containerlab topology will be exposed.
-	// +optional
-	DisableExpose bool `json:"disableExpose"`
 	// DisableAutoExpose disables the automagic exposing of ports for a given topology. When this
-	// setting is disabled clabernetes will not auto add ports so if you want to expose (via a
-	// load balancer service) you will need to have ports outlined in your containerlab config.
+	// setting is enabled clabernetes will not auto add ports, so any ports to expose through the
+	// selected service type must be outlined in your containerlab config.
 	// When this is `false` (default), clabernetes will add and expose the
 	// following list of ports to whatever ports you have already defined:
 	//
@@ -124,21 +120,18 @@ type Expose struct {
 	// 9559  - tcp - p4rt
 	// 57400 - tcp - gnmi (nokia srl/sros default)
 	//
-	// This setting is *ignored completely* if `DisableExpose` is true!
-	//
 	// +optional
 	DisableAutoExpose bool `json:"disableAutoExpose"`
 	// ExposeType configures the service type(s) related to exposing the topology. This is an enum
 	// that has the following valid values:
-	// - None: expose is *not* disabled, but we just don't create any services related to the pods,
-	//         you may want to do this if you want to tickle the pods by pod name directly for some
-	//         reason while not having extra services floating around.
+	// - None: no expose services are created for topology nodes. Internal fabric and alias services
+	//         are unaffected.
 	// - ClusterIP: a clusterip service is created so you can hit that service name for the pods.
 	// - Headless: a headless service (clusterIP: None) is created. This is useful when you don't
 	//         need load-balancing or a single service IP but want to directly connect to pods via
 	//         DNS records that return pod IPs.
 	// - LoadBalancer: (default) creates a load balancer service so you can access your pods from
-	//         outside the cluster. this is/was the only behavior up to v0.2.4.
+	//         outside the cluster.
 	// +kubebuilder:validation:Enum=None;ClusterIP;Headless;LoadBalancer
 	// +kubebuilder:default=LoadBalancer
 	// +optional

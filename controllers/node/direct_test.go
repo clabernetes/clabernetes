@@ -1869,6 +1869,34 @@ func TestCompileDirectExposedPortsKeepsAutoExposeParity(t *testing.T) {
 			explicitOnly[node.GetName()],
 		)
 	}
+
+	node.Spec.Ports = []string{"22/tcp"}
+	explicitOnly, err = compileDirectExposedPorts(
+		plan,
+		&ResolvedProfile{DisableAutoExpose: true, ExposeType: "ClusterIP"},
+		[]string{node.GetName()},
+		map[string]*clabernetesapisv1alpha1.Node{node.GetName(): node},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if explicitOnly[node.GetName()] == nil || len(explicitOnly[node.GetName()].Ports) != 1 {
+		t.Fatalf("explicit ports with auto-expose disabled = %#v, want only port 22", explicitOnly)
+	}
+
+	service = NewServiceReconciler(
+		&claberneteslogging.FakeInstance{},
+		clabernetesconfig.GetFakeManager,
+	).RenderDirectExposeService(
+		node,
+		node.GetName(),
+		&ResolvedProfile{DisableAutoExpose: true, ExposeType: "ClusterIP"},
+		explicitOnly[node.GetName()],
+	)
+	if service == nil || service.Spec.Type != k8scorev1.ServiceTypeClusterIP ||
+		len(service.Spec.Ports) != 1 {
+		t.Fatalf("explicit ClusterIP expose Service = %#v", service)
+	}
 }
 
 func TestCompileDirectExposedPortsRejectsGroupedNamespaceCollision(t *testing.T) {

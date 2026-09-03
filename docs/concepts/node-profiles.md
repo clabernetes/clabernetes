@@ -50,8 +50,10 @@ spec:
 ```
 
 Profiles are not selected by labels and are not merged into inheritance chains. Fields set on the
-referenced profile take precedence over global `Config` defaults; fields it omits continue through
-global resolution.
+referenced profile take precedence over supported global `Config` defaults; omitted fields use
+their built-in defaults or, where available, Config resolution. Service exposure uses the built-in
+`LoadBalancer` default because Config has no exposure-mode field. Set `spec.expose.exposeType` to
+`ClusterIP`, `Headless`, or `None` to override it.
 
 The `spec.scheduling.affinity` field accepts the native Kubernetes node affinity, pod affinity, and
 pod anti-affinity structure. A single NodeProfile can be referenced by multiple Nodes, so the
@@ -85,4 +87,5 @@ dedicated profile rather than a partial child profile.
 
 - [Resource and scheduling guide](/docs/guides/resource-management)
 - [Image pull guide](/docs/guides/image-pull)
+- [Service exposure guide](/docs/guides/expose-configuration)
 - [NodeProfile reference](/docs/crd/node-profile)

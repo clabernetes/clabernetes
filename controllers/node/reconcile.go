@@ -676,7 +676,7 @@ func nodeProfileResolutionMessage(
 	applied *clabernetesapisv1alpha1.AppliedProfileStatus,
 ) string {
 	if applied == nil {
-		return "using global Config defaults without an explicit NodeProfile"
+		return "using built-in and global Config defaults without an explicit NodeProfile"
 	}
 
 	return fmt.Sprintf(

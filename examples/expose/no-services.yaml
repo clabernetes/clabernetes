@@ -1,4 +1,4 @@
-# Topology with no Kubernetes services created
+# Topology with no client-facing expose services created
 # Use this when you don't need external access to nodes
 # and want to minimize resource usage
 apiVersion: c9s.run/v1alpha1
@@ -7,9 +7,8 @@ metadata:
   name: no-services
 spec:
   expose:
-    # Completely disables all service creation
-    # Nodes can still communicate via tunnels
-    disableExpose: true
+    # Disables expose services; internal fabric and alias services remain
+    exposeType: None
   definition:
     containerlab: |
       name: no-services

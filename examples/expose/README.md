@@ -12,7 +12,8 @@ Clabernetes can expose topology nodes via Kubernetes services. By default:
 
 ### no-services.yaml
 
-Completely disables service creation with `disableExpose: true`.
+Disables per-node expose Services with `exposeType: None`. Internal fabric and alias Services
+remain available.
 
 **Use cases:**
 - Nodes only need to communicate with each other (not externally)
@@ -22,7 +23,7 @@ Completely disables service creation with `disableExpose: true`.
 ```yaml
 spec:
   expose:
-    disableExpose: true
+    exposeType: None
 ```
 
 ### cluster-ip-only.yaml
@@ -44,6 +45,16 @@ Access nodes by service name:
 ```bash
 # From another pod in the cluster
 ssh admin@cluster-ip-only-srl1.<namespace>.svc.cluster.local
+```
+
+### headless.yaml
+
+Creates headless expose Services whose DNS records resolve directly to Pod addresses.
+
+```yaml
+spec:
+  expose:
+    exposeType: Headless
 ```
 
 ### no-auto-expose.yaml
@@ -98,7 +109,8 @@ When `disableAutoExpose: false` (default), these ports are automatically exposed
 |-------|-------------|
 | `LoadBalancer` | External access via cloud LB (default) |
 | `ClusterIP` | Internal cluster access only |
-| `None` | No services, but config preserved |
+| `Headless` | Direct Pod addresses through Service DNS |
+| `None` | No per-node expose Service |
 
 ## Related
 

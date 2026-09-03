@@ -60,6 +60,56 @@ func TestResolveProfileDefaults(t *testing.T) {
 	}
 }
 
+func TestResolveProfileExposeTypes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		profile  *clabernetesapisv1alpha1.NodeProfile
+		expected string
+	}{
+		{name: "built-in default", expected: "LoadBalancer"},
+		{
+			name:     "omitted profile value",
+			profile:  testNodeProfile("omitted", nil),
+			expected: "LoadBalancer",
+		},
+		{name: "load balancer", expected: "LoadBalancer"},
+		{name: "cluster ip", expected: "ClusterIP"},
+		{name: "headless", expected: "Headless"},
+		{name: "none", expected: "None"},
+	}
+
+	for index := 2; index < len(tests); index++ {
+		tests[index].profile = testNodeProfile(tests[index].name, func(
+			spec *clabernetesapisv1alpha1.NodeProfileSpec,
+		) {
+			spec.Expose = &clabernetesapisv1alpha1.NodeProfileExpose{
+				ExposeType: tests[index].expected,
+			}
+		})
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			resolved, err := clabernetescontrollersnode.ResolveProfile(
+				testProfileNode("srl1", nil),
+				test.profile,
+				clabernetesconfig.GetFakeManager,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if resolved.ExposeType != test.expected {
+				t.Fatalf("expose type = %q, want %q", resolved.ExposeType, test.expected)
+			}
+		})
+	}
+}
+
 func TestResolveExplicitNodeProfile(t *testing.T) {
 	profile := testNodeProfile(
 		"custom",

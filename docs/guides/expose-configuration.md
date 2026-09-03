@@ -7,7 +7,43 @@ This guide explains how to configure Clabernetes service exposure for your netwo
 
 ## Overview
 
-By default, Clabernetes creates LoadBalancer services for each node in your topology, automatically exposing common network management ports. This behavior can be customized to match your access requirements.
+By default, Clabernetes creates a LoadBalancer expose Service for each node and automatically
+selects common network management ports. `exposeType` changes that Service to `ClusterIP` or
+`Headless`, or suppresses it with `None`.
+
+Exposure policy applies only to the Service named after the node. It does not disable the
+headless `<node>-wire` Service used for fabric connectivity or headless Services created for
+declared network aliases.
+
+The default `LoadBalancer` mode is built into c9s. The global `Config` resource does not configure
+an exposure mode.
+
+> **Upgrade notice:** `disableExpose` has been removed from the Topology and NodeProfile APIs.
+> Before upgrading the CRDs or controller, replace every `disableExpose: true` with
+> `exposeType: None`. Otherwise the removed setting cannot suppress the built-in LoadBalancer
+> default. The new structural schemas reject manifests that still contain `disableExpose`.
+
+Inspect live exposure policy before upgrading:
+
+```bash
+kubectl get topologies,nodeprofiles -A -o yaml
+```
+
+Update the declarative source and apply it with the old controller still running:
+
+```yaml
+# Before
+spec:
+  expose:
+    disableExpose: true
+```
+
+```yaml
+# After
+spec:
+  expose:
+    exposeType: None
+```
 
 ## How exposure works
 
@@ -55,9 +91,9 @@ controls whether that Service is a `ClusterIP`, `LoadBalancer`, `Headless`, or d
 
 ## Exposure Options
 
-### Complete Disable (`disableExpose: true`)
+### Disable Expose Services (`exposeType: None`)
 
-When you don't need any Kubernetes services for your topology nodes:
+When you do not need client-facing Services for topology nodes:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -66,7 +102,7 @@ metadata:
   name: internal-only
 spec:
   expose:
-    disableExpose: true
+    exposeType: None
   definition:
     containerlab: |
       name: internal
@@ -79,9 +115,10 @@ spec:
 
 **Effects:**
 
-- No expose services are created for any node
+- No expose Services are created for any node
 - Nodes still communicate with each other over their Links; fabric connectivity does not
   depend on expose Services
+- Fabric and alias Services remain available
 - No external access to nodes
 
 **Use cases:**
@@ -89,6 +126,36 @@ spec:
 - Automated testing pipelines where nodes only need internal connectivity
 - Resource-constrained clusters where LoadBalancers are expensive
 - Security-sensitive environments
+
+### Direct NodeProfile Configuration
+
+Directly authored Nodes configure exposure through an explicitly referenced, same-namespace
+NodeProfile. Profiles are not selected by labels and are not merged:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: NodeProfile
+metadata:
+  name: internal-access
+spec:
+  expose:
+    exposeType: ClusterIP
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+spec:
+  profileRef:
+    name: internal-access
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux:latest
+```
+
+One NodeProfile can apply the same exposure policy to multiple Nodes. A direct Node without a
+`profileRef`, or whose referenced profile omits `exposeType`, uses the built-in `LoadBalancer`
+default. A Topology instead applies `spec.expose` topology-wide and compiles it into each generated
+NodeProfile.
 
 ### Disable Auto-Expose (`disableAutoExpose: true`)
 
@@ -204,7 +271,7 @@ spec:
 
 ### None
 
-No services but configuration preserved:
+No per-node expose Service:
 
 ```yaml
 spec:
@@ -214,8 +281,9 @@ spec:
 
 **Characteristics:**
 
-- Similar to `disableExpose: true` but the expose configuration is preserved
-- Useful when you might want to enable services later without changing other settings
+- Skips exposed-port allocation and removes any existing owned expose Service
+- Does not remove fabric or alias Services
+- Re-enable exposure by selecting `LoadBalancer`, `ClusterIP`, or `Headless`
 
 ## Using Management IPs
 
@@ -273,11 +341,10 @@ spec:
 | Configuration | Services Created | External Access | Port Control |
 | -------------- | ------------------ | ----------------- | -------------- |
 | Default | LoadBalancer | Yes | Auto + Manual |
-| `disableExpose: true` | None | No | N/A |
 | `disableAutoExpose: true` | LoadBalancer | Yes | Manual only |
 | `exposeType: ClusterIP` | ClusterIP | No | Auto + Manual |
 | `exposeType: Headless` | Headless (clusterIP: None) | No | Auto + Manual |
-| `exposeType: None` | None | No | N/A |
+| `exposeType: None` | No expose Service | No | N/A |
 
 ## Accessing Nodes
 
@@ -329,7 +396,7 @@ kubectl exec -it deploy/srl1 -- sr_cli
 
 1. **Production deployments**: Use `exposeType: LoadBalancer` with `disableAutoExpose: true` to expose only necessary ports
 
-2. **CI/CD pipelines**: Use `disableExpose: true` when nodes only need internal connectivity
+2. **CI/CD pipelines**: Use `exposeType: None` when nodes only need fabric connectivity
 
 3. **Development**: Use default settings for convenience
 

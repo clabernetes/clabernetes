@@ -39,8 +39,7 @@ spec:
   {{- end }}
   {{- if .DisableExpose }}
   expose:
-    disableExpose: true
-    exposeType: LoadBalancer
+    exposeType: None
   {{- end }}
   {{- if .Naming }}
   naming: {{ .Naming }}

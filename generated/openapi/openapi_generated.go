@@ -1006,17 +1006,9 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Expose(
 				Description: "Expose holds configurations relevant to how clabernetes exposes a topology.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"disableExpose": {
-						SchemaProps: spec.SchemaProps{
-							Description: "DisableExpose indicates if exposing nodes via LoadBalancer service should be disabled, by default any mapped ports in a containerlab topology will be exposed.",
-							Default:     false,
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
 					"disableAutoExpose": {
 						SchemaProps: spec.SchemaProps{
-							Description: "DisableAutoExpose disables the automagic exposing of ports for a given topology. When this setting is disabled clabernetes will not auto add ports so if you want to expose (via a load balancer service) you will need to have ports outlined in your containerlab config. When this is `false` (default), clabernetes will add and expose the following list of ports to whatever ports you have already defined:\n\n21    - tcp - ftp 22    - tcp - ssh 23    - tcp - telnet 80    - tcp - http 161   - udp - snmp 443   - tcp - https 830   - tcp - netconf (over ssh) 5000  - tcp - telnet for vrnetlab qemu host 5900  - tcp - vnc 6030  - tcp - gnmi (arista default) 9339  - tcp - gnmi/gnoi 9340  - tcp - gribi 9559  - tcp - p4rt 57400 - tcp - gnmi (nokia srl/sros default)\n\nThis setting is *ignored completely* if `DisableExpose` is true!",
+							Description: "DisableAutoExpose disables the automagic exposing of ports for a given topology. When this setting is enabled clabernetes will not auto add ports, so any ports to expose through the selected service type must be outlined in your containerlab config. When this is `false` (default), clabernetes will add and expose the following list of ports to whatever ports you have already defined:\n\n21    - tcp - ftp 22    - tcp - ssh 23    - tcp - telnet 80    - tcp - http 161   - udp - snmp 443   - tcp - https 830   - tcp - netconf (over ssh) 5000  - tcp - telnet for vrnetlab qemu host 5900  - tcp - vnc 6030  - tcp - gnmi (arista default) 9339  - tcp - gnmi/gnoi 9340  - tcp - gribi 9559  - tcp - p4rt 57400 - tcp - gnmi (nokia srl/sros default)",
 							Default:     false,
 							Type:        []string{"boolean"},
 							Format:      "",
@@ -1024,7 +1016,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Expose(
 					},
 					"exposeType": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ExposeType configures the service type(s) related to exposing the topology. This is an enum that has the following valid values: - None: expose is *not* disabled, but we just don't create any services related to the pods,\n        you may want to do this if you want to tickle the pods by pod name directly for some\n        reason while not having extra services floating around.\n- ClusterIP: a clusterip service is created so you can hit that service name for the pods. - Headless: a headless service (clusterIP: None) is created. This is useful when you don't\n        need load-balancing or a single service IP but want to directly connect to pods via\n        DNS records that return pod IPs.\n- LoadBalancer: (default) creates a load balancer service so you can access your pods from\n        outside the cluster. this is/was the only behavior up to v0.2.4.",
+							Description: "ExposeType configures the service type(s) related to exposing the topology. This is an enum that has the following valid values: - None: no expose services are created for topology nodes. Internal fabric and alias services\n        are unaffected.\n- ClusterIP: a clusterip service is created so you can hit that service name for the pods. - Headless: a headless service (clusterIP: None) is created. This is useful when you don't\n        need load-balancing or a single service IP but want to directly connect to pods via\n        DNS records that return pod IPs.\n- LoadBalancer: (default) creates a load balancer service so you can access your pods from\n        outside the cluster.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -2468,7 +2460,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfile(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "NodeProfile holds reusable Kubernetes realization policy for Nodes. A Node applies at most one NodeProfile through spec.profileRef; fields omitted from the profile inherit the global Config defaults.",
+				Description: "NodeProfile holds reusable Kubernetes realization policy for Nodes. A Node applies at most one NodeProfile through spec.profileRef; fields omitted from the profile use built-in defaults or, where supported, global Config defaults.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -2549,13 +2541,6 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileExpose(
 				Description: "NodeProfileExpose holds the expose policy fields of a NodeProfile. Pointers distinguish an omitted value from an explicit false value.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
-					"disableExpose": {
-						SchemaProps: spec.SchemaProps{
-							Description: "DisableExpose indicates if exposing Nodes via a Service should be disabled.",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
 					"disableAutoExpose": {
 						SchemaProps: spec.SchemaProps{
 							Description: "DisableAutoExpose disables automatic exposure of the default port list.",
@@ -3189,7 +3174,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 					},
 					"profileRef": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ProfileRef optionally names the same-namespace NodeProfile supplying direct workload policy. When omitted, global Config defaults are used.",
+							Description: "ProfileRef optionally names the same-namespace NodeProfile supplying direct workload policy. When omitted, built-in defaults and supported global Config defaults are used.",
 							Ref:         ref("k8s.io/api/core/v1.LocalObjectReference"),
 						},
 					},
@@ -3308,7 +3293,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeStatus(
 					},
 					"appliedProfile": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AppliedProfile identifies the NodeProfile revision successfully applied to the direct workload. It is nil when the Node uses only global Config defaults.",
+							Description: "AppliedProfile identifies the NodeProfile revision successfully applied to the direct workload. It is nil when the Node uses built-in and supported global Config defaults.",
 							Ref: ref(
 								"github.com/clabernetes/clabernetes/apis/v1alpha1.AppliedProfileStatus",
 							),

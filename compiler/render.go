@@ -251,7 +251,6 @@ func renderTopologyNodeProfile(
 ) *clabernetesapisv1alpha1.NodeProfile {
 	spec := clabernetesapisv1alpha1.NodeProfileSpec{
 		Expose: &clabernetesapisv1alpha1.NodeProfileExpose{
-			DisableExpose: new(topology.Spec.Expose.DisableExpose),
 			DisableAutoExpose: new(
 				topology.Spec.Expose.DisableAutoExpose,
 			),

@@ -428,6 +428,36 @@ func TestRenderNodeProfiles(t *testing.T) {
 	assertPerNodeNodeProfile(t, profiles[1])
 }
 
+func TestRenderNodeProfilesPreservesNoneExposeType(t *testing.T) {
+	t.Parallel()
+
+	topology, compiled := renderTestTopology(t)
+	topology.Spec.Expose.ExposeType = "None"
+
+	profiles := clabernetescompiler.RenderNodeProfiles(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+	for _, profile := range profiles {
+		if profile.Spec.Expose == nil || profile.Spec.Expose.ExposeType != "None" {
+			t.Fatalf(
+				"profile %q expose policy = %+v, want None",
+				profile.GetName(),
+				profile.Spec.Expose,
+			)
+		}
+
+		content, err := json.Marshal(profile.Spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(content), "disableExpose") {
+			t.Fatalf("profile %q retained disableExpose: %s", profile.GetName(), content)
+		}
+	}
+}
+
 func TestRenderNodeProfilesPreservesAffinity(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 	affinity := &k8scorev1.Affinity{
