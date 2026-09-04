@@ -23,6 +23,10 @@ A typical installation method uses the [c9s Helm chart](https://github.com/clabe
   Link wires need nothing special; they are plain UDP between the connectivity sidecars.
 - **`/dev/kvm` on workers** only when running VM-backed (vrnetlab) kinds; the plan requests the
   device through ordinary Kubernetes device semantics.
+- **Pod-to-Pod UDP in lab namespaces**: device Pods exchange management mesh traffic on UDP
+  14789 and link wires on UDP 14790, and their connectivity sidecar watches Links through the
+  Kubernetes API. NetworkPolicies must allow both ports between device Pods and egress to the
+  API server.
 - **Registry access is cluster administration**: private device images use ordinary
   `imagePullSecrets`, and mirrors or insecure registries are configured on the workers'
   container runtime, not in c9s. See [Image pulling](/docs/guides/image-pull).

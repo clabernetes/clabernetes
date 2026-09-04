@@ -199,7 +199,7 @@ expansion. In every component form, Clabernetes requires
 one namespace owner and verifies that every dependent component resolves into that namespace;
 invalid ownership fails planning rather than selecting a card arbitrarily.
 
-The same Containerlab definition can be converted with `clabverter --emit-crs`. The imported
+The same Containerlab definition can be converted with `clabverter --emitCRs`. The imported
 containerlab package remains responsible for component expansion and fabric construction, while
 Clabernetes owns the Kubernetes Node, device Pod, readiness, and shared payload lifecycle.
 

@@ -187,9 +187,10 @@ riding the preserved Pod underlay, with peers discovered through a namespace-sco
 headless Service (`c9s-management-mesh`), so nodes joining or leaving the namespace converge
 on the sidecar's reconcile tick without restarting any Pod. The management *gateway* stays
 strictly Pod-local: every Pod answers the gateway address itself with one deterministic
-identity, and gateway traffic never crosses the mesh. Lab members also resolve each other by
-node name through namespace-local Services; declared `aliases` add extra headless Services
-bound to the same Pod.
+identity, and gateway traffic never crosses the mesh. Inside a device, node names, declared
+`aliases`, and chassis component names resolve to management addresses through a
+namespace-wide peer directory written into each Pod's hosts file; the per-node and alias
+Services serve the rest of the cluster.
 
 A device that firewalls its own network namespace (EOS installs a default-deny input policy)
 cannot sever these transports: the sidecar keeps accept rules for its mesh and wire UDP ports
@@ -234,7 +235,7 @@ if any files would be mounted when using this topology file, and if so renders k
 configmaps containing the file contents and a Topology that appropriately mounts them into
 the pods.
 
-clabverter can also skip the Topology object entirely: `--emit-crs` renders the primitive
+clabverter can also skip the Topology object entirely: `--emitCRs` renders the primitive
 NodeProfile/Link/Node manifests directly, using the same compile and render pipeline as the
 in-cluster compiler (without Topology owner references). This is the preferred path when the
 aggregate source Topology would be too large to persist. Both paths validate identically and

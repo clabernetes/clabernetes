@@ -31,6 +31,31 @@ A Node can reference one same-namespace
 [NodeProfile](/docs/concepts/node-profiles). If the reference is omitted, global `Config`
 defaults apply. An explicit reference that does not exist prevents the Node from being realized.
 
+### Node fields
+
+The Node spec accepts the portable containerlab node vocabulary. Unknown fields are rejected
+when the manifest is applied, and known fields without a Pod mapping fail planning with a
+diagnostic naming the field.
+
+- **Realized as declared:** `kind`, `type`, `image`, `image-pull-policy`, `entrypoint`, `cmd`,
+  `env`, `user`, `sysctls`, `devices`, `cap-add`, `privileged`, `security-opts`, `tmpfs`,
+  `shm-size`, `cpu`, `memory`, `dns`, `healthcheck`, `startup-delay`, `restart-policy`
+  (`always` or `unless-stopped`), `exec`, `mgmt-ipv4`, `mgmt-ipv6`, `ports`, `aliases`,
+  `group`, `extras`, `components`, and `certificate`.
+- **Files:** `startup-config` (inline text or a path), `license`, and `binds` take their content
+  from payloads attached to the Node, see
+  [Containerlab file fields](/docs/guides/file-mounting#containerlab-file-fields).
+- **Grouping:** `network-mode: container:<primary>` places the Node in the primary Node's Pod.
+  Other network modes are rejected.
+- **Link changes:** `link-apply-mode` (`live`, `restart`, or `recreate`) overrides the kind's
+  default action when Links of the Node change.
+- **Rejected at planning:** `config` (config-engine variables), `env-files`, `runtime`,
+  `stages`, and `credentials`, see
+  [Differences from containerlab](/docs/concepts/containerlab-differences).
+
+Inside a device, node names, aliases, and chassis component names resolve to management
+addresses, see [Management network](/docs/guides/management-network#name-resolution).
+
 ## Link
 
 A Link declares exactly two endpoints: one wire, nothing else.
@@ -59,7 +84,7 @@ allocated wire id.
 
 Each Node grows only with its own configuration and each Link remains one wire. This removes the
 single aggregate-object size limit of a source Topology and allows tooling such as `clabverter
---emit-crs` to produce independently reconciled resources.
+--emitCRs` to produce independently reconciled resources.
 
 Direct resources do not promise unlimited scale: Kubernetes API capacity, controller throughput,
 and the total object count still matter.
@@ -71,4 +96,5 @@ The
 contains a NodeProfile, two Nodes, and one Link.
 
 See the [Node reference](/docs/crd/node) and
-[Link reference](/docs/crd/link) for all fields.
+[Link reference](/docs/crd/link) for all fields, and [Operating a lab](/docs/guides/lab-operations)
+for reading Node and Link status.

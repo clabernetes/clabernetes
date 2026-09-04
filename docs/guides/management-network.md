@@ -102,9 +102,15 @@ Services and external destinations stay reachable through ordinary Kubernetes ne
 
 ## Name resolution
 
-Lab members also resolve each other by node name: each node has a namespace-local Service
-named after it, and declared `aliases` add extra headless Services bound to the same Pod. A
-device can target `srl2` or a declared alias instead of a management address.
+Inside a device, every node name in the namespace, every declared alias, and every chassis
+component name resolves to that node's management address. c9s writes these entries into the
+Pod's `/etc/hosts` from a namespace-wide peer directory and updates them as nodes join or
+leave, without restarting any Pod. A device can therefore target `srl2` exactly as on
+containerlab's management network, on any port.
+
+Other workloads in the cluster reach a node through its Services instead: the expose Service
+named after the node and one headless Service per alias, both as
+`<name>.<namespace>.svc.cluster.local`.
 
 ## Related
 

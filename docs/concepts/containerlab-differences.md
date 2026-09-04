@@ -87,3 +87,5 @@ diagnostic. Nothing is silently dropped.
 - **The kubelet pulls images.** Pull policy and pull Secrets are Kubernetes-native; there is
   no image import, pull-through, or per-lab insecure-registry setting. c9s reads only registry
   metadata and fails readiness if the running image diverges from the planned digest.
+- **`env-files` and config-engine `config` are rejected.** Environment variables go in `env`,
+  and templated configuration must be rendered before the definition is applied.

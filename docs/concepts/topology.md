@@ -88,6 +88,11 @@ The compiler:
 4. prunes generated resources removed from the source
 5. aggregates bounded readiness and resource counts into Topology status
 
+`status.observedGeneration` records the Topology generation whose compiled resources were last
+applied, so the reported readiness refers to the current definition only once it equals
+`metadata.generation`. `status.topologyState` is `deploying`, `running`, `degraded`, or
+`deployfailed`.
+
 ## Child-resource name conflicts
 
 Generated Node, Link, and NodeProfile names are namespace-scoped and are not automatically
@@ -109,7 +114,7 @@ A Topology still embeds the entire source lab in one Kubernetes object. For larg
 prefer direct resources or use:
 
 ```bash
-clabverter --emit-crs <topology-file>
+clabverter --emitCRs <topology-file>
 ```
 
 This emits NodeProfile, Node, and Link manifests without persisting an aggregate Topology.

@@ -42,6 +42,11 @@ and targets that same port on the device Pod directly, with no Docker port publi
 between. This is why `ports` entries declare a destination port only. Declared `aliases`
 each add an extra headless Service selecting the node's Pod under the alias name.
 
+Nodes that share one Pod through `network-mode: container:<primary>` share one port space. A
+port an image exposes is kept for the first member that brings it, an explicit `ports` entry
+takes precedence over an image-exposed port, and two members declaring the same explicit port
+fail planning.
+
 ### Portable containerlab topologies
 
 A normal containerlab `ports` entry publishes the port on the local Docker host. When a port is
@@ -59,7 +64,7 @@ topology:
 
 The value is a comma-separated list using the same destination-port grammar as `Node.spec.ports`.
 Each entry is a destination port with an optional `tcp` or `udp` protocol. The c9s topology
-compiler and `clabverter --emit-crs` consume all entries into `Node.spec.ports`; the label is not
+compiler and `clabverter --emitCRs` consume all entries into `Node.spec.ports`; the label is not
 copied to Kubernetes labels. Invalid entries fail compilation. Local containerlab keeps the value
 as an inert container label and does not publish either port on the host.
 
