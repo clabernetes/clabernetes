@@ -21,7 +21,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -224,7 +223,6 @@ func ResolveDevicePod(
 // RenderVNCPod renders a capability-free, non-restarting Wireshark/noVNC session.
 func RenderVNCPod(namespace, image string) *k8scorev1.Pod {
 	falseValue := false
-	trueValue := true
 	fsGroup := int64(1000)
 
 	return &k8scorev1.Pod{
@@ -257,10 +255,9 @@ func RenderVNCPod(namespace, image string) *k8scorev1.Pod {
 				}},
 				ReadinessProbe: &k8scorev1.Probe{
 					ProbeHandler: k8scorev1.ProbeHandler{
-						HTTPGet: &k8scorev1.HTTPGetAction{
-							Path: "/",
-							Port: intstr.FromString("novnc"),
-						},
+						Exec: &k8scorev1.ExecAction{Command: []string{
+							"sh", "-c", "test -p \"${CLABWIRE_CAPTURE_PIPE:?}\"",
+						}},
 					},
 					PeriodSeconds:    1,
 					TimeoutSeconds:   1,
@@ -268,24 +265,17 @@ func RenderVNCPod(namespace, image string) *k8scorev1.Pod {
 				},
 				SecurityContext: &k8scorev1.SecurityContext{
 					AllowPrivilegeEscalation: &falseValue,
-					ReadOnlyRootFilesystem:   &trueValue,
 					Capabilities: &k8scorev1.Capabilities{
-						Drop: []k8scorev1.Capability{"ALL"},
+						Drop: []k8scorev1.Capability{"NET_RAW"},
 					},
 				},
-				VolumeMounts: []k8scorev1.VolumeMount{
-					{Name: "config", MountPath: "/config"},
-					{Name: "pcaps", MountPath: "/pcaps"},
-					{Name: "run", MountPath: "/run"},
-					{Name: "tmp", MountPath: "/tmp"},
-				},
+				VolumeMounts: []k8scorev1.VolumeMount{{
+					Name: "pcaps", MountPath: "/pcaps",
+				}},
 			}},
-			Volumes: []k8scorev1.Volume{
-				{Name: "config", VolumeSource: emptyDirectory()},
-				{Name: "pcaps", VolumeSource: emptyDirectory()},
-				{Name: "run", VolumeSource: emptyDirectory()},
-				{Name: "tmp", VolumeSource: emptyDirectory()},
-			},
+			Volumes: []k8scorev1.Volume{{
+				Name: "pcaps", VolumeSource: emptyDirectory(),
+			}},
 			EnableServiceLinks: &falseValue,
 		},
 	}
@@ -298,7 +288,7 @@ func runVNCSession(
 	devicePod string,
 	command []string,
 	options Options,
-) error {
+) (resultErr error) {
 	if strings.TrimSpace(options.VNCImage) == "" {
 		return errors.New("VNC image is required")
 	}
@@ -314,7 +304,28 @@ func runVNCSession(
 	if err != nil {
 		return fmt.Errorf("creating Wireshark VNC Pod: %w", err)
 	}
-	defer deleteSessionPod(client, pod)
+	defer func() {
+		if resultErr != nil {
+			tailLines := int64(100)
+			logContext, cancelLogs := context.WithTimeout(context.Background(), 10*time.Second)
+			logs, logErr := client.CoreV1().Pods(pod.GetNamespace()).GetLogs(
+				pod.GetName(),
+				&k8scorev1.PodLogOptions{
+					Container: vncContainerName,
+					TailLines: &tailLines,
+				},
+			).DoRaw(logContext)
+			cancelLogs()
+			if logErr == nil && strings.TrimSpace(string(logs)) != "" {
+				resultErr = fmt.Errorf(
+					"%w: Wireshark VNC logs:\n%s",
+					resultErr,
+					strings.TrimSpace(string(logs)),
+				)
+			}
+		}
+		deleteSessionPod(client, pod)
+	}()
 
 	if err = waitForReady(ctx, client, pod.GetNamespace(), pod.GetName()); err != nil {
 		return err
