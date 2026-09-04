@@ -28,7 +28,7 @@ over this profile default.
 
 ## Private registry credentials
 
-Create a Docker registry Secret in the same namespace as the target Node or Topology. In the example below, the Secret is named `regcred` is created in the `lab` namespace for a private registry at `registry.example.com` with username `myuser` and password `mypass`:
+Create a Docker registry Secret in the same namespace as the target Node or Topology. In the example below, the Secret named `regcred` is created in the `lab` namespace for a private registry at `registry.example.com` with username `myuser` and password `mypass`:
 
 ```bash
 kubectl -n lab create secret docker-registry regcred \
@@ -37,9 +37,29 @@ kubectl -n lab create secret docker-registry regcred \
   --docker-password=mypass
 ```
 
-The created registry credentials Secret can be referenced in a NodeProfile or Topology to allow the kubelet to pull images from the private registry.
+The created registry credentials Secret can be configured as a global default or referenced in a
+NodeProfile or Topology to allow the kubelet to pull images from the private registry.
 
-<Tabs items={['NodeProfile', 'Topology']}>
+<Tabs items={['Config', 'NodeProfile', 'Topology']}>
+<Tab>
+Set a global default in the singleton Config when every workload namespace should use the same
+pull Secret name:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Config
+metadata:
+  name: clabernetes
+spec:
+  imagePull:
+    pullSecrets:
+      - regcred
+```
+
+Nodes inherit this list unless their NodeProfile overrides it. An explicitly empty NodeProfile
+list clears the global default. Because Secrets are namespaced, each listed Secret must exist in
+every workload namespace that inherits the default.
+</Tab>
 <Tab>
 Here is an example of a NodeProfile that uses the `regcred` Secret for image pulling:
 
@@ -116,9 +136,9 @@ With kubernetes-reflector, you can install it in your cluster in the `c9s` names
 helm upgrade --namespace c9s --install reflector oci://ghcr.io/emberstack/helm-charts/reflector
 ```
 
-Then create the `regred` Secret in the `c9s` namespace and configure the reflector to mirror it to all or some namespaces.
+Then create the `regcred` Secret in the `c9s` namespace and configure the reflector to mirror it to all or some namespaces.
 
-```bash title="annotating the regred Secret to mirror it to all namespaces"
+```bash title="annotating the regcred Secret to mirror it to all namespaces"
 kubectl -n c9s annotate secret regcred \
   reflector.v1.k8s.emberstack.com/reflection-allowed=true \
   reflector.v1.k8s.emberstack.com/reflection-auto-enabled=true
