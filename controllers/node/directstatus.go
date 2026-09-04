@@ -254,6 +254,21 @@ func directPreflightDiagnostic(err error) (reason, message string, report bool) 
 		return "ImagePullSecretUnreadable", pullSecretErr.Error(), true
 	}
 
+	if errors.Is(err, ErrInvalidPlanArtifact) || errors.Is(err, ErrInvalidPlannerInput) {
+		// The controller refused to publish a generated artifact (malformed, oversized, or
+		// carrying a sensitive value). The refusal repeats identically on every reconcile, so
+		// without a condition the Node keeps its last status while only the manager log shows
+		// why the workload never rolls.
+		return "PlanRejected", err.Error(), true
+	}
+
+	if errors.Is(err, ErrPlanArtifactConflict) || errors.Is(err, ErrPlannerInputConflict) ||
+		errors.Is(err, ErrWorkerOutputConflict) {
+		// A foreign object occupies the content-addressed name of an immutable artifact;
+		// planning cannot progress until that object is removed.
+		return "PlanArtifactConflict", err.Error(), true
+	}
+
 	if applyErr, ok := errors.AsType[*deploymentApplyError](err); ok {
 		// The API server rejecting the rendered Deployment is terminal until the spec changes;
 		// anything else (a timeout, a conflict) is retried and may clear on its own.

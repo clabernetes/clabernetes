@@ -74,6 +74,14 @@ this generic signal is intentionally process-level: a running network OS may sti
 services or converging protocols. Declare a `healthcheck`, define one in the image, or configure
 an explicit TCP or SSH probe when application-level readiness is required.
 
+SSH probe credentials live in a Secret that c9s creates for the Node. They are never copied into
+the plan ConfigMaps, and a plan whose text contains the password is refused. A password that also
+appears verbatim in the topology text, such as `admin` when a startup-config restates
+`username admin`, is not screened: it is already plain text on the Topology and Node objects, so
+refusing the plan would protect nothing. Use a password that appears nowhere in the topology when
+it must stay confidential. A refused plan is reported on the Node as `PlanApplied=False` with
+reason `PlanRejected` and a Warning event; the last applied workload keeps running.
+
 If a Node names a profile that does not exist, c9s does not silently fall back to global defaults.
 The Node remains unrealized until that explicit reference resolves.
 

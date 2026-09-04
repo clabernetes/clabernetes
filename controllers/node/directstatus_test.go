@@ -3,6 +3,7 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -978,5 +979,92 @@ func TestObserveDirectContainersAcceptsIndexDigestWhenSpecIsPinned(t *testing.T)
 
 	if unpinnedReady {
 		t.Fatal("mismatched runtime identity was accepted without a pinned spec reference")
+	}
+}
+
+func TestReportDirectPreflightFailureStampsPlanArtifactErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		err        error
+		wantReason string
+	}{
+		{
+			name: "plan artifact carries a sensitive value",
+			err: fmt.Errorf(
+				"%w: plan input contains a sensitive value",
+				ErrInvalidPlanArtifact,
+			),
+			wantReason: "PlanRejected",
+		},
+		{
+			name: "planner input is oversized",
+			err: fmt.Errorf(
+				"%w: input size 9 is outside 1..4 bytes",
+				ErrInvalidPlannerInput,
+			),
+			wantReason: "PlanRejected",
+		},
+		{
+			name:       "foreign object at the plan name",
+			err:        fmt.Errorf("%w lab/router-plan-0123456789ab", ErrPlanArtifactConflict),
+			wantReason: "PlanArtifactConflict",
+		},
+		{
+			name: "foreign object at the worker output name",
+			err: fmt.Errorf(
+				"%w: record is not a framed worker output",
+				ErrWorkerOutputConflict,
+			),
+			wantReason: "PlanArtifactConflict",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			scheme := nodeReconcileTestScheme(t)
+			node := nodeReconcileTestNode()
+			client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+				WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).Build()
+			reconciler := &Reconciler{Client: client, apiReader: client}
+
+			if err := reconciler.reportDirectPreflightFailure(
+				context.Background(),
+				node,
+				test.err,
+			); err != nil {
+				t.Fatalf("reportDirectPreflightFailure() error = %v", err)
+			}
+
+			stored := &clabernetesapisv1alpha1.Node{}
+			if err := client.Get(
+				context.Background(),
+				ctrlruntimeclient.ObjectKeyFromObject(node),
+				stored,
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			condition := apimachinerymeta.FindStatusCondition(
+				stored.Status.Conditions,
+				clabernetesapisv1alpha1.NodeConditionPlanApplied,
+			)
+			if condition == nil || condition.Status != metav1.ConditionFalse ||
+				condition.Reason != test.wantReason ||
+				!strings.Contains(condition.Message, test.err.Error()) ||
+				!strings.Contains(condition.Message, "left unchanged") {
+				t.Fatalf("PlanApplied condition = %#v, want reason %q", condition, test.wantReason)
+			}
+
+			if stored.Status.Readiness != clabernetesconstants.NodeStatusNotReady {
+				t.Fatalf("readiness = %q, want %q",
+					stored.Status.Readiness,
+					clabernetesconstants.NodeStatusNotReady,
+				)
+			}
+		})
 	}
 }

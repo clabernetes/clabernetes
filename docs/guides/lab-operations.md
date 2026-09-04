@@ -42,7 +42,7 @@ preparation, and connectivity conditions, the plan digest, and the applied NodeP
 | Condition | Meaning |
 | --- | --- |
 | `NodeProfileResolved` | the referenced NodeProfile exists |
-| `PlanApplied` | the current spec was planned and rendered; when `False`, the reason names the cause, for example `PlanPending`, `ImagePullSecretMissing`, `OCIMetadataResolveManifest`, or `DeploymentInvalid` |
+| `PlanApplied` | the current spec was planned and rendered; when `False`, the reason names the cause, for example `PlanPending`, `ImagePullSecretMissing`, `OCIMetadataResolveManifest`, `PlanRejected`, or `DeploymentInvalid` |
 | `Prepared` | the preparation init container staged and verified every file |
 | `ConnectivityReady` | every interface of the cold-start plan exists |
 | `ContainersReady` | every application container of the Node runs and passes its probes |
