@@ -914,9 +914,8 @@ func TestPlanCarriesManagementMeshIntoInterposition(t *testing.T) {
 	input.Management = []clabernetesinternaldeviceplan.ManagementInput{{
 		NodeID: "node-a", IPv4: "192.0.2.10/24", IPv4Gateway: "192.0.2.1",
 		Mesh: &clabernetesinternaldeviceplan.ManagementMesh{
-			TunnelID:    16_000_001,
-			GatewayMAC:  "02:c9:aa:bb:cc:dd",
-			PeerService: "c9s-management-mesh",
+			TunnelID:   16_000_001,
+			GatewayMAC: "02:c9:aa:bb:cc:dd",
 		},
 	}}
 
@@ -937,10 +936,10 @@ func TestPlanRejectsInvalidManagementMesh(t *testing.T) {
 	t.Parallel()
 
 	invalid := []clabernetesinternaldeviceplan.ManagementMesh{
-		{TunnelID: 0, GatewayMAC: "02:c9:aa:bb:cc:dd", PeerService: "c9s-management-mesh"},
-		{TunnelID: 1 << 24, GatewayMAC: "02:c9:aa:bb:cc:dd", PeerService: "c9s-management-mesh"},
-		{TunnelID: 7, GatewayMAC: "not-a-mac", PeerService: "c9s-management-mesh"},
-		{TunnelID: 7, GatewayMAC: "02:c9:aa:bb:cc:dd", PeerService: ""},
+		{TunnelID: 0, GatewayMAC: "02:c9:aa:bb:cc:dd"},
+		{TunnelID: 1 << 24, GatewayMAC: "02:c9:aa:bb:cc:dd"},
+		{TunnelID: 7, GatewayMAC: "not-a-mac"},
+		{TunnelID: 7, GatewayMAC: ""},
 	}
 
 	for index, mesh := range invalid {

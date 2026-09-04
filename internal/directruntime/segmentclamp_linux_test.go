@@ -86,9 +86,9 @@ func testMeshSegmentClampProgramsOwnedTable(t *testing.T) {
 
 	conn := &nftables.Conn{}
 
-	tables, err := conn.ListTablesOfFamily(nftables.TableFamilyBridge)
+	tables, err := conn.ListTablesOfFamily(nftables.TableFamilyINet)
 	if err != nil {
-		t.Fatalf("listing bridge tables: %v", err)
+		t.Fatalf("listing inet tables: %v", err)
 	}
 
 	var owned *nftables.Table
@@ -103,9 +103,9 @@ func testMeshSegmentClampProgramsOwnedTable(t *testing.T) {
 		t.Fatal("owned segment clamp table was not created")
 	}
 
-	chains, err := conn.ListChainsOfTableFamily(nftables.TableFamilyBridge)
+	chains, err := conn.ListChainsOfTableFamily(nftables.TableFamilyINet)
 	if err != nil {
-		t.Fatalf("listing bridge chains: %v", err)
+		t.Fatalf("listing inet chains: %v", err)
 	}
 
 	var forward *nftables.Chain
@@ -125,8 +125,11 @@ func testMeshSegmentClampProgramsOwnedTable(t *testing.T) {
 		t.Fatalf("listing segment clamp rules: %v", err)
 	}
 
-	if len(rules) != 6 {
-		t.Fatalf("expected one clamp rule per mesh port and address family, got %d", len(rules))
+	if len(rules) != 4 {
+		t.Fatalf(
+			"expected one clamp rule per mesh ingress interface and address family, got %d",
+			len(rules),
+		)
 	}
 
 	for _, rule := range rules {
@@ -136,16 +139,16 @@ func testMeshSegmentClampProgramsOwnedTable(t *testing.T) {
 }
 
 // assertClampRuleShape pins the expression shape that was verified to actually rewrite a
-// handshake on the wire. The bridge family carries the link header, so the transport protocol has
-// to come from the packet parse (meta l4proto) rather than a network-header offset: a rule that
-// reads the protocol out of the header at an IPv4 offset is accepted by the kernel and then
-// silently never matches.
+// handshake on the wire. The inet family carries both address families, so the transport
+// protocol has to come from the packet parse (meta l4proto) rather than a network-header offset:
+// a rule that reads the protocol out of the header at an IPv4 offset is accepted by the kernel
+// and then silently never matches IPv6.
 func assertClampRuleShape(t *testing.T, rule *nftables.Rule) {
 	t.Helper()
 
 	var (
 		matchesL4Proto   bool
-		matchesEtherType bool
+		matchesFamily    bool
 		readsMaxSegment  bool
 		writesMaxSegment bool
 	)
@@ -157,12 +160,12 @@ func assertClampRuleShape(t *testing.T, rule *nftables.Rule) {
 				matchesL4Proto = true
 			}
 
-			if typed.Key == expr.MetaKeyPROTOCOL {
-				matchesEtherType = true
+			if typed.Key == expr.MetaKeyNFPROTO {
+				matchesFamily = true
 			}
 		case *expr.Payload:
 			if typed.Base == expr.PayloadBaseNetworkHeader {
-				t.Fatal("clamp rule reads the network header, which the bridge family offsets differently")
+				t.Fatal("clamp rule reads the network header, whose layout differs per family")
 			}
 		case *expr.Exthdr:
 			if typed.Type != tcpOptionMaxSegment {
@@ -177,10 +180,10 @@ func assertClampRuleShape(t *testing.T, rule *nftables.Rule) {
 		}
 	}
 
-	if !matchesL4Proto || !matchesEtherType || !readsMaxSegment || !writesMaxSegment {
+	if !matchesL4Proto || !matchesFamily || !readsMaxSegment || !writesMaxSegment {
 		t.Fatalf(
-			"clamp rule is incomplete (l4proto %t, ethertype %t, read %t, write %t)",
-			matchesL4Proto, matchesEtherType, readsMaxSegment, writesMaxSegment,
+			"clamp rule is incomplete (l4proto %t, family %t, read %t, write %t)",
+			matchesL4Proto, matchesFamily, readsMaxSegment, writesMaxSegment,
 		)
 	}
 }

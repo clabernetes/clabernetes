@@ -21,8 +21,8 @@ For every Node:
 
 Per namespace:
 
-- the headless `c9s-management-mesh` Service that discovers management mesh members
-- the `c9s-peer-directory` ConfigMap that maps node names to management addresses
+- the `c9s-peer-directory-0` to `c9s-peer-directory-7` ConfigMaps (the peer directory) that
+  map node names to management addresses and to the Pods realizing them
 - a `direct-device-ca-...` Secret holding the lab CA, plus one `<node>-certificates-...`
   Secret per Node that sets `certificate.issue`
 

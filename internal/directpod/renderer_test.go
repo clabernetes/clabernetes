@@ -220,7 +220,9 @@ func TestRenderMountsPeerDirectoryIntoEveryDeviceContainer(t *testing.T) {
 	pod := deployment.Spec.Template.Spec
 
 	// Namespace peers must never ride the Deployment spec: a lab membership change would
-	// recreate the Pod. They arrive through the peer-directory ConfigMap at runtime instead.
+	// recreate the Pod. They arrive through the projected peer-directory shards at runtime
+	// instead, every shard optional so the Pod starts before the directory exists, and the
+	// shard set fixed so the template never changes with namespace size.
 	volumeFound := false
 
 	for _, volume := range pod.Volumes {
@@ -230,10 +232,25 @@ func TestRenderMountsPeerDirectoryIntoEveryDeviceContainer(t *testing.T) {
 
 		volumeFound = true
 
-		if volume.ConfigMap == nil ||
-			volume.ConfigMap.Name != clabernetesinternaldirectruntime.PeerDirectoryConfigMapName ||
-			volume.ConfigMap.Optional == nil || !*volume.ConfigMap.Optional {
+		if volume.Projected == nil ||
+			len(volume.Projected.Sources) !=
+				clabernetesinternaldirectruntime.PeerDirectoryShardCount {
 			t.Fatalf("peer directory volume = %#v", volume)
+		}
+
+		for shard, source := range volume.Projected.Sources {
+			projection := source.ConfigMap
+			if projection == nil ||
+				projection.Name !=
+					clabernetesinternaldirectruntime.PeerDirectoryShardConfigMapName(shard) ||
+				projection.Optional == nil || !*projection.Optional ||
+				len(projection.Items) != 1 ||
+				projection.Items[0].Key !=
+					clabernetesinternaldirectruntime.PeerDirectoryConfigMapKey ||
+				projection.Items[0].Path !=
+					clabernetesinternaldirectruntime.PeerDirectoryShardFileName(shard) {
+				t.Fatalf("peer directory shard %d projection = %#v", shard, source)
+			}
 		}
 	}
 

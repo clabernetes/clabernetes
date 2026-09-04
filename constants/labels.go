@@ -30,13 +30,6 @@ const (
 	// LabelDirectWorkload identifies the primary Node name of a direct device Pod.
 	LabelDirectWorkload = LabelPrefix + "/direct-workload"
 
-	// LabelDirectMeshMember marks a direct device Pod as a member of its namespace's management
-	// L2 mesh; the namespace mesh discovery Service selects on it.
-	LabelDirectMeshMember = LabelPrefix + "/mesh-member"
-
-	// DirectMeshMemberEnabled is the LabelDirectMeshMember value carried by mesh member Pods.
-	DirectMeshMemberEnabled = "enabled"
-
 	// LabelTopologyKind is the label indicating the resource *kind* the object is associated with.
 	// For example, a "containerlab" kind.
 	LabelTopologyKind = LabelPrefix + "/topologyKind"

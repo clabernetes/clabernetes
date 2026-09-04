@@ -4,7 +4,6 @@
 package directruntime
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strings"
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	"github.com/vishvananda/netlink"
@@ -166,9 +164,11 @@ func replayTransportRoutes(
 
 // EnsureInterposition converges the Pod namespace to the interposition spec: the CNI interface
 // is preserved under the sidecar-owned transport name, the synthetic management pair exists with
-// the device-expected identity, the unconditional hardening baseline is applied, and Kubernetes
-// transport lives in the sidecar-owned policy table. Every step is idempotent; the device's own
-// state (main table, its chains, its sysctls) is never touched.
+// the device-expected identity, the routed management mesh tunnel endpoint carries the Pod's
+// derived identity, the unconditional hardening baseline is applied, Kubernetes transport lives
+// in the sidecar-owned policy table, and (when asked) the per-peer mesh state is converged to
+// the spec's peer set. Every step is idempotent; the device's own state (main table, its
+// chains, its sysctls) is never touched.
 func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 	podAddress, err := netip.ParseAddr(spec.PodAddress)
 	if err != nil || !podAddress.Is4() {
@@ -186,8 +186,7 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 	}
 
 	switch spec.DeviceInterface {
-	case spec.TransportInterface, spec.RouterInterface,
-		MeshBridgeName, MeshVTEPName, MeshDevicePortName, MeshGatewayPortName:
+	case spec.TransportInterface, spec.RouterInterface, MeshVTEPName:
 		return fmt.Errorf(
 			"interposition device interface %q collides with a sidecar-owned name",
 			spec.DeviceInterface,
@@ -195,13 +194,17 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 	}
 
 	gatewayMAC, err := net.ParseMAC(spec.MeshGatewayMAC)
-	if err != nil || spec.MeshTunnelID <= 0 || spec.MeshPeerService == "" {
+	if err != nil || spec.MeshTunnelID <= 0 {
 		return fmt.Errorf(
-			"interposition mesh membership is incomplete (tunnel %d, gateway MAC %q, peers %q)",
+			"interposition mesh membership is incomplete (tunnel %d, gateway MAC %q)",
 			spec.MeshTunnelID,
 			spec.MeshGatewayMAC,
-			spec.MeshPeerService,
 		)
+	}
+
+	meshMAC, err := net.ParseMAC(spec.MeshMAC)
+	if err != nil {
+		return fmt.Errorf("interposition mesh tunnel-endpoint identity %q is invalid", spec.MeshMAC)
 	}
 
 	capturedRoutes, transportIndex, err := preserveTransportInterface(spec, podAddress)
@@ -213,7 +216,7 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 	// state was pristine is the durable truth for re-assertion.
 	capturedRoutes = rememberTransportRoutes(spec.StateDirectory, capturedRoutes)
 
-	// Mesh frames cross the Pod underlay kernel-encapsulated; every mesh element carries the
+	// Mesh packets cross the Pod underlay kernel-encapsulated; every mesh element carries the
 	// underlay-bounded MTU so device-derived segment sizes fit the cross-Pod path.
 	meshMTU, err := podManagementMeshMTU(podAddress)
 	if err != nil {
@@ -226,7 +229,8 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		return err
 	}
 
-	if err := o.ensureManagementMesh(spec, podAddress, gatewayMAC, meshMTU); err != nil {
+	vtep, err := ensureMeshVTEP(spec, podAddress, meshMAC, meshMTU)
+	if err != nil {
 		return err
 	}
 
@@ -245,10 +249,6 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		return err
 	}
 
-	if err := o.DisableTxChecksumOffload(MeshDevicePortName); err != nil {
-		return err
-	}
-
 	// The device leg may already be renamed or adopted by a running device; offload state on it
 	// is best-effort after boot because the rename moves the ethtool identity with the link.
 	if _, present, lookupErr := lookupLink(spec.DeviceInterface); lookupErr == nil && present {
@@ -257,7 +257,17 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		}
 	}
 
-	return ensureTransportTable(spec, podAddress, managementPrefix, capturedRoutes, transportIndex)
+	if err := ensureTransportTable(
+		spec, podAddress, managementPrefix, capturedRoutes, transportIndex, vtep,
+	); err != nil {
+		return err
+	}
+
+	if !spec.ReconcileMeshPeers {
+		return nil
+	}
+
+	return ensureMeshPeers(spec, vtep, podAddress, managementPrefix.Addr())
 }
 
 // preserveTransportInterface renames the CNI interface carrying the Pod address to the
@@ -406,9 +416,10 @@ func podManagementMeshMTU(podAddress netip.Addr) (int, error) {
 	return meshMTU, nil
 }
 
-// ensureSyntheticPair creates the device pair (device leg + Pod-side mesh port) and the gateway
-// pair (router leg + bridge-side mesh port) with the plan identity and addresses. The legs only
-// exchange frames through the management mesh bridge.
+// ensureSyntheticPair creates the synthetic management pair: the device leg with the plan
+// identity and address, and the router leg carrying the gateway address and identity. The two
+// legs are the two ends of one veth, so every frame the device sends beyond its own leg
+// arrives on the router leg to be routed.
 func ensureSyntheticPair(
 	spec InterpositionSpec,
 	managementPrefix netip.Prefix,
@@ -416,11 +427,15 @@ func ensureSyntheticPair(
 	gatewayMAC net.HardwareAddr,
 	meshMTU int,
 ) error {
-	// The Pod-side leg is the durable presence marker: unlike the device leg it is never
-	// renamed or adopted by a device.
-	if _, present, err := lookupLink(MeshDevicePortName); err != nil {
+	// The router leg is the durable presence marker: unlike the device leg it is never renamed
+	// or adopted by a device (a device may even move the device leg into a namespace of its
+	// own; the router leg stays behind as the pair's far end).
+	router, present, err := lookupLink(spec.RouterInterface)
+	if err != nil {
 		return err
-	} else if !present {
+	}
+
+	if !present {
 		attributes := netlink.NewLinkAttrs()
 		attributes.Name = spec.DeviceInterface
 		attributes.Alias = interpositionOwnerAlias
@@ -438,84 +453,41 @@ func ensureSyntheticPair(
 			attributes.HardwareAddr = mac
 		}
 
-		pair := &netlink.Veth{LinkAttrs: attributes, PeerName: MeshDevicePortName}
-		if err = netlink.LinkAdd(pair); err != nil {
-			return fmt.Errorf("creating synthetic device pair: %w", err)
+		pair := &netlink.Veth{
+			LinkAttrs:        attributes,
+			PeerName:         spec.RouterInterface,
+			PeerHardwareAddr: gatewayMAC,
 		}
-
-		if err = adoptSyntheticLegs(meshMTU, MeshDevicePortName, spec.DeviceInterface); err != nil {
-			return err
-		}
-	}
-
-	router, present, err := lookupLink(spec.RouterInterface)
-	if err != nil {
-		return err
-	}
-
-	if !present {
-		attributes := netlink.NewLinkAttrs()
-		attributes.Name = spec.RouterInterface
-		attributes.Alias = interpositionOwnerAlias
-		attributes.HardwareAddr = gatewayMAC
-
 		if meshMTU != 0 {
-			attributes.MTU = meshMTU
+			pair.PeerMTU = uint32(meshMTU) //nolint:gosec // bounded by the underlay MTU.
 		}
 
-		pair := &netlink.Veth{LinkAttrs: attributes, PeerName: MeshGatewayPortName}
 		if err = netlink.LinkAdd(pair); err != nil {
-			return fmt.Errorf("creating synthetic gateway pair: %w", err)
+			return fmt.Errorf("creating synthetic management pair: %w", err)
+		}
+
+		if err = adoptSyntheticLegs(
+			meshMTU, spec.RouterInterface, spec.DeviceInterface,
+		); err != nil {
+			return err
 		}
 
 		router, _, err = lookupLink(spec.RouterInterface)
 		if err != nil || router == nil {
 			return fmt.Errorf("router leg vanished after creation: %w", err)
 		}
+	}
 
-		if err = adoptSyntheticLegs(
-			meshMTU, spec.RouterInterface, MeshGatewayPortName,
-		); err != nil {
-			return err
+	// The gateway identity is pinned: it is what every proxy ARP answer for a peer carries, so
+	// a device sees one stable next hop for everything beyond its own leg.
+	if !bytesEqualMAC(router.Attrs().HardwareAddr, gatewayMAC) {
+		if err = netlink.LinkSetHardwareAddr(router, gatewayMAC); err != nil {
+			return fmt.Errorf("pinning router leg gateway identity: %w", err)
 		}
 	}
 
-	// The device leg may have been renamed or moved by the device after adoption; only address
-	// the legs that are still present, and only with sidecar-owned addresses.
-	if device, devicePresent, lookupErr := lookupLink(spec.DeviceInterface); lookupErr == nil &&
-		devicePresent {
-		deviceAddress, parseErr := netlink.ParseAddr(spec.ManagementIPv4)
-		if parseErr != nil {
-			return fmt.Errorf("parsing management address: %w", parseErr)
-		}
-
-		addresses, listErr := netlink.AddrList(device, netlink.FAMILY_V4)
-		if listErr != nil {
-			return fmt.Errorf("reading device leg addresses: %w", listErr)
-		}
-
-		// A device that adopted the leg and stripped its kernel address owns the leg's
-		// addressing from then on; only an untouched leg is (re)addressed, so the sidecar
-		// converges the pre-boot state without fighting the device afterwards.
-		if device.Attrs().Alias == interpositionOwnerAlias && len(addresses) == 0 &&
-			device.Attrs().OperState != netlink.OperUp {
-			if err = netlink.AddrReplace(device, deviceAddress); err != nil {
-				return fmt.Errorf("addressing device leg: %w", err)
-			}
-		}
-
-		if spec.ManagementIPv6 != "" {
-			if v6, v6Err := netlink.ParseAddr(spec.ManagementIPv6); v6Err == nil {
-				v6Addresses, _ := netlink.AddrList(device, netlink.FAMILY_V6)
-				if device.Attrs().Alias == interpositionOwnerAlias && len(v6Addresses) == 0 {
-					_ = netlink.AddrReplace(device, v6)
-				}
-			}
-		}
-
-		if err = netlink.LinkSetUp(device); err != nil {
-			return fmt.Errorf("bringing device leg up: %w", err)
-		}
+	if err = addressDeviceLeg(spec); err != nil {
+		return err
 	}
 
 	prefixLength := managementPrefix.Bits()
@@ -548,6 +520,51 @@ func ensureSyntheticPair(
 	return nil
 }
 
+// addressDeviceLeg addresses the device leg when it is still present and untouched. The leg
+// may have been renamed or moved by the device after adoption; only a present leg is addressed,
+// and only with sidecar-owned addresses.
+func addressDeviceLeg(spec InterpositionSpec) error {
+	device, present, err := lookupLink(spec.DeviceInterface)
+	if err != nil || !present {
+		return nil //nolint:nilerr // a moved or renamed leg is the device's to own.
+	}
+
+	deviceAddress, err := netlink.ParseAddr(spec.ManagementIPv4)
+	if err != nil {
+		return fmt.Errorf("parsing management address: %w", err)
+	}
+
+	addresses, err := netlink.AddrList(device, netlink.FAMILY_V4)
+	if err != nil {
+		return fmt.Errorf("reading device leg addresses: %w", err)
+	}
+
+	// A device that adopted the leg and stripped its kernel address owns the leg's addressing
+	// from then on; only an untouched leg is (re)addressed, so the sidecar converges the
+	// pre-boot state without fighting the device afterwards.
+	if device.Attrs().Alias == interpositionOwnerAlias && len(addresses) == 0 &&
+		device.Attrs().OperState != netlink.OperUp {
+		if err = netlink.AddrReplace(device, deviceAddress); err != nil {
+			return fmt.Errorf("addressing device leg: %w", err)
+		}
+	}
+
+	if spec.ManagementIPv6 != "" {
+		if v6, v6Err := netlink.ParseAddr(spec.ManagementIPv6); v6Err == nil {
+			v6Addresses, _ := netlink.AddrList(device, netlink.FAMILY_V6)
+			if device.Attrs().Alias == interpositionOwnerAlias && len(v6Addresses) == 0 {
+				_ = netlink.AddrReplace(device, v6)
+			}
+		}
+	}
+
+	if err = netlink.LinkSetUp(device); err != nil {
+		return fmt.Errorf("bringing device leg up: %w", err)
+	}
+
+	return nil
+}
+
 // applyInterpositionSysctls applies the unconditional hardening baseline.
 func applyInterpositionSysctls(spec InterpositionSpec) error {
 	settings := [][2]string{
@@ -564,46 +581,44 @@ func applyInterpositionSysctls(spec InterpositionSpec) error {
 		{"net.ipv4.conf." + spec.RouterInterface + ".accept_local", "1"},
 		{"net.ipv4.conf." + spec.RouterInterface + ".forwarding", "1"},
 		// ARP-flux scoping: without arp_ignore=1 every interface of the namespace answers ARP
-		// for the gateway (and for peer gateways arriving over the mesh through bridge-self
-		// delivery), so gateway resolution would return multiple identities.
+		// for the gateway, so gateway resolution would return multiple identities.
 		{"net.ipv4.conf." + spec.RouterInterface + ".arp_ignore", "1"},
-		{"net.ipv4.conf." + MeshBridgeName + ".arp_ignore", "1"},
-		{"net.ipv4.conf." + MeshDevicePortName + ".arp_ignore", "1"},
-		{"net.ipv4.conf." + MeshGatewayPortName + ".arp_ignore", "1"},
 		{"net.ipv4.conf." + MeshVTEPName + ".arp_ignore", "1"},
-		// The bridge and its ports are pure L2 elements; IPv6 stays off so they never source
-		// NDP or link-local traffic onto the mesh.
-		{"net.ipv6.conf." + MeshBridgeName + ".disable_ipv6", "1"},
-		{"net.ipv6.conf." + MeshDevicePortName + ".disable_ipv6", "1"},
-		{"net.ipv6.conf." + MeshGatewayPortName + ".disable_ipv6", "1"},
-		{"net.ipv6.conf." + MeshVTEPName + ".disable_ipv6", "1"},
+		// The router leg answers ARP for every remote peer with the gateway identity: the
+		// device keeps its connected management route and resolves peers exactly as on a shared
+		// segment, while the frames it then sends are routed to the peer's tunnel endpoint. The
+		// kernel proxies only targets whose route leaves through another interface, which is
+		// precisely the management subnet route via the mesh tunnel endpoint; the Pod's own
+		// address (routed back to the router leg) and the gateway (local) are never proxied.
+		// The default proxy delay exists to let a real host answer first; there is none here.
+		{"net.ipv4.conf." + spec.RouterInterface + ".proxy_arp", "1"},
+		{"net.ipv4.neigh." + spec.RouterInterface + ".proxy_delay", "0"},
 	}
 
-	// Kubernetes nodes load br_netfilter for kube-proxy and Pod namespaces inherit its
-	// defaults, which would push every bridged mesh frame through the Pod's netfilter a second
-	// time after the L3 gateway hop -- conntrack clash resolution then re-NATs translated
-	// flows and replies can no longer match. The mesh bridge is pure L2 by design: bridged
-	// frames bypass netfilter in this namespace. The sysctls exist only when the module is
-	// loaded; absent means already off.
-	for _, name := range []string{
-		"net.bridge.bridge-nf-call-iptables",
-		"net.bridge.bridge-nf-call-ip6tables",
-		"net.bridge.bridge-nf-call-arptables",
-	} {
-		parts := append([]string{"/proc/sys"}, strings.Split(name, ".")...)
-
-		path := filepath.Join(parts...)
-		if _, err := os.Stat(path); err == nil {
-			settings = append(settings, [2]string{name, "0"})
-		}
+	if spec.ManagementIPv6 != "" && spec.GatewayIPv6 != "" {
+		// IPv6 peers ride the same routed path; the kernel gates IPv6 forwarding on the
+		// namespace-wide setting, and the router leg proxies neighbor discovery for the peer
+		// addresses the sidecar lists on it.
+		settings = append(settings,
+			[2]string{"net.ipv6.conf.all.forwarding", "1"},
+			[2]string{"net.ipv6.conf." + spec.RouterInterface + ".proxy_ndp", "1"},
+			[2]string{"net.ipv6.conf." + MeshVTEPName + ".disable_ipv6", "0"},
+			[2]string{"net.ipv6.conf." + MeshVTEPName + ".accept_ra", "0"},
+		)
+	} else {
+		// Without an IPv6 management identity the tunnel endpoint never sources neighbor
+		// discovery or link-local traffic onto the mesh.
+		settings = append(
+			settings,
+			[2]string{"net.ipv6.conf." + MeshVTEPName + ".disable_ipv6", "1"},
+		)
 	}
 
 	// The device leg's forwarding stays off so a device keeping the physical leg in the Pod
 	// namespace (with its own delivery mechanism) never sees kernel re-forwarding loops, and
-	// its ARP responder is scoped: a single-namespace kind shares its stack with the gateway
-	// leg, so without arp_ignore=1 it would flux-answer mesh-flooded ARP for the gateway (and
-	// for every peer address the namespace holds). The leg may already be renamed by the
-	// device; missing is fine.
+	// its ARP responder is scoped: a single-namespace kind shares its stack with the router
+	// leg, so without arp_ignore=1 it would flux-answer ARP for the gateway. The leg may
+	// already be renamed by the device; missing is fine.
 	if _, present, err := lookupLink(spec.DeviceInterface); err == nil && present {
 		settings = append(
 			settings,
@@ -653,7 +668,8 @@ func clearExistingReversePathFilters() error {
 
 // ensureTransportTable owns Kubernetes transport in a dedicated policy table selected ahead of
 // the main table, so device rewrites of main never affect it. The table replays the exact
-// captured CNI route set plus the management-subnet route.
+// captured CNI route set plus the management routes: the Pod's own management address via the
+// router leg and the management subnet via the mesh tunnel endpoint.
 //
 //nolint:funlen // one linear rule-and-route convergence pass.
 func ensureTransportTable(
@@ -662,6 +678,7 @@ func ensureTransportTable(
 	managementPrefix netip.Prefix,
 	captured []capturedRoute,
 	transportIndex int,
+	vtep netlink.Link,
 ) error {
 	if transportIndex == 0 {
 		transport, present, err := lookupLink(spec.TransportInterface)
@@ -694,17 +711,20 @@ func ensureTransportTable(
 		}
 	}
 
-	managementRoute := &netlink.Route{
-		Table:     interpositionTransportTable,
-		LinkIndex: router.Attrs().Index,
-		Dst: &net.IPNet{
-			IP:   managementPrefix.Masked().Addr().AsSlice(),
-			Mask: net.CIDRMask(managementPrefix.Bits(), 32),
-		},
-		Scope: netlink.SCOPE_LINK,
+	managementAddress := &net.IPNet{
+		IP:   managementPrefix.Addr().AsSlice(),
+		Mask: net.CIDRMask(32, 32),
 	}
-	if err = netlink.RouteReplace(managementRoute); err != nil {
-		return fmt.Errorf("asserting management subnet route: %w", err)
+
+	managementSubnet := &net.IPNet{
+		IP:   managementPrefix.Masked().Addr().AsSlice(),
+		Mask: net.CIDRMask(managementPrefix.Bits(), 32),
+	}
+
+	if err = ensureManagementRoutes(
+		router, vtep, managementAddress, managementSubnet,
+	); err != nil {
+		return err
 	}
 
 	rules, err := netlink.RuleList(netlink.FAMILY_V4)
@@ -712,13 +732,10 @@ func ensureTransportTable(
 		return fmt.Errorf("listing routing rules: %w", err)
 	}
 
-	// The management rule covers exactly the Pod's own management address: hooks and the
-	// Pod-address translation reach the local device through the gateway leg, while peer
-	// management addresses fall through to the device leg's connected route and ride the mesh.
-	managementAddress := &net.IPNet{
-		IP:   managementPrefix.Addr().AsSlice(),
-		Mask: net.CIDRMask(32, 32),
-	}
+	// The management rule covers exactly the Pod's own management address: hooks, the
+	// Pod-address translation, and mesh-delivered peer traffic reach the local device through
+	// the router leg, while the device's own peer-bound traffic selects the table through the
+	// router rule and follows the subnet route to the mesh tunnel endpoint.
 
 	haveRouterRule, haveTransportRule, haveManagementRule := false, false, false
 
@@ -781,6 +798,135 @@ func ensureTransportTable(
 
 		if err = netlink.RuleAdd(rule); err != nil {
 			return fmt.Errorf("asserting management transport rule: %w", err)
+		}
+	}
+
+	if spec.ManagementIPv6 == "" || spec.GatewayIPv6 == "" {
+		return nil
+	}
+
+	return ensureTransportTableIPv6(spec, router, vtep)
+}
+
+// ensureManagementRoutes converges the two management routes of the transport table: the Pod's
+// own address is a host route via the router leg, and the whole subnet is on-link via the mesh
+// tunnel endpoint, where each peer resolves through its static neighbor entry. A subnet route
+// via the router leg (the earlier bridged shape) would send peer traffic back to the device;
+// it is converged away.
+func ensureManagementRoutes(
+	router, vtep netlink.Link,
+	managementAddress, managementSubnet *net.IPNet,
+) error {
+	if err := netlink.RouteReplace(&netlink.Route{
+		Table:     interpositionTransportTable,
+		LinkIndex: router.Attrs().Index,
+		Dst:       managementAddress,
+		Scope:     netlink.SCOPE_LINK,
+	}); err != nil {
+		return fmt.Errorf("asserting own management route: %w", err)
+	}
+
+	if err := netlink.RouteReplace(&netlink.Route{
+		Table:     interpositionTransportTable,
+		LinkIndex: vtep.Attrs().Index,
+		Dst:       managementSubnet,
+		Scope:     netlink.SCOPE_LINK,
+	}); err != nil {
+		return fmt.Errorf("asserting management mesh route: %w", err)
+	}
+
+	family := netlink.FAMILY_V4
+	if managementSubnet.IP.To4() == nil {
+		family = netlink.FAMILY_V6
+	}
+
+	routes, err := netlink.RouteListFiltered(
+		family,
+		&netlink.Route{Table: interpositionTransportTable},
+		netlink.RT_FILTER_TABLE,
+	)
+	if err != nil {
+		return fmt.Errorf("listing transport table routes: %w", err)
+	}
+
+	for _, route := range routes {
+		if route.LinkIndex != router.Attrs().Index || route.Dst == nil ||
+			route.Dst.String() != managementSubnet.String() {
+			continue
+		}
+
+		stale := route
+		if err = netlink.RouteDel(&stale); err != nil {
+			return fmt.Errorf("removing stale management subnet route: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// ensureTransportTableIPv6 mirrors the IPv4 management routing for an optional IPv6 management
+// identity: the router-ingress and own-address rules select the transport table, which carries
+// the own address via the router leg and the subnet via the mesh tunnel endpoint.
+func ensureTransportTableIPv6(spec InterpositionSpec, router, vtep netlink.Link) error {
+	prefix, err := netip.ParsePrefix(spec.ManagementIPv6)
+	if err != nil {
+		return fmt.Errorf(
+			"interposition IPv6 management address %q is invalid",
+			spec.ManagementIPv6,
+		)
+	}
+
+	ownAddress := &net.IPNet{IP: prefix.Addr().AsSlice(), Mask: net.CIDRMask(128, 128)}
+	subnet := &net.IPNet{
+		IP:   prefix.Masked().Addr().AsSlice(),
+		Mask: net.CIDRMask(prefix.Bits(), 128),
+	}
+
+	if err = ensureManagementRoutes(router, vtep, ownAddress, subnet); err != nil {
+		return err
+	}
+
+	rules, err := netlink.RuleList(netlink.FAMILY_V6)
+	if err != nil {
+		return fmt.Errorf("listing IPv6 routing rules: %w", err)
+	}
+
+	haveRouterRule, haveManagementRule := false, false
+
+	for _, rule := range rules {
+		if rule.Table != interpositionTransportTable {
+			continue
+		}
+
+		switch rule.Priority {
+		case interpositionRouterRulePriority:
+			haveRouterRule = rule.IifName == spec.RouterInterface
+		case interpositionManagementRulePriority:
+			haveManagementRule = rule.Dst != nil && rule.Dst.String() == ownAddress.String()
+		}
+	}
+
+	if !haveRouterRule {
+		rule := netlink.NewRule()
+		rule.Family = netlink.FAMILY_V6
+		rule.Priority = interpositionRouterRulePriority
+		rule.Table = interpositionTransportTable
+		rule.IifName = spec.RouterInterface
+
+		if err = netlink.RuleAdd(rule); err != nil {
+			return fmt.Errorf("asserting IPv6 router transport rule: %w", err)
+		}
+	}
+
+	if !haveManagementRule {
+		rule := netlink.NewRule()
+		rule.Family = netlink.FAMILY_V6
+		rule.Priority = interpositionManagementRulePriority
+		rule.Table = interpositionTransportTable
+		rule.Dst = ownAddress
+
+		if err = netlink.RuleAdd(rule); err != nil {
+			return fmt.Errorf("asserting IPv6 management transport rule: %w", err)
 		}
 	}
 
@@ -856,117 +1002,14 @@ func adoptSyntheticLegs(meshMTU int, names ...string) error {
 	return nil
 }
 
-// ensureManagementMesh converges the pure-L2 bridge stitching the device leg, the gateway leg,
-// and the management mesh VTEP, then reconciles the head-end replication peer set discovered
-// through the mesh peer Service.
-func (o netlinkOperations) ensureManagementMesh(
-	spec InterpositionSpec,
-	podAddress netip.Addr,
-	gatewayMAC net.HardwareAddr,
-	meshMTU int,
-) error {
-	bridge, err := ensureMeshBridge(gatewayMAC, meshMTU)
-	if err != nil {
-		return err
-	}
-
-	vtep, err := ensureMeshVTEP(spec, podAddress, meshMTU)
-	if err != nil {
-		return err
-	}
-
-	// The gateway leg and the VTEP are both isolated: gateway traffic can never cross the mesh
-	// in either direction, which is what contains the duplicate gateway identity every Pod
-	// hosts. The device port is a normal port so devices reach both.
-	if err := ensureMeshPort(MeshDevicePortName, bridge, false, meshMTU); err != nil {
-		return err
-	}
-
-	if err := ensureMeshPort(MeshGatewayPortName, bridge, true, meshMTU); err != nil {
-		return err
-	}
-
-	if err := ensureMeshPort(MeshVTEPName, bridge, true, meshMTU); err != nil {
-		return err
-	}
-
-	// The router leg is sidecar-owned; assert its MTU every pass so device segment sizes derive
-	// from what the cross-Pod path carries.
-	if meshMTU != 0 {
-		if router, present, lookupErr := lookupLink(spec.RouterInterface); lookupErr == nil &&
-			present && router.Attrs().MTU != meshMTU {
-			if err := netlink.LinkSetMTU(router, meshMTU); err != nil {
-				return fmt.Errorf("clamping router leg MTU: %w", err)
-			}
-		}
-	}
-
-	return o.ensureMeshPeers(spec, vtep, podAddress)
-}
-
-// ensureMeshBridge converges the sidecar-owned pure-L2 bridge. Its MAC is pinned (derived from
-// the gateway identity) because an unpinned bridge inherits the lowest port MAC and churns with
-// port changes.
-func ensureMeshBridge(gatewayMAC net.HardwareAddr, meshMTU int) (netlink.Link, error) {
-	bridgeMAC := append(net.HardwareAddr(nil), gatewayMAC...)
-	if len(bridgeMAC) > 1 {
-		bridgeMAC[1] ^= 0x02
-	}
-
-	existing, present, err := lookupLink(MeshBridgeName)
-	if err != nil {
-		return nil, err
-	}
-
-	if present {
-		if existing.Type() != "bridge" || existing.Attrs().Alias != interpositionOwnerAlias {
-			return nil, fmt.Errorf(
-				"mesh bridge name %q collides with unrelated state",
-				MeshBridgeName,
-			)
-		}
-	} else {
-		attributes := netlink.NewLinkAttrs()
-		attributes.Name = MeshBridgeName
-		attributes.HardwareAddr = bridgeMAC
-
-		if meshMTU != 0 {
-			attributes.MTU = meshMTU
-		}
-
-		if err = netlink.LinkAdd(&netlink.Bridge{LinkAttrs: attributes}); err != nil {
-			return nil, fmt.Errorf("creating management mesh bridge: %w", err)
-		}
-
-		existing, present, err = lookupLink(MeshBridgeName)
-		if err != nil || !present {
-			return nil, errors.Join(errors.New("mesh bridge vanished after creation"), err)
-		}
-
-		if err = netlink.LinkSetAlias(existing, interpositionOwnerAlias); err != nil {
-			return nil, fmt.Errorf("marking mesh bridge ownership: %w", err)
-		}
-	}
-
-	if !bytesEqualMAC(existing.Attrs().HardwareAddr, bridgeMAC) {
-		if err = netlink.LinkSetHardwareAddr(existing, bridgeMAC); err != nil {
-			return nil, fmt.Errorf("pinning mesh bridge MAC: %w", err)
-		}
-	}
-
-	if err = netlink.LinkSetUp(existing); err != nil {
-		return nil, fmt.Errorf("bringing mesh bridge up: %w", err)
-	}
-
-	return existing, nil
-}
-
-// ensureMeshVTEP converges the management mesh VTEP: learning enabled, no default remote --
-// unicast destinations are learned from mesh traffic while unknown destinations flood through
-// the head-end replication entries.
+// ensureMeshVTEP converges the routed management mesh tunnel endpoint: learning off, no default
+// remote, no flood entries, the Pod's derived link-layer identity. Unicast toward a peer
+// resolves through the static neighbor and forwarding entries the sidecar installs; an
+// unknown destination fails resolution locally instead of flooding anywhere.
 func ensureMeshVTEP(
 	spec InterpositionSpec,
 	podAddress netip.Addr,
+	meshMAC net.HardwareAddr,
 	meshMTU int,
 ) (netlink.Link, error) {
 	localIP := net.IP(podAddress.AsSlice())
@@ -989,9 +1032,14 @@ func ensureMeshVTEP(
 
 		conforms := isVXLAN && vxlan.VxlanId == spec.MeshTunnelID &&
 			vxlan.SrcAddr.Equal(localIP) &&
-			vxlan.Port == clabernetesconstants.ManagementMeshVXLANPort && vxlan.Learning &&
+			vxlan.Port == clabernetesconstants.ManagementMeshVXLANPort && !vxlan.Learning &&
+			bytesEqualMAC(vxlan.Attrs().HardwareAddr, meshMAC) &&
 			(meshMTU == 0 || vxlan.Attrs().MTU == meshMTU)
 		if conforms {
+			if err = netlink.LinkSetUp(existing); err != nil {
+				return nil, fmt.Errorf("bringing mesh VTEP up: %w", err)
+			}
+
 			return existing, nil
 		}
 
@@ -1002,6 +1050,7 @@ func ensureMeshVTEP(
 
 	attributes := netlink.NewLinkAttrs()
 	attributes.Name = MeshVTEPName
+	attributes.HardwareAddr = meshMAC
 
 	if meshMTU != 0 {
 		attributes.MTU = meshMTU
@@ -1012,7 +1061,7 @@ func ensureMeshVTEP(
 		VxlanId:   spec.MeshTunnelID,
 		SrcAddr:   localIP,
 		Port:      clabernetesconstants.ManagementMeshVXLANPort,
-		Learning:  true,
+		Learning:  false,
 	}
 	if err = netlink.LinkAdd(vtep); err != nil {
 		return nil, fmt.Errorf("creating mesh VTEP: %w", err)
@@ -1030,121 +1079,121 @@ func ensureMeshVTEP(
 		)
 	}
 
+	if err = netlink.LinkSetUp(created); err != nil {
+		return nil, fmt.Errorf("bringing mesh VTEP up: %w", err)
+	}
+
 	return created, nil
 }
 
-// ensureMeshPort enslaves one link to the mesh bridge, asserts its MTU, and applies bridge port
-// isolation where required. Isolation is core bridge behavior (kernel 4.18+); a kernel rejecting
-// it fails interposition closed with this exact reason.
-func ensureMeshPort(name string, bridge netlink.Link, isolated bool, meshMTU int) error {
-	link, present, err := lookupLink(name)
-	if err != nil {
-		return err
-	}
-
-	if !present {
-		return fmt.Errorf("mesh port %q is unavailable", name)
-	}
-
-	if link.Attrs().MasterIndex != bridge.Attrs().Index {
-		if err = netlink.LinkSetMaster(link, bridge); err != nil {
-			return fmt.Errorf("enslaving mesh port %q: %w", name, err)
-		}
-	}
-
-	if meshMTU != 0 && link.Attrs().MTU != meshMTU {
-		if err = netlink.LinkSetMTU(link, meshMTU); err != nil {
-			return fmt.Errorf("clamping mesh port %q MTU: %w", name, err)
-		}
-	}
-
-	if err = netlink.LinkSetUp(link); err != nil {
-		return fmt.Errorf("bringing mesh port %q up: %w", name, err)
-	}
-
-	if isolated {
-		if err = netlink.LinkSetIsolated(link, true); err != nil {
-			return fmt.Errorf(
-				"isolating mesh port %q (bridge port isolation requires kernel 4.18+): %w",
-				name,
-				err,
-			)
-		}
-	}
-
-	return nil
+// meshPeerState is the exact kernel state one peer requires.
+type meshPeerState struct {
+	pod net.IP
+	mac net.HardwareAddr
 }
 
-// ensureMeshPeers reconciles the head-end replication entries toward every discovered peer Pod.
-// Resolution failure keeps the last-known peer set: absence of the discovery record is not an
-// error, and a transient resolver failure must not tear the mesh down.
-func (o netlinkOperations) ensureMeshPeers(
+// ensureMeshPeers converges the per-peer mesh state to the spec's peer set: on the tunnel
+// endpoint one permanent neighbor entry per peer management address (toward the peer's derived
+// identity) and one forwarding entry per peer identity (toward the peer's Pod address), and on
+// the router leg one neighbor-discovery proxy entry per peer IPv6 address. Stale entries,
+// including any flood entry left by an earlier shape, are removed exactly; nothing here is ever
+// learned from traffic.
+func ensureMeshPeers(
 	spec InterpositionSpec,
 	vtep netlink.Link,
 	podAddress netip.Addr,
+	ownManagement netip.Addr,
 ) error {
-	resolver := peerAddressResolver(podBoundResolver(spec.PodAddress))
-	if net.ParseIP(spec.PodAddress) == nil && o.resolver != nil {
-		resolver = o.resolver
-	}
+	peersV4 := map[netip.Addr]meshPeerState{}
+	peersV6 := map[netip.Addr]meshPeerState{}
+	forwarding := map[string]meshPeerState{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), fabricPeerResolveTimeout)
-	defer cancel()
-
-	addresses, err := resolver.LookupNetIP(ctx, "ip4", spec.MeshPeerService)
-	if err != nil {
-		// Absence keeps the last-known peer set by design.
-		return nil
-	}
-
-	desired := map[netip.Addr]bool{}
-
-	for _, address := range addresses {
-		address = address.Unmap()
-		if !address.Is4() || address == podAddress {
+	for _, peer := range spec.MeshPeers {
+		pod, err := netip.ParseAddr(peer.PodAddress)
+		if err != nil || !pod.Unmap().Is4() || pod.Unmap() == podAddress {
 			continue
 		}
 
-		desired[address] = true
+		management, err := netip.ParseAddr(peer.ManagementIPv4)
+		if err != nil || !management.Unmap().Is4() || management.Unmap() == ownManagement {
+			continue
+		}
+
+		mac, err := ManagementMeshMAC(management)
+		if err != nil {
+			continue
+		}
+
+		state := meshPeerState{pod: net.IP(pod.Unmap().AsSlice()), mac: mac}
+		peersV4[management.Unmap()] = state
+		forwarding[mac.String()] = state
+
+		// IPv6 peer state exists only alongside an IPv6 management identity of this Pod: the
+		// tunnel endpoint keeps IPv6 disabled otherwise.
+		if peer.ManagementIPv6 == "" || spec.ManagementIPv6 == "" || spec.GatewayIPv6 == "" {
+			continue
+		}
+
+		if v6, v6Err := netip.ParseAddr(peer.ManagementIPv6); v6Err == nil && v6.Is6() &&
+			!v6.Is4In6() {
+			peersV6[v6] = state
+		}
 	}
 
+	if err := ensureMeshForwardingEntries(vtep, forwarding); err != nil {
+		return err
+	}
+
+	if err := ensureMeshNeighbors(vtep, netlink.FAMILY_V4, peersV4); err != nil {
+		return err
+	}
+
+	if err := ensureMeshNeighbors(vtep, netlink.FAMILY_V6, peersV6); err != nil {
+		return err
+	}
+
+	router, present, err := lookupLink(spec.RouterInterface)
+	if err != nil || !present {
+		return errors.Join(
+			fmt.Errorf("router interface %q is unavailable", spec.RouterInterface),
+			err,
+		)
+	}
+
+	return ensureNeighborProxies(router, peersV6)
+}
+
+// ensureMeshForwardingEntries converges the tunnel endpoint's forwarding entries (peer identity
+// to peer Pod address) to exactly the desired set.
+func ensureMeshForwardingEntries(vtep netlink.Link, desired map[string]meshPeerState) error {
 	entries, err := netlink.NeighList(vtep.Attrs().Index, unix.AF_BRIDGE)
 	if err != nil {
 		return fmt.Errorf("listing mesh forwarding entries: %w", err)
 	}
 
-	zeroMAC := make(net.HardwareAddr, 6)
-	present := map[netip.Addr]bool{}
+	present := map[string]bool{}
 
 	for _, entry := range entries {
-		if entry.Flags&unix.NTF_SELF == 0 || entry.IP == nil {
+		if entry.Flags&unix.NTF_SELF == 0 {
 			continue
 		}
 
-		destination, ok := netip.AddrFromSlice(entry.IP)
-		if !ok {
-			continue
-		}
-
-		destination = destination.Unmap()
-
-		if desired[destination] {
-			if bytesEqualMAC(entry.HardwareAddr, zeroMAC) {
-				present[destination] = true
-			}
+		key := entry.HardwareAddr.String()
+		if want, ok := desired[key]; ok && entry.IP != nil && entry.IP.Equal(want.pod) {
+			present[key] = true
 
 			continue
 		}
 
-		// A stale head-end entry, or a learned unicast path toward a departed Pod address.
+		// A departed or relocated peer, or a flood entry from the earlier shape.
 		stale := entry
 		if err = netlink.NeighDel(&stale); err != nil {
-			return fmt.Errorf("removing stale mesh peer %q: %w", destination, err)
+			return fmt.Errorf("removing stale mesh forwarding entry %q: %w", key, err)
 		}
 	}
 
-	for destination := range desired {
-		if present[destination] {
+	for key, state := range desired {
+		if present[key] {
 			continue
 		}
 
@@ -1153,10 +1202,119 @@ func (o netlinkOperations) ensureMeshPeers(
 			Family:       unix.AF_BRIDGE,
 			Flags:        unix.NTF_SELF,
 			State:        netlink.NUD_PERMANENT | netlink.NUD_NOARP,
-			IP:           net.IP(destination.AsSlice()),
-			HardwareAddr: zeroMAC,
+			IP:           state.pod,
+			HardwareAddr: state.mac,
 		}); err != nil {
-			return fmt.Errorf("adding mesh peer %q: %w", destination, err)
+			return fmt.Errorf("adding mesh forwarding entry %q: %w", key, err)
+		}
+	}
+
+	return nil
+}
+
+// ensureMeshNeighbors converges the tunnel endpoint's permanent neighbor entries of one address
+// family (peer management address to peer identity) to exactly the desired set. Non-permanent
+// entries are the kernel's own transient resolution state for unknown addresses and are left
+// alone.
+func ensureMeshNeighbors(
+	vtep netlink.Link,
+	family int,
+	desired map[netip.Addr]meshPeerState,
+) error {
+	entries, err := netlink.NeighList(vtep.Attrs().Index, family)
+	if err != nil {
+		return fmt.Errorf("listing mesh neighbor entries: %w", err)
+	}
+
+	present := map[netip.Addr]bool{}
+
+	for _, entry := range entries {
+		if entry.State&netlink.NUD_PERMANENT == 0 || entry.IP == nil {
+			continue
+		}
+
+		address, ok := netip.AddrFromSlice(entry.IP)
+		if !ok {
+			continue
+		}
+
+		address = address.Unmap()
+
+		if want, ok := desired[address]; ok && bytesEqualMAC(entry.HardwareAddr, want.mac) {
+			present[address] = true
+
+			continue
+		}
+
+		stale := entry
+		if err = netlink.NeighDel(&stale); err != nil {
+			return fmt.Errorf("removing stale mesh neighbor %q: %w", address, err)
+		}
+	}
+
+	for address, state := range desired {
+		if present[address] {
+			continue
+		}
+
+		if err = netlink.NeighSet(&netlink.Neigh{
+			LinkIndex:    vtep.Attrs().Index,
+			Family:       family,
+			State:        netlink.NUD_PERMANENT,
+			IP:           net.IP(address.AsSlice()),
+			HardwareAddr: state.mac,
+		}); err != nil {
+			return fmt.Errorf("adding mesh neighbor %q: %w", address, err)
+		}
+	}
+
+	return nil
+}
+
+// ensureNeighborProxies converges the router leg's IPv6 neighbor-discovery proxy entries to
+// exactly the peer IPv6 addresses, the IPv6 counterpart of proxy ARP.
+func ensureNeighborProxies(router netlink.Link, peers map[netip.Addr]meshPeerState) error {
+	entries, err := netlink.NeighProxyList(router.Attrs().Index, netlink.FAMILY_V6)
+	if err != nil {
+		return fmt.Errorf("listing neighbor proxies: %w", err)
+	}
+
+	present := map[netip.Addr]bool{}
+
+	for _, entry := range entries {
+		if entry.IP == nil {
+			continue
+		}
+
+		address, ok := netip.AddrFromSlice(entry.IP)
+		if !ok {
+			continue
+		}
+
+		if _, wanted := peers[address]; wanted {
+			present[address] = true
+
+			continue
+		}
+
+		stale := entry
+		if err = netlink.NeighDel(&stale); err != nil {
+			return fmt.Errorf("removing stale neighbor proxy %q: %w", address, err)
+		}
+	}
+
+	for address := range peers {
+		if present[address] {
+			continue
+		}
+
+		if err = netlink.NeighAdd(&netlink.Neigh{
+			LinkIndex: router.Attrs().Index,
+			Family:    netlink.FAMILY_V6,
+			Flags:     unix.NTF_PROXY,
+			IP:        net.IP(address.AsSlice()),
+		}); err != nil {
+			return fmt.Errorf("adding neighbor proxy %q: %w", address, err)
 		}
 	}
 

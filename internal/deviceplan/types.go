@@ -135,7 +135,7 @@ type ManagementInput struct {
 	// auto-expose default set) translated to the Node's interposed management address when the
 	// port is not already claimed by a planned container port in the Pod.
 	InboundPorts []Port `json:"inboundPorts,omitempty"`
-	// Mesh is the controller-allocated management L2 mesh membership carried into the
+	// Mesh is the controller-allocated management mesh membership carried into the
 	// interposition contract.
 	Mesh *ManagementMesh `json:"mesh,omitempty"`
 }
@@ -578,9 +578,9 @@ type ManagementInterposition struct {
 	// InboundPorts are declared management ports translated from the Pod address to the device
 	// management address.
 	InboundPorts []ManagementPortMap `json:"inboundPorts,omitempty"`
-	// Mesh is the Pod's membership in the topology's management L2 domain; when present the
-	// sidecar bridges the device leg, the gateway leg, and a management VTEP so peer management
-	// addresses are reachable device-to-device.
+	// Mesh is the Pod's membership in the namespace's management domain; when present the
+	// sidecar routes peer-bound management traffic over the management tunnel endpoint so peer
+	// management addresses are reachable device-to-device.
 	Mesh *ManagementMesh `json:"mesh,omitempty"`
 }
 
@@ -594,8 +594,9 @@ type ManagementPortMap struct {
 	DevicePort uint16 `json:"devicePort"`
 }
 
-// ManagementMesh is controller-allocated membership in the management L2 domain shared by a
-// namespace's interposed Pods.
+// ManagementMesh is controller-allocated membership in the management domain shared by a
+// namespace's interposed Pods. The peer set is not plan data: it reaches the sidecar through
+// the namespace peer directory the controller publishes.
 type ManagementMesh struct {
 	// TunnelID is the VNI of the management mesh, derived deterministically from the
 	// namespace; Link wire ids travel a different port and plane and cannot reach the mesh.
@@ -603,9 +604,6 @@ type ManagementMesh struct {
 	// GatewayMAC is the deterministic gateway link-layer identity shared by every Pod of the
 	// namespace.
 	GatewayMAC string `json:"gatewayMAC"`
-	// PeerService is the stable transport (Service DNS) name resolving to every mesh member
-	// Pod; the sidecar discovers the current peer set through it on the revision tick.
-	PeerService string `json:"peerService"`
 }
 
 // ManagementInterfaceSelector identifies a generic runtime-owned interface when the imported

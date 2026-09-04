@@ -13,7 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// meshSegmentClampTableName is the sidecar-owned bridge-family nftables table holding the
+// meshSegmentClampTableName is the sidecar-owned inet-family nftables table holding the
 // management mesh segment clamp. nftables tables are scoped to the Pod network namespace, so the
 // name cannot collide across Pods.
 const meshSegmentClampTableName = "c9s-mesh-clamp"
@@ -32,21 +32,21 @@ const (
 	tcpHeaderBytes  = 20
 	tcpFlagsOffset  = 13
 	tcpFlagSYN      = 0x02
-	etherTypeLength = 2
 )
 
 // ensureMeshSegmentClamp reconciles the segment clamp on the management mesh: every TCP handshake
-// crossing the mesh bridge advertises at most the segment the mesh MTU can carry.
+// forwarded between the router leg and the mesh tunnel endpoint advertises at most the segment
+// the mesh MTU can carry.
 //
 // Devices whose management port size is fixed by the application (SR OS presents a 1514 byte port
 // that cannot be lowered) otherwise derive their segment size from their own interface and emit
-// frames the mesh cannot carry. Nothing on the path answers with fragmentation-needed -- the drop
-// happens on a veth, not a router -- so the flow becomes a black hole: the connection completes
-// and then stalls on the first full-size segment, which is exactly what a TLS certificate or a
-// NETCONF hello is. Clamping the advertised size makes both peers send segments that fit.
+// segments the mesh cannot carry. The routed path does answer an oversized DF packet with
+// fragmentation-needed, but a stack that ignores it, or a flow whose first full-size segment is
+// exactly what a TLS certificate or a NETCONF hello is, still stalls; clamping the advertised
+// size makes both peers send segments that fit from the first byte.
 //
-// The clamp only ever lowers an advertised size, and it is scoped to the mesh bridge so lab data
-// plane traffic keeps whatever segment size the topology asked for.
+// The clamp only ever lowers an advertised size, and it is scoped to the two mesh ingress
+// interfaces so lab data plane traffic keeps whatever segment size the topology asked for.
 func ensureMeshSegmentClamp(meshMTU int) error {
 	if meshMTU <= 0 {
 		return nil
@@ -55,7 +55,7 @@ func ensureMeshSegmentClamp(meshMTU int) error {
 	conn := &nftables.Conn{}
 
 	table := conn.AddTable(&nftables.Table{
-		Family: nftables.TableFamilyBridge,
+		Family: nftables.TableFamilyINet,
 		Name:   meshSegmentClampTableName,
 	})
 	conn.FlushTable(table)
@@ -69,16 +69,15 @@ func ensureMeshSegmentClamp(meshMTU int) error {
 	})
 
 	for _, ingressName := range []string{
-		MeshDevicePortName,
-		MeshGatewayPortName,
+		RouterInterfaceName,
 		MeshVTEPName,
 	} {
 		for _, family := range []struct {
-			etherType   uint16
+			protocol    byte
 			headerBytes int
 		}{
-			{etherType: unix.ETH_P_IP, headerBytes: ipv4HeaderBytes},
-			{etherType: unix.ETH_P_IPV6, headerBytes: ipv6HeaderBytes},
+			{protocol: unix.NFPROTO_IPV4, headerBytes: ipv4HeaderBytes},
+			{protocol: unix.NFPROTO_IPV6, headerBytes: ipv6HeaderBytes},
 		} {
 			maxSegment := meshMTU - family.headerBytes - tcpHeaderBytes
 			if maxSegment <= 0 {
@@ -94,15 +93,15 @@ func ensureMeshSegmentClamp(meshMTU int) error {
 				table,
 				chain,
 				ingressName,
-				family.etherType,
+				family.protocol,
 				maxSegmentValue,
 			))
 		}
 	}
 
 	if err := conn.Flush(); err != nil {
-		// MSS clamping is an optimization for kernels that expose bridge-family nftables.
-		// Older kernels may reject that optional family or expression with ENOENT or
+		// MSS clamping is an optimization for kernels that expose the needed nftables
+		// expressions. Older kernels may reject an optional expression with ENOENT or
 		// EOPNOTSUPP; management connectivity must still use the realized mesh.
 		if isUnsupportedMeshSegmentClampError(err) {
 			return nil
@@ -118,13 +117,14 @@ func isUnsupportedMeshSegmentClampError(err error) bool {
 	return errors.Is(err, unix.ENOENT) || errors.Is(err, unix.EOPNOTSUPP)
 }
 
-// meshSegmentClampRule builds the clamp for one address family: a TCP SYN crossing the mesh
-// bridge whose advertised maximum segment exceeds what the mesh carries has that size replaced.
+// meshSegmentClampRule builds the clamp for one ingress interface and address family: a TCP SYN
+// forwarded from that interface whose advertised maximum segment exceeds what the mesh carries
+// has that size replaced.
 func meshSegmentClampRule(
 	table *nftables.Table,
 	chain *nftables.Chain,
 	ingressName string,
-	etherType uint16,
+	protocol byte,
 	maxSegment uint16,
 ) *nftables.Rule {
 	size := binaryutil.BigEndian.PutUint16(maxSegment)
@@ -133,23 +133,17 @@ func meshSegmentClampRule(
 		Table: table,
 		Chain: chain,
 		Exprs: []expr.Any{
-			// Match the fixed mesh ingress ports instead of the bridge-specific ibrname key:
-			// Talos enables NF_TABLES_BRIDGE without NFT_BRIDGE_META.
 			&expr.Meta{Key: expr.MetaKeyIIFNAME, Register: 1},
 			&expr.Cmp{
 				Op:       expr.CmpOpEq,
 				Register: 1,
 				Data:     interfaceName(ingressName),
 			},
-			&expr.Meta{Key: expr.MetaKeyPROTOCOL, Register: 1},
-			&expr.Cmp{
-				Op:       expr.CmpOpEq,
-				Register: 1,
-				Data:     binaryutil.BigEndian.PutUint16(etherType)[:etherTypeLength],
-			},
+			&expr.Meta{Key: expr.MetaKeyNFPROTO, Register: 1},
+			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{protocol}},
 			// The transport protocol comes from the packet parse rather than a header offset:
-			// the bridge family carries the link header, so the network-header offsets differ
-			// per address family and per IPv6 extension chain.
+			// the inet family carries both address families, whose network-header layouts
+			// differ, and IPv6 may carry an extension chain ahead of TCP.
 			&expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1},
 			&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{unix.IPPROTO_TCP}},
 			&expr.Payload{

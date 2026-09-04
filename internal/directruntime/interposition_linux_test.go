@@ -4,8 +4,6 @@
 package directruntime
 
 import (
-	"context"
-	"errors"
 	"net"
 	"net/netip"
 	"os"
@@ -18,22 +16,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var errStaticMeshResolver = errors.New("transient resolver failure")
-
-type staticMeshResolver struct {
-	addresses []netip.Addr
-	err       error
-}
-
-func (s staticMeshResolver) LookupNetIP(
-	_ context.Context,
-	_, _ string,
-) ([]netip.Addr, error) {
-	return s.addresses, s.err
-}
-
-// listMeshHeadEndPeers returns the destinations of the VTEP's zero-MAC head-end entries.
-func listMeshHeadEndPeers(t *testing.T, vtep netlink.Link) map[string]bool {
+// listMeshForwardingEntries returns the VTEP's self forwarding entries: identity to Pod address.
+func listMeshForwardingEntries(t *testing.T, vtep netlink.Link) map[string]string {
 	t.Helper()
 
 	entries, err := netlink.NeighList(vtep.Attrs().Index, unix.AF_BRIDGE)
@@ -41,25 +25,60 @@ func listMeshHeadEndPeers(t *testing.T, vtep netlink.Link) map[string]bool {
 		t.Fatalf("listing mesh forwarding entries: %v", err)
 	}
 
-	peers := map[string]bool{}
+	forwarding := map[string]string{}
 
 	for _, entry := range entries {
 		if entry.Flags&unix.NTF_SELF == 0 || entry.IP == nil {
 			continue
 		}
 
-		if entry.HardwareAddr.String() == "00:00:00:00:00:00" {
-			peers[entry.IP.String()] = true
-		}
+		forwarding[entry.HardwareAddr.String()] = entry.IP.String()
 	}
 
-	return peers
+	return forwarding
 }
 
-// assertMeshPeerReconciliation exercises head-end replication maintenance directly against the
-// realized VTEP: discovery adds peers minus self, shrinking removes exactly the departed peer,
-// and a resolver failure keeps the last-known set.
-func assertMeshPeerReconciliation(t *testing.T) {
+// listMeshNeighbors returns the VTEP's permanent neighbor entries: address to identity.
+func listMeshNeighbors(t *testing.T, vtep netlink.Link, family int) map[string]string {
+	t.Helper()
+
+	entries, err := netlink.NeighList(vtep.Attrs().Index, family)
+	if err != nil {
+		t.Fatalf("listing mesh neighbors: %v", err)
+	}
+
+	neighbors := map[string]string{}
+
+	for _, entry := range entries {
+		if entry.State&netlink.NUD_PERMANENT == 0 || entry.IP == nil {
+			continue
+		}
+
+		neighbors[entry.IP.String()] = entry.HardwareAddr.String()
+	}
+
+	return neighbors
+}
+
+func assertStringMap(t *testing.T, step string, got, want map[string]string) {
+	t.Helper()
+
+	if len(got) != len(want) {
+		t.Fatalf("%s: entries = %v, want %v", step, got, want)
+	}
+
+	for key, value := range want {
+		if got[key] != value {
+			t.Fatalf("%s: entries = %v, want %v", step, got, want)
+		}
+	}
+}
+
+// assertMeshPeerReconciliation exercises per-peer state maintenance directly against the
+// realized VTEP: a peer set installs exactly one neighbor and one forwarding entry per peer
+// (self excluded), a relocated peer moves its forwarding entry, shrinking removes exactly the
+// departed peer's entries, and a flood entry left by the earlier bridged shape is removed.
+func assertMeshPeerReconciliation(t *testing.T, spec InterpositionSpec) {
 	t.Helper()
 
 	vtep, err := netlink.LinkByName(MeshVTEPName)
@@ -67,47 +86,62 @@ func assertMeshPeerReconciliation(t *testing.T) {
 		t.Fatalf("mesh VTEP is absent: %v", err)
 	}
 
-	pod := netip.MustParseAddr("10.244.2.134")
-	// A non-address Pod identity routes resolution through the injected resolver seam.
-	spec := InterpositionSpec{PodAddress: "resolver-seam", MeshPeerService: "peers"}
+	pod := netip.MustParseAddr(spec.PodAddress)
+	own := netip.MustParsePrefix(spec.ManagementIPv4).Addr()
 
-	operations := netlinkOperations{resolver: staticMeshResolver{addresses: []netip.Addr{
-		netip.MustParseAddr("10.244.1.5"),
-		netip.MustParseAddr("10.244.2.9"),
-		pod,
-	}}}
-	if err = operations.ensureMeshPeers(spec, vtep, pod); err != nil {
-		t.Fatalf("ensureMeshPeers() discovery pass: %v", err)
+	spec.MeshPeers = []MeshPeer{
+		{ManagementIPv4: "172.80.80.12", PodAddress: "10.244.1.5"},
+		{ManagementIPv4: "172.80.80.13", PodAddress: "10.244.2.9"},
+		// The Pod's own identity never becomes a peer, however it is listed.
+		{ManagementIPv4: "172.80.80.11", PodAddress: "10.244.2.134"},
+		{ManagementIPv4: "172.80.80.99", PodAddress: spec.PodAddress},
 	}
 
-	peers := listMeshHeadEndPeers(t, vtep)
-	if len(peers) != 2 || !peers["10.244.1.5"] || !peers["10.244.2.9"] {
-		t.Fatalf("head-end peers = %v, want the discovered set minus self", peers)
+	if err = ensureMeshPeers(spec, vtep, pod, own); err != nil {
+		t.Fatalf("ensureMeshPeers() install pass: %v", err)
 	}
 
-	operations = netlinkOperations{resolver: staticMeshResolver{addresses: []netip.Addr{
-		netip.MustParseAddr("10.244.1.5"),
-	}}}
-	if err = operations.ensureMeshPeers(spec, vtep, pod); err != nil {
-		t.Fatalf("ensureMeshPeers() shrink pass: %v", err)
+	assertStringMap(t, "install forwarding", listMeshForwardingEntries(t, vtep), map[string]string{
+		"06:c9:ac:50:50:0c": "10.244.1.5",
+		"06:c9:ac:50:50:0d": "10.244.2.9",
+	})
+	assertStringMap(t, "install neighbors", listMeshNeighbors(t, vtep, netlink.FAMILY_V4),
+		map[string]string{
+			"172.80.80.12": "06:c9:ac:50:50:0c",
+			"172.80.80.13": "06:c9:ac:50:50:0d",
+		})
+
+	// A flood entry from the earlier head-end-replicated shape must be converged away exactly.
+	if err = netlink.NeighAppend(&netlink.Neigh{
+		LinkIndex:    vtep.Attrs().Index,
+		Family:       unix.AF_BRIDGE,
+		Flags:        unix.NTF_SELF,
+		State:        netlink.NUD_PERMANENT | netlink.NUD_NOARP,
+		IP:           net.ParseIP("10.244.9.9"),
+		HardwareAddr: make(net.HardwareAddr, 6),
+	}); err != nil {
+		t.Fatalf("planting a flood entry: %v", err)
 	}
 
-	peers = listMeshHeadEndPeers(t, vtep)
-	if len(peers) != 1 || !peers["10.244.1.5"] {
-		t.Fatalf("head-end peers = %v, want exactly the remaining peer", peers)
+	// Peer 12 moves to another Pod, peer 13 departs.
+	spec.MeshPeers = []MeshPeer{{ManagementIPv4: "172.80.80.12", PodAddress: "10.244.3.2"}}
+
+	if err = ensureMeshPeers(spec, vtep, pod, own); err != nil {
+		t.Fatalf("ensureMeshPeers() relocate pass: %v", err)
 	}
 
-	operations = netlinkOperations{resolver: staticMeshResolver{
-		err: errStaticMeshResolver,
-	}}
-	if err = operations.ensureMeshPeers(spec, vtep, pod); err != nil {
-		t.Fatalf("ensureMeshPeers() failure pass: %v", err)
+	assertStringMap(t, "relocate forwarding", listMeshForwardingEntries(t, vtep),
+		map[string]string{"06:c9:ac:50:50:0c": "10.244.3.2"})
+	assertStringMap(t, "relocate neighbors", listMeshNeighbors(t, vtep, netlink.FAMILY_V4),
+		map[string]string{"172.80.80.12": "06:c9:ac:50:50:0c"})
+
+	// An unchanged pass is a no-op.
+	if err = ensureMeshPeers(spec, vtep, pod, own); err != nil {
+		t.Fatalf("ensureMeshPeers() steady pass: %v", err)
 	}
 
-	peers = listMeshHeadEndPeers(t, vtep)
-	if len(peers) != 1 || !peers["10.244.1.5"] {
-		t.Fatalf("head-end peers = %v, want the last-known set kept", peers)
-	}
+	assertStringMap(t, "steady forwarding", listMeshForwardingEntries(t, vtep),
+		map[string]string{"06:c9:ac:50:50:0c": "10.244.3.2"})
 }
 
 const interpositionNetlinkChild = "C9S_INTERPOSITION_NETLINK_TEST_CHILD"
@@ -156,6 +190,17 @@ func TestEnsureInterpositionConvergesIsolatedNamespace(t *testing.T) {
 
 		t.Fatalf("isolated interposition test failed: %v\n%s", err, output)
 	}
+}
+
+func readSysctl(t *testing.T, path string) string {
+	t.Helper()
+
+	raw, err := os.ReadFile(path) //nolint:gosec // fixed sysctl tree, package-owned names.
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+
+	return strings.TrimSpace(string(raw))
 }
 
 //nolint:gocognit,gocyclo // one straight-line verification pass.
@@ -244,7 +289,11 @@ func testEnsureInterpositionConverges(t *testing.T) {
 		StateDirectory:     state,
 		MeshTunnelID:       16_100_007,
 		MeshGatewayMAC:     "02:c9:aa:bb:cc:dd",
-		MeshPeerService:    "c9s-management-mesh",
+		MeshMAC:            "06:c9:ac:50:50:0b",
+		MeshPeers: []MeshPeer{
+			{ManagementIPv4: "172.80.80.21", PodAddress: "10.244.1.21"},
+		},
+		ReconcileMeshPeers: true,
 	}
 
 	// The device interface name equals the original CNI name, exactly like real kinds: the
@@ -265,30 +314,53 @@ func testEnsureInterpositionConverges(t *testing.T) {
 			t.Fatalf("%s: listing transport table: %v", step, listErr)
 		}
 
-		haveDefault := false
-
-		for _, route := range routes {
-			if isDefaultRouteDestination(route.Dst) && route.Gw != nil &&
-				route.Gw.String() == "10.244.2.1" {
-				haveDefault = true
-			}
-		}
-
-		if !haveDefault {
-			t.Fatalf("%s: transport table carries no default route: %+v", step, routes)
-		}
-
 		transport, transportErr := netlink.LinkByName(TransportInterfaceName)
 		if transportErr != nil {
 			t.Fatalf("%s: preserved transport interface is absent: %v", step, transportErr)
 		}
 
-		// The exact CNI route shape must survive in the transport table: subnet VIA the
-		// gateway, never a resurrected kernel connected prefix.
+		router, routerErr := netlink.LinkByName(RouterInterfaceName)
+		if routerErr != nil ||
+			router.Attrs().HardwareAddr.String() != "02:c9:aa:bb:cc:dd" {
+			t.Fatalf(
+				"%s: router leg gateway MAC = %v, want pinned deterministic identity (%v)",
+				step, router.Attrs().HardwareAddr, routerErr,
+			)
+		}
+
+		vtepLink, vtepErr := netlink.LinkByName(MeshVTEPName)
+		if vtepErr != nil {
+			t.Fatalf("%s: mesh VTEP is absent: %v", step, vtepErr)
+		}
+
+		haveDefault, haveOwn, haveMesh := false, false, false
+
 		for _, route := range routes {
-			if route.Dst != nil && route.Dst.String() == "10.244.2.0/24" && route.Gw == nil {
+			switch {
+			case isDefaultRouteDestination(route.Dst):
+				haveDefault = route.Gw != nil && route.Gw.String() == "10.244.2.1"
+			case route.Dst.String() == "10.244.2.0/24" && route.Gw == nil:
+				// The exact CNI route shape must survive in the transport table: subnet VIA
+				// the gateway, never a resurrected kernel connected prefix.
 				t.Fatalf("%s: connected prefix route resurrected in transport table", step)
+			case route.Dst.String() == "172.80.80.11/32":
+				haveOwn = route.LinkIndex == router.Attrs().Index
+			case route.Dst.String() == "172.80.80.0/24":
+				// The subnet rides the mesh tunnel endpoint; via the router leg it would send
+				// peer traffic straight back to the device.
+				if route.LinkIndex == router.Attrs().Index {
+					t.Fatalf("%s: management subnet routed via the router leg", step)
+				}
+
+				haveMesh = route.LinkIndex == vtepLink.Attrs().Index
 			}
+		}
+
+		if !haveDefault || !haveOwn || !haveMesh {
+			t.Fatalf(
+				"%s: transport table routes (default %t, own %t, mesh %t): %+v",
+				step, haveDefault, haveOwn, haveMesh, routes,
+			)
 		}
 
 		addresses, _ := netlink.AddrList(transport, netlink.FAMILY_V4)
@@ -299,6 +371,13 @@ func testEnsureInterpositionConverges(t *testing.T) {
 		device, deviceErr := netlink.LinkByName("eth0")
 		if deviceErr != nil {
 			t.Fatalf("%s: synthetic device leg is absent: %v", step, deviceErr)
+		}
+
+		// The device leg and the router leg are the two ends of one pair: nothing sits between
+		// the device and the routing decision.
+		if device.Attrs().ParentIndex != router.Attrs().Index {
+			t.Fatalf("%s: device leg peer index %d, want router leg %d",
+				step, device.Attrs().ParentIndex, router.Attrs().Index)
 		}
 
 		deviceAddresses, _ := netlink.AddrList(device, netlink.FAMILY_V4)
@@ -328,7 +407,7 @@ func testEnsureInterpositionConverges(t *testing.T) {
 		}
 
 		// The management rule must cover exactly the local device address: a subnet-wide rule
-		// would pull peer management traffic into the isolated gateway leg instead of the mesh.
+		// would pull peer management traffic into the router leg instead of the mesh.
 		haveLocalManagementRule := false
 
 		for _, rule := range rules {
@@ -343,64 +422,32 @@ func testEnsureInterpositionConverges(t *testing.T) {
 			t.Fatalf("%s: management rule is not scoped to the local device address", step)
 		}
 
-		bridge, bridgeErr := netlink.LinkByName(MeshBridgeName)
-		if bridgeErr != nil || bridge.Type() != "bridge" {
-			t.Fatalf("%s: mesh bridge is absent: %v", step, bridgeErr)
-		}
-
-		for portName, wantIsolated := range map[string]bool{
-			MeshDevicePortName:  false,
-			MeshGatewayPortName: true,
-			MeshVTEPName:        true,
-		} {
-			port, portErr := netlink.LinkByName(portName)
-			if portErr != nil {
-				t.Fatalf("%s: mesh port %q is absent: %v", step, portName, portErr)
+		// The bridged shape is gone: no bridge, no gateway pair.
+		for _, name := range []string{"c9sb0", "c9sd0", "c9sg0"} {
+			if _, bridgedErr := netlink.LinkByName(name); bridgedErr == nil {
+				t.Fatalf("%s: bridged-shape element %q exists", step, name)
 			}
-
-			if port.Attrs().MasterIndex != bridge.Attrs().Index {
-				t.Fatalf("%s: mesh port %q is not enslaved to the bridge", step, portName)
-			}
-
-			protinfo, protErr := netlink.LinkGetProtinfo(port)
-			if protErr != nil {
-				t.Fatalf("%s: reading mesh port %q protinfo: %v", step, portName, protErr)
-			}
-
-			if protinfo.Isolated != wantIsolated {
-				t.Fatalf(
-					"%s: mesh port %q isolated = %t, want %t",
-					step, portName, protinfo.Isolated, wantIsolated,
-				)
-			}
-		}
-
-		vtepLink, vtepErr := netlink.LinkByName(MeshVTEPName)
-		if vtepErr != nil {
-			t.Fatalf("%s: mesh VTEP is absent: %v", step, vtepErr)
 		}
 
 		vxlan, isVXLAN := vtepLink.(*netlink.Vxlan)
-		if !isVXLAN || vxlan.VxlanId != 16_100_007 || !vxlan.Learning ||
-			vxlan.Port != 14789 || vxlan.SrcAddr.String() != "10.244.2.134" {
+		if !isVXLAN || vxlan.VxlanId != 16_100_007 || vxlan.Learning ||
+			vxlan.Port != 14789 || vxlan.SrcAddr.String() != "10.244.2.134" ||
+			vxlan.Attrs().HardwareAddr.String() != "06:c9:ac:50:50:0b" ||
+			vxlan.Attrs().MasterIndex != 0 {
 			t.Fatalf("%s: mesh VTEP does not conform: %+v", step, vtepLink)
 		}
 
-		router, routerErr := netlink.LinkByName(RouterInterfaceName)
-		if routerErr != nil ||
-			router.Attrs().HardwareAddr.String() != "02:c9:aa:bb:cc:dd" {
-			t.Fatalf(
-				"%s: router leg gateway MAC = %v, want pinned deterministic identity (%v)",
-				step, router.Attrs().HardwareAddr, routerErr,
-			)
+		// The router leg proxies ARP for peers with no delay; the VTEP never answers.
+		if readSysctl(t, "/proc/sys/net/ipv4/conf/"+RouterInterfaceName+"/proxy_arp") != "1" ||
+			readSysctl(t, "/proc/sys/net/ipv4/neigh/"+RouterInterfaceName+"/proxy_delay") != "0" ||
+			readSysctl(t, "/proc/sys/net/ipv4/conf/"+MeshVTEPName+"/arp_ignore") != "1" ||
+			readSysctl(t, "/proc/sys/net/ipv6/conf/"+MeshVTEPName+"/disable_ipv6") != "1" {
+			t.Fatalf("%s: router leg proxy ARP or VTEP scoping sysctls are not set", step)
 		}
 
 		// The fake CNI underlay is 1500; every mesh element must carry underlay minus
 		// encapsulation overhead so device segment sizes fit the cross-Pod path.
-		for _, name := range []string{
-			MeshBridgeName, MeshDevicePortName, MeshGatewayPortName,
-			MeshVTEPName, RouterInterfaceName, "eth0",
-		} {
+		for _, name := range []string{MeshVTEPName, RouterInterfaceName, "eth0"} {
 			link, linkErr := netlink.LinkByName(name)
 			if linkErr != nil {
 				t.Fatalf("%s: mesh element %q is absent: %v", step, name, linkErr)
@@ -410,22 +457,35 @@ func testEnsureInterpositionConverges(t *testing.T) {
 				t.Fatalf("%s: mesh element %q MTU = %d, want 1450", step, name, link.Attrs().MTU)
 			}
 		}
+
+		// The peer given to EnsureInterposition is installed through the same path the tick
+		// uses: one neighbor entry and one forwarding entry, nothing flooded.
+		assertStringMap(t, step+" forwarding", listMeshForwardingEntries(t, vtepLink),
+			map[string]string{"06:c9:ac:50:50:15": "10.244.1.21"})
+		assertStringMap(t, step+" neighbors", listMeshNeighbors(t, vtepLink, netlink.FAMILY_V4),
+			map[string]string{"172.80.80.21": "06:c9:ac:50:50:15"})
 	}
 
 	assertInterposedState("cold pass")
 
 	assertReversePathFiltersCleared(t)
 
-	assertMeshPeerReconciliation(t)
+	// A pass not asked to reconcile peers leaves the peer state alone even with a different
+	// peer list, so unchanged ticks never touch the neighbor tables.
+	untouched := spec
+	untouched.MeshPeers = nil
+	untouched.ReconcileMeshPeers = false
 
-	// Second pass must be idempotent.
-	if err = operations.EnsureInterposition(spec); err != nil {
+	if err = operations.EnsureInterposition(untouched); err != nil {
 		t.Fatalf("EnsureInterposition() steady pass: %v", err)
 	}
 
 	assertInterposedState("steady pass")
 
-	// A device stripping every table's routes must be converged back from the recorded gateway.
+	assertMeshPeerReconciliation(t, spec)
+
+	// A device stripping every table's routes must be converged back from the recorded gateway,
+	// and the mesh routes re-asserted with it.
 	routes, _ := netlink.RouteListFiltered(
 		netlink.FAMILY_V4,
 		&netlink.Route{},
@@ -443,7 +503,8 @@ func testEnsureInterpositionConverges(t *testing.T) {
 		netlink.RT_FILTER_TABLE,
 	)
 	for _, route := range strippedRoutes {
-		if isDefaultRouteDestination(route.Dst) {
+		if isDefaultRouteDestination(route.Dst) ||
+			(route.Dst != nil && route.Dst.String() == "172.80.80.0/24") {
 			_ = netlink.RouteDel(&route)
 		}
 	}
@@ -463,14 +524,7 @@ func assertReversePathFiltersCleared(t *testing.T) {
 	t.Helper()
 
 	for _, name := range []string{"default", "all", TransportInterfaceName, RouterInterfaceName} {
-		raw, err := os.ReadFile( //nolint:gosec // fixed sysctl tree, package-owned names.
-			"/proc/sys/net/ipv4/conf/" + name + "/rp_filter",
-		)
-		if err != nil {
-			t.Fatalf("reading rp_filter for %q: %v", name, err)
-		}
-
-		if value := strings.TrimSpace(string(raw)); value != "0" {
+		if value := readSysctl(t, "/proc/sys/net/ipv4/conf/"+name+"/rp_filter"); value != "0" {
 			t.Fatalf("rp_filter for %q = %s, want 0", name, value)
 		}
 	}
@@ -483,16 +537,11 @@ func assertReversePathFiltersCleared(t *testing.T) {
 		t.Fatalf("creating post-interposition interface: %v", err)
 	}
 
-	raw, err := os.ReadFile("/proc/sys/net/ipv4/conf/post0/rp_filter")
-	if err != nil {
-		t.Fatalf("reading rp_filter for post-interposition interface: %v", err)
-	}
-
-	if value := strings.TrimSpace(string(raw)); value != "0" {
+	if value := readSysctl(t, "/proc/sys/net/ipv4/conf/post0/rp_filter"); value != "0" {
 		t.Fatalf("post-interposition interface rp_filter = %s, want 0", value)
 	}
 
-	if err = netlink.LinkDel(&netlink.Dummy{
+	if err := netlink.LinkDel(&netlink.Dummy{
 		LinkAttrs: netlink.LinkAttrs{Name: "post0"},
 	}); err != nil {
 		t.Fatalf("removing post-interposition interface: %v", err)

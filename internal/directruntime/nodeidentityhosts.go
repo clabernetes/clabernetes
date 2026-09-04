@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
@@ -26,12 +28,12 @@ const podHostsFilePath = "/etc/hosts"
 // first match wins, so the owned line is prepended ahead of it), and every namespace peer —
 // with its aliases and chassis component names — resolves to its management address, so peer
 // traffic rides the management mesh on any port, exactly like the Docker management network.
-// The peer set comes from the mounted peer-directory file, so lab membership changes reach a
+// The peer set comes from the mounted peer directory, so lab membership changes reach a
 // running Pod without a restart. Best effort by design: a failed rewrite leaves the kubelet's
 // resolution in place and must not keep the device from booting.
 func applyOwnedHostsBestEffort(
 	plan clabernetesinternaldeviceplan.Plan,
-	peerDirectoryPath string,
+	peers []PeerIdentity,
 	operations LaunchOperations,
 ) {
 	hostname, err := operations.Hostname()
@@ -39,20 +41,6 @@ func applyOwnedHostsBestEffort(
 		reportSkippedOwnedHosts(err)
 
 		return
-	}
-
-	peers := []PeerIdentity(nil)
-
-	if peerDirectoryPath != "" {
-		content, readErr := operations.ReadFile(peerDirectoryPath)
-		if readErr == nil && len(content) != 0 {
-			peers, readErr = ParsePeerDirectory(content)
-		}
-
-		if readErr != nil && !os.IsNotExist(readErr) {
-			// The directory is an optional projection: absence means no peers yet.
-			reportSkippedOwnedHosts(readErr)
-		}
 	}
 
 	identity := renderNodeIdentityHostsLines(plan, hostname)
@@ -188,15 +176,65 @@ func prependOwnedHosts(current []byte, owned string) []byte {
 	return []byte(owned + remainder)
 }
 
+// hostsFileMemo remembers the hosts file fingerprint (size and modification time) observed
+// right after the owned entries were last realized, so a tick on which neither the peer set
+// nor the file changed costs one stat call instead of a render and a file scan proportional
+// to the namespace size. Any rewrite by the kubelet or a container moves the fingerprint.
+type hostsFileMemo struct {
+	mutex       sync.Mutex
+	fingerprint string
+}
+
+func hostsFileFingerprint(path string) string {
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+
+	return strconv.FormatInt(info.Size(), 10) + "@" +
+		strconv.FormatInt(info.ModTime().UnixNano(), 10)
+}
+
+// unchanged reports whether the file still carries the fingerprint of the last realization.
+func (m *hostsFileMemo) unchanged(path string) bool {
+	if m == nil {
+		return false
+	}
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	return m.fingerprint != "" && m.fingerprint == hostsFileFingerprint(path)
+}
+
+// remember records the file's fingerprint after a realization.
+func (m *hostsFileMemo) remember(path string) {
+	if m == nil {
+		return
+	}
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	m.fingerprint = hostsFileFingerprint(path)
+}
+
 // assertOwnedHosts is the sidecar-side entry: the connectivity sidecar shares the Pod's UTS
 // hostname and the kubelet-managed hosts file, so it realizes the same owned entries as the
-// launch boundary, from the sidecar's own peer-directory mount.
-func assertOwnedHosts(plan clabernetesinternaldeviceplan.Plan) {
-	applyOwnedHostsBestEffort(
-		plan,
-		ConnectivityPeerDirectoryRoot+"/"+PeerDirectoryConfigMapKey,
-		newLaunchOperations(),
-	)
+// launch boundary, from the peers read off the sidecar's own peer-directory mount. With an
+// unchanged peer set the realization runs only when the file itself changed underneath.
+func assertOwnedHosts(
+	plan clabernetesinternaldeviceplan.Plan,
+	peers []PeerIdentity,
+	memo *hostsFileMemo,
+	peersChanged bool,
+) {
+	if !peersChanged && memo.unchanged(podHostsFilePath) {
+		return
+	}
+
+	applyOwnedHostsBestEffort(plan, peers, newLaunchOperations())
+	memo.remember(podHostsFilePath)
 }
 
 // reportSkippedOwnedHosts notes a best-effort hosts rewrite failure on the container's own log

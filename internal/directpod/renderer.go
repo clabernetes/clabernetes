@@ -73,7 +73,6 @@ const (
 	preparationName                  = "planner"
 	connectivityName                 = "clabwire"
 	directWorkloadLabel              = clabernetesconstants.LabelDirectWorkload
-	directMeshMemberLabel            = clabernetesconstants.LabelDirectMeshMember
 	planDigestAnnotation             = "c9s.run/node-plan-digest"
 	// node-runtime CLI invocation tokens.
 	runtimeCommandName        = "node-runtime"
@@ -421,7 +420,6 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 	}
 
 	labels[directWorkloadLabel] = options.Name
-	labels[directMeshMemberLabel] = clabernetesconstants.DirectMeshMemberEnabled
 
 	annotations := maps.Clone(options.Annotations)
 	if annotations == nil {
@@ -481,19 +479,16 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 		VolumeSource: k8scorev1.VolumeSource{EmptyDir: &k8scorev1.EmptyDirVolumeSource{}},
 	})
 
-	// The peer directory is deliberately a namespace-scoped ConfigMap volume rather than
-	// rendered HostAliases: lab membership changes update the ConfigMap only, which the
-	// kubelet syncs into running Pods, so adding or removing a node never recreates Pods.
-	// Optional, so a Pod can start before the directory exists.
-	peerDirectoryOptional := true
-
+	// The peer directory is deliberately a namespace-scoped ConfigMap projection rather than
+	// rendered HostAliases: lab membership changes update the ConfigMaps only, which the
+	// kubelet syncs into running Pods, so adding or removing a node never recreates Pods. The
+	// directory is a fixed set of shards projected into one directory, so a membership change
+	// rewrites one small object and the Pod template never changes with namespace size. Every
+	// shard is optional, so a Pod can start before the directory exists.
 	volumes = append(volumes, k8scorev1.Volume{
 		Name: peerDirectoryVolumeName,
-		VolumeSource: k8scorev1.VolumeSource{ConfigMap: &k8scorev1.ConfigMapVolumeSource{
-			LocalObjectReference: k8scorev1.LocalObjectReference{
-				Name: clabernetesinternaldirectruntime.PeerDirectoryConfigMapName,
-			},
-			Optional: &peerDirectoryOptional,
+		VolumeSource: k8scorev1.VolumeSource{Projected: &k8scorev1.ProjectedVolumeSource{
+			Sources: peerDirectoryProjections(),
 		}},
 	})
 	if options.ConnectivityRevisionConfigMapName != "" {
@@ -2940,4 +2935,32 @@ func validateUniqueVolumeNames(volumes []k8scorev1.Volume) error {
 	}
 
 	return nil
+}
+
+// peerDirectoryProjections lists every peer directory shard as an optional ConfigMap projection
+// under its shard file name.
+func peerDirectoryProjections() []k8scorev1.VolumeProjection {
+	optional := true
+	sources := make(
+		[]k8scorev1.VolumeProjection,
+		0,
+		clabernetesinternaldirectruntime.PeerDirectoryShardCount,
+	)
+
+	for shard := range clabernetesinternaldirectruntime.PeerDirectoryShardCount {
+		sources = append(sources, k8scorev1.VolumeProjection{
+			ConfigMap: &k8scorev1.ConfigMapProjection{
+				LocalObjectReference: k8scorev1.LocalObjectReference{
+					Name: clabernetesinternaldirectruntime.PeerDirectoryShardConfigMapName(shard),
+				},
+				Items: []k8scorev1.KeyToPath{{
+					Key:  clabernetesinternaldirectruntime.PeerDirectoryConfigMapKey,
+					Path: clabernetesinternaldirectruntime.PeerDirectoryShardFileName(shard),
+				}},
+				Optional: &optional,
+			},
+		})
+	}
+
+	return sources
 }

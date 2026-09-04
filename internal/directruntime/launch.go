@@ -108,11 +108,7 @@ func RunLaunchWithOperations(
 		}
 	}
 
-	applyOwnedHostsBestEffort(
-		normalized,
-		ApplicationPeerDirectoryRoot+"/"+PeerDirectoryConfigMapKey,
-		operations,
-	)
+	realizeOwnedHostsAtLaunch(normalized, operations)
 
 	entrypoint := slices.Clone(target.Entrypoint)
 	if len(entrypoint) == 0 {
@@ -141,4 +137,19 @@ func RunLaunchWithOperations(
 	}
 
 	return nil
+}
+
+// realizeOwnedHostsAtLaunch reads the mounted peer directory and realizes the owned hosts
+// entries before the device process starts. The directory is an optional projection; a bad
+// shard costs its names, never the boot.
+func realizeOwnedHostsAtLaunch(
+	plan clabernetesinternaldeviceplan.Plan,
+	operations LaunchOperations,
+) {
+	peers, err := ReadPeerDirectory(ApplicationPeerDirectoryRoot, operations.ReadFile)
+	if err != nil {
+		reportSkippedOwnedHosts(err)
+	}
+
+	applyOwnedHostsBestEffort(plan, peers, operations)
 }

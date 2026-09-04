@@ -169,10 +169,14 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	podAddresses, err := r.directPodAddressesByNodeUID(ctx, node.GetNamespace())
+	if err != nil {
+		return err
+	}
 	if err = r.reconcileDirectPeerDirectory(
 		ctx,
 		node.GetNamespace(),
-		compileNamespaceManagementIdentities(nodesByName, profile.Mgmt),
+		compileNamespaceManagementIdentities(nodesByName, profile.Mgmt, podAddresses),
 	); err != nil {
 		return err
 	}
@@ -1472,9 +1476,8 @@ func compileDirectManagement(
 			NodeID: string(node.GetUID()), IPv4: ipv4, IPv6: ipv6,
 			InboundPorts: slices.Clone(inboundPorts),
 			Mesh: &clabernetesinternaldeviceplan.ManagementMesh{
-				TunnelID:    meshTunnelID,
-				GatewayMAC:  meshGatewayMAC,
-				PeerService: clabernetesconstants.ManagementMeshServiceName,
+				TunnelID:   meshTunnelID,
+				GatewayMAC: meshGatewayMAC,
 			},
 		}
 		value.IPv4Gateway = settings.IPv4Gw

@@ -27,9 +27,8 @@ func meshManagementPlan() clabernetesinternaldeviceplan.ManagementPlan {
 		Interposition: &clabernetesinternaldeviceplan.ManagementInterposition{
 			DeviceInterface: "eth0",
 			Mesh: &clabernetesinternaldeviceplan.ManagementMesh{
-				TunnelID:    100,
-				GatewayMAC:  "02:00:00:00:00:01",
-				PeerService: "c9s-management-mesh",
+				TunnelID:   100,
+				GatewayMAC: "02:00:00:00:00:01",
 			},
 		},
 	}
