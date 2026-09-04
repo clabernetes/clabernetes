@@ -7,15 +7,20 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	clabernetesclicker "github.com/clabernetes/clabernetes/clicker"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesinternalvnccapture "github.com/clabernetes/clabernetes/internal/vnccapture"
 	clabernetesmanager "github.com/clabernetes/clabernetes/manager"
 	"github.com/urfave/cli/v2"
+	clientcmd "k8s.io/client-go/tools/clientcmd"
 )
 
 const (
@@ -74,6 +79,12 @@ const (
 	deviceRuntimeSnapLength           = "snapLength"
 	deviceRuntimePacketLimit          = "packetLimit"
 	deviceRuntimeDuration             = "duration"
+	captureNamespace                  = "namespace"
+	captureKubeconfig                 = "kubeconfig"
+	captureContext                    = "context"
+	captureVNC                        = "vnc"
+	captureVNCImage                   = "vnc-image"
+	captureLocalPort                  = "local-port"
 )
 
 // versionPrinterOnce guards the process-global urfave/cli version printer: Entrypoint may be
@@ -90,6 +101,7 @@ func Entrypoint() *cli.App {
 		Version: clabernetesconstants.Version,
 		Usage:   "run clabernetes manager",
 		Commands: []*cli.Command{
+			captureCommand(),
 			devicePayloadWorkerCommand(),
 			deviceImageWorkerCommand(),
 			devicePlanWorkerCommand(),
@@ -726,4 +738,80 @@ func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
 	}
 
 	return raw, nil
+}
+
+func captureCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "capture",
+		Usage:     "stream a direct interface capture to stdout or Wireshark VNC",
+		ArgsUsage: "<node> <interface>",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: captureNamespace, Aliases: []string{"n"}},
+			&cli.StringFlag{Name: captureKubeconfig},
+			&cli.StringFlag{Name: captureContext},
+			&cli.DurationFlag{Name: deviceRuntimeDuration, Value: 30 * time.Second},
+			&cli.IntFlag{Name: deviceRuntimePacketLimit},
+			&cli.IntFlag{Name: deviceRuntimeSnapLength},
+			&cli.BoolFlag{Name: captureVNC},
+			&cli.StringFlag{
+				Name:  captureVNCImage,
+				Value: clabernetesinternalvnccapture.DefaultVNCImage,
+			},
+			&cli.IntFlag{Name: captureLocalPort},
+		},
+		Action: func(c *cli.Context) error {
+			if c.NArg() != 2 {
+				return errors.New("capture requires exactly one Node and interface")
+			}
+
+			loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+			if kubeconfig := strings.TrimSpace(c.String(captureKubeconfig)); kubeconfig != "" {
+				loadingRules.ExplicitPath = kubeconfig
+			}
+			overrides := &clientcmd.ConfigOverrides{}
+			overrides.CurrentContext = strings.TrimSpace(c.String(captureContext))
+			clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+				loadingRules,
+				overrides,
+			)
+			config, err := clientConfig.ClientConfig()
+			if err != nil {
+				return fmt.Errorf("loading Kubernetes client configuration: %w", err)
+			}
+
+			namespace := strings.TrimSpace(c.String(captureNamespace))
+			if namespace == "" {
+				namespace, _, err = clientConfig.Namespace()
+				if err != nil {
+					return fmt.Errorf("resolving Kubernetes namespace: %w", err)
+				}
+			}
+
+			duration := c.Duration(deviceRuntimeDuration)
+			if c.Bool(captureVNC) && !c.IsSet(deviceRuntimeDuration) {
+				duration = time.Hour
+			}
+
+			ctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
+			return clabernetesinternalvnccapture.Run(
+				ctx,
+				config,
+				clabernetesinternalvnccapture.Options{
+					Namespace:   namespace,
+					NodeName:    c.Args().Get(0),
+					Interface:   c.Args().Get(1),
+					Duration:    duration,
+					PacketLimit: c.Int(deviceRuntimePacketLimit),
+					SnapLength:  c.Int(deviceRuntimeSnapLength),
+					VNC:         c.Bool(captureVNC),
+					VNCImage:    c.String(captureVNCImage),
+					LocalPort:   c.Int(captureLocalPort),
+					Out:         c.App.Writer,
+					ErrOut:      c.App.ErrWriter,
+				},
+			)
+		},
+	}
 }
