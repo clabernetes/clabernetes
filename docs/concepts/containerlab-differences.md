@@ -51,9 +51,9 @@ diagnostic. Nothing is silently dropped.
   node name it cannot carry is sanitized: the name is lower-cased, every other character becomes
   `-`, a name starting with a digit is prefixed with `clab-`, and a name longer than 63
   characters is truncated and suffixed with a hash. `R1` becomes `r1`, `PE_1` becomes `pe-1`.
-  Every reference follows the node -- links, `network-mode: container:<node>`, and the node-keyed
+  Every reference follows the node: links, `network-mode: container:<node>`, and the node-keyed
   policy on the Topology (`filesFromConfigMap`, `filesFromSecret`, `filesFromURL`, `resources`,
-  `statusProbes`) is still written with the name the definition uses. Two node names that differ
+  `statusProbes`) are still written with the name the definition uses. Two node names that differ
   only in something Kubernetes cannot carry (`R1` and `r1`) would become one object, and that
   fails compilation. The namespace is the topology boundary.
 - **`labels` become Kubernetes labels** on the emitted Node, its Deployment, and Pods
@@ -87,3 +87,5 @@ diagnostic. Nothing is silently dropped.
 - **The kubelet pulls images.** Pull policy and pull Secrets are Kubernetes-native; there is
   no image import, pull-through, or per-lab insecure-registry setting. c9s reads only registry
   metadata and fails readiness if the running image diverges from the planned digest.
+- **`env-files` and config-engine `config` are rejected.** Environment variables go in `env`,
+  and templated configuration must be rendered before the definition is applied.

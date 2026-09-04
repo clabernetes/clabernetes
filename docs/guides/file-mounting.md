@@ -230,6 +230,28 @@ URL payloads are fetched anonymously. For content behind authentication, load it
 ConfigMap or Secret and reference that instead. Registry credentials belong in Kubernetes
 `imagePull.pullSecrets`, not in file mounting.
 
+## Containerlab file fields
+
+Containerlab node fields that name a file on the local host are satisfied by payloads instead.
+A path in the definition that equals the `filePath` of a `filesFromConfigMap`,
+`filesFromSecret`, or `filesFromURL` entry of the same Node is served from that payload:
+
+- `startup-config` inline text (a value containing newlines) is embedded in the plan and needs
+  no payload. A `startup-config` path must match a payload `filePath`.
+- `license` works the same way: mount the license at the path the field names, as in the
+  [Nokia SR-SIM guide](/docs/guides/nokia-srsim#license-file-mounting).
+- `binds` entries (`source:target` with an optional `ro`) mount a payload into the device at
+  `target`. The source must be a payload `filePath` of that Node, or a directory that contains
+  one. Anything else is rejected because there is no host to bind from.
+- `env-files` are rejected. Put the variables in `env`.
+
+Destination paths the Pod owns are rejected before anything is created: `/etc/hosts`,
+`/etc/hostname`, `/etc/resolv.conf`, `/dev/termination-log`, and everything under
+`/var/lib/clabernetes` and `/var/run/clabernetes`.
+
+[clabverter](/docs/guides/clabverter) produces these payloads automatically from a containerlab
+topology directory.
+
 ## Common Use Cases
 
 ### License Files
@@ -416,11 +438,7 @@ Ensure correct mode:
 
 ### ConfigMap Size Limit
 
-If exceeding 1MB:
-
-- Use URL-based mounting
-- Split into multiple ConfigMaps
-- Compress content
+If a file exceeds 1MB, mount it from a URL instead or split it into multiple ConfigMaps.
 
 ### URL Download Failures
 
@@ -437,14 +455,6 @@ Verify URL accessibility:
 ```bash
 kubectl run curl-test --rm -it --image=curlimages/curl -- curl -I <url>
 ```
-
-## Best Practices
-
-1. **Use Secrets for sensitive data**: Licenses, credentials, certificates
-2. **Use URLs for large files**: Configurations beyond the ConfigMap limit (up to 64 MB)
-3. **Version your ConfigMaps**: Include version in name for traceability
-4. **Use descriptive paths**: Match vendor conventions for file locations
-5. **Test file accessibility**: Verify URLs work before deploying
 
 ## Related
 

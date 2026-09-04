@@ -4,8 +4,6 @@ description: Install c9s into an existing Kubernetes cluster.
 icon: Download
 ---
 
-
-
 C9s can be installed into an existing Kubernetes cluster with version 1.31 or higher. No custom CNI, no additional storage class, no special tuning.
 
 A typical installation method uses the [c9s Helm chart](https://github.com/clabernetes/clabernetes/pkgs/container/clabernetes%2Fclabernetes) distributed as an OCI artifact.
@@ -15,18 +13,23 @@ A typical installation method uses the [c9s Helm chart](https://github.com/clabe
 - **Kubernetes 1.31 or newer.** The direct runtime relies on restartable init containers
   (native sidecars) and server-side field selectors for Link watches.
 - **Privileged workloads must be admitted** in lab namespaces: every device Pod runs a
-  privileged connectivity init-sidecar that owns interposition, fabric, and host-Link wiring
-  pod-locally. No node-resident agent is installed. Device containers themselves receive only
-  the privilege their imported kind plan declares.
+  privileged connectivity init-sidecar that wires the Pod's interfaces. If Pod Security
+  Admission is enforced, label lab namespaces with
+  `pod-security.kubernetes.io/enforce=privileged`. No node-resident agent is installed, and
+  device containers themselves receive only the privilege their containerlab kind declares.
 - **VXLAN and nftables support in the worker kernel** (standard in distribution kernels):
   the namespace-wide management mesh is kernel VXLAN inside the Pods on the CNI network, and
   management translation uses an nftables table inside each Pod's namespace. Cross-worker
   Link wires need nothing special; they are plain UDP between the connectivity sidecars.
 - **`/dev/kvm` on workers** only when running VM-backed (vrnetlab) kinds; the plan requests the
   device through ordinary Kubernetes device semantics.
+- **Pod-to-Pod UDP in lab namespaces**: device Pods exchange management mesh traffic on UDP
+  14789 and link wires on UDP 14790, and their connectivity sidecar watches Links through the
+  Kubernetes API. NetworkPolicies must allow both ports between device Pods and egress to the
+  API server.
 - **Registry access is cluster administration**: private device images use ordinary
   `imagePullSecrets`, and mirrors or insecure registries are configured on the workers'
-  container runtime, not in c9s.
+  container runtime, not in c9s. See [Image pulling](/docs/guides/image-pull).
 
 ## Versions
 
@@ -111,8 +114,35 @@ make install VERSION=main
 specific context:
 
 ```bash
- C9S_CONTEXT=my-cluster make install
+C9S_CONTEXT=my-cluster make install
 ```
+
+## Verify the installation
+
+```bash
+kubectl -n c9s get pods
+```
+
+The manager Pods must be `Running`. Then deploy a lab, for example one of the
+[basic examples](/docs/examples).
+
+## Global configuration
+
+Cluster-wide defaults (pull policy and pull Secrets, default resources, node selectors by image,
+registry trust and mirrors) live in one `Config` resource named `clabernetes` in the c9s
+namespace. The Helm chart creates it from the `globalConfig` values. On later upgrades the chart
+only fills fields that are still unset in the Config; set `globalConfig.mergeMode: overwrite` to
+have the chart values replace the whole resource on every upgrade. When the release is managed
+by Argo CD or Flux, set `globalConfig.enabled: false` and apply the Config yourself.
+
+Edit the Config directly when you do not manage it through Helm values:
+
+```bash
+kubectl -n c9s edit configs.c9s.run clabernetes
+```
+
+The manager picks up changes immediately and re-evaluates every Node. See the
+[Config reference](/docs/crd/config) for all fields.
 
 ## Upgrade
 

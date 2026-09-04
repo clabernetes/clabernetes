@@ -1,9 +1,11 @@
 title: Guides
 icon: Map
 pages:
+  - lab-operations
   - expose-configuration
   - management-network
   - file-mounting
+  - clabverter
   - image-pull
   - mtu
   - link-wire

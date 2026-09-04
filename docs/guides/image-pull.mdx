@@ -1,16 +1,16 @@
 ---
 title: Image pulling
-description: Configure direct kubelet pulls, private registry credentials, registry trust, and controller metadata mirrors.
+description: Configure pull policy, private registry credentials, registry trust, and controller metadata mirrors.
 ---
 
-Device images run directly in c9s-managed Pods. The kubelet and cluster container runtime are the
-only components that download and start them. c9s does not import image layers, create image-puller
-Pods, mount a CRI socket, or copy images into an inner Docker daemon.
+The kubelet pulls device images like the image of any other Pod. c9s has no inner Docker daemon,
+image-puller Pods, or image import path, so registry access is configured the Kubernetes way:
+pull policy and pull Secrets on the workload, mirrors and trust in the worker container runtime.
 
 ## Pull policy
 
-Set the default Kubernetes pull policy in the singleton Config or in the one NodeProfile
-selected by a Node:
+The default pull policy is `IfNotPresent`. Change it in the singleton Config, in a NodeProfile,
+or in a Topology's `spec.imagePull`:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -19,16 +19,16 @@ metadata:
   name: clabernetes
 spec:
   imagePull:
-    policy: IfNotPresent
+    policy: Always
 ```
 
-The supported values are the Kubernetes policies `Always`, `IfNotPresent`, and `Never`. An
-explicit image-pull policy produced by the imported containerlab node definition takes precedence
-over this profile default.
+The supported values are `Always`, `IfNotPresent`, and `Never`. A node that sets
+`image-pull-policy` in its containerlab definition keeps that value.
 
 ## Private registry credentials
 
-Create a Docker registry Secret in the same namespace as the target Node or Topology. In the example below, the Secret is named `regcred` is created in the `lab` namespace for a private registry at `registry.example.com` with username `myuser` and password `mypass`:
+Create a Docker registry Secret in the namespace where the Node or Topology lives. The example
+creates a Secret named `regcred` in the `lab` namespace for the registry `registry.example.com`:
 
 ```bash
 kubectl -n lab create secret docker-registry regcred \
@@ -37,11 +37,38 @@ kubectl -n lab create secret docker-registry regcred \
   --docker-password=mypass
 ```
 
-The created registry credentials Secret can be referenced in a NodeProfile or Topology to allow the kubelet to pull images from the private registry.
+Then set the Secret name as a global default in the Config, or reference it from a NodeProfile
+or Topology:
 
-<Tabs items={['NodeProfile', 'Topology']}>
+<Tabs items={['Config', 'NodeProfile', 'Topology']}>
 <Tab>
-Here is an example of a NodeProfile that uses the `regcred` Secret for image pulling:
+The Config default applies to every Node in the cluster:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Config
+metadata:
+  name: clabernetes
+spec:
+  imagePull:
+    pullSecrets:
+      - regcred
+```
+
+Secrets are namespaced, so the Secret must exist in every namespace that runs Nodes. A Node in
+a namespace without it is not planned: its `PlanApplied` condition reports
+`ImagePullSecretMissing` until the Secret appears. See
+[centrally managed credentials](#centrally-managed-credentials) for mirroring one Secret into
+many namespaces.
+
+A NodeProfile that sets `pullSecrets` replaces the global list for its Nodes, and
+`pullSecrets: []` opts them out of the global default.
+
+With Helm, set the same default through `globalConfig.imagePull.pullSecrets` in the chart
+values.
+</Tab>
+<Tab>
+A NodeProfile applies the Secret to every Node that references it:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -67,6 +94,8 @@ spec:
 ```
 </Tab>
 <Tab>
+A Topology applies the Secret to all of its nodes. The Topology controller copies
+`spec.imagePull` into the NodeProfile it generates:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -98,47 +127,47 @@ spec:
 </Tab>
 </Tabs>
 
-c9s places the Secret name in `Pod.spec.imagePullSecrets`; credential bytes are never stored in a
-device plan or immutable ConfigMap. The controller accepts only Kubernetes Docker-config Secret
-types when it needs the same credentials for OCI metadata access.
-
-Topology-level `spec.imagePull` is compiled into the shared NodeProfile generated for that
-Topology. Direct Node manifests select a profile explicitly through
-`Node.spec.profileRef`.
+c9s passes only the Secret name to the kubelet through `Pod.spec.imagePullSecrets`. The
+controller also reads the Secret to fetch the image manifest before it creates the Pod, so the
+Secret must be of type `kubernetes.io/dockerconfigjson` or `kubernetes.io/dockercfg`, which
+`kubectl create secret docker-registry` produces. Credential bytes are never copied into a plan
+or ConfigMap.
 
 ### Centrally managed credentials
 
-If you want to create the Secret in a single namespace and have it mirrored to all or some namespaces, you can use a tool like [External Secrets Operator](https://external-secrets.io) or [kubernetes-reflector](https://github.com/emberstack/kubernetes-reflector) to automatically copy the Secret to the namespaces where your device Pods will run. This way, you can manage your registry credentials in one place and ensure that all relevant namespaces have access to them.
+To manage registry credentials in one place, create the Secret once and mirror it into the lab
+namespaces with a tool such as [External Secrets Operator](https://external-secrets.io) or
+[kubernetes-reflector](https://github.com/emberstack/kubernetes-reflector). Together with the
+Config default, a new lab namespace then needs no registry setup at all.
 
-With kubernetes-reflector, you can install it in your cluster in the `c9s` namespace where c9s operator runs as follows:
+With kubernetes-reflector, install it next to c9s:
 
-```
+```bash
 helm upgrade --namespace c9s --install reflector oci://ghcr.io/emberstack/helm-charts/reflector
 ```
 
-Then create the `regred` Secret in the `c9s` namespace and configure the reflector to mirror it to all or some namespaces.
+Create the `regcred` Secret in the `c9s` namespace and annotate it so the reflector mirrors it
+into every namespace:
 
-```bash title="annotating the regred Secret to mirror it to all namespaces"
+```bash
 kubectl -n c9s annotate secret regcred \
   reflector.v1.k8s.emberstack.com/reflection-allowed=true \
   reflector.v1.k8s.emberstack.com/reflection-auto-enabled=true
-
 ```
+
+To mirror into selected namespaces only, add the
+`reflector.v1.k8s.emberstack.com/reflection-auto-namespaces` annotation with a comma-separated
+list of namespaces.
 
 ## Registry mirrors, private CAs, HTTP, and proxies
 
-Configure registry mirrors, runtime proxy settings, private certificate authorities, and
-plain-HTTP endpoints in the container runtime on every Kubernetes node eligible to run a device
-Pod. The files and reload procedure depend on the cluster distribution and runtime. Validate that
-path by scheduling an ordinary Pod with the same image, placement, pull policy, and pull Secret.
-Node-runtime mirrors do not configure controller metadata access; when the controller must reach
-registries through the same mirrors, declare them as
-[controller metadata mirrors](#controller-metadata-mirrors) as well.
+Registry mirrors, proxies, private certificate authorities, and plain-HTTP registries are
+configured in the container runtime of every worker that can run a device Pod, not in c9s. The
+files and reload steps depend on the Kubernetes distribution and runtime.
 
-Before creating the device Pod, the c9s controller fetches only the OCI manifest and configuration
-blob required by package-driven planning. Publicly trusted HTTPS needs no extra setting. If this
-metadata request needs a private CA or an explicitly permitted HTTP endpoint, configure an exact
-registry authority in the Config:
+Before it creates a device Pod, the c9s controller fetches the image manifest and configuration
+from the registry (never the layers) to plan the Pod. Public HTTPS registries need no extra
+setting. If the registry uses a private CA or plain HTTP, add a trust entry for it in the Config:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -157,19 +186,19 @@ spec:
         plainHTTP: true
 ```
 
-This trust policy affects only controller metadata access. It does not configure kubelets,
-mirrors, proxies, or node trust. Entries match exact `host[:port]` authorities. Wildcards, schemes,
-repository paths, duplicate authorities, empty exceptions, and a CA combined with `plainHTTP` are
-rejected. Configure the equivalent trust and endpoint in the node runtime as well. Prefer TLS with
-a private CA; plain HTTP has no transport encryption.
+Entries match the exact `host[:port]` of the registry. Wildcards and paths are not accepted, and
+an entry sets either `caBundle` or `plainHTTP`. This trust applies only to the controller's
+metadata requests: configure the same CA or HTTP endpoint in the worker runtime as well, and
+prefer TLS with a private CA over plain HTTP. If the workers pull through a mirror, also declare
+it as a [controller metadata mirror](#controller-metadata-mirrors).
 
 ## Controller metadata mirrors
 
-Some clusters pull every image through a CRI-level pull-through registry, for example Harbor proxy
-projects configured through containerd `hosts.toml` or Talos `machine.registries.mirrors`. The
-kubelet then pulls public references such as `ghcr.io/...` without reaching the public registry,
-but the controller's metadata request would still dial the original registry host. Declare the
-same mirrors for controller metadata access in the Config:
+Some clusters pull every image through a pull-through registry configured in the container
+runtime, for example Harbor proxy projects set up through containerd `hosts.toml` or Talos
+`machine.registries.mirrors`. The kubelet then never reaches the public registry, but the
+controller's metadata request would still dial it. Declare the same mirrors for the controller
+in the Config:
 
 ```yaml
 apiVersion: c9s.run/v1alpha1
@@ -193,36 +222,35 @@ spec:
           -----END CERTIFICATE-----
 ```
 
-Each entry redirects the controller's manifest and config requests for one exact source registry
-to the mirror endpoint. Docker Hub aliases (`docker.io`, `index.docker.io`,
-`registry-1.docker.io`) share one entry. Only the HTTP connection is rewritten: image references,
-resolved digest identities, and Pod image strings keep the original registry, so kubelets keep
-using their own runtime mirror configuration. There is no origin fallback; a failing mirror fails
-planning with a Node condition instead of silently retrying the public registry.
+Each entry redirects the controller's manifest and configuration requests for one source
+registry to the mirror endpoint. The Docker Hub names `docker.io`, `index.docker.io`, and
+`registry-1.docker.io` share one entry. Only the connection changes: image references, resolved
+digests, and Pod image strings keep the original registry, so kubelets keep using their own
+mirror configuration. A failing mirror fails planning with a Node condition; there is no
+fallback to the public registry.
 
-`overridePath` treats the endpoint path as the mirror's registry API root, replacing the standard
-`/v2` prefix (containerd `override_path` semantics). A Harbor proxy project for `ghcr.io` at
-`https://harbor.example.com/v2/ghcr` serves `ghcr.io/srl-labs/network-multitool` at
+`overridePath` treats the endpoint path as the mirror's registry API root, replacing the
+standard `/v2` prefix (containerd `override_path` semantics). A Harbor proxy project for
+`ghcr.io` at `https://harbor.example.com/v2/ghcr` serves `ghcr.io/srl-labs/network-multitool` at
 `/v2/ghcr/srl-labs/network-multitool/...`. An endpoint with a path requires `overridePath`; a
 hostname-only endpoint such as `https://mirror.example.com` forwards paths unchanged.
 
-Transport trust follows the connection: a `registryMetadataTrust` entry for the mirror endpoint
-host applies to every source registry fetched through that mirror. The endpoint scheme selects
-TLS or plain HTTP, and the mirror answers its own authentication challenges. Pull Secret
-credentials still match the source registry in the image reference.
+Trust follows the connection: a `registryMetadataTrust` entry for the mirror host applies to
+every registry fetched through that mirror, and the endpoint scheme selects TLS or plain HTTP.
+Pull Secret credentials still match the source registry in the image reference.
 
-One sharp edge: the metadata client refuses authentication-token realms that are loopback or
-RFC 1918 IP literals (a server-side request forgery guard). Harbor advertises its configured
-external URL as the token realm, so a Harbor mirror reachable only as a private IP literal must
-be addressed by a DNS hostname instead.
+The authentication token realm a mirror advertises must be a DNS hostname: the controller
+refuses realms that point at loopback or private IP addresses. Harbor advertises its configured
+external URL as the realm, so a Harbor mirror that is reachable only by a private IP must be
+given a hostname.
 
 ## Troubleshooting
 
-Metadata authentication or trust failures are reported on the Node before a device workload is
-created. A referenced pull Secret that does not exist or cannot be read is reported the same way:
-`PlanApplied` goes `False` with reason `ImagePullSecretMissing` or `ImagePullSecretUnreadable`
-plus a Warning event, and planning resumes once the Secret is available. Kubelet pull failures
-appear on the device Pod as normal events such as `ErrImagePull` or `ImagePullBackOff`.
+Problems the controller finds before it creates the Pod are reported on the Node: `PlanApplied`
+becomes `False` with a reason such as `ImagePullSecretMissing`, `ImagePullSecretUnreadable`, or
+an `OCIMetadata...` reason for registry authentication and trust failures, plus a Warning
+event. Planning resumes on its own once the cause is fixed. Pull failures on the worker appear
+on the device Pod as the usual `ErrImagePull` or `ImagePullBackOff` events.
 
 Inspect the Node, Pod, events, and resolved profile:
 
@@ -233,7 +261,7 @@ kubectl -n lab describe pod -l c9s.run/direct-workload=router
 kubectl -n lab get nodeprofile private-images -o yaml
 ```
 
-Test the kubelet path independently:
+Test the kubelet path independently with a plain Pod that uses the same image and pull Secret:
 
 ```bash
 kubectl -n lab run image-pull-test --restart=Never --image=registry.example.com/network/srlinux:latest \
@@ -241,8 +269,8 @@ kubectl -n lab run image-pull-test --restart=Never --image=registry.example.com/
 kubectl -n lab describe pod image-pull-test
 ```
 
-If the test Pod fails, fix the Secret or cluster-runtime registry configuration. c9s deliberately
-has no CRI-socket, insecure-registry, pull-through, Docker-config mount, or image-import fallback.
+If the test Pod fails, fix the Secret or the worker's registry configuration. c9s has no
+insecure-registry, pull-through, or image-import fallback of its own.
 
 ## Related
 

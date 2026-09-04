@@ -73,7 +73,7 @@ network). Two things keep that from surprising a device:
   size the application fixes and cannot lower (SR OS presents 1514). Their handshakes crossing
   the mesh have the advertised maximum segment lowered to what the mesh carries, so both peers
   send segments that fit. Without it these flows are a black hole: the connection completes and
-  then stalls on the first full-size segment -- a TLS certificate, a NETCONF hello -- because a
+  then stalls on the first full-size segment (a TLS certificate, a NETCONF hello) because a
   drop on a veth produces no fragmentation-needed to learn from. The clamp only ever lowers a
   size, and only on the management mesh; lab links keep the MTU the topology asked for.
 
