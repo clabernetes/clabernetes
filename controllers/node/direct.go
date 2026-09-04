@@ -185,6 +185,9 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	// Definitions never change across discovery rounds, so the declared text that screens the
+	// sensitive-value set is fixed for the whole reconcile.
+	declaredText := declaredNodeText(declaredInput)
 	metadataResolver := *r.ImageMetadataResolver
 	metadataResolver.Platform = r.DirectPlatform
 	registryMetadataTrust, err := compileRegistryMetadataTrust(
@@ -227,9 +230,10 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	sensitiveValues := append(
-		slices.Clone(declaredMetadata.SensitiveValues),
-		entropyResolution.SensitiveValues...,
+	sensitiveValues := screenSensitiveValues(
+		declaredText,
+		declaredMetadata.SensitiveValues,
+		entropyResolution.SensitiveValues,
 	)
 	imagePullSecrets := declaredMetadata.PullSecrets
 	planInput := clabernetesinternaldeviceplan.Input{}
@@ -293,9 +297,10 @@ func (r *Reconciler) reconcileDirect(
 		if compileErr != nil {
 			return compileErr
 		}
-		sensitiveValues = append(
-			slices.Clone(discoveredMetadata.SensitiveValues),
-			entropyResolution.SensitiveValues...,
+		sensitiveValues = screenSensitiveValues(
+			declaredText,
+			discoveredMetadata.SensitiveValues,
+			entropyResolution.SensitiveValues,
 		)
 		imagePullSecrets = discoveredMetadata.PullSecrets
 		if reflect.DeepEqual(discoveryInput.Images, nextInput.Images) {
@@ -350,7 +355,11 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	sensitiveValues = append(sensitiveValues, certificateResolution.SensitiveValues...)
+	sensitiveValues = screenSensitiveValues(
+		declaredText,
+		sensitiveValues,
+		certificateResolution.SensitiveValues,
+	)
 	planningResult, err := r.PlannerReconciler.Reconcile(ctx, PlannerAttempt{
 		Node: node, Input: planInput, SensitiveValues: sensitiveValues,
 		Image: r.DirectRuntimeImage, PlannerRevision: clabernetesconstants.Version,
@@ -394,7 +403,11 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	sensitiveValues = append(sensitiveValues, probeResolution.SensitiveValues...)
+	sensitiveValues = screenSensitiveValues(
+		declaredText,
+		sensitiveValues,
+		probeResolution.SensitiveValues,
+	)
 	persistentVolumeClaims, err := r.reconcileDirectPersistentVolumeClaims(
 		ctx,
 		groupMembers,
