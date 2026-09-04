@@ -245,7 +245,6 @@ func runClabverter(
 		topologySpecPath,
 		outputDirectory,
 		"lab",
-		"prefixed",
 		"",
 		false,
 		emitCRs,

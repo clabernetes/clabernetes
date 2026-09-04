@@ -462,8 +462,8 @@ func profileReferenceIndex(obj ctrlruntimeclient.Object) []string {
 	return []string{node.Spec.ProfileRef.Name}
 }
 
-// enqueuePrimariesForNodeProfile maps a profile event to only the launcher group primaries
-// containing Nodes that explicitly reference it.
+// enqueuePrimariesForNodeProfile maps a profile event to only the group primaries whose member
+// Nodes explicitly reference it.
 func (c *Controller) enqueuePrimariesForNodeProfile(
 	ctx context.Context,
 	obj ctrlruntimeclient.Object,

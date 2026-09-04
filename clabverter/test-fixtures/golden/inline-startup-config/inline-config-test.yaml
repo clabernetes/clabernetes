@@ -48,7 +48,6 @@ spec:
     disableAutoExpose: false
   imagePull:
     pullSecrets: null
-  naming: prefixed
   statusProbes:
     enabled: false
     excludedNodes: null

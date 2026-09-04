@@ -13,7 +13,6 @@ const (
 	outputDirectory      = "outputDirectory"
 	destinationNamespace = "destinationNamespace"
 	imagePullSecrets     = "imagePullSecrets"
-	naming               = "naming"
 	disableExpose        = "disableExpose"
 	emitCRs              = "emitCRs"
 	debug                = "debug"
@@ -75,12 +74,6 @@ func Entrypoint() *cli.App {
 				Required: false,
 				Value:    false,
 			},
-			&cli.StringFlag{
-				Name:     naming,
-				Usage:    "naming scheme to use for clabernetes resources",
-				Required: false,
-				Value:    "prefixed",
-			},
 			&cli.BoolFlag{
 				Name:     debug,
 				Usage:    "enable debug logging",
@@ -107,7 +100,6 @@ func Entrypoint() *cli.App {
 				c.String(topoSpecFile),
 				c.String(outputDirectory),
 				c.String(destinationNamespace),
-				c.String(naming),
 				c.String(imagePullSecrets),
 				c.Bool(disableExpose),
 				c.Bool(emitCRs),

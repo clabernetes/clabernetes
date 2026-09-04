@@ -159,7 +159,6 @@ kind: Topology
 metadata:
   name: %s
 spec:
-  naming: non-prefixed
   statusProbes:
     enabled: true
   imagePull:

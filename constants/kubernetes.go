@@ -15,11 +15,6 @@ const (
 )
 
 const (
-	// KubernetesDefaultInClusterDNSSuffix is the default in cluster dns suffix (duh).
-	KubernetesDefaultInClusterDNSSuffix = "svc.cluster.local"
-)
-
-const (
 	// KubernetesImagePullIfNotPresent holds the constant for "IfNotPresent" image pull policy.
 	KubernetesImagePullIfNotPresent = "IfNotPresent"
 )

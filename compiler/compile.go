@@ -1,7 +1,6 @@
 package compiler
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,22 +11,6 @@ import (
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
-
-// UnsupportedFieldPolicy is retained for callers that explicitly requested strict compilation.
-// Error is the only supported policy; Topology compilation no longer has a warning mode.
-type UnsupportedFieldPolicy string
-
-const (
-	// UnsupportedFieldPolicyError rejects every source field c9s cannot preserve.
-	UnsupportedFieldPolicyError UnsupportedFieldPolicy = "error"
-)
-
-var errUnsupportedFieldPolicy = errors.New("unsupported topology compiler field policy")
-
-// CompileOptions is retained for strict external compiler callers.
-type CompileOptions struct {
-	UnsupportedFieldPolicy UnsupportedFieldPolicy
-}
 
 // Diagnostic describes one source construct that c9s cannot faithfully preserve.
 type Diagnostic struct {
@@ -187,26 +170,6 @@ func CompileTopology(
 		topology.Spec.Definition.Containerlab,
 		newCompileDiagnostics(),
 	)
-}
-
-// CompileTopologyWithOptions preserves the explicit strict entry point used by external callers.
-// An omitted policy and Error both select the same fail-closed compiler.
-func CompileTopologyWithOptions(
-	logger claberneteslogging.Instance,
-	topology *clabernetesapisv1alpha1.Topology,
-	options CompileOptions,
-) (*CompiledTopology, error) {
-	if options.UnsupportedFieldPolicy != "" &&
-		options.UnsupportedFieldPolicy != UnsupportedFieldPolicyError {
-		return nil, fmt.Errorf(
-			"%w %q; only %q is supported",
-			errUnsupportedFieldPolicy,
-			options.UnsupportedFieldPolicy,
-			UnsupportedFieldPolicyError,
-		)
-	}
-
-	return CompileTopology(logger, topology)
 }
 
 // GetTopologyKind returns the "kind" of topology this CR represents.

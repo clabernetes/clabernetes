@@ -231,10 +231,6 @@ spec:
                     - registry
                     x-kubernetes-list-type: map
                 type: object
-              inClusterDNSSuffix:
-                description: InClusterDNSSuffix overrides the default in cluster dns
-                  suffix used when resolving services.
-                type: string
               metadata:
                 description: |-
                   Metadata holds "global" metadata -- that is, metadata that is applied to all objects created
@@ -257,16 +253,6 @@ spec:
                       kubernetes label data.
                     type: object
                 type: object
-              naming:
-                default: prefixed
-                description: |-
-                  Naming holds the global override for the "naming" setting for Topology objects -- this
-                  controls whether the Topology resources have the containerlab topology name as a prefix.
-                  Of course this is ignored if a Topology sets its Naming field to something not "global".
-                enum:
-                - prefixed
-                - non-prefixed
-                type: string
             type: object
           status:
             description: ConfigStatus is the status for a Config resource.

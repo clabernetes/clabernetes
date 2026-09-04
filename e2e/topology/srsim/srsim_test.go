@@ -111,7 +111,6 @@ kind: Topology
 metadata:
   name: topology-srsim
 spec:
-  naming: non-prefixed
   statusProbes:
     enabled: true
   imagePull:

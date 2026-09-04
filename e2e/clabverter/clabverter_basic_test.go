@@ -27,7 +27,6 @@ func TestClabverterBasic(t *testing.T) {
 		"",
 		"test-fixtures",
 		namespace,
-		"prefixed",
 		"",
 		false,
 		false,

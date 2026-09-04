@@ -87,7 +87,6 @@ spec:
   imagePull:
     pullSecrets:
     - regcred
-  naming: prefixed
   statusProbes:
     enabled: false
     excludedNodes: null

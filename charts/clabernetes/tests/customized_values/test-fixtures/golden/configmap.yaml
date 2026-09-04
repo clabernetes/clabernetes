@@ -30,7 +30,6 @@ data:
     {}
     ---
   containerStopSignals: "false"
-  inClusterDNSSuffix: svc.cluster.local
   imagePullPolicy: Always
   imagePullSecrets: |-
     - device-registry
@@ -41,4 +40,3 @@ data:
     - endpoint: https://harbor.lab.example/v2/docker
       overridePath: true
       registry: docker.io
-  naming: prefixed

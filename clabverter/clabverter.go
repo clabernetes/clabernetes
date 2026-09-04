@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -66,7 +65,6 @@ type Clabverter struct {
 	githubGroup string
 	githubRepo  string
 	githubToken string
-	naming      string
 
 	rawClabConfig string
 	clabConfig    *clabernetesutilcontainerlab.Config
@@ -94,7 +92,6 @@ func MustNewClabverter(
 	topologySpecFile,
 	outputDirectory,
 	destinationNamespace,
-	naming string,
 	imagePullSecrets string,
 	disableExpose,
 	emitCRs,
@@ -134,15 +131,6 @@ func MustNewClabverter(
 		imagePullSecretsArr = strings.Split(imagePullSecrets, ",")
 	}
 
-	supportedNamings := []string{"prefixed", "non-prefixed"}
-	if !slices.Contains(supportedNamings, naming) {
-		clabverterLogger.Fatalf(
-			"naming flag value is not recognized: %s, possible values %q",
-			naming,
-			supportedNamings,
-		)
-	}
-
 	githubToken := os.Getenv(clabernetesconstants.GitHubTokenEnv)
 
 	return &Clabverter{
@@ -159,7 +147,6 @@ func MustNewClabverter(
 		startupConfigConfigMaps: make(map[string]topologyConfigMapTemplateVars),
 		extraFilesConfigMaps:    make(map[string][]topologyConfigMapTemplateVars),
 		extraFilesFromURL:       make(map[string][]topologyFileFromURLTemplateVars),
-		naming:                  naming,
 		renderedFiles:           []renderedContent{},
 	}
 }
@@ -531,7 +518,6 @@ func (c *Clabverter) handleManifest() error {
 			FilesFromURL:     c.extraFilesFromURL,
 			ImagePullSecrets: c.imagePullSecrets,
 			DisableExpose:    c.disableExpose,
-			Naming:           c.naming,
 		},
 	)
 	if err != nil {
