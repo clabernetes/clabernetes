@@ -5,7 +5,7 @@ icon: Rocket
 ---
 
 The [repository](https://github.com/clabernetes/clabernetes) includes an automated workflow that creates a single-node [KinD](https://kind.sigs.k8s.io/) cluster, installs the
-selected c9s Helm chart, configures MetalLB, and deploys a sample network topology consisting of an Nokia SR Linux node connected to a Network Multitool node.
+selected c9s Helm chart, configures MetalLB, and deploys a sample network topology consisting of a Nokia SR Linux node connected to a Network Multitool node.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ From the repository root, run:
 make try-c9s
 ```
 
-This command creates a single-node KinD cluster, installs c9s, configures Kubernetes load balancer (MetalLB) and deploys a sample network topology consisting of an Nokia SR Linux node connected to a Network Multitool node.
+This command creates a single-node KinD cluster, installs c9s, configures Kubernetes load balancer (MetalLB) and deploys a sample network topology consisting of a Nokia SR Linux node connected to a Network Multitool node.
 
 A successful run ends with the following output:
 
@@ -55,12 +55,12 @@ The previous step ends with the list of commands to use to connect to the two no
 
 <TryC9sDiagram />
 
-The list of connection commands show you how to connect:
+The connection commands show you how to connect:
 
 - with SSH/gNMI/NETCONF to the Nokia SR Linux node deployed in the lab and
 - with SSH to the Network Multitool node deployed in the lab.
 
-Connect to the SR Linux node using SSH, you should see the login prompt for the admin user, enter the `NokiaSrl1!` to log in.
+Connect to the SR Linux node with SSH and log in as `admin` with the password `NokiaSrl1!`.
 
 ## Test the datapath [step]
 

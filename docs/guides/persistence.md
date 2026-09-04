@@ -71,11 +71,7 @@ spec:
       storageClassName: "fast-ssd"
 ```
 
-**Storage class recommendations:**
-
-- Use `ReadWriteOnce` capable storage classes
-- SSD-backed storage for better performance
-- Avoid network-attached storage for latency-sensitive workloads
+The storage class must support `ReadWriteOnce` volumes.
 
 ### Direct Node and NodeProfile Persistence
 
@@ -114,9 +110,9 @@ On every Pod start, preparation regenerates and verifies the planned artifacts, 
 per file what to publish:
 
 - **A file the device has modified since it was last staged is left in place.** Saving your
-  configuration on the node (for example `tools system configuration save` on SR Linux, or the
-  Save lifecycle described below) makes that saved state the boot state of every later Pod,
-  regardless of whether the startup configuration was CLI-format or a full config file.
+  configuration on the node (for example `tools system configuration save` on SR Linux) makes
+  that saved state the boot state of every later Pod, regardless of whether the startup
+  configuration was CLI-format or a full config file.
 - **A file the device never touched follows the spec.** Updated topology files, certificates,
   and repo files keep propagating.
 - **Everything the device wrote at unplanned paths** inside the persisted directories (SSH host
@@ -190,12 +186,9 @@ kubectl delete pvc srl1
 
 ## Saving Configuration
 
-The Save lifecycle runs the imported kind's own save behavior (for SR Linux,
-`tools system configuration save`) inside the device container. Saving on the device directly
-works exactly as well; the lifecycle entrypoint simply gives every kind one uniform verb.
-
-Running a save against a node **without** persistence still succeeds, but its output carries a
-warning that the saved configuration cannot survive Pod replacement.
+Save on the device with its own command, for example `tools system configuration save` on SR
+Linux. The saved file lands in a persisted directory and becomes the boot state of every later
+Pod. Without persistence, a saved configuration is lost when the Pod is replaced.
 
 ## Important Limitations
 
@@ -214,15 +207,15 @@ claimSize: "10Gi"
 claimSize: "3Gi"  # Will be ignored
 ```
 
-To use a smaller claim, delete the topology and recreate it.
+To use a smaller claim, delete the Node (or its Topology) and recreate it.
 
 ### Storage Class Is Immutable
 
 The storage class cannot be changed after PVC creation. To change storage class:
 
-1. Backup any important data
-2. Delete the topology
-3. Recreate with new storage class
+1. Back up any important data
+2. Delete the Node (or its Topology), and delete a retained claim as well
+3. Recreate with the new storage class
 
 ### Node Removal Removes the Claim Unless Retained
 
@@ -309,22 +302,6 @@ kubectl describe pod <pod-name> | grep -A10 "Volumes"
 That is the saved-configuration-wins contract at work: a saved configuration shadows startup
 config updates. Set `enforce-startup-config: true` or run a device-state reset to make the
 declared configuration win.
-
-### Slow Performance
-
-Consider:
-
-- Using a faster storage class
-- Reducing claim size to what's actually needed
-- Using local storage for development
-
-## Best Practices
-
-1. **Size appropriately**: Start with recommended sizes, increase as needed
-2. **Use appropriate storage class**: Match performance requirements
-3. **Regular backups**: Persistence doesn't replace backups
-4. **Clean up retained claims**: Remove unused PVCs to free resources
-5. **Monitor usage**: Watch for PVCs nearing capacity
 
 ## Related
 

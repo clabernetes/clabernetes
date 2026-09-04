@@ -18,32 +18,9 @@ declared network aliases.
 The default `LoadBalancer` mode is built into c9s. The global `Config` resource does not configure
 an exposure mode.
 
-> **Upgrade notice:** `disableExpose` has been removed from the Topology and NodeProfile APIs.
-> Before upgrading the CRDs or controller, replace every `disableExpose: true` with
-> `exposeType: None`. Otherwise the removed setting cannot suppress the built-in LoadBalancer
-> default. The new structural schemas reject manifests that still contain `disableExpose`.
-
-Inspect live exposure policy before upgrading:
-
-```bash
-kubectl get topologies,nodeprofiles -A -o yaml
-```
-
-Update the declarative source and apply it with the old controller still running:
-
-```yaml
-# Before
-spec:
-  expose:
-    disableExpose: true
-```
-
-```yaml
-# After
-spec:
-  expose:
-    exposeType: None
-```
+> **Upgrade notice:** `disableExpose` was removed from the Topology and NodeProfile APIs.
+> Replace every `disableExpose: true` with `exposeType: None` before applying manifests to this
+> release; manifests that still contain `disableExpose` are rejected.
 
 ## How exposure works
 
@@ -260,14 +237,7 @@ spec:
 - Creates a headless service (`clusterIP: None`)
 - DNS queries return pod IPs directly instead of a virtual service IP
 - No load balancing or proxying by kube-proxy
-- Useful for StatefulSet-like access patterns where you need direct pod connectivity
-
-**Use cases:**
-
-- Service discovery where clients need to connect directly to specific pods
-- Custom load balancing logic in client applications
-- Integration with external service meshes that handle their own load balancing
-- Scenarios where you need DNS-based pod discovery without Kubernetes proxying
+- Useful when a client must reach the Pod address directly
 
 ### None
 
@@ -391,20 +361,6 @@ ssh admin@srl1.default.svc.cluster.local
 # the node, and unqualified exec targets the device application container
 kubectl exec -it deploy/srl1 -- sr_cli
 ```
-
-## Best Practices
-
-1. **Production deployments**: Use `exposeType: LoadBalancer` with `disableAutoExpose: true` to expose only necessary ports
-
-2. **CI/CD pipelines**: Use `exposeType: None` when nodes only need fabric connectivity
-
-3. **Development**: Use default settings for convenience
-
-4. **Security**: Disable auto-expose and explicitly define only required ports
-
-5. **Cost optimization**: Use `ClusterIP` or `Headless` when external access isn't needed
-
-6. **Service mesh integration**: Use `exposeType: Headless` when integrating with service meshes that handle their own load balancing
 
 ## Related
 

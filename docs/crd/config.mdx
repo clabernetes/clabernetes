@@ -4,7 +4,11 @@ description: Config custom resource schema.
 icon: SlidersHorizontal
 ---
 
-The `Config` CRD holds cluster-wide defaults applied when Nodes do not reference an explicit
-NodeProfile.
+The `Config` CRD holds the cluster-wide defaults for direct device Pods: pull policy and pull
+Secrets, default resources, node selectors by image, and the controller-only registry metadata
+trust and mirror policies. A NodeProfile referenced by a Node overrides only the fields it sets;
+everything else comes from the Config. One Config named `clabernetes` lives in the namespace
+where c9s is installed. See [Global configuration](/docs/installation#global-configuration) for
+how it is created and edited.
 
 <CrdViewer name="config" />

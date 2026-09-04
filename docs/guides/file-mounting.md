@@ -416,11 +416,7 @@ Ensure correct mode:
 
 ### ConfigMap Size Limit
 
-If exceeding 1MB:
-
-- Use URL-based mounting
-- Split into multiple ConfigMaps
-- Compress content
+If a file exceeds 1MB, mount it from a URL instead or split it into multiple ConfigMaps.
 
 ### URL Download Failures
 
@@ -437,14 +433,6 @@ Verify URL accessibility:
 ```bash
 kubectl run curl-test --rm -it --image=curlimages/curl -- curl -I <url>
 ```
-
-## Best Practices
-
-1. **Use Secrets for sensitive data**: Licenses, credentials, certificates
-2. **Use URLs for large files**: Configurations beyond the ConfigMap limit (up to 64 MB)
-3. **Version your ConfigMaps**: Include version in name for traceability
-4. **Use descriptive paths**: Match vendor conventions for file locations
-5. **Test file accessibility**: Verify URLs work before deploying
 
 ## Related
 

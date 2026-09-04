@@ -115,24 +115,7 @@ spec:
         cpu: "1"
 ```
 
-### Resources by Containerlab Kind
-
-Per-kind resource defaults are no longer configured in c9s: the imported containerlab package
-owns kind requirements, and generic defaults come from `config.deployment.resourcesDefault`. Use
-a `NodeProfile` when a specific group of nodes needs different sizing:
-
-```yaml
-apiVersion: c9s.run/v1alpha1
-kind: Config
-metadata:
-  name: clabernetes
-spec:
-  deployment:
-    resourcesDefault:
-      requests:
-        memory: "512Mi"
-        cpu: "250m"
-```
+There are no per-kind defaults. Use a NodeProfile when a group of nodes needs different sizing.
 
 ### Containerlab `cpu` and `memory`
 
@@ -241,30 +224,6 @@ spec:
         - key: "nvidia.com/gpu"
           operator: "Exists"
           effect: "NoSchedule"
-```
-
-### Toleration Examples
-
-```yaml
-# Tolerate specific taint
-tolerations:
-  - key: "node-role.kubernetes.io/network"
-    operator: "Equal"
-    value: "true"
-    effect: "NoSchedule"
-
-# Tolerate any value for a key
-tolerations:
-  - key: "dedicated"
-    operator: "Exists"
-    effect: "NoSchedule"
-
-# Tolerate with time limit
-tolerations:
-  - key: "node.kubernetes.io/unreachable"
-    operator: "Exists"
-    effect: "NoExecute"
-    tolerationSeconds: 300
 ```
 
 ### Taint Your Nodes
@@ -442,24 +401,15 @@ kubectl top nodes
 kubectl describe node <node-name> | grep -A5 "Allocated"
 ```
 
-## Best Practices
-
-1. **Always set requests**: Ensure scheduler knows resource needs
-2. **Set appropriate limits**: Prevent runaway resource usage
-3. **Use node selectors wisely**: Don't over-constrain scheduling
-4. **Test tolerations**: Verify pods can run on intended nodes
-5. **Monitor resource usage**: Adjust based on actual consumption
-
 ## Privileged Mode
 
-There is no privileged wrapper pod and no `privilegedLauncher` knob. Each device container
-receives exactly the privilege, capabilities, and devices its imported containerlab kind plan
-declares, including any `privileged`, `cap-add`, or `devices` vocabulary in the node
-definition itself. Privilege is per-container plan output, never profile or Config policy.
+Each device container receives exactly the privilege, capabilities, and devices its containerlab
+kind declares, including any `privileged`, `cap-add`, or `devices` vocabulary in the node
+definition itself. Privilege is never a NodeProfile or Config setting.
 
 ## Related
 
 - [Example: with-resources.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-resources.yaml)
 - [Example: with-scheduling.yaml](https://github.com/clabernetes/clabernetes/blob/main/examples/deployment/with-scheduling.yaml)
 - [CRD Reference: Deployment](/docs/crd/topology)
-- [CRD Reference: Scheduling](/docs/guides/resource-management)
+- [CRD Reference: NodeProfile](/docs/crd/node-profile)

@@ -39,9 +39,8 @@ spec:
       - srsim-registry
 ```
 
-The kubelet receives this name through `Pod.spec.imagePullSecrets`. Configure registry mirrors,
-private CAs, or HTTP endpoints in the worker container runtime; c9s has no nested Docker or image
-import fallback.
+See [Image pulling](/docs/guides/image-pull) for a cluster-wide pull Secret default, registry
+mirrors, and private CAs.
 
 ## Supported Configurations
 
@@ -102,7 +101,6 @@ spec:
           sr1:
             kind: nokia_srsim
             type: sr-1
-            startup-config: sr1-config.cfg
           sr2:
             kind: nokia_srsim
             type: sr-1s
@@ -197,7 +195,7 @@ The structured `veth` endpoints above compile to the same c9s Link as brief endp
 `srsim`; the planned card containers are directly visible application containers of that Pod, so
 `kubectl logs` and `kubectl exec` reach a specific card with `-c`. An empty `components: []`
 declaration is also accepted for SR-SIM images that use Containerlab's default component
-expansion, including the issue-269 topology shape. In every component form, Clabernetes requires
+expansion. In every component form, Clabernetes requires
 one namespace owner and verifies that every dependent component resolves into that namespace;
 invalid ownership fails planning rather than selecting a card arbitrarily.
 
@@ -266,9 +264,12 @@ spec:
             network-mode: container:srsim-a
             env:
               NOKIA_SROS_SLOT: "1"
+          client:
+            kind: linux
+            image: ghcr.io/srl-labs/network-multitool:latest
         links:
-          # Links to other chassis or external devices cross the cluster fabric
-          - endpoints: ["srsim-iom1:1/1/c1/1", "external-router:e1-1"]
+          # Links to other chassis or nodes leave the Pod over the cluster fabric
+          - endpoints: ["srsim-iom1:1/1/c1/1", "client:eth1"]
 ```
 
 **Key points for distributed mode:**
@@ -466,17 +467,10 @@ attachment stops reconciliation instead of silently choosing one license.
 
 All cards (CPM-A, CPM-B, IOMs) within a single distributed chassis must run on the same Kubernetes worker node. This is a fundamental constraint of Linux network namespaces: they cannot span multiple hosts.
 
-**Impact:** A single Kubernetes worker must have sufficient resources (CPU, memory) for all cards in a chassis.
-
-**Mitigations:**
-
-- Use Kubernetes node selectors or taints/tolerations to ensure chassis pods are scheduled on appropriately sized nodes
-- Consider using integrated SR-SIM types (sr-1, sr-1s) when resource constraints are a concern
-- Plan cluster capacity with distributed chassis resource requirements in mind
-
-### Different Chassis Can Be Distributed
-
-While cards within a chassis must be co-located, different chassis (routers) in your topology can be scheduled on different Kubernetes worker nodes. For example, if you have two SR-7 routers in your topology, each can run on a different worker node; only the cards within each individual router must share a node.
+A single Kubernetes worker must therefore have enough CPU and memory for all cards of a chassis.
+Use node selectors or tolerations to place chassis Pods on suitably sized workers, or use an
+integrated type such as `sr-1` when resources are tight. Different chassis in one topology can
+still run on different workers.
 
 ### Port Publishing
 
