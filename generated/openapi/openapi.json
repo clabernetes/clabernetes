@@ -583,10 +583,6 @@
                                 },
                                 "type": "object"
                             },
-                            "inClusterDNSSuffix": {
-                                "description": "InClusterDNSSuffix overrides the default in cluster dns suffix used when resolving services.",
-                                "type": "string"
-                            },
                             "metadata": {
                                 "description": "Metadata holds \"global\" metadata -- that is, metadata that is applied to all objects created\nby the clabernetes controller.",
                                 "properties": {
@@ -606,15 +602,6 @@
                                     }
                                 },
                                 "type": "object"
-                            },
-                            "naming": {
-                                "default": "prefixed",
-                                "description": "Naming holds the global override for the \"naming\" setting for Topology objects -- this\ncontrols whether the Topology resources have the containerlab topology name as a prefix.\nOf course this is ignored if a Topology sets its Naming field to something not \"global\".",
-                                "enum": [
-                                    "prefixed",
-                                    "non-prefixed"
-                                ],
-                                "type": "string"
                             }
                         },
                         "type": "object"
@@ -3960,22 +3947,6 @@
                                 },
                                 "type": "object"
                             },
-                            "naming": {
-                                "default": "global",
-                                "description": "Naming tells the clabernetes controller how it should name resources it creates -- that is\nwhether it should include the containerlab topology name as a prefix on resources spawned\nfrom this Topology or not; this includes the actual (containerlab) node Deployment(s), as\nwell as the Service(s) for the Topology. This setting has three modes; \"prefixed\" -- which of\ncourse includes the containerlab topology name as a prefix, \"non-prefixed\" which does *not*\ninclude the containerlab topology name as a prefix, and \"global\" which defers to the global\nconfig setting for this (which defaults to \"prefixed\").\n\"non-prefixed\" mode should only be enabled when/if Topologies are deployed in their own\nnamespace -- the reason for this is simple: if two Topologies exist in the same namespace\nwith a (containerlab) node named \"my-router\" there will be a conflicting Deployment and\nServices for the \"my-router\" (containerlab) node. Note that this field is immutable! If you\nwant to change its value you need to delete the Topology and re-create it.",
-                                "enum": [
-                                    "prefixed",
-                                    "non-prefixed",
-                                    "global"
-                                ],
-                                "type": "string",
-                                "x-kubernetes-validations": [
-                                    {
-                                        "message": "naming field is immutable, to change this value delete and re-create the Topology",
-                                        "rule": "self == oldSelf"
-                                    }
-                                ]
-                            },
                             "statusProbes": {
                                 "description": "StatusProbes holds additional direct application readiness policy.",
                                 "properties": {
@@ -4091,16 +4062,9 @@
                             }
                         },
                         "required": [
-                            "definition",
-                            "naming"
+                            "definition"
                         ],
-                        "type": "object",
-                        "x-kubernetes-validations": [
-                            {
-                                "message": "naming is required once set",
-                                "rule": "!has(oldSelf.naming) || has(self.naming)"
-                            }
-                        ]
+                        "type": "object"
                     },
                     "status": {
                         "description": "TopologyStatus is the status for a Topology resource. Note that all *per node* (and per link)\nstate lives on the emitted Node and Link custom resources rather than here -- the Topology\nonly aggregates, which keeps its size bounded regardless of how big the topology definition\nis.",

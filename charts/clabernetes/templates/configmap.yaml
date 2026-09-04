@@ -35,7 +35,6 @@ data:
 {{ .Values.globalConfig.deployment.nodeSelectorsByImage | toYaml | indent 4 }}
     ---
   containerStopSignals: "{{ .Values.globalConfig.deployment.containerStopSignals }}"
-  inClusterDNSSuffix: {{ .Values.globalConfig.inClusterDNSSuffix }}
   imagePullPolicy: {{ .Values.globalConfig.imagePull.policy }}
   imagePullSecrets: |-
 {{ .Values.globalConfig.imagePull.pullSecrets | toYaml | indent 4 }}
@@ -47,5 +46,4 @@ data:
   registryMetadataMirrors: |-
 {{ .Values.globalConfig.imagePull.registryMetadataMirrors | toYaml | indent 4 }}
   {{- end }}
-  naming: {{ .Values.globalConfig.naming }}
 {{- end }}

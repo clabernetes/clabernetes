@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
-	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	k8scorev1 "k8s.io/api/core/v1"
 )
 
@@ -82,13 +81,6 @@ func (m *manager) GetNodeSelectorsByImage(
 	return GetNodeSelectorsByImage(imageName, m.config.Deployment.NodeSelectorsByImage)
 }
 
-func (m *manager) GetInClusterDNSSuffix() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return m.config.InClusterDNSSuffix
-}
-
 func (m *manager) GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryMetadataTrustEntry {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
@@ -103,13 +95,6 @@ func (m *manager) GetRegistryMetadataMirrors() (
 	defer m.lock.RUnlock()
 
 	return slices.Clone(m.config.ImagePull.RegistryMetadataMirrors)
-}
-
-func (m *manager) GetRemoveTopologyPrefix() bool {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-
-	return m.config.Naming != clabernetesconstants.NamingModePrefixed
 }
 
 func (m *manager) GetContainerStopSignals() bool {

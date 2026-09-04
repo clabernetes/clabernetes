@@ -20,22 +20,18 @@ type bootstrapConfig struct {
 	resourcesDefault        *k8scorev1.ResourceRequirements
 	nodeSelectorsByImage    map[string]map[string]string
 	containerStopSignals    bool
-	inClusterDNSSuffix      string
 	imagePullPolicy         string
 	imagePullSecrets        []string
 	registryMetadataTrust   []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
 	registryMetadataMirrors []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry
-	naming                  string
 }
 
-func bootstrapFromConfigMap( //nolint:gocyclo,funlen
+func bootstrapFromConfigMap( //nolint:gocyclo
 	inMap map[string]string,
 ) (*bootstrapConfig, error) {
 	bc := &bootstrapConfig{
-		mergeMode:          "merge",
-		inClusterDNSSuffix: clabernetesconstants.KubernetesDefaultInClusterDNSSuffix,
-		imagePullPolicy:    clabernetesconstants.KubernetesImagePullIfNotPresent,
-		naming:             clabernetesconstants.NamingModePrefixed,
+		mergeMode:       "merge",
+		imagePullPolicy: clabernetesconstants.KubernetesImagePullIfNotPresent,
 	}
 
 	var outErrors []string
@@ -87,11 +83,6 @@ func bootstrapFromConfigMap( //nolint:gocyclo,funlen
 		}
 	}
 
-	inClusterDNSSuffix, inClusterDNSSuffixOk := inMap["inClusterDNSSuffix"]
-	if inClusterDNSSuffixOk {
-		bc.inClusterDNSSuffix = inClusterDNSSuffix
-	}
-
 	imagePullPolicy, imagePullPolicyOk := inMap["imagePullPolicy"]
 	if imagePullPolicyOk {
 		bc.imagePullPolicy = imagePullPolicy
@@ -109,11 +100,6 @@ func bootstrapFromConfigMap( //nolint:gocyclo,funlen
 		&bc.registryMetadataTrust, outErrors)
 	outErrors = unmarshalBootstrapKey(inMap, "registryMetadataMirrors",
 		&bc.registryMetadataMirrors, outErrors)
-
-	naming, namingOk := inMap["naming"]
-	if namingOk {
-		bc.naming = naming
-	}
 
 	var err error
 
@@ -198,10 +184,6 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 		config.Spec.Metadata.Labels[k] = v
 	}
 
-	if config.Spec.InClusterDNSSuffix == "" {
-		config.Spec.InClusterDNSSuffix = bootstrap.inClusterDNSSuffix
-	}
-
 	if config.Spec.ImagePull.Policy == "" {
 		config.Spec.ImagePull.Policy = bootstrap.imagePullPolicy
 	}
@@ -273,10 +255,6 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 		)
 		existingRegistryMirrors[entry.Registry] = true
 	}
-
-	if config.Spec.Naming == "" {
-		config.Spec.Naming = bootstrap.naming
-	}
 }
 
 func mergeFromBootstrapConfigReplace(
@@ -288,7 +266,6 @@ func mergeFromBootstrapConfigReplace(
 			Annotations: bootstrap.globalAnnotations,
 			Labels:      bootstrap.globalLabels,
 		},
-		InClusterDNSSuffix: bootstrap.inClusterDNSSuffix,
 		ImagePull: clabernetesapisv1alpha1.ConfigImagePull{
 			Policy:                  bootstrap.imagePullPolicy,
 			PullSecrets:             append([]string{}, bootstrap.imagePullSecrets...),
@@ -300,6 +277,5 @@ func mergeFromBootstrapConfigReplace(
 			NodeSelectorsByImage: bootstrap.nodeSelectorsByImage,
 			ContainerStopSignals: bootstrap.containerStopSignals,
 		},
-		Naming: bootstrap.naming,
 	}
 }

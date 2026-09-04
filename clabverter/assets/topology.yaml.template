@@ -41,9 +41,6 @@ spec:
   expose:
     exposeType: None
   {{- end }}
-  {{- if .Naming }}
-  naming: {{ .Naming }}
-  {{- end }}
   definition:
     containerlab: |-
       {{- .ClabConfig }}

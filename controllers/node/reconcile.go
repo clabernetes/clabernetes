@@ -587,7 +587,7 @@ func resolveGroupProfileReference(
 		profileName = primaryNode.Spec.ProfileRef.Name
 		if profileName == "" {
 			return "", fmt.Errorf(
-				"%w: launcher Node %q has an empty NodeProfile reference",
+				"%w: primary Node %q has an empty NodeProfile reference",
 				claberneteserrors.ErrInvalidData,
 				primaryNodeName,
 			)

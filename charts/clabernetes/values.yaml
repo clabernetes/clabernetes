@@ -78,8 +78,6 @@ globalConfig:
   #
   mergeMode: merge
 
-  inClusterDNSSuffix: svc.cluster.local
-
   imagePull:
     # policy is the Kubernetes imagePullPolicy default for direct application containers whose
     # source Node definition does not explicitly declare one.
@@ -142,10 +140,6 @@ globalConfig:
     # When false, images that declare a stop signal fail planning rather than silently dropping
     # the signal.
     containerStopSignals: false
-
-  # name is the global setting that governs a Topology's "naming" field when set to "global".
-  # valid options are "prefixed" or "non-prefixed", see the api types for more detail.
-  naming: prefixed
 
 #
 # clicker

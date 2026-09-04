@@ -38,7 +38,6 @@ func TestClabvert(t *testing.T) {
 		imagePullSecrets     string
 		disableExpose        bool
 		emitCRs              bool
-		naming               string
 	}{
 		{
 			name:                 "simple",
@@ -46,7 +45,6 @@ func TestClabvert(t *testing.T) {
 			topologySpecFile:     "",
 			destinationNamespace: "notclabernetes",
 			imagePullSecrets:     "regcred",
-			naming:               "prefixed",
 		},
 		{
 			name:             "simple-no-explicit-namespace",
@@ -54,7 +52,6 @@ func TestClabvert(t *testing.T) {
 			topologySpecFile: "test-fixtures/clabversiontest/specs.yaml",
 			imagePullSecrets: "",
 			disableExpose:    true,
-			naming:           "non-prefixed",
 		},
 		{
 			name:                 "emit-crs",
@@ -63,7 +60,6 @@ func TestClabvert(t *testing.T) {
 			destinationNamespace: "notclabernetes",
 			imagePullSecrets:     "regcred",
 			emitCRs:              true,
-			naming:               "prefixed",
 		},
 		{
 			name:                 "inline-startup-config",
@@ -71,7 +67,6 @@ func TestClabvert(t *testing.T) {
 			topologySpecFile:     "",
 			destinationNamespace: "inline-test",
 			imagePullSecrets:     "",
-			naming:               "prefixed",
 		},
 	}
 
@@ -116,7 +111,6 @@ func TestClabvert(t *testing.T) {
 					testCase.topologySpecFile,
 					actualDir,
 					testCase.destinationNamespace,
-					testCase.naming,
 					testCase.imagePullSecrets,
 					testCase.disableExpose,
 					testCase.emitCRs,

@@ -33,7 +33,6 @@ type containerlabTemplateVars struct {
 	FilesFromURL     map[string][]topologyFileFromURLTemplateVars
 	ImagePullSecrets []string
 	DisableExpose    bool
-	Naming           string
 }
 
 type renderedContent struct {

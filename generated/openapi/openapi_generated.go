@@ -729,13 +729,6 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 							),
 						},
 					},
-					"inClusterDNSSuffix": {
-						SchemaProps: spec.SchemaProps{
-							Description: "InClusterDNSSuffix overrides the default in cluster dns suffix used when resolving services.",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 					"imagePull": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ImagePull holds direct Pod pull defaults and controller-only OCI metadata trust policy.",
@@ -752,14 +745,6 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 							Ref: ref(
 								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment",
 							),
-						},
-					},
-					"naming": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Naming holds the global override for the \"naming\" setting for Topology objects -- this controls whether the Topology resources have the containerlab topology name as a prefix. Of course this is ignored if a Topology sets its Naming field to something not \"global\".",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
 						},
 					},
 				},
@@ -3856,16 +3841,8 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 							),
 						},
 					},
-					"naming": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Naming tells the clabernetes controller how it should name resources it creates -- that is whether it should include the containerlab topology name as a prefix on resources spawned from this Topology or not; this includes the actual (containerlab) node Deployment(s), as well as the Service(s) for the Topology. This setting has three modes; \"prefixed\" -- which of course includes the containerlab topology name as a prefix, \"non-prefixed\" which does *not* include the containerlab topology name as a prefix, and \"global\" which defers to the global config setting for this (which defaults to \"prefixed\"). \"non-prefixed\" mode should only be enabled when/if Topologies are deployed in their own namespace -- the reason for this is simple: if two Topologies exist in the same namespace with a (containerlab) node named \"my-router\" there will be a conflicting Deployment and Services for the \"my-router\" (containerlab) node. Note that this field is immutable! If you want to change its value you need to delete the Topology and re-create it.",
-							Default:     "",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
 				},
-				Required: []string{"definition", "naming"},
+				Required: []string{"definition"},
 			},
 		},
 		Dependencies: []string{

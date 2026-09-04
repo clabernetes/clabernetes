@@ -130,9 +130,6 @@
         "mergeMode": {
           "type": "string"
         },
-        "inClusterDNSSuffix": {
-          "type": "string"
-        },
         "imagePull": {
           "type": "object",
           "properties": {
@@ -183,10 +180,6 @@
               "type": "boolean"
             }
           }
-        },
-        "naming": {
-          "type": "string",
-          "enum": ["prefixed", "non-prefixed"]
         }
       }
     },

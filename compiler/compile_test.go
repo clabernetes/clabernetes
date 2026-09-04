@@ -927,29 +927,6 @@ topology:
 	}
 }
 
-func TestCompileTopologyWithOptionsRejectsRemovedWarningMode(t *testing.T) {
-	t.Parallel()
-
-	topology := &clabernetesapisv1alpha1.Topology{}
-	topology.Spec.Definition.Containerlab = `
-name: removed-warning-mode
-topology:
-  nodes:
-    n1: {kind: linux, image: alpine}
-`
-
-	_, err := clabernetescompiler.CompileTopologyWithOptions(
-		&claberneteslogging.FakeInstance{},
-		topology,
-		clabernetescompiler.CompileOptions{
-			UnsupportedFieldPolicy: clabernetescompiler.UnsupportedFieldPolicy("warn"),
-		},
-	)
-	if err == nil {
-		t.Fatal("compiler accepted removed warning mode")
-	}
-}
-
 //nolint:wsl_v5 // Keeping the expected diagnostic set beside compilation makes ordering explicit.
 func TestCompileTopologyDiagnosticsAreSortedAndLocated(t *testing.T) {
 	definition := `

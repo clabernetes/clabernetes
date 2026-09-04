@@ -80,7 +80,6 @@ kind: Topology
 metadata:
   name: topology-ceos
 spec:
-  naming: non-prefixed
   statusProbes:
     enabled: true
   imagePull:

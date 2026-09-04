@@ -52,7 +52,6 @@ func InitManager(
 			kubeClabernetesClient: client,
 			lock:                  &sync.RWMutex{},
 			config: &clabernetesapisv1alpha1.ConfigSpec{
-				InClusterDNSSuffix: clabernetesconstants.KubernetesDefaultInClusterDNSSuffix,
 				Metadata: clabernetesapisv1alpha1.ConfigMetadata{
 					Annotations: nil,
 					Labels:      nil,
@@ -68,7 +67,6 @@ func InitManager(
 				ImagePull: clabernetesapisv1alpha1.ConfigImagePull{
 					Policy: clabernetesconstants.KubernetesImagePullIfNotPresent,
 				},
-				Naming: clabernetesconstants.NamingModePrefixed,
 			},
 		}
 
@@ -116,15 +114,10 @@ type Manager interface { //nolint: interfacebloat
 	GetNodeSelectorsByImage(
 		imageName string,
 	) map[string]string
-	// GetInClusterDNSSuffix returns the in cluster dns suffix as set by the global config.
-	GetInClusterDNSSuffix() string
 	// GetRegistryMetadataTrust returns exact controller-only OCI registry trust exceptions.
 	GetRegistryMetadataTrust() []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
 	// GetRegistryMetadataMirrors returns exact controller-only OCI registry metadata mirrors.
 	GetRegistryMetadataMirrors() []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry
-	// GetRemoveTopologyPrefix returns true if the topology prefix should be removed from Topology
-	// resources, otherwise false.
-	GetRemoveTopologyPrefix() bool
 	// GetContainerStopSignals returns true if the direct-pod renderer should map an image's OCI
 	// stop signal to the Kubernetes lifecycle.stopSignal field -- this requires the cluster to
 	// enable the ContainerStopSignals feature gate.

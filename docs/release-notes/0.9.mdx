@@ -75,6 +75,13 @@ config and daemon config, insecure registries, pull-through, CRI overrides, by-k
 defaults, and Docker management-network fields. `Link.status.error` is replaced by the
 `Accepted` condition, and `Node.status.probeStatuses` is removed.
 
+Two global settings that no longer controlled anything are also gone: the Topology and Config
+`naming` fields and the Config `inClusterDNSSuffix` field, together with the
+`globalConfig.naming` and `globalConfig.inClusterDNSSuffix` Helm values. Generated resources
+are named after the containerlab node inside the Topology namespace, and services resolve
+without a configurable suffix. Drop the fields from manifests and values files before
+installing; a manifest that still sets them is rejected by the new schemas.
+
 Two node-definition fields change meaning:
 
 - `ports` entries are destination ports only (`22/tcp`). The Docker-style `host:container`

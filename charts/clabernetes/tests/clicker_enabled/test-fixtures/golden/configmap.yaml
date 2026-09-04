@@ -37,8 +37,6 @@ data:
     {}
     ---
   containerStopSignals: "false"
-  inClusterDNSSuffix: svc.cluster.local
   imagePullPolicy: IfNotPresent
   imagePullSecrets: |-
     []
-  naming: prefixed

@@ -71,13 +71,6 @@ func WithDefaultResources(resources *k8scorev1.ResourceRequirements) FakeOption 
 	}
 }
 
-// WithContainerStopSignals configures OCI stop signal mapping on the fake manager.
-func WithContainerStopSignals(enabled bool) FakeOption {
-	return func(fm *fakeManager) {
-		fm.containerStopSignals = enabled
-	}
-}
-
 // WithMetadata configures global annotations and labels on the fake manager.
 func WithMetadata(annotations, labels map[string]string) FakeOption {
 	return func(fm *fakeManager) {
@@ -126,10 +119,6 @@ func (f fakeManager) GetNodeSelectorsByImage(
 	return GetNodeSelectorsByImage(imageName, f.nodeSelectorsByImage)
 }
 
-func (f fakeManager) GetInClusterDNSSuffix() string {
-	return "svc.cluster.local"
-}
-
 func (f fakeManager) GetRegistryMetadataTrust() (
 	result []clabernetesapisv1alpha1.RegistryMetadataTrustEntry,
 ) {
@@ -140,10 +129,6 @@ func (f fakeManager) GetRegistryMetadataMirrors() (
 	result []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry,
 ) {
 	return slices.Clone(f.registryMetadataMirrors)
-}
-
-func (f fakeManager) GetRemoveTopologyPrefix() bool {
-	return false
 }
 
 func (f fakeManager) GetContainerStopSignals() bool {
