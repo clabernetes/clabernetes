@@ -48,6 +48,13 @@ const (
 	// the pod namespace): the device has already consumed the frame, and the kernel copy would
 	// otherwise be forwarded back through the router leg in a loop. It precedes every lookup.
 	interpositionDeviceLegRulePriority = 896
+	// interpositionProbeMark is the socket mark the sidecar puts on its own connections to the
+	// device's management address (readiness dials). For a kernel-held address those would be
+	// delivered locally, where a device that translates its management ports onward to a nested
+	// guest (vrnetlab binds that translation to the device leg) never sees them; marked, they
+	// select the transport table like mesh-delivered traffic and cross the pair onto the device
+	// leg, exactly as an external client's connection does.
+	interpositionProbeMark = 0xc9
 	// interpositionIngressRulePriority steers traffic that arrives from the mesh tunnel endpoint
 	// or from the Kubernetes transport for a management address the pod kernel itself holds
 	// into the transport table, ahead of local delivery: it then crosses the synthetic pair and

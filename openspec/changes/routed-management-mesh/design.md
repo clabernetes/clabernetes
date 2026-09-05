@@ -72,9 +72,14 @@ growth never recreates Pods; a membership or Pod-address change rewrites one sha
 single ConfigMap is removed by the controller.
 
 **D5 — Segment clamp on the routed forward path.** The TCP MSS clamp moves from the bridge
-family to an `inet` forward chain matching ingress on the router leg and the VTEP. With L3
-forwarding the kernel also emits fragmentation-needed for oversized DF packets, so devices doing
-path MTU discovery adapt on their own; the clamp remains for devices whose port size is fixed.
+family to an `inet` forward chain matching ingress on the router leg, the VTEP, and the
+transport. With L3 forwarding the kernel also emits fragmentation-needed for oversized DF
+packets, so devices doing path MTU discovery adapt on their own; the clamp remains for devices
+whose port size is fixed. The transport ingress is the inbound translated flow of an exposed
+port: a device that raises its leg above the mesh MTU (SR-SIM sets 9000) sizes its segments from
+the client's SYN, a client on the Pod network advertises more than the router leg carries, and
+the veth drops the oversized segment before routing, so no fragmentation-needed is ever sent
+and every exposed-port session to such a device stalled on its first large segment.
 
 **D6 — Transport table shape.** The sidecar-owned policy table carries the Pod's own management
 address as a host route via the router leg and the management subnet via the VTEP. The device
@@ -113,9 +118,16 @@ translation reverses there.
 routes between its legs and the device leg crosses netfilter twice in one namespace. In one
 zone the first crossing confirms the connection and a device's own translation bound to its
 leg can no longer bind. The bridged shape never had this problem because bridged frames
-skipped netfilter until the device leg. The sidecar legs and locally originated traffic use
-zone 1; the device leg and everything else stay in the default zone. The sidecar's own
-translations and their replies stay consistent within its zone.
+skipped netfilter until the device leg. The sidecar legs, locally originated traffic, and
+management-sourced ingress on any interface use zone 1; the device leg and everything else
+stay in the default zone. The management-sourced rule covers traffic a device hands to the
+pod kernel without crossing the device leg: SR Linux routes its off-subnet management egress
+(resolver queries above all) through an internal gateway pair from its management namespace,
+and that traffic enters on a device-created interface. Tracked outside the zone, its
+masquerade bound where the reply, entering on the transport in the zone, never found it. A
+device's own translation domain (a nested guest behind a bridge, sourced from a guest address)
+is not management-sourced and stays out. The sidecar's own translations and their replies stay
+consistent within its zone.
 
 **D9 — IPv6 management is best effort per Pod.** IPv6 mesh state (rules, routes, neighbor and
 proxy entries) is installed only while the router leg actually carries the IPv6 gateway. A
@@ -151,7 +163,27 @@ never again. SR Linux takes the leg down, renames it to `mgmt0`, and brings it b
 it boots, and the kernel refuses to rename an interface that is up; a re-assertion pass that
 set the leg up in that window (one pass per second while the device boots) broke the rename,
 after which the pod kernel answered for the address itself and the device's management
-plane never came up while readiness stayed green.
+plane never came up while readiness stayed green. Policy rules keyed on the device leg (the
+blackhole of a device-held address) follow the rename: the sidecar resolves the leg through
+the router leg's veth peer index rather than the plan name, because a rule keyed on a name
+detaches at the rename and matches nothing, after which every frame the device's own stack
+already consumed was forwarded back through the router leg until its TTL ran out, and the
+time exceeded reports aborted every connection the sidecar opened to the device (SSH
+readiness failed with "no route to host").
+
+**D14 — The sidecar's own connections to a kernel-held management address cross the pair.**
+The ingress-scoped rules of a kernel-held address (D7) leave locally originated traffic to the
+local lookup, so a readiness dial from the sidecar was delivered to the pod kernel itself. A
+device that translates its management ports onward to a nested guest binds that translation to
+the device leg (vrnetlab), so the dial was refused there while every external client, arriving
+through the pair, reached the guest. The sidecar marks its probe sockets (`SO_MARK`, mark
+`0xc9`) and a marked rule alongside the ingress-scoped ones selects the transport table, so the
+dial leaves through the router leg, arrives on the device leg with the gateway as its source
+like any inbound translated flow, and the reply returns through the gateway hairpin. The rule
+is scoped to locally originated lookups (loopback ingress): the mark survives the crossing, and
+an unscoped rule selected the transport table again on the device leg and looped the packet
+between the legs until its TTL ran out. Unmarked local traffic, the device's own, stays local:
+steering it too would give a device's connections to its own address the gateway as source.
 
 ## Risks / Trade-offs
 

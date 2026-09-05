@@ -4,7 +4,9 @@
 package directruntime
 
 import (
+	"bytes"
 	"errors"
+	"net/netip"
 	"os"
 	"os/exec"
 	"runtime"
@@ -75,12 +77,18 @@ func testMeshSegmentClampProgramsOwnedTable(t *testing.T) {
 
 	const meshMTU = 1430
 
-	if err := ensureMeshFilterTable(TransportInterfaceName, RouterInterfaceName, meshMTU); err != nil {
+	management := netip.MustParseAddr("172.80.80.11")
+
+	if err := ensureMeshFilterTable(
+		TransportInterfaceName, RouterInterfaceName, management, meshMTU,
+	); err != nil {
 		t.Fatalf("programming mesh filter table: %v", err)
 	}
 
 	// Reconciling twice must be idempotent and leave exactly one table with the same rules.
-	if err := ensureMeshFilterTable(TransportInterfaceName, RouterInterfaceName, meshMTU); err != nil {
+	if err := ensureMeshFilterTable(
+		TransportInterfaceName, RouterInterfaceName, management, meshMTU,
+	); err != nil {
 		t.Fatalf("reprogramming mesh filter table: %v", err)
 	}
 
@@ -113,23 +121,49 @@ func testMeshSegmentClampProgramsOwnedTable(t *testing.T) {
 		t.Fatal("segment clamp forward chain was not created")
 	}
 
-	assertConntrackZoneChains(t, conn, owned, zoneChains)
+	assertConntrackZoneChains(t, conn, owned, zoneChains, management)
 
 	rules, err := conn.GetRules(owned, forward)
 	if err != nil {
 		t.Fatalf("listing segment clamp rules: %v", err)
 	}
 
-	if len(rules) != 4 {
+	if len(rules) != 6 {
 		t.Fatalf(
-			"expected one clamp rule per mesh ingress interface and address family, got %d",
+			"expected one clamp rule per forwarding ingress interface (router leg, mesh "+
+				"tunnel endpoint, transport) and address family, got %d",
 			len(rules),
 		)
 	}
 
+	assertClampCoversForwardingIngress(t, rules)
+
 	for _, rule := range rules {
 		assertClampRuleShape(t, rule)
 		assertClampRuleUsesGenericIngress(t, rule)
+	}
+}
+
+// assertClampCoversForwardingIngress checks the clamp matches every interface the sidecar
+// forwards management traffic from: the router leg, the mesh tunnel endpoint, and the transport
+// (exposed-port sessions from the Pod network).
+func assertClampCoversForwardingIngress(t *testing.T, rules []*nftables.Rule) {
+	t.Helper()
+
+	clampedIngress := map[string]bool{}
+
+	for _, rule := range rules {
+		for _, expression := range rule.Exprs {
+			if cmp, ok := expression.(*expr.Cmp); ok && len(cmp.Data) == interfaceNameLength {
+				clampedIngress[strings.TrimRight(string(cmp.Data), "\x00")] = true
+			}
+		}
+	}
+
+	for _, name := range []string{RouterInterfaceName, MeshVTEPName, TransportInterfaceName} {
+		if !clampedIngress[name] {
+			t.Fatalf("clamp does not cover ingress %q: %v", name, clampedIngress)
+		}
 	}
 }
 
@@ -222,17 +256,21 @@ func TestUnsupportedMeshSegmentClampErrorsAreOptional(t *testing.T) {
 	}
 }
 
-// assertConntrackZoneChains checks that the sidecar legs and locally originated traffic get the
-// sidecar conntrack zone: three ingress rules and one output rule, each setting the zone.
+// assertConntrackZoneChains checks that the sidecar legs, management-sourced ingress, and
+// locally originated traffic get the sidecar conntrack zone: three interface ingress rules plus
+// the management-source rule, and one output rule, each setting the zone.
 func assertConntrackZoneChains(
 	t *testing.T,
 	conn *nftables.Conn,
 	owned *nftables.Table,
 	zoneChains map[string]*nftables.Chain,
+	management netip.Addr,
 ) {
 	t.Helper()
 
-	for name, want := range map[string]int{"zone-prerouting": 3, "zone-output": 1} {
+	managementSourced := false
+
+	for name, want := range map[string]int{"zone-prerouting": 4, "zone-output": 1} {
 		chain, ok := zoneChains[name]
 		if !ok {
 			t.Fatalf("conntrack zone chain %q was not created", name)
@@ -244,25 +282,58 @@ func assertConntrackZoneChains(
 		}
 
 		for _, rule := range zoneRules {
-			setsZone := false
-
-			// The library reads a ct set back without its source-register marker; the key is
-			// what identifies the zone assignment.
-			for _, expression := range rule.Exprs {
-				if ct, isCt := expression.(*expr.Ct); isCt && ct.Key == expr.CtKeyZONE {
-					setsZone = true
-				}
-			}
-
-			if !setsZone {
+			if !zoneRuleSetsZone(rule) {
 				t.Fatalf(
 					"zone chain %q rule does not set the conntrack zone: %+v",
 					name,
 					rule.Exprs,
 				)
 			}
+
+			if zoneRuleMatchesSource(rule, management) {
+				managementSourced = true
+			}
 		}
 	}
+
+	// Management-sourced ingress on any interface (SR Linux's internal gateway leg carries the
+	// device's resolver queries into the pod kernel) is tracked in the sidecar's zone.
+	if !managementSourced {
+		t.Fatal("zone chain does not assign the zone to management-sourced ingress")
+	}
+}
+
+// zoneRuleSetsZone reports whether the rule assigns the conntrack zone. The library reads a ct
+// set back without its source-register marker; the key is what identifies the assignment.
+func zoneRuleSetsZone(rule *nftables.Rule) bool {
+	for _, expression := range rule.Exprs {
+		if ct, isCt := expression.(*expr.Ct); isCt && ct.Key == expr.CtKeyZONE {
+			return true
+		}
+	}
+
+	return false
+}
+
+// zoneRuleMatchesSource reports whether the rule matches the IPv4 source address given: a
+// network-header read at the source offset followed by a comparison against the address.
+func zoneRuleMatchesSource(rule *nftables.Rule, address netip.Addr) bool {
+	source := address.As4()
+	readsSource := false
+
+	for _, expression := range rule.Exprs {
+		switch typed := expression.(type) {
+		case *expr.Payload:
+			readsSource = typed.Base == expr.PayloadBaseNetworkHeader &&
+				typed.Offset == ipv4SourceOffset && typed.Len == ipv4AddressLength
+		case *expr.Cmp:
+			if readsSource && bytes.Equal(typed.Data, source[:]) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // ownedMeshFilterTable finds the sidecar-owned inet table.

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/netip"
 	"os"
@@ -20,6 +21,10 @@ import (
 // interpositionOwnerAlias marks sidecar-created interposition interfaces so reconciliation can
 // distinguish them from device- and CNI-owned links.
 const interpositionOwnerAlias = "c9s:interposition:v1"
+
+// loopbackInterfaceName is the ingress the kernel attributes locally originated route lookups
+// to; a policy rule scoped to it matches only traffic this namespace originates.
+const loopbackInterfaceName = "lo"
 
 // meshVTEPLinkType is the kernel link type of the management mesh VTEP.
 const meshVTEPLinkType = "vxlan"
@@ -238,7 +243,7 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 	// port size is fixed by the application cannot be told the mesh MTU: clamping the segment
 	// size the handshake advertises keeps its management flows inside what the mesh carries.
 	if err := ensureMeshFilterTable(
-		spec.TransportInterface, spec.RouterInterface, meshMTU,
+		spec.TransportInterface, spec.RouterInterface, managementPrefix.Addr(), meshMTU,
 	); err != nil {
 		return err
 	}
@@ -921,6 +926,31 @@ func ensureTransportTable(
 	return ensureTransportTableIPv6(spec, router, vtep)
 }
 
+// deviceLegName resolves the current name of the device leg. The device leg is the far end of
+// the router leg's veth, and the router leg is never renamed, so the peer index reaches the leg
+// under whatever name the device gave it: SR Linux renames its leg while it boots, and a policy
+// rule keyed on the plan name detaches at that moment and matches nothing from then on (the
+// device-leg blackhole above all: without it every frame the device's own stack already
+// consumed is forwarded back through the router leg until its TTL runs out, and the time
+// exceeded reports abort every connection the sidecar opens to the device). A leg the device
+// moved into a namespace of its own, or that is otherwise unresolvable, keeps the plan name.
+func deviceLegName(spec InterpositionSpec) string {
+	router, present, err := lookupLink(spec.RouterInterface)
+	if err != nil || !present || router.Attrs().ParentIndex == 0 {
+		return spec.DeviceInterface
+	}
+
+	// The peer index is only meaningful in this namespace; a peer moved elsewhere leaves an
+	// index that may name an unrelated interface here, so the pairing is checked both ways.
+	peer, err := netlink.LinkByIndex(router.Attrs().ParentIndex)
+	if err != nil || peer.Type() != "veth" ||
+		peer.Attrs().ParentIndex != router.Attrs().Index {
+		return spec.DeviceInterface
+	}
+
+	return peer.Attrs().Name
+}
+
 // addressHeldLocally reports whether any interface of the pod namespace carries the exact
 // address: a single-namespace device leaves the management address on the device leg, where
 // the kernel itself terminates it, while a device with its own stack strips or moves it.
@@ -951,6 +981,7 @@ type ownAddressRuleShape struct {
 	iif      string
 	dst      *net.IPNet
 	action   uint8
+	mark     uint32
 }
 
 func (s ownAddressRuleShape) key() string {
@@ -959,7 +990,9 @@ func (s ownAddressRuleShape) key() string {
 		destination = s.dst.String()
 	}
 
-	return fmt.Sprintf("%d|%d|%s|%s|%d", s.priority, s.table, s.iif, destination, s.action)
+	return fmt.Sprintf(
+		"%d|%d|%s|%s|%d|%d", s.priority, s.table, s.iif, destination, s.action, s.mark,
+	)
 }
 
 // ownAddressRuleShapes lists the rules one address family needs: the re-homed local lookup,
@@ -973,11 +1006,12 @@ func (s ownAddressRuleShape) key() string {
 // router leg is delivered locally. Only the IPv4 family carries a Pod-address translation.
 func ownAddressRuleShapes(
 	spec InterpositionSpec,
+	deviceLeg string,
 	ownAddress, gateway *net.IPNet,
 	kernelHeld bool,
 ) []ownAddressRuleShape {
 	shapes := []ownAddressRuleShape{
-		{interpositionLocalRulePriority, unix.RT_TABLE_LOCAL, "", nil, unix.RTN_UNSPEC},
+		{interpositionLocalRulePriority, unix.RT_TABLE_LOCAL, "", nil, unix.RTN_UNSPEC, 0},
 	}
 
 	if kernelHeld {
@@ -988,6 +1022,7 @@ func ownAddressRuleShapes(
 				MeshVTEPName,
 				ownAddress,
 				unix.RTN_UNSPEC,
+				0,
 			},
 			ownAddressRuleShape{
 				interpositionIngressRulePriority,
@@ -995,6 +1030,22 @@ func ownAddressRuleShapes(
 				spec.TransportInterface,
 				ownAddress,
 				unix.RTN_UNSPEC,
+				0,
+			},
+			// The sidecar's own connections to the address (readiness dials) carry the probe
+			// mark and cross the pair like mesh-delivered traffic, so a device-leg-bound
+			// translation sees them; unmarked local traffic, the device's own, stays local.
+			// The rule is scoped to locally originated lookups (the loopback ingress the
+			// kernel uses for them): a packet keeps its mark across the pair, and an
+			// unscoped rule would select the transport table again on the device leg and
+			// forward the packet back out the router leg until its TTL ran out.
+			ownAddressRuleShape{
+				interpositionIngressRulePriority,
+				interpositionTransportTable,
+				loopbackInterfaceName,
+				ownAddress,
+				unix.RTN_UNSPEC,
+				interpositionProbeMark,
 			},
 		)
 
@@ -1006,6 +1057,7 @@ func ownAddressRuleShapes(
 					spec.RouterInterface,
 					gateway,
 					unix.RTN_UNSPEC,
+					0,
 				},
 				ownAddressRuleShape{
 					interpositionGatewayHairpinRulePriority,
@@ -1013,6 +1065,7 @@ func ownAddressRuleShapes(
 					"",
 					gateway,
 					unix.RTN_UNSPEC,
+					0,
 				},
 			)
 		}
@@ -1027,13 +1080,15 @@ func ownAddressRuleShapes(
 			"",
 			ownAddress,
 			unix.RTN_UNSPEC,
+			0,
 		},
 		ownAddressRuleShape{
 			interpositionDeviceLegRulePriority,
 			unix.RT_TABLE_UNSPEC,
-			spec.DeviceInterface,
+			deviceLeg,
 			ownAddress,
 			unix.RTN_BLACKHOLE,
+			0,
 		},
 	)
 }
@@ -1063,7 +1118,9 @@ func ensureOwnAddressRules(
 	kernelHeld bool,
 ) error {
 	wanted := map[string]ownAddressRuleShape{}
-	for _, shape := range ownAddressRuleShapes(spec, ownAddress, gateway, kernelHeld) {
+	for _, shape := range ownAddressRuleShapes(
+		spec, deviceLegName(spec), ownAddress, gateway, kernelHeld,
+	) {
 		wanted[shape.key()] = shape
 	}
 
@@ -1104,7 +1161,7 @@ func ensureOwnAddressRules(
 		}
 
 		id := ownAddressRuleShape{
-			rule.Priority, rule.Table, rule.IifName, rule.Dst, action,
+			rule.Priority, rule.Table, rule.IifName, rule.Dst, action, rule.Mark,
 		}.key()
 		if _, ok := wanted[id]; ok {
 			present[id] = true
@@ -1131,6 +1188,12 @@ func ensureOwnAddressRules(
 		rule.IifName = shape.iif
 		rule.Dst = shape.dst
 		rule.Type = shape.action
+
+		if shape.mark != 0 {
+			mask := uint32(math.MaxUint32)
+			rule.Mark = shape.mark
+			rule.Mask = &mask
+		}
 
 		if err = netlink.RuleAdd(rule); err != nil {
 			return fmt.Errorf("asserting own-address rule %s: %w", id, err)

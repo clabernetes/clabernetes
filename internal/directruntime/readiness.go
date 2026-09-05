@@ -1,4 +1,4 @@
-//nolint:err113,gocognit,gocyclo,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
+//nolint:err113,gocyclo,mnd // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -156,9 +156,12 @@ func runApplicationChecks(
 		break
 	}
 
-	if checks.TCPPort != 0 {
-		dialer := net.Dialer{Timeout: applicationProbeTimeout}
+	// Probe connections carry the sidecar's mark: for a kernel-held management address they
+	// then cross the synthetic pair onto the device leg like an external client's connection,
+	// where a device translating its management ports onward (vrnetlab) sees them.
+	dialer := net.Dialer{Timeout: applicationProbeTimeout, Control: markProbeSocket}
 
+	if checks.TCPPort != 0 {
 		connection, err := dialer.DialContext(
 			ctx,
 			"tcp",
@@ -177,6 +180,16 @@ func runApplicationChecks(
 		return nil
 	}
 
+	return runSSHReadiness(ctx, dialer, host, checks)
+}
+
+// runSSHReadiness authenticates to the device's SSH service over a marked probe connection.
+func runSSHReadiness(
+	ctx context.Context,
+	dialer net.Dialer,
+	host string,
+	checks ReadinessChecks,
+) error {
 	passwordPath := filepath.Clean(checks.SSHPasswordFile)
 	if !filepath.IsAbs(passwordPath) || passwordPath == string(filepath.Separator) {
 		return errors.New("SSH readiness password path must be scoped and absolute")
@@ -208,14 +221,21 @@ func runApplicationChecks(
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // Readiness authenticates the peer.
 	}
 
-	client, err := ssh.Dial(
-		"tcp",
-		net.JoinHostPort(host, strconv.Itoa(checks.SSHPort)),
-		sshConfig,
-	)
+	sshAddress := net.JoinHostPort(host, strconv.Itoa(checks.SSHPort))
+
+	transport, err := dialer.DialContext(ctx, "tcp", sshAddress)
 	if err != nil {
 		return fmt.Errorf("SSH application readiness failed: %w", err)
 	}
+
+	sshConnection, channels, requests, err := ssh.NewClientConn(transport, sshAddress, sshConfig)
+	if err != nil {
+		_ = transport.Close()
+
+		return fmt.Errorf("SSH application readiness failed: %w", err)
+	}
+
+	client := ssh.NewClient(sshConnection, channels, requests)
 
 	if err = client.Close(); err != nil {
 		return fmt.Errorf("closing SSH application readiness connection: %w", err)

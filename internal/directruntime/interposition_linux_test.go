@@ -410,10 +410,12 @@ func testEnsureInterpositionConverges(t *testing.T) {
 		// The device leg still carries the management address here (a single-namespace
 		// device), so inbound traffic from the mesh and from the transport selects the
 		// transport table through ingress-scoped rules ahead of the re-homed local lookup and
-		// crosses the pair onto the device leg, while nothing catches locally originated or
-		// device-leg traffic. The kernel's priority-0 local lookup is gone.
+		// crosses the pair onto the device leg, as do the sidecar's own marked connections,
+		// while nothing catches unmarked locally originated or device-leg traffic. The
+		// kernel's priority-0 local lookup is gone.
 		ingressRules := map[string]bool{}
 		localPriorities := map[int]bool{}
+		markedRule := false
 
 		for _, rule := range rules {
 			if rule.Table == interpositionTransportTable &&
@@ -427,6 +429,12 @@ func testEnsureInterpositionConverges(t *testing.T) {
 					t.Fatalf("%s: ingress rule is not scoped to the address: %+v", step, rule)
 				}
 
+				if rule.Mark == interpositionProbeMark && rule.IifName == loopbackInterfaceName {
+					markedRule = true
+
+					continue
+				}
+
 				ingressRules[rule.IifName] = true
 			}
 
@@ -436,8 +444,9 @@ func testEnsureInterpositionConverges(t *testing.T) {
 		}
 
 		if !ingressRules[MeshVTEPName] || !ingressRules[TransportInterfaceName] ||
-			len(ingressRules) != 2 {
-			t.Fatalf("%s: ingress rules for a kernel-held address = %v", step, ingressRules)
+			len(ingressRules) != 2 || !markedRule {
+			t.Fatalf("%s: ingress rules for a kernel-held address = %v (marked %t)",
+				step, ingressRules, markedRule)
 		}
 
 		if !localPriorities[interpositionLocalRulePriority] || localPriorities[0] {
@@ -508,6 +517,41 @@ func testEnsureInterpositionConverges(t *testing.T) {
 			decision[0].LinkIndex != routerLink.Attrs().Index {
 			t.Fatalf("%s: mesh-delivered traffic to the kernel-held address resolves to %+v (%v), "+
 				"want the router leg toward the device leg", step, decision, decisionErr)
+		}
+
+		// The sidecar's own marked connections (readiness dials) cross the pair to the device
+		// leg, where a device-leg-bound translation sees them; unmarked local traffic, the
+		// device's own, is delivered locally as before.
+		marked, markedErr := netlink.RouteGetWithOptions(
+			net.ParseIP("172.80.80.11"),
+			&netlink.RouteGetOptions{Mark: interpositionProbeMark},
+		)
+		if markedErr != nil || len(marked) == 0 || marked[0].Type == unix.RTN_LOCAL ||
+			marked[0].LinkIndex != routerLink.Attrs().Index {
+			t.Fatalf("%s: a marked sidecar connection to the kernel-held address resolves to "+
+				"%+v (%v), want the router leg toward the device leg", step, marked, markedErr)
+		}
+
+		unmarked, unmarkedErr := netlink.RouteGetWithOptions(
+			net.ParseIP("172.80.80.11"),
+			&netlink.RouteGetOptions{},
+		)
+		if unmarkedErr != nil || len(unmarked) == 0 || unmarked[0].Type != unix.RTN_LOCAL {
+			t.Fatalf("%s: an unmarked local connection to the kernel-held address resolves to "+
+				"%+v (%v), want local delivery", step, unmarked, unmarkedErr)
+		}
+
+		// The mark survives the crossing; re-entering on the device leg the packet must be
+		// delivered, never selected for the transport table again (that looped it).
+		reentered, reenteredErr := netlink.RouteGetWithOptions(
+			net.ParseIP("172.80.80.11"),
+			&netlink.RouteGetOptions{
+				Iif: "eth0", SrcAddr: net.ParseIP("172.80.80.1"), Mark: interpositionProbeMark,
+			},
+		)
+		if reenteredErr != nil || len(reentered) == 0 || reentered[0].Type != unix.RTN_LOCAL {
+			t.Fatalf("%s: a marked connection re-entering on the device leg resolves to "+
+				"%+v (%v), want local delivery", step, reentered, reenteredErr)
 		}
 
 		if readSysctl(t, "/proc/sys/net/ipv4/conf/eth0/accept_local") != "1" ||
@@ -735,11 +779,13 @@ func testEnsureInterpositionConverges(t *testing.T) {
 	}
 
 	// The device's own stack answers the gateway through the pair; the hairpin of the
-	// kernel-held shape (rules and the device-leg host route) is converged away.
+	// kernel-held shape (rules, the marked-probe rule, and the device-leg host route) is
+	// converged away.
 	for _, rule := range bareRules {
 		if rule.Priority == interpositionGatewayReturnRulePriority ||
-			rule.Priority == interpositionGatewayHairpinRulePriority {
-			t.Fatalf("gateway hairpin rule present for a device-held address: %+v", rule)
+			rule.Priority == interpositionGatewayHairpinRulePriority ||
+			rule.Priority == interpositionIngressRulePriority {
+			t.Fatalf("kernel-held shape rule present for a device-held address: %+v", rule)
 		}
 	}
 
@@ -828,6 +874,30 @@ func testEnsureInterpositionConverges(t *testing.T) {
 	if renamed == nil || router.Attrs().ParentIndex != renamed.Attrs().Index {
 		t.Fatalf("router leg peer index %d, want the renamed device leg %+v",
 			router.Attrs().ParentIndex, renamed)
+	}
+
+	// SR Linux then takes the address into its own management namespace, leaving the renamed
+	// leg bare. The device-leg blackhole must follow the leg under its new name: a rule keyed
+	// on the plan name detaches at the rename and matches nothing, so every frame the device's
+	// own stack consumed is forwarded back through the router leg until its TTL runs out.
+	if err = netlink.AddrDel(renamed, bare); err != nil {
+		t.Fatalf("stripping the renamed device leg address like SR Linux: %v", err)
+	}
+
+	if err = operations.EnsureInterposition(withIPv6); err != nil {
+		t.Fatalf("EnsureInterposition() with the renamed leg bare: %v", err)
+	}
+
+	shown, showErr := exec.CommandContext( //nolint:gosec // fixed iproute2 invocation.
+		t.Context(),
+		"ip", "rule", "show", "pref", strconv.Itoa(interpositionDeviceLegRulePriority),
+	).CombinedOutput()
+	if showErr != nil || !strings.Contains(string(shown), "blackhole") ||
+		!strings.Contains(string(shown), "iif mgmt0") ||
+		strings.Contains(string(shown), "iif eth0") ||
+		strings.Contains(string(shown), "detached") {
+		t.Fatalf("device-leg blackhole after the rename = %q (%v), want one attached rule "+
+			"keyed on the renamed leg", strings.TrimSpace(string(shown)), showErr)
 	}
 }
 

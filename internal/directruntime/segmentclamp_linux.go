@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/netip"
 
 	"github.com/google/nftables"
 	"github.com/google/nftables/binaryutil"
@@ -46,7 +47,16 @@ const (
 const sidecarConntrackZone = 1
 
 // ensureMeshFilterTable reconciles the sidecar-owned inet table: the conntrack zone of the
-// sidecar's legs, and the management segment clamp.
+// sidecar's legs and of management-sourced ingress, and the management segment clamp.
+//
+// The zone is the sidecar's translation domain, so it must also hold traffic the device hands
+// to the pod kernel without crossing the device leg: SR Linux routes its off-subnet management
+// egress through an internal gateway pair from its management namespace, and that traffic
+// enters on a device-created interface, sourced from the management address. Tracked outside
+// the zone, its masquerade would bind where the reply, entering on the transport in the zone,
+// never finds it, and every management resolver query the device makes goes unanswered. The
+// source address identifies management-sourced traffic wherever it enters; a device's own
+// translation domain (a nested guest behind a bridge, sourced from a guest address) stays out.
 //
 // The clamp makes every TCP handshake forwarded between the router leg and the mesh tunnel
 // endpoint advertise at most the segment the mesh MTU can carry. Devices whose management port
@@ -56,9 +66,18 @@ const sidecarConntrackZone = 1
 // but a stack that ignores it, or a flow whose first full-size segment is exactly what a TLS
 // certificate or a NETCONF hello is, still stalls; clamping the advertised size makes both
 // peers send segments that fit from the first byte. The clamp only ever lowers an advertised
-// size, and it is scoped to the two mesh ingress interfaces so lab data plane traffic keeps
-// whatever segment size the topology asked for.
-func ensureMeshFilterTable(transportName, routerName string, meshMTU int) error {
+// size, and it is scoped to the three interfaces the sidecar forwards management traffic from
+// (the router leg, the mesh tunnel endpoint, and the transport, whose ingress is the inbound
+// translated flow of an exposed port) so lab data plane traffic keeps whatever segment size
+// the topology asked for. The transport matters as much as the mesh: a device that raises its
+// leg above the mesh MTU (SR-SIM sets 9000) sizes its segments from the client's SYN, and a
+// client on the Pod network advertises more than the router leg can carry, so every large
+// segment of an exposed-port session was dropped at the router leg without a word.
+func ensureMeshFilterTable(
+	transportName, routerName string,
+	managementAddress netip.Addr,
+	meshMTU int,
+) error {
 	conn := &nftables.Conn{}
 
 	table := conn.AddTable(&nftables.Table{
@@ -92,6 +111,26 @@ func ensureMeshFilterTable(transportName, routerName string, meshMTU int) error 
 		})
 	}
 
+	if managementAddress.Is4() {
+		source := managementAddress.As4()
+
+		conn.AddRule(&nftables.Rule{
+			Table: table,
+			Chain: zonePrerouting,
+			Exprs: append([]expr.Any{
+				&expr.Meta{Key: expr.MetaKeyNFPROTO, Register: 1},
+				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{unix.NFPROTO_IPV4}},
+				&expr.Payload{
+					DestRegister: 1,
+					Base:         expr.PayloadBaseNetworkHeader,
+					Offset:       ipv4SourceOffset,
+					Len:          ipv4AddressLength,
+				},
+				&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: source[:]},
+			}, conntrackZoneExpressions()...),
+		})
+	}
+
 	zoneOutput := conn.AddChain(&nftables.Chain{
 		Name:     "zone-output",
 		Table:    table,
@@ -115,7 +154,7 @@ func ensureMeshFilterTable(transportName, routerName string, meshMTU int) error 
 			Priority: nftables.ChainPriorityFilter,
 		})
 
-		for _, ingressName := range []string{routerName, MeshVTEPName} {
+		for _, ingressName := range []string{routerName, MeshVTEPName, transportName} {
 			for _, family := range []struct {
 				protocol    byte
 				headerBytes int

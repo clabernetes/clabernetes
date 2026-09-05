@@ -50,8 +50,10 @@
       IPv6 in the namespace); IPv6 device-leg addressing pre-boot only (SR-SIM keeps ownership).
 - [x] 4b.3 Ingress-scoped own-address rules for kernel-held addresses ahead of a re-homed local
       lookup (SONiC moves the local rule; vrnetlab NAT is bound to the device leg).
-- [x] 4b.4 Sidecar conntrack zone for the sidecar legs and locally originated traffic (double
-      netfilter traversal defeated vrnetlab's DNAT); early demux off in the Pod namespace
+- [x] 4b.4 Sidecar conntrack zone for the sidecar legs, locally originated traffic, and
+      management-sourced ingress on any interface (double netfilter traversal defeated
+      vrnetlab's DNAT; SR Linux resolver queries leave through its internal gateway pair and
+      their replies never met a zone-0 masquerade); early demux off in the Pod namespace
       (socket-owned replies were dropped in the forward path).
 - [x] 4b.5 HTTP readiness endpoint on TCP 14791 with a transport-filter accept; paced
       interposition re-assertion; compare-before-write sysctls.
@@ -65,6 +67,17 @@
 - [x] 4b.9 Device leg brought up at creation only: a per-tick `LinkSetUp` raced SR Linux's
       down/rename/up of its management interface (one of five SR Linux nodes lost gNMI after
       a runtime rollout while SSH and ping, answered by the pod kernel, kept it ready).
+- [x] 4b.10 Device-leg blackhole keyed on the leg's current name, resolved through the router
+      leg's veth peer (SR Linux renames the leg; a name-keyed rule detached and the device's
+      consumed frames looped through the router leg, aborting the sidecar's SSH readiness
+      dials with time exceeded).
+- [x] 4b.11 Sidecar probe sockets marked and steered across the pair for kernel-held addresses
+      (the ingress-scoped rules of 4b.3 left the sidecar's own readiness dial to local delivery,
+      which vrnetlab's device-leg-bound translation never saw: vr-sros SSH readiness was refused
+      while external SSH through the pod address worked).
+- [x] 4b.12 Segment clamp also on transport ingress (exposed-port sessions): SR-SIM raises its
+      leg to MTU 9000 and sized segments from a Pod-network client's SYN; the router leg
+      dropped them silently and an SSH session through the pod address never showed a prompt.
 
 ## 5. Documentation and validation
 
