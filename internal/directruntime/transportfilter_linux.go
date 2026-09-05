@@ -46,12 +46,22 @@ func newTransportFilterOperations() TransportFilterOperations {
 // policy: a permissive policy with an explicit drop rule severs the transports just as a drop
 // policy does, and two attributed accept rules are harmless in a chain that would accept anyway.
 func (transportFilterOperations) EnsureTransportFilterAccepts(spec TransportFilterSpec) error {
-	if len(spec.UDPPorts) == 0 {
+	accepts := make([]transportAccept, 0, len(spec.UDPPorts)+len(spec.TCPPorts))
+
+	for _, port := range spec.UDPPorts {
+		accepts = append(accepts, transportAccept{protocol: unix.IPPROTO_UDP, port: port})
+	}
+
+	for _, port := range spec.TCPPorts {
+		accepts = append(accepts, transportAccept{protocol: unix.IPPROTO_TCP, port: port})
+	}
+
+	if len(accepts) == 0 {
 		return nil
 	}
 
 	for _, family := range transportFilterFamilies() {
-		if err := ensureFamilyTransportAccepts(family, spec.UDPPorts); err != nil {
+		if err := ensureFamilyTransportAccepts(family, accepts); err != nil {
 			return err
 		}
 	}
@@ -59,10 +69,25 @@ func (transportFilterOperations) EnsureTransportFilterAccepts(spec TransportFilt
 	return nil
 }
 
+// transportAccept is one destination port of one transport protocol to keep accepted.
+type transportAccept struct {
+	protocol byte
+	port     uint16
+}
+
+// comment attributes the accept rule; the UDP form predates TCP accepts and keeps its shape.
+func (a transportAccept) comment() string {
+	if a.protocol == unix.IPPROTO_TCP {
+		return transportFilterCommentPrefix + "tcp-" + strconv.Itoa(int(a.port))
+	}
+
+	return transportFilterCommentPrefix + strconv.Itoa(int(a.port))
+}
+
 // ensureFamilyTransportAccepts converges one table family. A kernel built without the family
 // cannot host a device filter in it either, so an unsupported family is success, mirroring the
 // mesh segment clamp's degradation contract.
-func ensureFamilyTransportAccepts(family nftables.TableFamily, ports []uint16) error {
+func ensureFamilyTransportAccepts(family nftables.TableFamily, accepts []transportAccept) error {
 	conn := &nftables.Conn{}
 
 	chains, err := conn.ListChainsOfTableFamily(family)
@@ -79,7 +104,7 @@ func ensureFamilyTransportAccepts(family nftables.TableFamily, ports []uint16) e
 			continue
 		}
 
-		if err := ensureChainTransportAccepts(chain, ports); err != nil {
+		if err := ensureChainTransportAccepts(chain, accepts); err != nil {
 			return fmt.Errorf(
 				"asserting transport accepts in %q chain %q: %w",
 				chain.Table.Name,
@@ -116,7 +141,7 @@ func isForeignTransportFilterChain(chain *nftables.Chain) bool {
 // one kernel transaction per chain so a device flushing another table concurrently cannot fail
 // the whole sweep. A chain that disappears between listing and commit is a device rewriting its
 // filter; the next revision tick converges it.
-func ensureChainTransportAccepts(chain *nftables.Chain, ports []uint16) error {
+func ensureChainTransportAccepts(chain *nftables.Chain, accepts []transportAccept) error {
 	conn := &nftables.Conn{}
 
 	rules, err := conn.GetRules(chain.Table, chain)
@@ -139,8 +164,8 @@ func ensureChainTransportAccepts(chain *nftables.Chain, ports []uint16) error {
 
 	inserted := false
 
-	for _, port := range ports {
-		comment := transportFilterCommentPrefix + strconv.Itoa(int(port))
+	for _, accept := range accepts {
+		comment := accept.comment()
 		if present[comment] {
 			continue
 		}
@@ -148,7 +173,7 @@ func ensureChainTransportAccepts(chain *nftables.Chain, ports []uint16) error {
 		conn.InsertRule(&nftables.Rule{
 			Table:    chain.Table,
 			Chain:    chain,
-			Exprs:    transportAcceptExpressions(port),
+			Exprs:    transportAcceptExpressions(accept),
 			UserData: userdata.AppendString(nil, userdata.TypeComment, comment),
 		})
 
@@ -171,20 +196,20 @@ func ensureChainTransportAccepts(chain *nftables.Chain, ports []uint16) error {
 }
 
 // transportAcceptExpressions is the exact expression sequence iptables-nft generates for
-// `-p udp --dport <port> -j ACCEPT`, so a device's iptables tooling can list, save, and restore
-// the rule as one of its own. Meta L4PROTO carries the parsed transport protocol in every swept
-// family, including ip6 extension chains.
-func transportAcceptExpressions(port uint16) []expr.Any {
+// `-p <proto> --dport <port> -j ACCEPT`, so a device's iptables tooling can list, save, and
+// restore the rule as one of its own. Meta L4PROTO carries the parsed transport protocol in
+// every swept family, including ip6 extension chains.
+func transportAcceptExpressions(accept transportAccept) []expr.Any {
 	return []expr.Any{
 		&expr.Meta{Key: expr.MetaKeyL4PROTO, Register: 1},
-		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{unix.IPPROTO_UDP}},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: []byte{accept.protocol}},
 		&expr.Payload{
 			DestRegister: 1,
 			Base:         expr.PayloadBaseTransportHeader,
 			Offset:       transportPortOffset,
 			Len:          transportPortLength,
 		},
-		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: portBytes(port)},
+		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: portBytes(accept.port)},
 		&expr.Counter{},
 		&expr.Verdict{Kind: expr.VerdictAccept},
 	}

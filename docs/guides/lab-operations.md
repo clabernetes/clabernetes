@@ -21,8 +21,8 @@ For every Node:
 
 Per namespace:
 
-- the headless `c9s-management-mesh` Service that discovers management mesh members
-- the `c9s-peer-directory` ConfigMap that maps node names to management addresses
+- the `c9s-peer-directory-0` to `c9s-peer-directory-7` ConfigMaps (the peer directory) that
+  map node names to management addresses and to the Pods realizing them
 - a `direct-device-ca-...` Secret holding the lab CA, plus one `<node>-certificates-...`
   Secret per Node that sets `certificate.issue`
 
@@ -124,9 +124,10 @@ output is a standard pcap file for Wireshark or `tcpdump -r`.
 ## Network policies
 
 Device Pods talk to each other over UDP: port 14789 carries the management mesh and port 14790
-the link wires. The connectivity sidecar also watches Links through the Kubernetes API. If
-NetworkPolicies restrict traffic in a lab namespace, allow both ports between device Pods and
-egress to the API server.
+the link wires. The connectivity sidecar also watches Links through the Kubernetes API and
+answers the kubelet's readiness probe on TCP 14791. If NetworkPolicies restrict traffic in a
+lab namespace, allow both UDP ports between device Pods, TCP 14791 from the nodes, and egress
+to the API server.
 
 ## Related
 

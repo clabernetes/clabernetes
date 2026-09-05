@@ -165,13 +165,16 @@ func allocateDirectManagementAddresses(
 
 // compileNamespaceManagementIdentities derives every namespace node's management addresses —
 // the same explicit-or-allocated values compileDirectManagement realizes for its own group —
-// into the peer directory device Pods realize into /etc/hosts at runtime. Allocation is a
-// deterministic function of the namespace node set, so every reconcile derives the same
-// directory. Best effort by design: a peer whose declaration cannot be normalized is skipped
-// here and surfaces on that peer's own reconcile instead.
+// and the address of the Pod currently realizing each node into the peer directory device
+// Pods realize into /etc/hosts and into their management mesh peer state at runtime.
+// Allocation is a deterministic function of the namespace node set, so every reconcile derives
+// the same directory for the same Pod placement. Best effort by design: a peer whose
+// declaration cannot be normalized is skipped here and surfaces on that peer's own reconcile
+// instead, and a node whose Pod holds no address yet contributes name resolution only.
 func compileNamespaceManagementIdentities(
 	nodesByName map[string]*clabernetesapisv1alpha1.Node,
 	mgmt *clabernetesapisv1alpha1.ManagementPolicy,
+	podAddressesByNodeUID map[string]string,
 ) []clabernetesinternaldirectruntime.PeerIdentity {
 	settings := clabernetesapisv1alpha1.ManagementPolicy{}
 	if mgmt != nil {
@@ -224,6 +227,7 @@ func compileNamespaceManagementIdentities(
 		identity := clabernetesinternaldirectruntime.PeerIdentity{
 			Name:    name,
 			Aliases: slices.Clone(node.Spec.Aliases),
+			Pod:     podAddressesByNodeUID[string(node.GetUID())],
 		}
 
 		// Chassis component runtime names ("pe1-a", "pe1-1") resolve through Docker DNS in

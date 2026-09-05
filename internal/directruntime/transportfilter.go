@@ -10,13 +10,16 @@ import (
 
 var errTransportFilter = errors.New("transport filter invariant failed")
 
-// TransportFilterSpec lists the UDP destination ports of the sidecar's own transports (the
-// management mesh VTEP and the fabric wire socket) that must stay deliverable across every
-// packet filter programmed in the shared Pod network namespace.
+// TransportFilterSpec lists the destination ports of the sidecar's own transports (the
+// management mesh VTEP, the fabric wire socket, and the readiness endpoint the kubelet probes)
+// that must stay deliverable across every packet filter programmed in the shared Pod network
+// namespace.
 type TransportFilterSpec struct {
 	// UDPPorts are the transport destination ports to keep accepted; both directions of every
 	// transport address one of these ports, so destination matching covers inbound and outbound.
 	UDPPorts []uint16
+	// TCPPorts are the sidecar's own listening ports to keep accepted inbound.
+	TCPPorts []uint16
 }
 
 // TransportFilterOperations keeps the sidecar's UDP transports exempt from device-programmed
@@ -47,17 +50,23 @@ func reconcileTransportFilter(
 		return err
 	}
 
-	var ports []uint16
+	spec := TransportFilterSpec{}
 
 	if entry != nil && entry.Interposition != nil && entry.Interposition.Mesh != nil {
-		ports = append(ports, clabernetesconstants.ManagementMeshVXLANPort)
+		spec.UDPPorts = append(spec.UDPPorts, clabernetesconstants.ManagementMeshVXLANPort)
 	}
 
 	if hasRemoteInterfaces(plan) {
-		ports = append(ports, clabernetesconstants.FabricWireServicePort)
+		spec.UDPPorts = append(spec.UDPPorts, clabernetesconstants.FabricWireServicePort)
 	}
 
-	if len(ports) == 0 {
+	// The readiness endpoint answers the kubelet on the Pod address; a device's input policy
+	// must not turn the Pod unready.
+	if options.PodAddress != "" {
+		spec.TCPPorts = append(spec.TCPPorts, clabernetesconstants.ConnectivityReadinessPort)
+	}
+
+	if len(spec.UDPPorts) == 0 && len(spec.TCPPorts) == 0 {
 		return nil
 	}
 
@@ -65,9 +74,7 @@ func reconcileTransportFilter(
 		return fmt.Errorf("%w: transport filter operations are unavailable", errTransportFilter)
 	}
 
-	if err := options.FilterOperations.EnsureTransportFilterAccepts(TransportFilterSpec{
-		UDPPorts: ports,
-	}); err != nil {
+	if err := options.FilterOperations.EnsureTransportFilterAccepts(spec); err != nil {
 		return fmt.Errorf("ensuring transport filter accepts: %w", err)
 	}
 

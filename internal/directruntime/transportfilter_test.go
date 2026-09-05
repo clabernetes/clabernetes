@@ -27,9 +27,8 @@ func meshManagementPlan() clabernetesinternaldeviceplan.ManagementPlan {
 		Interposition: &clabernetesinternaldeviceplan.ManagementInterposition{
 			DeviceInterface: "eth0",
 			Mesh: &clabernetesinternaldeviceplan.ManagementMesh{
-				TunnelID:    100,
-				GatewayMAC:  "02:00:00:00:00:01",
-				PeerService: "c9s-management-mesh",
+				TunnelID:   100,
+				GatewayMAC: "02:00:00:00:00:01",
 			},
 		},
 	}
@@ -130,6 +129,28 @@ func TestReconcileTransportFilterDerivesPortsFromPlan(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestReconcileTransportFilterKeepsTheReadinessEndpointReachable pins the TCP accept for the
+// kubelet's readiness probe: a device's input policy must not turn the Pod unready, and a Pod
+// without a Pod address (nothing to probe) asks for no TCP accept at all.
+func TestReconcileTransportFilterKeepsTheReadinessEndpointReachable(t *testing.T) {
+	t.Parallel()
+
+	operations := &recordingTransportFilterOperations{}
+
+	if err := reconcileTransportFilter(clabernetesinternaldeviceplan.Plan{}, ConnectivityOptions{
+		FilterOperations: operations,
+		PodAddress:       "10.244.0.12",
+	}); err != nil {
+		t.Fatalf("reconciling transport filter: %v", err)
+	}
+
+	if len(operations.specs) != 1 || len(operations.specs[0].UDPPorts) != 0 ||
+		len(operations.specs[0].TCPPorts) != 1 ||
+		operations.specs[0].TCPPorts[0] != clabernetesconstants.ConnectivityReadinessPort {
+		t.Fatalf("readiness accept = %+v", operations.specs)
 	}
 }
 

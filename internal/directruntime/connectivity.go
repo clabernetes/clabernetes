@@ -883,6 +883,14 @@ type ConnectivityOptions struct {
 	// drift correction, so unchanged ticks do not need a per-second reconcile fan-out.
 	hostEndpointPacer *hostEndpointPacer
 
+	// peerDirectory is the cached view of the mounted namespace peer directory; it re-parses
+	// only when the projected files change, and feeds both the hosts entries and the mesh peer
+	// state.
+	peerDirectory *peerDirectoryReader
+
+	// hostsMemo lets an unchanged tick skip the hosts realization after one stat call.
+	hostsMemo *hostsFileMemo
+
 	// resolver is the Pod DNS client configuration captured at startup, before any application
 	// container could rewrite the shared /etc/resolv.conf.
 	resolver *ResolverConfig
@@ -1116,6 +1124,8 @@ func runConnectivity(
 	}
 
 	options.hostEndpointPacer = &hostEndpointPacer{}
+	options.peerDirectory = newPeerDirectoryReader(ConnectivityPeerDirectoryRoot)
+	options.hostsMemo = &hostsFileMemo{}
 	options.readinessLog = &endpointReadinessLog{}
 
 	if options.NATOperations == nil {
@@ -1138,6 +1148,14 @@ func runConnectivity(
 	if err != nil {
 		return err
 	}
+
+	// Probes get an answer from the first moment: not ready until the cold pass publishes the
+	// readiness marker, then whatever the markers say, without any exec on the node.
+	readiness := startConnectivityReadinessServer(plan, options)
+
+	defer func() {
+		returnErr = errors.Join(returnErr, readiness.Close())
+	}()
 
 	// The DNS client configuration is captured before any application container can boot and
 	// rewrite the shared /etc/resolv.conf; a restart after such a rewrite falls back to the
@@ -1193,7 +1211,11 @@ func runConnectivity(
 		return err
 	}
 
-	if err = reconcileInterposition(effectivePlan, options, operations); err != nil {
+	// The cold pass converges the full mesh peer set: whatever the directory holds right now
+	// is installed before any device container starts.
+	peers, _ := options.peerDirectory.load()
+
+	if err = reconcileInterposition(effectivePlan, options, operations, peers, true); err != nil {
 		return err
 	}
 
@@ -1212,7 +1234,7 @@ func runConnectivity(
 
 	// The owned hosts entries are asserted before readiness gates application containers, so
 	// the device process boots with its own identity and the namespace peers resolvable.
-	assertOwnedHosts(effectivePlan)
+	assertOwnedHosts(effectivePlan, peers, options.hostsMemo, true)
 
 	if err = reconcileLocalInterfaces(&effectivePlan, operations, options.PodUID); err != nil {
 		return err
@@ -1505,6 +1527,8 @@ func waitForConnectivityRevisions(
 		revisionTicks = ticker.C
 	}
 
+	ticks := 0
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1523,8 +1547,23 @@ func waitForConnectivityRevisions(
 			// Interposition state is sidecar-owned: a device rewrite of shared namespace state
 			// is converged back on the next tick, and an unrecoverable divergence restarts the
 			// sidecar into a full fail-closed cold pass.
-			if err := reconcileInterposition(basePlan, options, operations); err != nil {
-				return err
+			// The full interposition re-assertion runs on every tick while the device boots,
+			// then on a slow resync or when the mounted directory changes; per-peer mesh state
+			// is exact and static and converges on directory change and on its own resync.
+			ticks++
+			peers, changed := options.peerDirectory.load()
+
+			if changed || ticks <= interpositionBootTicks ||
+				ticks%interpositionResyncTicks == 0 {
+				if err := reconcileInterposition(
+					basePlan,
+					options,
+					operations,
+					peers,
+					changed || ticks%meshPeerResyncTicks == 0,
+				); err != nil {
+					return err
+				}
 			}
 
 			// A device rebuilding its packet filter (EOS rewrites iptables on config changes)
@@ -1537,7 +1576,7 @@ func waitForConnectivityRevisions(
 			// to a running Pod (lab membership changes never restart Pods) and heals the
 			// kubelet's file rewrite after any container (re)start. The write only happens
 			// when the realized content differs.
-			assertOwnedHosts(basePlan)
+			assertOwnedHosts(basePlan, peers, options.hostsMemo, changed)
 
 			nextRevision, nextReady, err := applyProjectedConnectivityRevision(
 				ctx,

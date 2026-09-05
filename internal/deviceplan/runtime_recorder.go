@@ -86,14 +86,7 @@ func newRecordingRuntime(
 		missingImages: map[string]bool{},
 		artifactRoot:  artifactRoot,
 	}
-	if management != nil {
-		runtime.mgmt = &clabtypes.MgmtNet{
-			IPv4Gw: management.IPv4Gateway,
-			IPv6Gw: management.IPv6Gateway,
-		}
-	} else {
-		runtime.mgmt = &clabtypes.MgmtNet{}
-	}
+	runtime.mgmt = runtimeManagement(management)
 
 	for _, image := range images {
 		labels := map[string]string{}

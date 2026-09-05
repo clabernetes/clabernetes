@@ -28,6 +28,7 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -73,20 +74,20 @@ const (
 	preparationName                  = "planner"
 	connectivityName                 = "clabwire"
 	directWorkloadLabel              = clabernetesconstants.LabelDirectWorkload
-	directMeshMemberLabel            = clabernetesconstants.LabelDirectMeshMember
 	planDigestAnnotation             = "c9s.run/node-plan-digest"
 	// node-runtime CLI invocation tokens.
-	runtimeCommandName        = "node-runtime"
-	runtimeFlagPlan           = "--plan"
-	runtimeFlagInput          = "--input"
-	runtimeFlagContainer      = "--containerID"
-	runtimeFlagArtifacts      = "--artifacts"
-	runtimeFlagScratch        = "--scratch"
-	runtimeFlagRevision       = "--revision"
-	runtimeFlagPersistentNode = "--persistentNode"
-	runtimeFlagReset          = "--reset"
-	runtimeFlagState          = "--state"
-	podAddressFieldPath       = "status.podIP"
+	runtimeCommandName              = "node-runtime"
+	runtimeFlagPlan                 = "--plan"
+	runtimeFlagInput                = "--input"
+	runtimeFlagContainer            = "--containerID"
+	runtimeFlagArtifacts            = "--artifacts"
+	runtimeFlagScratch              = "--scratch"
+	runtimeFlagRevision             = "--revision"
+	runtimeFlagPersistentNode       = "--persistentNode"
+	runtimeFlagReset                = "--reset"
+	runtimeFlagState                = "--state"
+	runtimeFlagConnectivityRevision = "--connectivityRevision"
+	podAddressFieldPath             = "status.podIP"
 )
 
 // Stable direct workload identities consumed by the status reconciler.
@@ -421,7 +422,6 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 	}
 
 	labels[directWorkloadLabel] = options.Name
-	labels[directMeshMemberLabel] = clabernetesconstants.DirectMeshMemberEnabled
 
 	annotations := maps.Clone(options.Annotations)
 	if annotations == nil {
@@ -481,19 +481,16 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 		VolumeSource: k8scorev1.VolumeSource{EmptyDir: &k8scorev1.EmptyDirVolumeSource{}},
 	})
 
-	// The peer directory is deliberately a namespace-scoped ConfigMap volume rather than
-	// rendered HostAliases: lab membership changes update the ConfigMap only, which the
-	// kubelet syncs into running Pods, so adding or removing a node never recreates Pods.
-	// Optional, so a Pod can start before the directory exists.
-	peerDirectoryOptional := true
-
+	// The peer directory is deliberately a namespace-scoped ConfigMap projection rather than
+	// rendered HostAliases: lab membership changes update the ConfigMaps only, which the
+	// kubelet syncs into running Pods, so adding or removing a node never recreates Pods. The
+	// directory is a fixed set of shards projected into one directory, so a membership change
+	// rewrites one small object and the Pod template never changes with namespace size. Every
+	// shard is optional, so a Pod can start before the directory exists.
 	volumes = append(volumes, k8scorev1.Volume{
 		Name: peerDirectoryVolumeName,
-		VolumeSource: k8scorev1.VolumeSource{ConfigMap: &k8scorev1.ConfigMapVolumeSource{
-			LocalObjectReference: k8scorev1.LocalObjectReference{
-				Name: clabernetesinternaldirectruntime.PeerDirectoryConfigMapName,
-			},
-			Optional: &peerDirectoryOptional,
+		VolumeSource: k8scorev1.VolumeSource{Projected: &k8scorev1.ProjectedVolumeSource{
+			Sources: peerDirectoryProjections(),
 		}},
 	})
 	if options.ConnectivityRevisionConfigMapName != "" {
@@ -2544,11 +2541,12 @@ func renderHelpers(
 		"--podUID", "$(C9S_POD_UID)",
 		"--podAddress", "$(C9S_POD_ADDRESS)",
 	}
-	connectivityReadyCommand := []string{
-		runtimeBinaryPath, runtimeCommandName, "connectivity-ready",
-		runtimeFlagPlan, planMountPath + "/plan.json",
-		runtimeFlagState, connectivityStatePath,
-	}
+	// The sidecar answers its probes over HTTP on the Pod address: an exec probe would start the
+	// runtime binary every second in every Pod, which is what bounded Pod density on a worker.
+	connectivityReadyHandler := k8scorev1.ProbeHandler{HTTPGet: &k8scorev1.HTTPGetAction{
+		Path: clabernetesinternaldirectruntime.ConnectivityReadinessPath,
+		Port: intstr.FromInt32(clabernetesconstants.ConnectivityReadinessPort),
+	}}
 	connectivityMounts := []k8scorev1.VolumeMount{
 		planMount,
 		inputMount,
@@ -2563,12 +2561,7 @@ func renderHelpers(
 	if options.ConnectivityRevisionConfigMapName != "" {
 		connectivityArgs = append(
 			connectivityArgs,
-			"--connectivityRevision",
-			connectivityRevisionMountPath+"/revision.json",
-		)
-		connectivityReadyCommand = append(
-			connectivityReadyCommand,
-			"--connectivityRevision",
+			runtimeFlagConnectivityRevision,
 			connectivityRevisionMountPath+"/revision.json",
 		)
 		connectivityMounts = append(connectivityMounts, k8scorev1.VolumeMount{
@@ -2702,16 +2695,12 @@ func renderHelpers(
 				Privileged: &trueValue, RunAsUser: &rootUser,
 			},
 			StartupProbe: &k8scorev1.Probe{
-				ProbeHandler: k8scorev1.ProbeHandler{Exec: &k8scorev1.ExecAction{
-					Command: connectivityReadyCommand,
-				}},
+				ProbeHandler:  connectivityReadyHandler,
 				PeriodSeconds: 1, TimeoutSeconds: 1,
 				SuccessThreshold: 1, FailureThreshold: 300,
 			},
 			ReadinessProbe: &k8scorev1.Probe{
-				ProbeHandler: k8scorev1.ProbeHandler{Exec: &k8scorev1.ExecAction{
-					Command: connectivityReadyCommand,
-				}},
+				ProbeHandler:  connectivityReadyHandler,
 				PeriodSeconds: 1, TimeoutSeconds: 1,
 				SuccessThreshold: 1, FailureThreshold: 1,
 			},
@@ -2940,4 +2929,65 @@ func validateUniqueVolumeNames(volumes []k8scorev1.Volume) error {
 	}
 
 	return nil
+}
+
+// peerDirectoryProjections lists every peer directory shard as an optional ConfigMap projection
+// under its shard file name.
+func peerDirectoryProjections() []k8scorev1.VolumeProjection {
+	optional := true
+	sources := make(
+		[]k8scorev1.VolumeProjection,
+		0,
+		clabernetesinternaldirectruntime.PeerDirectoryShardCount,
+	)
+
+	for shard := range clabernetesinternaldirectruntime.PeerDirectoryShardCount {
+		sources = append(sources, k8scorev1.VolumeProjection{
+			ConfigMap: &k8scorev1.ConfigMapProjection{
+				LocalObjectReference: k8scorev1.LocalObjectReference{
+					Name: clabernetesinternaldirectruntime.PeerDirectoryShardConfigMapName(shard),
+				},
+				Items: []k8scorev1.KeyToPath{{
+					Key:  clabernetesinternaldirectruntime.PeerDirectoryConfigMapKey,
+					Path: clabernetesinternaldirectruntime.PeerDirectoryShardFileName(shard),
+				}},
+				Optional: &optional,
+			},
+		})
+	}
+
+	return sources
+}
+
+// ConnectivityReadinessCommand derives the exec form of the connectivity sidecar's readiness
+// evaluation from a rendered connectivity container: the same plan, state, and projected
+// revision the sidecar was started with. The kubelet probes the sidecar over HTTP; controllers
+// use this form to confirm a projected revision was applied before restarting containers.
+func ConnectivityReadinessCommand(container k8scorev1.Container) []string {
+	if container.Name != ConnectivityContainerName || len(container.Command) < 2 {
+		return nil
+	}
+
+	flags := map[string]string{}
+
+	for index := 0; index+1 < len(container.Args); index++ {
+		if strings.HasPrefix(container.Args[index], "--") {
+			flags[container.Args[index]] = container.Args[index+1]
+			index++
+		}
+	}
+
+	plan, state := flags[runtimeFlagPlan], flags[runtimeFlagState]
+	revision := flags[runtimeFlagConnectivityRevision]
+
+	if plan == "" || state == "" || revision == "" {
+		return nil
+	}
+
+	return []string{
+		container.Command[0], container.Command[1], "connectivity-ready",
+		runtimeFlagPlan, plan,
+		runtimeFlagState, state,
+		runtimeFlagConnectivityRevision, revision,
+	}
 }

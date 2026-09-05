@@ -286,10 +286,16 @@ func baselineTargetsMatch(
 
 func directConnectivityReadinessCommand(pod *k8scorev1.Pod) (string, []string) {
 	for _, container := range pod.Spec.InitContainers {
-		if container.Name == clabernetesinternaldirectpod.ConnectivityContainerName &&
-			container.ReadinessProbe != nil && container.ReadinessProbe.Exec != nil {
-			return container.Name, slices.Clone(container.ReadinessProbe.Exec.Command)
+		if container.Name != clabernetesinternaldirectpod.ConnectivityContainerName {
+			continue
 		}
+
+		command := clabernetesinternaldirectpod.ConnectivityReadinessCommand(container)
+		if len(command) == 0 {
+			return "", nil
+		}
+
+		return container.Name, command
 	}
 
 	return "", nil

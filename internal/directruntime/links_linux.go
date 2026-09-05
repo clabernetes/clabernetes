@@ -56,6 +56,13 @@ func (netlinkOperations) EnsureSysctl(name, value string) error {
 	parts := strings.Split(name, ".")
 
 	path := filepath.Join(append([]string{"/proc/sys"}, parts...)...)
+
+	// Re-assertion is the common case; a write costs a kernel round trip the read avoids.
+	if current, err := os.ReadFile(path); err == nil && //nolint:gosec // fixed sysctl tree.
+		strings.TrimSpace(string(current)) == strings.TrimSpace(value) {
+		return nil
+	}
+
 	if err := os.WriteFile(path, []byte(value), 0o644); err != nil { //nolint:gosec // the artifact must be readable by the device process.
 		return fmt.Errorf("writing sysctl: %w", err)
 	}

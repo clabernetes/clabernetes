@@ -86,6 +86,34 @@ func (w *conflictOnceStatusWriter) Update(
 	return w.StatusWriter.Update(ctx, obj, opts...)
 }
 
+func TestDirectRequeueAfterPacesReadyNodes(t *testing.T) {
+	t.Parallel()
+
+	converging := &clabernetesapisv1alpha1.Node{}
+	converging.Status.Readiness = clabernetesconstants.NodeStatusNotReady
+
+	if got := directRequeueAfter(converging); got != directRequeueInterval {
+		t.Fatalf("converging Node requeues after %s, want %s", got, directRequeueInterval)
+	}
+
+	if got := directRequeueAfter(nil); got != directRequeueInterval {
+		t.Fatalf("nil Node requeues after %s, want %s", got, directRequeueInterval)
+	}
+
+	ready := &clabernetesapisv1alpha1.Node{}
+	ready.Status.Readiness = clabernetesconstants.NodeStatusReady
+
+	low := directSteadyRequeueInterval - directSteadyRequeueJitter/2
+	high := directSteadyRequeueInterval + directSteadyRequeueJitter/2
+
+	for range 64 {
+		got := directRequeueAfter(ready)
+		if got < low || got >= high {
+			t.Fatalf("ready Node requeues after %s, want within [%s, %s)", got, low, high)
+		}
+	}
+}
+
 func TestUpdateNodeStatusRetriesResourceVersionConflict(t *testing.T) {
 	t.Parallel()
 

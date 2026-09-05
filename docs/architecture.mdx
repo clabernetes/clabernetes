@@ -179,18 +179,25 @@ Docker-shaped environment) can always answer. This is the same source identity c
 Docker port publishing presents. Management configuration renders at plan time through each kind's own imported
 templates using the allocated address, prefix, and gateway.
 
-The management subnet is one shared L2 domain across the whole topology, exactly as on
+The management subnet is one shared subnet across the whole namespace, exactly as on
 containerlab's management network: a device dialing a peer's *management address* (a hardcoded
 telemetry target, a syslog collector, plain ping) reaches the peer device itself, any protocol,
-both directions. Each Pod bridges its management legs onto a management VXLAN tunnel endpoint
-riding the preserved Pod underlay, with peers discovered through a namespace-scoped
-headless Service (`c9s-management-mesh`), so nodes joining or leaving the namespace converge
-on the sidecar's reconcile tick without restarting any Pod. The management *gateway* stays
-strictly Pod-local: every Pod answers the gateway address itself with one deterministic
-identity, and gateway traffic never crosses the mesh. Inside a device, node names, declared
-`aliases`, and chassis component names resolve to management addresses through a
-namespace-wide peer directory written into each Pod's hosts file; the per-node and alias
-Services serve the rest of the cluster.
+both directions, with source addresses intact. Nothing is flooded to get there: the sidecar's
+router leg answers the device's ARP for any peer with the gateway identity and routes the
+packet over a management VXLAN tunnel endpoint riding the preserved Pod underlay, holding
+exactly one neighbor entry and one forwarding entry per peer. Peers are published rather than
+discovered: the controller renders a namespace-wide peer directory (node names, aliases,
+management addresses, and the address of the Pod realizing each node) as a fixed set of
+ConfigMap shards that the kubelet projects into every Pod, so nodes joining, leaving, or moving
+between workers converge without any DNS lookup and without restarting any Pod (a rescheduled
+Pod's new address reaches its peers with the kubelet's ConfigMap sync, about a minute by
+default). The management
+*gateway* stays strictly Pod-local: every Pod answers the gateway address itself with one
+deterministic identity, and gateway traffic never crosses the mesh. Inside a device, node names,
+declared `aliases`, and chassis component names resolve to management addresses through the
+same peer directory written into each Pod's hosts file; the per-node and alias Services serve
+the rest of the cluster. Only ARP is emulated across Pods; other device broadcasts (gratuitous
+ARP, LLDP or DHCP on the management port) stay inside the Pod.
 
 A device that firewalls its own network namespace (EOS installs a default-deny input policy)
 cannot sever these transports: the sidecar keeps accept rules for its mesh and wire UDP ports

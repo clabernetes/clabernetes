@@ -1247,8 +1247,7 @@ func TestCompileDirectManagementCarriesInboundPorts(t *testing.T) {
 	}
 
 	mesh := management[0].Mesh
-	if mesh == nil || mesh.PeerService != clabernetesconstants.ManagementMeshServiceName ||
-		mesh.TunnelID <= 0 || mesh.TunnelID >= 1<<24 || mesh.GatewayMAC == "" {
+	if mesh == nil || mesh.TunnelID <= 0 || mesh.TunnelID >= 1<<24 || mesh.GatewayMAC == "" {
 		t.Fatalf("management mesh = %#v, want namespace-derived mesh above Link ceiling", mesh)
 	}
 

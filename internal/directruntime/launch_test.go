@@ -232,7 +232,7 @@ func TestRunLaunchRealizesPeerDirectoryAheadOfKubeletContent(t *testing.T) {
 		hostname: "node-a",
 		files: map[string][]byte{
 			"/etc/hosts": []byte(kubeletHosts),
-			"/var/lib/clabernetes/peer-directory/peers.json": directory,
+			"/var/lib/clabernetes/peer-directory/peers-3.json": directory,
 		},
 	}
 	if err = clabernetesinternaldirectruntime.RunLaunchWithOperations(

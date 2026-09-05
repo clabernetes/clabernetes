@@ -843,8 +843,9 @@ func TestManagementConnectivityAddsPackageSelectedAddressesBeforeReadiness(t *te
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodAddress:     "10.244.0.12",
+			StateDirectory:   state,
+			PodAddress:       "10.244.0.12",
+			FilterOperations: &fakeTransportFilterOperations{},
 		},
 		operations,
 		nil,
@@ -896,7 +897,9 @@ func TestManagementConnectivityRejectsPodTransportPrefixOverlapBeforeAddressMuta
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory: t.TempDir(), PodAddress: "10.244.2.180",
+			StateDirectory:   t.TempDir(),
+			PodAddress:       "10.244.2.180",
+			FilterOperations: &fakeTransportFilterOperations{},
 		},
 		operations,
 		nil,
@@ -2327,9 +2330,8 @@ func interposedConnectivityFixture(
 				{Protocol: "tcp", PodPort: 22, DevicePort: 22},
 			},
 			Mesh: &clabernetesinternaldeviceplan.ManagementMesh{
-				TunnelID:    16_100_007,
-				GatewayMAC:  "02:c9:aa:bb:cc:dd",
-				PeerService: "c9s-management-mesh",
+				TunnelID:   16_100_007,
+				GatewayMAC: "02:c9:aa:bb:cc:dd",
 			},
 		},
 	}}
@@ -2385,7 +2387,7 @@ func TestInterposedManagementRealizesPodLocallyBeforeReadiness(t *testing.T) {
 		spec.PodAddress != "10.244.0.12" ||
 		spec.MeshTunnelID != 16_100_007 ||
 		spec.MeshGatewayMAC != "02:c9:aa:bb:cc:dd" ||
-		spec.MeshPeerService != "c9s-management-mesh" {
+		spec.MeshMAC != "06:c9:ac:14:14:0b" || !spec.ReconcileMeshPeers {
 		t.Fatalf("interposition spec = %#v", spec)
 	}
 

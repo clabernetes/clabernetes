@@ -23,16 +23,17 @@ const (
 	AppNameDefault = "clabernetes"
 
 	// ManagementMeshVXLANPort is the UDP port of the kernel VXLAN management mesh joining a
-	// namespace's interposed Pods into one management L2 domain.
+	// namespace's interposed Pods into one management domain.
 	ManagementMeshVXLANPort = 14789
 
 	// FabricWireServicePort is the UDP port of the c9s-owned fabric wire carrying cross-Pod
 	// direct Link frames, carrier state, and peer heartbeats between connectivity sidecars.
 	FabricWireServicePort = 14790
 
-	// ManagementMeshServiceName is the namespace-scoped headless Service through which mesh
-	// member Pods discover the current management L2 mesh peer set.
-	ManagementMeshServiceName = "c9s-management-mesh"
+	// ConnectivityReadinessPort is the TCP port on which the connectivity sidecar answers the
+	// kubelet's readiness probe on the Pod address; an HTTP probe costs the node nothing, where
+	// an exec probe would start the runtime binary every second in every Pod.
+	ConnectivityReadinessPort = 14791
 
 	// TCP is... TCP.
 	TCP = "TCP"

@@ -72,10 +72,11 @@ network). Two things keep that from surprising a device:
 - **Management TCP handshakes are clamped to it.** Some devices present a management port whose
   size the application fixes and cannot lower (SR OS presents 1514). Their handshakes crossing
   the mesh have the advertised maximum segment lowered to what the mesh carries, so both peers
-  send segments that fit. Without it these flows are a black hole: the connection completes and
-  then stalls on the first full-size segment (a TLS certificate, a NETCONF hello) because a
-  drop on a veth produces no fragmentation-needed to learn from. The clamp only ever lowers a
-  size, and only on the management mesh; lab links keep the MTU the topology asked for.
+  send segments that fit from the first byte and a connection never stalls on its first
+  full-size segment (a TLS certificate, a NETCONF hello). A device that sends an oversized
+  packet with fragmentation forbidden instead receives fragmentation-needed from its own
+  gateway, so ordinary path MTU discovery works too. The clamp only ever lowers a size, and
+  only on the management path; lab links keep the MTU the topology asked for.
 
 Nothing here is configurable, and raising the Pod network MTU raises the management path with
 it.

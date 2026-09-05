@@ -1429,8 +1429,8 @@ func validateManagementInterposition(field string, item ManagementPlan) error {
 	return nil
 }
 
-// validateManagementMesh enforces a complete mesh membership: a VNI-range tunnel ID, a valid
-// deterministic gateway MAC, and a peer-discovery transport name.
+// validateManagementMesh enforces a complete mesh membership: a VNI-range tunnel ID and a valid
+// deterministic gateway MAC.
 func validateManagementMesh(field string, mesh *ManagementMesh) error {
 	if mesh.TunnelID <= 0 || mesh.TunnelID > maxVXLANIdentifier {
 		return planningError(ErrorInvalidInput, field+".tunnelID", "mesh tunnel ID is invalid", nil)
@@ -1438,15 +1438,6 @@ func validateManagementMesh(field string, mesh *ManagementMesh) error {
 
 	if _, err := net.ParseMAC(mesh.GatewayMAC); err != nil {
 		return planningError(ErrorInvalidInput, field+".gatewayMAC", "gateway MAC is invalid", nil)
-	}
-
-	if mesh.PeerService == "" {
-		return planningError(
-			ErrorInvalidInput,
-			field+".peerService",
-			"mesh peer-discovery transport name is required",
-			nil,
-		)
 	}
 
 	return nil

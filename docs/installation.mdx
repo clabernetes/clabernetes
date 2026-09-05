@@ -26,7 +26,8 @@ A typical installation method uses the [c9s Helm chart](https://github.com/clabe
 - **Pod-to-Pod UDP in lab namespaces**: device Pods exchange management mesh traffic on UDP
   14789 and link wires on UDP 14790, and their connectivity sidecar watches Links through the
   Kubernetes API. NetworkPolicies must allow both ports between device Pods and egress to the
-  API server.
+  API server, and must let the kubelet reach TCP 14791 on device Pods, where the connectivity
+  sidecar answers its readiness probe.
 - **Registry access is cluster administration**: private device images use ordinary
   `imagePullSecrets`, and mirrors or insecure registries are configured on the workers'
   container runtime, not in c9s. See [Image pulling](/docs/guides/image-pull).
