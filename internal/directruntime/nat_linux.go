@@ -310,7 +310,9 @@ func (nftablesOperations) EnsureInterpositionNAT(spec InterpositionNATSpec) erro
 // device then answers an on-subnet peer over its connected management route -- required for
 // management stacks that never learn an off-subnet route (SR OS derives its routes from a
 // Docker-shaped environment that a Pod does not present), and matching how containerlab's
-// Docker port publishing presents the bridge address as the client.
+// Docker port publishing presents the bridge address as the client. For a kernel-held address
+// the gateway is also a local address of the pod kernel; the interposition's gateway hairpin
+// rules carry such a reply across the pair to the router leg, where the translation reverses.
 func addInboundGatewaySourceRule(
 	conn *nftables.Conn,
 	table *nftables.Table,

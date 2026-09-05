@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/nftables"
+	"github.com/vishvananda/netlink"
 )
 
 const natNetlinkChild = "C9S_NAT_NETLINK_TEST_CHILD"
@@ -194,6 +195,35 @@ func testInterpositionNATProgramsOwnedTable(t *testing.T) {
 	if len(sourceRules) != 3 {
 		t.Fatalf("expected 3 srcnat rules (all shapes), got %d", len(sourceRules))
 	}
+
+	// With the management address held on the device leg by the pod kernel, inbound flows
+	// still get the gateway as their source (the interposition hairpins the reply across the
+	// pair); the table keeps the same three shapes.
+	if err = netlink.LinkAdd(&netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: spec.DeviceInterface}}); err != nil {
+		t.Fatalf("creating a device leg: %v", err)
+	}
+
+	held, _ := netlink.ParseAddr(spec.ManagementAddress + "/24")
+
+	deviceLeg, _ := netlink.LinkByName(spec.DeviceInterface)
+	if err = netlink.AddrAdd(deviceLeg, held); err != nil {
+		t.Fatalf("holding the management address on the device leg: %v", err)
+	}
+
+	if err = operations.EnsureInterpositionNAT(spec); err != nil {
+		t.Fatalf("reprogramming translation table with a kernel-held address: %v", err)
+	}
+
+	heldRules, err := conn.GetRules(owned, source)
+	if err != nil || len(heldRules) != 3 {
+		t.Fatalf(
+			"expected 3 srcnat rules for a kernel-held address, got %d (%v)",
+			len(heldRules),
+			err,
+		)
+	}
+
+	_ = netlink.LinkDel(deviceLeg)
 
 	destinationRules, err := conn.GetRules(owned, destination)
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
@@ -394,10 +395,16 @@ func TestRenderCreatesDirectApplicationContainersFromGenericPlan(t *testing.T) {
 		t.Fatalf("connectivity Pod UID ownership input = %#v", connectivity)
 	}
 
-	if connectivity.StartupProbe == nil || connectivity.ReadinessProbe == nil ||
-		connectivity.ReadinessProbe.Exec == nil ||
-		!slices.Contains(connectivity.ReadinessProbe.Exec.Command, "--connectivityRevision") {
-		t.Fatalf("connectivity revision readiness probes = %#v", connectivity)
+	// Both sidecar probes are HTTP probes against the sidecar's readiness endpoint on the Pod
+	// address: an exec probe would start the runtime binary every second in every Pod.
+	for _, probe := range []*k8scorev1.Probe{
+		connectivity.StartupProbe, connectivity.ReadinessProbe,
+	} {
+		if probe == nil || probe.Exec != nil || probe.HTTPGet == nil ||
+			probe.HTTPGet.Path != clabernetesinternaldirectruntime.ConnectivityReadinessPath ||
+			probe.HTTPGet.Port.IntValue() != clabernetesconstants.ConnectivityReadinessPort {
+			t.Fatalf("connectivity readiness probes = %#v", connectivity)
+		}
 	}
 
 	// The daemonless Pod grants no daemon socket to any container: no hostPath volume exists

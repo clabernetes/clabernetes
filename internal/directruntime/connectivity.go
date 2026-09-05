@@ -1149,6 +1149,14 @@ func runConnectivity(
 		return err
 	}
 
+	// Probes get an answer from the first moment: not ready until the cold pass publishes the
+	// readiness marker, then whatever the markers say, without any exec on the node.
+	readiness := startConnectivityReadinessServer(plan, options)
+
+	defer func() {
+		returnErr = errors.Join(returnErr, readiness.Close())
+	}()
+
 	// The DNS client configuration is captured before any application container can boot and
 	// rewrite the shared /etc/resolv.conf; a restart after such a rewrite falls back to the
 	// copy persisted in the sidecar-owned state directory.
@@ -1539,19 +1547,23 @@ func waitForConnectivityRevisions(
 			// Interposition state is sidecar-owned: a device rewrite of shared namespace state
 			// is converged back on the next tick, and an unrecoverable divergence restarts the
 			// sidecar into a full fail-closed cold pass.
-			// Per-peer mesh state is exact and static: it converges when the mounted directory
-			// changes and on a slow resync, never on every tick.
+			// The full interposition re-assertion runs on every tick while the device boots,
+			// then on a slow resync or when the mounted directory changes; per-peer mesh state
+			// is exact and static and converges on directory change and on its own resync.
 			ticks++
 			peers, changed := options.peerDirectory.load()
 
-			if err := reconcileInterposition(
-				basePlan,
-				options,
-				operations,
-				peers,
-				changed || ticks%meshPeerResyncTicks == 0,
-			); err != nil {
-				return err
+			if changed || ticks <= interpositionBootTicks ||
+				ticks%interpositionResyncTicks == 0 {
+				if err := reconcileInterposition(
+					basePlan,
+					options,
+					operations,
+					peers,
+					changed || ticks%meshPeerResyncTicks == 0,
+				); err != nil {
+					return err
+				}
 			}
 
 			// A device rebuilding its packet filter (EOS rewrites iptables on config changes)

@@ -234,10 +234,12 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		return err
 	}
 
-	// A device whose management port size is fixed by the application cannot be told the mesh
-	// MTU; clamping the segment size the handshake advertises keeps its management flows inside
-	// what the mesh carries.
-	if err := ensureMeshSegmentClamp(meshMTU); err != nil {
+	// The sidecar's legs track connections in their own zone, and a device whose management
+	// port size is fixed by the application cannot be told the mesh MTU: clamping the segment
+	// size the handshake advertises keeps its management flows inside what the mesh carries.
+	if err := ensureMeshFilterTable(
+		spec.TransportInterface, spec.RouterInterface, meshMTU,
+	); err != nil {
 		return err
 	}
 
@@ -257,8 +259,13 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		}
 	}
 
+	// IPv6 management is best effort: a device that disables IPv6 in the shared namespace
+	// (EOS does) leaves the router leg unable to carry the IPv6 gateway, and the IPv4 mesh must
+	// keep working exactly as before rather than failing closed on IPv6 state.
+	ipv6Active := routerCarriesIPv6Gateway(spec)
+
 	if err := ensureTransportTable(
-		spec, podAddress, managementPrefix, capturedRoutes, transportIndex, vtep,
+		spec, podAddress, managementPrefix, capturedRoutes, transportIndex, vtep, ipv6Active,
 	); err != nil {
 		return err
 	}
@@ -267,7 +274,39 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		return nil
 	}
 
-	return ensureMeshPeers(spec, vtep, podAddress, managementPrefix.Addr())
+	return ensureMeshPeers(spec, vtep, podAddress, managementPrefix.Addr(), ipv6Active)
+}
+
+// routerCarriesIPv6Gateway reports whether the router leg actually holds the IPv6 gateway
+// address: the spec asked for IPv6 management and the kernel accepted the address, which it
+// refuses when IPv6 is disabled in the namespace or on the interface.
+func routerCarriesIPv6Gateway(spec InterpositionSpec) bool {
+	if spec.ManagementIPv6 == "" || spec.GatewayIPv6 == "" {
+		return false
+	}
+
+	gateway, err := netip.ParseAddr(spec.GatewayIPv6)
+	if err != nil {
+		return false
+	}
+
+	router, present, err := lookupLink(spec.RouterInterface)
+	if err != nil || !present {
+		return false
+	}
+
+	addresses, err := netlink.AddrList(router, netlink.FAMILY_V6)
+	if err != nil {
+		return false
+	}
+
+	for _, address := range addresses {
+		if candidate, ok := netip.AddrFromSlice(address.IP); ok && candidate.Unmap() == gateway {
+			return true
+		}
+	}
+
+	return false
 }
 
 // preserveTransportInterface renames the CNI interface carrying the Pod address to the
@@ -435,7 +474,11 @@ func ensureSyntheticPair(
 		return err
 	}
 
+	created := false
+
 	if !present {
+		created = true
+
 		attributes := netlink.NewLinkAttrs()
 		attributes.Name = spec.DeviceInterface
 		attributes.Alias = interpositionOwnerAlias
@@ -486,7 +529,7 @@ func ensureSyntheticPair(
 		}
 	}
 
-	if err = addressDeviceLeg(spec); err != nil {
+	if err = addressDeviceLeg(spec, created); err != nil {
 		return err
 	}
 
@@ -499,18 +542,34 @@ func ensureSyntheticPair(
 		return fmt.Errorf("parsing gateway address: %w", err)
 	}
 
+	// The router leg carries the gateway address without a prefix route: the management
+	// subnet is not on-link behind it. A kernel connected route via the router leg would
+	// compete in the main table with the device leg's own connected route, and a
+	// single-namespace device stack that picked it would resolve peers on the router leg,
+	// where nothing answers. Peer-bound traffic reaches the tunnel endpoint through the
+	// transport table, and the device's own address through its host route there.
+	routerAddress.Flags = unix.IFA_F_NOPREFIXROUTE
+
 	if err = netlink.AddrReplace(router, routerAddress); err != nil {
 		return fmt.Errorf("addressing router leg: %w", err)
 	}
+
+	prefixes := []netip.Prefix{managementPrefix.Masked()}
 
 	if spec.GatewayIPv6 != "" && spec.ManagementIPv6 != "" {
 		if v6Prefix, v6Err := netip.ParsePrefix(spec.ManagementIPv6); v6Err == nil {
 			if v6Gateway, gwErr := netlink.ParseAddr(
 				fmt.Sprintf("%s/%d", spec.GatewayIPv6, v6Prefix.Bits()),
 			); gwErr == nil {
+				v6Gateway.Flags = unix.IFA_F_NOPREFIXROUTE
 				_ = netlink.AddrReplace(router, v6Gateway)
+				prefixes = append(prefixes, v6Prefix.Masked())
 			}
 		}
+	}
+
+	if err = removeRouterPrefixRoutes(router, prefixes); err != nil {
+		return err
 	}
 
 	if err = netlink.LinkSetUp(router); err != nil {
@@ -520,10 +579,51 @@ func ensureSyntheticPair(
 	return nil
 }
 
+// removeRouterPrefixRoutes deletes any main-table route for a management prefix that leaves
+// through the router leg: the kernel adds one when an address is installed without the
+// no-prefix-route flag (an earlier sidecar shape, or a replace that kept the old route).
+func removeRouterPrefixRoutes(router netlink.Link, prefixes []netip.Prefix) error {
+	for _, prefix := range prefixes {
+		family := netlink.FAMILY_V4
+		if prefix.Addr().Is6() {
+			family = netlink.FAMILY_V6
+		}
+
+		routes, err := netlink.RouteListFiltered(
+			family,
+			&netlink.Route{Table: unix.RT_TABLE_MAIN},
+			netlink.RT_FILTER_TABLE,
+		)
+		if err != nil {
+			return fmt.Errorf("listing main table routes: %w", err)
+		}
+
+		for _, route := range routes {
+			if route.LinkIndex != router.Attrs().Index || route.Dst == nil ||
+				route.Dst.String() != prefix.String() {
+				continue
+			}
+
+			stale := route
+			if err = netlink.RouteDel(&stale); err != nil {
+				return fmt.Errorf("removing router leg prefix route %s: %w", prefix, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // addressDeviceLeg addresses the device leg when it is still present and untouched. The leg
 // may have been renamed or moved by the device after adoption; only a present leg is addressed,
 // and only with sidecar-owned addresses.
-func addressDeviceLeg(spec InterpositionSpec) error {
+// addressDeviceLeg gives a freshly created device leg its pre-boot addressing and brings it
+// up once. The leg's administrative state is the device's from then on: SR Linux takes its
+// leg down, renames it, and brings it back up while it boots, and the kernel refuses to
+// rename an interface that is up, so a re-assertion pass that set the leg up in that window
+// would leave the device without its management interface for good (the pod kernel then
+// answers for the address itself, and the device's own management plane never comes up).
+func addressDeviceLeg(spec InterpositionSpec, bringUp bool) error {
 	device, present, err := lookupLink(spec.DeviceInterface)
 	if err != nil || !present {
 		return nil //nolint:nilerr // a moved or renamed leg is the device's to own.
@@ -549,13 +649,21 @@ func addressDeviceLeg(spec InterpositionSpec) error {
 		}
 	}
 
-	if spec.ManagementIPv6 != "" {
+	// The IPv6 address follows the same rule: a device that flushed the leg after boot (SR-SIM
+	// takes the addresses into its own stack) owns it from then on, and re-adding the address
+	// would make the kernel answer for it ahead of the device.
+	if spec.ManagementIPv6 != "" && device.Attrs().Alias == interpositionOwnerAlias &&
+		device.Attrs().OperState != netlink.OperUp {
 		if v6, v6Err := netlink.ParseAddr(spec.ManagementIPv6); v6Err == nil {
 			v6Addresses, _ := netlink.AddrList(device, netlink.FAMILY_V6)
-			if device.Attrs().Alias == interpositionOwnerAlias && len(v6Addresses) == 0 {
+			if len(v6Addresses) == 0 {
 				_ = netlink.AddrReplace(device, v6)
 			}
 		}
+	}
+
+	if !bringUp {
+		return nil
 	}
 
 	if err = netlink.LinkSetUp(device); err != nil {
@@ -569,6 +677,12 @@ func addressDeviceLeg(spec InterpositionSpec) error {
 func applyInterpositionSysctls(spec InterpositionSpec) error {
 	settings := [][2]string{
 		{"net.ipv4.ip_forward", "1"},
+		// Inbound traffic for a management address the pod kernel holds is routed across the
+		// synthetic pair onto the device leg. Early demux would hand a packet to an existing
+		// local socket before that routing decision, and the forward path then drops a
+		// socket-owned packet silently: every reply into a kernel-originated management
+		// connection would vanish on the tunnel endpoint. Routing stays authoritative.
+		{"net.ipv4.ip_early_demux", "0"},
 		{"net.ipv4.conf.all.rp_filter", "0"},
 		// A new network namespace copies the init namespace's IPv4 devconf template, so hosts
 		// that set rp_filter (Ubuntu ships 2) poison conf/default here -- and every interface a
@@ -620,10 +734,18 @@ func applyInterpositionSysctls(spec InterpositionSpec) error {
 	// leg, so without arp_ignore=1 it would flux-answer ARP for the gateway. The leg may
 	// already be renamed by the device; missing is fine.
 	if _, present, err := lookupLink(spec.DeviceInterface); err == nil && present {
+		// The device leg forwards, as it does under a container runtime: a device that
+		// translates management ports onward to a nested guest (vrnetlab) forwards from this
+		// leg into its own bridge. Traffic that must not be re-forwarded (a device-held address
+		// re-entering after its raw-socket dataplane consumed the frame) is blackholed by rule
+		// instead. Inbound translated flows are source-translated to the gateway, a local
+		// address, before they cross the pair onto the device leg; a single-namespace device
+		// stack must accept that local source there.
 		settings = append(
 			settings,
-			[2]string{"net.ipv4.conf." + spec.DeviceInterface + ".forwarding", "0"},
+			[2]string{"net.ipv4.conf." + spec.DeviceInterface + ".forwarding", "1"},
 			[2]string{"net.ipv4.conf." + spec.DeviceInterface + ".arp_ignore", "1"},
+			[2]string{"net.ipv4.conf." + spec.DeviceInterface + ".accept_local", "1"},
 		)
 	}
 
@@ -670,8 +792,6 @@ func clearExistingReversePathFilters() error {
 // the main table, so device rewrites of main never affect it. The table replays the exact
 // captured CNI route set plus the management routes: the Pod's own management address via the
 // router leg and the management subnet via the mesh tunnel endpoint.
-//
-//nolint:funlen // one linear rule-and-route convergence pass.
 func ensureTransportTable(
 	spec InterpositionSpec,
 	podAddress netip.Addr,
@@ -679,6 +799,7 @@ func ensureTransportTable(
 	captured []capturedRoute,
 	transportIndex int,
 	vtep netlink.Link,
+	ipv6Active bool,
 ) error {
 	if transportIndex == 0 {
 		transport, present, err := lookupLink(spec.TransportInterface)
@@ -721,8 +842,18 @@ func ensureTransportTable(
 		Mask: net.CIDRMask(managementPrefix.Bits(), 32),
 	}
 
+	kernelHeld := addressHeldLocally(managementPrefix.Addr())
+
+	var gateway *net.IPNet
+
+	if gatewayAddress, gatewayErr := netip.ParseAddr(spec.GatewayIPv4); gatewayErr == nil &&
+		gatewayAddress.Is4() {
+		gateway = &net.IPNet{IP: gatewayAddress.AsSlice(), Mask: net.CIDRMask(32, 32)}
+	}
+
 	if err = ensureManagementRoutes(
 		router, vtep, managementAddress, managementSubnet,
+		gatewayHairpin{device: spec.DeviceInterface, gateway: gateway, active: kernelHeld},
 	); err != nil {
 		return err
 	}
@@ -737,7 +868,7 @@ func ensureTransportTable(
 	// the router leg, while the device's own peer-bound traffic selects the table through the
 	// router rule and follows the subnet route to the mesh tunnel endpoint.
 
-	haveRouterRule, haveTransportRule, haveManagementRule := false, false, false
+	haveRouterRule, haveTransportRule := false, false
 
 	for _, rule := range rules {
 		if rule.Table != interpositionTransportTable {
@@ -749,19 +880,6 @@ func ensureTransportTable(
 			haveRouterRule = rule.IifName == spec.RouterInterface
 		case interpositionTransportRulePriority:
 			haveTransportRule = true
-		case interpositionManagementRulePriority:
-			if rule.Dst != nil && rule.Dst.String() == managementAddress.String() {
-				haveManagementRule = true
-
-				continue
-			}
-
-			// A subnet-wide rule from an earlier shape would hijack peer management
-			// addresses into the isolated gateway leg; converge it away.
-			stale := rule
-			if err = netlink.RuleDel(&stale); err != nil {
-				return fmt.Errorf("removing stale management transport rule: %w", err)
-			}
 		}
 	}
 
@@ -790,32 +908,265 @@ func ensureTransportTable(
 		}
 	}
 
-	if !haveManagementRule {
-		rule := netlink.NewRule()
-		rule.Priority = interpositionManagementRulePriority
-		rule.Table = interpositionTransportTable
-		rule.Dst = managementAddress
-
-		if err = netlink.RuleAdd(rule); err != nil {
-			return fmt.Errorf("asserting management transport rule: %w", err)
-		}
+	if err = ensureOwnAddressRules(
+		netlink.FAMILY_V4, spec, managementAddress, gateway, kernelHeld,
+	); err != nil {
+		return err
 	}
 
-	if spec.ManagementIPv6 == "" || spec.GatewayIPv6 == "" {
+	if !ipv6Active {
 		return nil
 	}
 
 	return ensureTransportTableIPv6(spec, router, vtep)
 }
 
-// ensureManagementRoutes converges the two management routes of the transport table: the Pod's
-// own address is a host route via the router leg, and the whole subnet is on-link via the mesh
-// tunnel endpoint, where each peer resolves through its static neighbor entry. A subnet route
+// addressHeldLocally reports whether any interface of the pod namespace carries the exact
+// address: a single-namespace device leaves the management address on the device leg, where
+// the kernel itself terminates it, while a device with its own stack strips or moves it.
+func addressHeldLocally(address netip.Addr) bool {
+	family := netlink.FAMILY_V4
+	if address.Is6() {
+		family = netlink.FAMILY_V6
+	}
+
+	addresses, err := netlink.AddrList(nil, family)
+	if err != nil {
+		return false
+	}
+
+	for _, candidate := range addresses {
+		if held, ok := netip.AddrFromSlice(candidate.IP); ok && held.Unmap() == address.Unmap() {
+			return true
+		}
+	}
+
+	return false
+}
+
+// ownAddressRuleShape is one policy rule the own-address convergence owns.
+type ownAddressRuleShape struct {
+	priority int
+	table    int
+	iif      string
+	dst      *net.IPNet
+	action   uint8
+}
+
+func (s ownAddressRuleShape) key() string {
+	destination := ""
+	if s.dst != nil {
+		destination = s.dst.String()
+	}
+
+	return fmt.Sprintf("%d|%d|%s|%s|%d", s.priority, s.table, s.iif, destination, s.action)
+}
+
+// ownAddressRuleShapes lists the rules one address family needs: the re-homed local lookup,
+// then either the ingress-scoped rules of a kernel-held address or the unscoped rule and the
+// device-leg blackhole of a device-held one.
+//
+// A kernel-held address additionally hairpins gateway-bound traffic across the pair: a reply
+// the device side returns to the gateway (the client identity of every inbound translated
+// flow) leaves through the device leg and re-enters on the router leg, where the translation
+// state lives, instead of being delivered to the local gateway address; what enters on the
+// router leg is delivered locally. Only the IPv4 family carries a Pod-address translation.
+func ownAddressRuleShapes(
+	spec InterpositionSpec,
+	ownAddress, gateway *net.IPNet,
+	kernelHeld bool,
+) []ownAddressRuleShape {
+	shapes := []ownAddressRuleShape{
+		{interpositionLocalRulePriority, unix.RT_TABLE_LOCAL, "", nil, unix.RTN_UNSPEC},
+	}
+
+	if kernelHeld {
+		shapes = append(shapes,
+			ownAddressRuleShape{
+				interpositionIngressRulePriority,
+				interpositionTransportTable,
+				MeshVTEPName,
+				ownAddress,
+				unix.RTN_UNSPEC,
+			},
+			ownAddressRuleShape{
+				interpositionIngressRulePriority,
+				interpositionTransportTable,
+				spec.TransportInterface,
+				ownAddress,
+				unix.RTN_UNSPEC,
+			},
+		)
+
+		if gateway != nil {
+			shapes = append(shapes,
+				ownAddressRuleShape{
+					interpositionGatewayReturnRulePriority,
+					unix.RT_TABLE_LOCAL,
+					spec.RouterInterface,
+					gateway,
+					unix.RTN_UNSPEC,
+				},
+				ownAddressRuleShape{
+					interpositionGatewayHairpinRulePriority,
+					interpositionTransportTable,
+					"",
+					gateway,
+					unix.RTN_UNSPEC,
+				},
+			)
+		}
+
+		return shapes
+	}
+
+	return append(shapes,
+		ownAddressRuleShape{
+			interpositionManagementRulePriority,
+			interpositionTransportTable,
+			"",
+			ownAddress,
+			unix.RTN_UNSPEC,
+		},
+		ownAddressRuleShape{
+			interpositionDeviceLegRulePriority,
+			unix.RT_TABLE_UNSPEC,
+			spec.DeviceInterface,
+			ownAddress,
+			unix.RTN_BLACKHOLE,
+		},
+	)
+}
+
+// ensureOwnAddressRules converges the rules that steer traffic for the Pod's own management
+// address and the placement of the local-table lookup.
+//
+// The kernel's local lookup sits at priority 0, ahead of everything; the sidecar re-homes it
+// right behind the ingress rule so the shape below is expressible, and keeps it there even if
+// a device moves its own copy around.
+//
+// When the pod kernel does not hold the address (the device runs its own stack behind the
+// device leg), every packet to it selects the transport table, whose host route leaves through
+// the router leg.
+//
+// When the pod kernel holds the address on the device leg itself (a single-namespace device),
+// traffic arriving from the mesh tunnel endpoint or from the Kubernetes transport selects the
+// transport table ahead of local delivery: it crosses the synthetic pair and arrives on the
+// device leg, exactly where a shared segment would have delivered it, so a device's
+// interface-scoped filters and forwarders (vrnetlab forwards management ports to its virtual
+// machine from that leg) keep seeing it. Re-entering on the device leg, and locally originated
+// traffic, then reach the local lookup and cannot loop.
+func ensureOwnAddressRules(
+	family int,
+	spec InterpositionSpec,
+	ownAddress, gateway *net.IPNet,
+	kernelHeld bool,
+) error {
+	wanted := map[string]ownAddressRuleShape{}
+	for _, shape := range ownAddressRuleShapes(spec, ownAddress, gateway, kernelHeld) {
+		wanted[shape.key()] = shape
+	}
+
+	rules, err := netlink.RuleList(family)
+	if err != nil {
+		return fmt.Errorf("listing routing rules: %w", err)
+	}
+
+	present := map[string]bool{}
+
+	var kernelLocal *netlink.Rule
+
+	for index := range rules {
+		rule := rules[index]
+
+		if rule.Priority == 0 && rule.Table == unix.RT_TABLE_LOCAL {
+			kernelLocal = &rules[index]
+
+			continue
+		}
+
+		owned := (rule.Priority == interpositionLocalRulePriority &&
+			rule.Table == unix.RT_TABLE_LOCAL) ||
+			(rule.Priority == interpositionIngressRulePriority &&
+				rule.Table == interpositionTransportTable) ||
+			(rule.Priority == interpositionManagementRulePriority &&
+				rule.Table == interpositionTransportTable) ||
+			rule.Priority == interpositionDeviceLegRulePriority ||
+			rule.Priority == interpositionGatewayReturnRulePriority ||
+			rule.Priority == interpositionGatewayHairpinRulePriority
+		if !owned {
+			continue
+		}
+
+		action := rule.Type
+		if action == unix.RTN_UNICAST {
+			action = unix.RTN_UNSPEC
+		}
+
+		id := ownAddressRuleShape{
+			rule.Priority, rule.Table, rule.IifName, rule.Dst, action,
+		}.key()
+		if _, ok := wanted[id]; ok {
+			present[id] = true
+
+			continue
+		}
+
+		// The other shape, or a rule from an earlier version; converge it away.
+		stale := rule
+		if err = netlink.RuleDel(&stale); err != nil {
+			return fmt.Errorf("removing stale own-address rule: %w", err)
+		}
+	}
+
+	for id, shape := range wanted {
+		if present[id] {
+			continue
+		}
+
+		rule := netlink.NewRule()
+		rule.Family = family
+		rule.Priority = shape.priority
+		rule.Table = shape.table
+		rule.IifName = shape.iif
+		rule.Dst = shape.dst
+		rule.Type = shape.action
+
+		if err = netlink.RuleAdd(rule); err != nil {
+			return fmt.Errorf("asserting own-address rule %s: %w", id, err)
+		}
+	}
+
+	// The re-homed local lookup is in place; the kernel's copy at priority 0 would preempt the
+	// ingress rule, so it goes.
+	if kernelLocal != nil {
+		if err = netlink.RuleDel(kernelLocal); err != nil {
+			return fmt.Errorf("re-homing the local lookup rule: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// gatewayHairpin describes the gateway host route via the device leg that the hairpin rules of
+// a kernel-held address select (see interpositionGatewayHairpinRulePriority). An inactive
+// hairpin converges the route away.
+type gatewayHairpin struct {
+	device  string
+	gateway *net.IPNet
+	active  bool
+}
+
+// ensureManagementRoutes converges the management routes of the transport table: the Pod's
+// own address is a host route via the router leg, the whole subnet is on-link via the mesh
+// tunnel endpoint, where each peer resolves through its static neighbor entry, and while the
+// gateway hairpin is active the gateway is a host route via the device leg. A subnet route
 // via the router leg (the earlier bridged shape) would send peer traffic back to the device;
-// it is converged away.
+// it is converged away, as is the hairpin route of an address a device has since taken over.
 func ensureManagementRoutes(
 	router, vtep netlink.Link,
 	managementAddress, managementSubnet *net.IPNet,
+	hairpin gatewayHairpin,
 ) error {
 	if err := netlink.RouteReplace(&netlink.Route{
 		Table:     interpositionTransportTable,
@@ -835,6 +1186,30 @@ func ensureManagementRoutes(
 		return fmt.Errorf("asserting management mesh route: %w", err)
 	}
 
+	hairpinIndex := 0
+	hairpinUp := false
+
+	if hairpin.gateway != nil {
+		if device, present, lookupErr := lookupLink(hairpin.device); lookupErr == nil && present {
+			hairpinIndex = device.Attrs().Index
+			hairpinUp = device.Attrs().Flags&net.FlagUp != 0
+		}
+	}
+
+	// A device that took its leg down (SR Linux does while it renames it) owns that state; the
+	// kernel drops the leg's routes and refuses new ones until it is up again, and the next
+	// pass with the leg up re-installs the route.
+	if hairpin.active && hairpinIndex != 0 && hairpinUp {
+		if err := netlink.RouteReplace(&netlink.Route{
+			Table:     interpositionTransportTable,
+			LinkIndex: hairpinIndex,
+			Dst:       hairpin.gateway,
+			Scope:     netlink.SCOPE_LINK,
+		}); err != nil {
+			return fmt.Errorf("asserting gateway hairpin route: %w", err)
+		}
+	}
+
 	family := netlink.FAMILY_V4
 	if managementSubnet.IP.To4() == nil {
 		family = netlink.FAMILY_V6
@@ -850,14 +1225,22 @@ func ensureManagementRoutes(
 	}
 
 	for _, route := range routes {
-		if route.LinkIndex != router.Attrs().Index || route.Dst == nil ||
-			route.Dst.String() != managementSubnet.String() {
+		if route.Dst == nil {
+			continue
+		}
+
+		staleSubnet := route.LinkIndex == router.Attrs().Index &&
+			route.Dst.String() == managementSubnet.String()
+		staleHairpin := !hairpin.active && hairpinIndex != 0 &&
+			route.LinkIndex == hairpinIndex && route.Dst.String() == hairpin.gateway.String()
+
+		if !staleSubnet && !staleHairpin {
 			continue
 		}
 
 		stale := route
 		if err = netlink.RouteDel(&stale); err != nil {
-			return fmt.Errorf("removing stale management subnet route: %w", err)
+			return fmt.Errorf("removing stale transport table route %s: %w", route.Dst, err)
 		}
 	}
 
@@ -882,7 +1265,9 @@ func ensureTransportTableIPv6(spec InterpositionSpec, router, vtep netlink.Link)
 		Mask: net.CIDRMask(prefix.Bits(), 128),
 	}
 
-	if err = ensureManagementRoutes(router, vtep, ownAddress, subnet); err != nil {
+	if err = ensureManagementRoutes(
+		router, vtep, ownAddress, subnet, gatewayHairpin{},
+	); err != nil {
 		return err
 	}
 
@@ -891,18 +1276,12 @@ func ensureTransportTableIPv6(spec InterpositionSpec, router, vtep netlink.Link)
 		return fmt.Errorf("listing IPv6 routing rules: %w", err)
 	}
 
-	haveRouterRule, haveManagementRule := false, false
+	haveRouterRule := false
 
 	for _, rule := range rules {
-		if rule.Table != interpositionTransportTable {
-			continue
-		}
-
-		switch rule.Priority {
-		case interpositionRouterRulePriority:
+		if rule.Table == interpositionTransportTable &&
+			rule.Priority == interpositionRouterRulePriority {
 			haveRouterRule = rule.IifName == spec.RouterInterface
-		case interpositionManagementRulePriority:
-			haveManagementRule = rule.Dst != nil && rule.Dst.String() == ownAddress.String()
 		}
 	}
 
@@ -918,19 +1297,9 @@ func ensureTransportTableIPv6(spec InterpositionSpec, router, vtep netlink.Link)
 		}
 	}
 
-	if !haveManagementRule {
-		rule := netlink.NewRule()
-		rule.Family = netlink.FAMILY_V6
-		rule.Priority = interpositionManagementRulePriority
-		rule.Table = interpositionTransportTable
-		rule.Dst = ownAddress
-
-		if err = netlink.RuleAdd(rule); err != nil {
-			return fmt.Errorf("asserting IPv6 management transport rule: %w", err)
-		}
-	}
-
-	return nil
+	return ensureOwnAddressRules(
+		netlink.FAMILY_V6, spec, ownAddress, nil, addressHeldLocally(prefix.Addr()),
+	)
 }
 
 // isDefaultRouteDestination reports whether a route destination is the IPv4 default: the
@@ -1103,6 +1472,7 @@ func ensureMeshPeers(
 	vtep netlink.Link,
 	podAddress netip.Addr,
 	ownManagement netip.Addr,
+	ipv6Active bool,
 ) error {
 	peersV4 := map[netip.Addr]meshPeerState{}
 	peersV6 := map[netip.Addr]meshPeerState{}
@@ -1128,9 +1498,10 @@ func ensureMeshPeers(
 		peersV4[management.Unmap()] = state
 		forwarding[mac.String()] = state
 
-		// IPv6 peer state exists only alongside an IPv6 management identity of this Pod: the
-		// tunnel endpoint keeps IPv6 disabled otherwise.
-		if peer.ManagementIPv6 == "" || spec.ManagementIPv6 == "" || spec.GatewayIPv6 == "" {
+		// IPv6 peer state exists only while this Pod's own IPv6 management path is live: the
+		// tunnel endpoint keeps IPv6 disabled otherwise, and a namespace with IPv6 disabled
+		// cannot hold the entries at all.
+		if peer.ManagementIPv6 == "" || !ipv6Active {
 			continue
 		}
 
@@ -1146,6 +1517,10 @@ func ensureMeshPeers(
 
 	if err := ensureMeshNeighbors(vtep, netlink.FAMILY_V4, peersV4); err != nil {
 		return err
+	}
+
+	if !ipv6Active {
+		return nil
 	}
 
 	if err := ensureMeshNeighbors(vtep, netlink.FAMILY_V6, peersV6); err != nil {

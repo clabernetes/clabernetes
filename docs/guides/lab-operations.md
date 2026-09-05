@@ -124,9 +124,10 @@ output is a standard pcap file for Wireshark or `tcpdump -r`.
 ## Network policies
 
 Device Pods talk to each other over UDP: port 14789 carries the management mesh and port 14790
-the link wires. The connectivity sidecar also watches Links through the Kubernetes API. If
-NetworkPolicies restrict traffic in a lab namespace, allow both ports between device Pods and
-egress to the API server.
+the link wires. The connectivity sidecar also watches Links through the Kubernetes API and
+answers the kubelet's readiness probe on TCP 14791. If NetworkPolicies restrict traffic in a
+lab namespace, allow both UDP ports between device Pods, TCP 14791 from the nodes, and egress
+to the API server.
 
 ## Related
 

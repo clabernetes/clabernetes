@@ -8,10 +8,22 @@ import (
 	"sync"
 )
 
-// meshPeerResyncTicks bounds how many revision ticks pass between two full mesh peer state
-// convergences while the directory is unchanged: a device flushing the namespace's neighbor
-// tables is healed within this many ticks rather than only on the next membership change.
-const meshPeerResyncTicks = 30
+const (
+	// meshPeerResyncTicks bounds how many revision ticks pass between two full mesh peer state
+	// convergences while the directory is unchanged: a device flushing the namespace's
+	// neighbor tables is healed within this many ticks rather than only on the next
+	// membership change.
+	meshPeerResyncTicks = 30
+	// interpositionBootTicks is the window after the cold pass during which the sidecar-owned
+	// interposition state (legs, tunnel endpoint, routes, rules, sysctls, translation, clamp)
+	// is re-asserted on every tick: devices displace shared namespace state while they boot.
+	interpositionBootTicks = 60
+	// interpositionResyncTicks paces that re-assertion afterwards. Re-asserting on every tick
+	// costs each Pod hundreds of netlink and sysctl operations per second for state a booted
+	// device leaves alone, which does not scale to thousands of Pods; a displaced state now
+	// heals within this many ticks, and a directory change still triggers a pass at once.
+	interpositionResyncTicks = 10
+)
 
 // peerDirectoryReader is the sidecar's view of the mounted directory: it re-parses the shard
 // files only when their fingerprint (size and modification time of every candidate file)

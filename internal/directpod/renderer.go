@@ -28,6 +28,7 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -75,17 +76,18 @@ const (
 	directWorkloadLabel              = clabernetesconstants.LabelDirectWorkload
 	planDigestAnnotation             = "c9s.run/node-plan-digest"
 	// node-runtime CLI invocation tokens.
-	runtimeCommandName        = "node-runtime"
-	runtimeFlagPlan           = "--plan"
-	runtimeFlagInput          = "--input"
-	runtimeFlagContainer      = "--containerID"
-	runtimeFlagArtifacts      = "--artifacts"
-	runtimeFlagScratch        = "--scratch"
-	runtimeFlagRevision       = "--revision"
-	runtimeFlagPersistentNode = "--persistentNode"
-	runtimeFlagReset          = "--reset"
-	runtimeFlagState          = "--state"
-	podAddressFieldPath       = "status.podIP"
+	runtimeCommandName              = "node-runtime"
+	runtimeFlagPlan                 = "--plan"
+	runtimeFlagInput                = "--input"
+	runtimeFlagContainer            = "--containerID"
+	runtimeFlagArtifacts            = "--artifacts"
+	runtimeFlagScratch              = "--scratch"
+	runtimeFlagRevision             = "--revision"
+	runtimeFlagPersistentNode       = "--persistentNode"
+	runtimeFlagReset                = "--reset"
+	runtimeFlagState                = "--state"
+	runtimeFlagConnectivityRevision = "--connectivityRevision"
+	podAddressFieldPath             = "status.podIP"
 )
 
 // Stable direct workload identities consumed by the status reconciler.
@@ -2539,11 +2541,12 @@ func renderHelpers(
 		"--podUID", "$(C9S_POD_UID)",
 		"--podAddress", "$(C9S_POD_ADDRESS)",
 	}
-	connectivityReadyCommand := []string{
-		runtimeBinaryPath, runtimeCommandName, "connectivity-ready",
-		runtimeFlagPlan, planMountPath + "/plan.json",
-		runtimeFlagState, connectivityStatePath,
-	}
+	// The sidecar answers its probes over HTTP on the Pod address: an exec probe would start the
+	// runtime binary every second in every Pod, which is what bounded Pod density on a worker.
+	connectivityReadyHandler := k8scorev1.ProbeHandler{HTTPGet: &k8scorev1.HTTPGetAction{
+		Path: clabernetesinternaldirectruntime.ConnectivityReadinessPath,
+		Port: intstr.FromInt32(clabernetesconstants.ConnectivityReadinessPort),
+	}}
 	connectivityMounts := []k8scorev1.VolumeMount{
 		planMount,
 		inputMount,
@@ -2558,12 +2561,7 @@ func renderHelpers(
 	if options.ConnectivityRevisionConfigMapName != "" {
 		connectivityArgs = append(
 			connectivityArgs,
-			"--connectivityRevision",
-			connectivityRevisionMountPath+"/revision.json",
-		)
-		connectivityReadyCommand = append(
-			connectivityReadyCommand,
-			"--connectivityRevision",
+			runtimeFlagConnectivityRevision,
 			connectivityRevisionMountPath+"/revision.json",
 		)
 		connectivityMounts = append(connectivityMounts, k8scorev1.VolumeMount{
@@ -2697,16 +2695,12 @@ func renderHelpers(
 				Privileged: &trueValue, RunAsUser: &rootUser,
 			},
 			StartupProbe: &k8scorev1.Probe{
-				ProbeHandler: k8scorev1.ProbeHandler{Exec: &k8scorev1.ExecAction{
-					Command: connectivityReadyCommand,
-				}},
+				ProbeHandler:  connectivityReadyHandler,
 				PeriodSeconds: 1, TimeoutSeconds: 1,
 				SuccessThreshold: 1, FailureThreshold: 300,
 			},
 			ReadinessProbe: &k8scorev1.Probe{
-				ProbeHandler: k8scorev1.ProbeHandler{Exec: &k8scorev1.ExecAction{
-					Command: connectivityReadyCommand,
-				}},
+				ProbeHandler:  connectivityReadyHandler,
 				PeriodSeconds: 1, TimeoutSeconds: 1,
 				SuccessThreshold: 1, FailureThreshold: 1,
 			},
@@ -2963,4 +2957,37 @@ func peerDirectoryProjections() []k8scorev1.VolumeProjection {
 	}
 
 	return sources
+}
+
+// ConnectivityReadinessCommand derives the exec form of the connectivity sidecar's readiness
+// evaluation from a rendered connectivity container: the same plan, state, and projected
+// revision the sidecar was started with. The kubelet probes the sidecar over HTTP; controllers
+// use this form to confirm a projected revision was applied before restarting containers.
+func ConnectivityReadinessCommand(container k8scorev1.Container) []string {
+	if container.Name != ConnectivityContainerName || len(container.Command) < 2 {
+		return nil
+	}
+
+	flags := map[string]string{}
+
+	for index := 0; index+1 < len(container.Args); index++ {
+		if strings.HasPrefix(container.Args[index], "--") {
+			flags[container.Args[index]] = container.Args[index+1]
+			index++
+		}
+	}
+
+	plan, state := flags[runtimeFlagPlan], flags[runtimeFlagState]
+	revision := flags[runtimeFlagConnectivityRevision]
+
+	if plan == "" || state == "" || revision == "" {
+		return nil
+	}
+
+	return []string{
+		container.Command[0], container.Command[1], "connectivity-ready",
+		runtimeFlagPlan, plan,
+		runtimeFlagState, state,
+		runtimeFlagConnectivityRevision, revision,
+	}
 }

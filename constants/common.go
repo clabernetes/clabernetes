@@ -30,6 +30,11 @@ const (
 	// direct Link frames, carrier state, and peer heartbeats between connectivity sidecars.
 	FabricWireServicePort = 14790
 
+	// ConnectivityReadinessPort is the TCP port on which the connectivity sidecar answers the
+	// kubelet's readiness probe on the Pod address; an HTTP probe costs the node nothing, where
+	// an exec probe would start the runtime binary every second in every Pod.
+	ConnectivityReadinessPort = 14791
+
 	// TCP is... TCP.
 	TCP = "TCP"
 

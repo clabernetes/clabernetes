@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1017,15 +1018,32 @@ func requireRealDirectory(value, description string) error {
 	return nil
 }
 
+// runtimeManagement presents the controller-allocated management identity as the containerlab
+// management network an imported package expects: the gateways, and the subnets the addresses
+// belong to. Kinds derive environment from the subnets (vrnetlab-based kinds generate their
+// BOF static routes from DOCKER_NET_V4_ADDR/DOCKER_NET_V6_ADDR and fail to boot without them).
 func runtimeManagement(input *ManagementInput) *clabtypes.MgmtNet {
 	if input == nil {
 		return &clabtypes.MgmtNet{}
 	}
 
 	return &clabtypes.MgmtNet{
-		IPv4Gw: input.IPv4Gateway,
-		IPv6Gw: input.IPv6Gateway,
+		IPv4Subnet: managementSubnet(input.IPv4),
+		IPv4Gw:     input.IPv4Gateway,
+		IPv6Subnet: managementSubnet(input.IPv6),
+		IPv6Gw:     input.IPv6Gateway,
 	}
+}
+
+// managementSubnet returns the masked prefix of a management address in CIDR form, or "" when
+// the address is absent or carries no prefix.
+func managementSubnet(address string) string {
+	prefix, err := netip.ParsePrefix(address)
+	if err != nil {
+		return ""
+	}
+
+	return prefix.Masked().String()
 }
 
 func mountedTargetCertificateInfrastructure(

@@ -5,6 +5,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"math/rand/v2"
 	"reflect"
 	"time"
 
@@ -155,11 +156,36 @@ func (c *Controller) Reconcile(
 	// Direct pipelines park between worker Pod phases and revalidate referenced payload
 	// objects on every pass, so a periodic pass is both the stall watchdog for a dropped
 	// Pod event and the backstop for payload edits the watches cannot see.
-	return ctrlruntime.Result{RequeueAfter: directRequeueInterval}, nil
+	return ctrlruntime.Result{RequeueAfter: directRequeueAfter(node)}, nil
 }
 
-// directRequeueInterval paces the direct-mode watchdog pass.
-const directRequeueInterval = 60 * time.Second
+const (
+	// directRequeueInterval paces the direct-mode watchdog pass while a Node is still
+	// converging: parked between worker Pod phases, booting, or not ready.
+	directRequeueInterval = 60 * time.Second
+	// directSteadyRequeueInterval paces the watchdog pass once the Node's runtime is ready.
+	// The pass then only backstops a dropped Pod event and edits of referenced payload
+	// objects the watches cannot see, while its uncached reads of the Node, its probe and
+	// entropy Secrets, and its plan ConfigMaps are the manager's dominant cost at rest,
+	// linear in the number of Nodes; at a minute per Node that is one pass per second per
+	// sixty Nodes.
+	directSteadyRequeueInterval = 5 * time.Minute
+	// directSteadyRequeueJitter spreads the steady passes of Nodes that became ready together
+	// (a deploy wave, a runtime rollout) so they do not keep hitting the API server in step.
+	directSteadyRequeueJitter = time.Minute
+)
+
+// directRequeueAfter picks the watchdog pace for the Node's current readiness.
+func directRequeueAfter(node *clabernetesapisv1alpha1.Node) time.Duration {
+	if node == nil || node.Status.Readiness != clabernetesconstants.NodeStatusReady {
+		return directRequeueInterval
+	}
+
+	//nolint:gosec // scheduling jitter, not a security boundary.
+	jitter := time.Duration(rand.Int64N(int64(directSteadyRequeueJitter)))
+
+	return directSteadyRequeueInterval - directSteadyRequeueJitter/2 + jitter
+}
 
 // Reconcile reconciles a single Node through the direct device runtime.
 func (r *Reconciler) Reconcile(

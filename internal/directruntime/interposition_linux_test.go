@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -97,7 +98,7 @@ func assertMeshPeerReconciliation(t *testing.T, spec InterpositionSpec) {
 		{ManagementIPv4: "172.80.80.99", PodAddress: spec.PodAddress},
 	}
 
-	if err = ensureMeshPeers(spec, vtep, pod, own); err != nil {
+	if err = ensureMeshPeers(spec, vtep, pod, own, false); err != nil {
 		t.Fatalf("ensureMeshPeers() install pass: %v", err)
 	}
 
@@ -126,7 +127,7 @@ func assertMeshPeerReconciliation(t *testing.T, spec InterpositionSpec) {
 	// Peer 12 moves to another Pod, peer 13 departs.
 	spec.MeshPeers = []MeshPeer{{ManagementIPv4: "172.80.80.12", PodAddress: "10.244.3.2"}}
 
-	if err = ensureMeshPeers(spec, vtep, pod, own); err != nil {
+	if err = ensureMeshPeers(spec, vtep, pod, own, false); err != nil {
 		t.Fatalf("ensureMeshPeers() relocate pass: %v", err)
 	}
 
@@ -136,7 +137,7 @@ func assertMeshPeerReconciliation(t *testing.T, spec InterpositionSpec) {
 		map[string]string{"172.80.80.12": "06:c9:ac:50:50:0c"})
 
 	// An unchanged pass is a no-op.
-	if err = ensureMeshPeers(spec, vtep, pod, own); err != nil {
+	if err = ensureMeshPeers(spec, vtep, pod, own, false); err != nil {
 		t.Fatalf("ensureMeshPeers() steady pass: %v", err)
 	}
 
@@ -406,20 +407,136 @@ func testEnsureInterpositionConverges(t *testing.T) {
 			t.Fatalf("%s: transport rules missing: %+v", step, rules)
 		}
 
-		// The management rule must cover exactly the local device address: a subnet-wide rule
-		// would pull peer management traffic into the router leg instead of the mesh.
-		haveLocalManagementRule := false
+		// The device leg still carries the management address here (a single-namespace
+		// device), so inbound traffic from the mesh and from the transport selects the
+		// transport table through ingress-scoped rules ahead of the re-homed local lookup and
+		// crosses the pair onto the device leg, while nothing catches locally originated or
+		// device-leg traffic. The kernel's priority-0 local lookup is gone.
+		ingressRules := map[string]bool{}
+		localPriorities := map[int]bool{}
 
 		for _, rule := range rules {
 			if rule.Table == interpositionTransportTable &&
-				rule.Priority == interpositionManagementRulePriority &&
-				rule.Dst != nil && rule.Dst.String() == "172.80.80.11/32" {
-				haveLocalManagementRule = true
+				rule.Priority == interpositionManagementRulePriority {
+				t.Fatalf("%s: unscoped own-address rule for a kernel-held address: %+v", step, rule)
+			}
+
+			if rule.Table == interpositionTransportTable &&
+				rule.Priority == interpositionIngressRulePriority {
+				if rule.Dst == nil || rule.Dst.String() != "172.80.80.11/32" {
+					t.Fatalf("%s: ingress rule is not scoped to the address: %+v", step, rule)
+				}
+
+				ingressRules[rule.IifName] = true
+			}
+
+			if rule.Table == unix.RT_TABLE_LOCAL {
+				localPriorities[rule.Priority] = true
 			}
 		}
 
-		if !haveLocalManagementRule {
-			t.Fatalf("%s: management rule is not scoped to the local device address", step)
+		if !ingressRules[MeshVTEPName] || !ingressRules[TransportInterfaceName] ||
+			len(ingressRules) != 2 {
+			t.Fatalf("%s: ingress rules for a kernel-held address = %v", step, ingressRules)
+		}
+
+		if !localPriorities[interpositionLocalRulePriority] || localPriorities[0] {
+			t.Fatalf("%s: local lookup priorities = %v, want re-homed only", step, localPriorities)
+		}
+
+		// A kernel-held address hairpins gateway-bound replies across the pair: the gateway,
+		// which every inbound translated flow carries as its client, resolves through the
+		// device leg unless the packet entered on the router leg, where it is local.
+		hairpinRules := map[int]string{}
+
+		for _, rule := range rules {
+			if rule.Dst == nil || rule.Dst.String() != "172.80.80.1/32" {
+				continue
+			}
+
+			if (rule.Priority == interpositionGatewayReturnRulePriority &&
+				rule.Table == unix.RT_TABLE_LOCAL) ||
+				(rule.Priority == interpositionGatewayHairpinRulePriority &&
+					rule.Table == interpositionTransportTable) {
+				hairpinRules[rule.Priority] = rule.IifName
+			}
+		}
+
+		if returnIif, ok := hairpinRules[interpositionGatewayReturnRulePriority]; !ok ||
+			returnIif != RouterInterfaceName {
+			t.Fatalf("%s: gateway return rule = %v, want the router leg to local", step,
+				hairpinRules)
+		}
+
+		if hairpinIif, ok := hairpinRules[interpositionGatewayHairpinRulePriority]; !ok ||
+			hairpinIif != "" {
+			t.Fatalf("%s: gateway hairpin rule = %v, want unscoped to the transport table", step,
+				hairpinRules)
+		}
+
+		hairpinDecision, hairpinErr := netlink.RouteGetWithOptions(
+			net.ParseIP("172.80.80.1"),
+			&netlink.RouteGetOptions{SrcAddr: net.ParseIP("172.80.80.11")},
+		)
+		if hairpinErr != nil || len(hairpinDecision) == 0 ||
+			hairpinDecision[0].Type == unix.RTN_LOCAL ||
+			hairpinDecision[0].LinkIndex != device.Attrs().Index {
+			t.Fatalf("%s: a reply to the gateway resolves to %+v (%v), want the device leg",
+				step, hairpinDecision, hairpinErr)
+		}
+
+		returnDecision, returnErr := netlink.RouteGetWithOptions(
+			net.ParseIP("172.80.80.1"),
+			&netlink.RouteGetOptions{
+				Iif:     RouterInterfaceName,
+				SrcAddr: net.ParseIP("172.80.80.12"),
+			},
+		)
+		if returnErr != nil || len(returnDecision) == 0 ||
+			returnDecision[0].Type != unix.RTN_LOCAL {
+			t.Fatalf("%s: gateway-bound traffic entering on the router leg resolves to %+v (%v), "+
+				"want local delivery", step, returnDecision, returnErr)
+		}
+
+		routerLink, _ := netlink.LinkByName(RouterInterfaceName)
+
+		decision, decisionErr := netlink.RouteGetWithOptions(
+			net.ParseIP("172.80.80.11"),
+			&netlink.RouteGetOptions{Iif: MeshVTEPName, SrcAddr: net.ParseIP("172.80.80.12")},
+		)
+		if decisionErr != nil || len(decision) == 0 ||
+			decision[0].LinkIndex != routerLink.Attrs().Index {
+			t.Fatalf("%s: mesh-delivered traffic to the kernel-held address resolves to %+v (%v), "+
+				"want the router leg toward the device leg", step, decision, decisionErr)
+		}
+
+		if readSysctl(t, "/proc/sys/net/ipv4/conf/eth0/accept_local") != "1" ||
+			readSysctl(t, "/proc/sys/net/ipv4/conf/eth0/forwarding") != "1" {
+			t.Fatalf("%s: device leg does not accept the local gateway source or forward", step)
+		}
+
+		for _, rule := range rules {
+			if rule.Priority == interpositionDeviceLegRulePriority {
+				t.Fatalf(
+					"%s: device-leg blackhole present for a kernel-held address: %+v",
+					step,
+					rule,
+				)
+			}
+		}
+
+		// The router leg holds the gateway without a prefix route: a main-table connected route
+		// via it would compete with the device leg's own and strand single-namespace replies.
+		mainRoutes, _ := netlink.RouteListFiltered(
+			netlink.FAMILY_V4,
+			&netlink.Route{Table: unix.RT_TABLE_MAIN},
+			netlink.RT_FILTER_TABLE,
+		)
+		for _, route := range mainRoutes {
+			if route.LinkIndex == router.Attrs().Index && route.Dst != nil &&
+				route.Dst.String() == "172.80.80.0/24" {
+				t.Fatalf("%s: main table carries the management prefix via the router leg", step)
+			}
 		}
 
 		// The bridged shape is gone: no bridge, no gateway pair.
@@ -437,12 +554,14 @@ func testEnsureInterpositionConverges(t *testing.T) {
 			t.Fatalf("%s: mesh VTEP does not conform: %+v", step, vtepLink)
 		}
 
-		// The router leg proxies ARP for peers with no delay; the VTEP never answers.
+		// The router leg proxies ARP for peers with no delay; the VTEP never answers; early
+		// demux stays off so the routing decision governs every kernel-held delivery.
 		if readSysctl(t, "/proc/sys/net/ipv4/conf/"+RouterInterfaceName+"/proxy_arp") != "1" ||
 			readSysctl(t, "/proc/sys/net/ipv4/neigh/"+RouterInterfaceName+"/proxy_delay") != "0" ||
 			readSysctl(t, "/proc/sys/net/ipv4/conf/"+MeshVTEPName+"/arp_ignore") != "1" ||
-			readSysctl(t, "/proc/sys/net/ipv6/conf/"+MeshVTEPName+"/disable_ipv6") != "1" {
-			t.Fatalf("%s: router leg proxy ARP or VTEP scoping sysctls are not set", step)
+			readSysctl(t, "/proc/sys/net/ipv4/ip_early_demux") != "0" {
+			t.Fatalf("%s: router leg proxy ARP, VTEP scoping, or early demux sysctls are not set",
+				step)
 		}
 
 		// The fake CNI underlay is 1500; every mesh element must carry underlay minus
@@ -467,6 +586,11 @@ func testEnsureInterpositionConverges(t *testing.T) {
 	}
 
 	assertInterposedState("cold pass")
+
+	// Without an IPv6 management identity the VTEP never sources IPv6 onto the mesh.
+	if readSysctl(t, "/proc/sys/net/ipv6/conf/"+MeshVTEPName+"/disable_ipv6") != "1" {
+		t.Fatal("cold pass: VTEP keeps IPv6 enabled without an IPv6 management identity")
+	}
 
 	assertReversePathFiltersCleared(t)
 
@@ -514,6 +638,197 @@ func testEnsureInterpositionConverges(t *testing.T) {
 	}
 
 	assertInterposedState("re-assertion after device strip")
+
+	// SONiC re-inserts the kernel's local lookup at priority 1001, behind every rule the
+	// sidecar installs. A reply arriving on the tunnel endpoint for the kernel-held address
+	// must still resolve to local delivery, never to the router leg.
+	localRules, _ := netlink.RuleList(netlink.FAMILY_V4)
+	for _, rule := range localRules {
+		if rule.Priority != 0 || rule.Table != unix.RT_TABLE_LOCAL {
+			continue
+		}
+
+		moved := netlink.NewRule()
+		moved.Priority = 1001
+		moved.Table = unix.RT_TABLE_LOCAL
+
+		if err = netlink.RuleAdd(moved); err != nil {
+			t.Fatalf("re-inserting the local rule like SONiC: %v", err)
+		}
+
+		stale := rule
+		if err = netlink.RuleDel(&stale); err != nil {
+			t.Fatalf("removing the priority-0 local rule like SONiC: %v", err)
+		}
+	}
+
+	if err = operations.EnsureInterposition(spec); err != nil {
+		t.Fatalf("EnsureInterposition() with the local rule moved: %v", err)
+	}
+
+	assertInterposedState("local lookup moved like SONiC")
+
+	// Once it re-enters on the device leg, the local lookup still delivers it: no
+	// ingress-scoped rule catches the device leg, so it cannot loop.
+	decision, err := netlink.RouteGetWithOptions(
+		net.ParseIP("172.80.80.11"),
+		&netlink.RouteGetOptions{Iif: "eth0", SrcAddr: net.ParseIP("172.80.80.12")},
+	)
+	if err != nil || len(decision) == 0 || decision[0].Type != unix.RTN_LOCAL {
+		t.Fatalf("device-leg arrival of the kernel-held address resolves to %+v (%v), want local",
+			decision, err)
+	}
+
+	// A device that took the address into its own stack leaves the device leg bare; the
+	// own-address rule then routes hooks and mesh-delivered traffic through the router leg.
+	device, _ := netlink.LinkByName("eth0")
+	bare, _ := netlink.ParseAddr("172.80.80.11/24")
+
+	if err = netlink.AddrDel(device, bare); err != nil {
+		t.Fatalf("stripping the device leg address like a device stack would: %v", err)
+	}
+
+	if err = operations.EnsureInterposition(spec); err != nil {
+		t.Fatalf("EnsureInterposition() with a bare device leg: %v", err)
+	}
+
+	bareOwnRules := map[string]bool{}
+	bareLocalLookups := map[string]bool{}
+	bareBlackhole := false
+
+	bareRules, _ := netlink.RuleList(netlink.FAMILY_V4)
+	for _, rule := range bareRules {
+		if rule.Table == interpositionTransportTable &&
+			rule.Priority == interpositionManagementRulePriority &&
+			rule.Dst != nil && rule.Dst.String() == "172.80.80.11/32" {
+			bareOwnRules[rule.IifName] = true
+		}
+
+		if rule.Priority == interpositionLocalRulePriority && rule.Table == unix.RT_TABLE_LOCAL {
+			bareLocalLookups[rule.IifName] = true
+		}
+	}
+
+	// The device-leg copy of a frame the device's own stack consumed is blackholed instead of
+	// being forwarded back through the router leg. iproute2 renders the action, which the
+	// netlink library does not decode on listing.
+	if shown, showErr := exec.CommandContext( //nolint:gosec // fixed iproute2 invocation.
+		t.Context(),
+		"ip", "rule", "show", "pref", strconv.Itoa(interpositionDeviceLegRulePriority),
+	).CombinedOutput(); showErr == nil && strings.Contains(string(shown), "blackhole") &&
+		strings.Contains(string(shown), "iif eth0") &&
+		strings.Contains(string(shown), "172.80.80.11") {
+		bareBlackhole = true
+	}
+
+	if !bareBlackhole {
+		t.Fatalf("device-leg blackhole rule is missing for a device-held address: %+v", bareRules)
+	}
+
+	if !bareOwnRules[""] || len(bareOwnRules) != 1 {
+		t.Fatalf("own-address rules for a device-held address = %v, want one unscoped rule",
+			bareOwnRules)
+	}
+
+	if !bareLocalLookups[""] {
+		t.Fatalf("re-homed local lookup is missing for a device-held address: %v", bareLocalLookups)
+	}
+
+	// The device's own stack answers the gateway through the pair; the hairpin of the
+	// kernel-held shape (rules and the device-leg host route) is converged away.
+	for _, rule := range bareRules {
+		if rule.Priority == interpositionGatewayReturnRulePriority ||
+			rule.Priority == interpositionGatewayHairpinRulePriority {
+			t.Fatalf("gateway hairpin rule present for a device-held address: %+v", rule)
+		}
+	}
+
+	bareTransportRoutes, _ := netlink.RouteListFiltered(
+		netlink.FAMILY_V4,
+		&netlink.Route{Table: interpositionTransportTable},
+		netlink.RT_FILTER_TABLE,
+	)
+	for _, route := range bareTransportRoutes {
+		if route.Dst != nil && route.Dst.String() == "172.80.80.1/32" {
+			t.Fatalf("gateway hairpin route present for a device-held address: %+v", route)
+		}
+	}
+
+	if err = netlink.AddrAdd(device, bare); err != nil {
+		t.Fatalf("restoring the device leg address: %v", err)
+	}
+
+	// A device that disables IPv6 in the shared namespace (EOS does) must not fail the IPv4
+	// mesh closed over an IPv6 management identity it cannot carry: the pass succeeds and
+	// simply installs no IPv6 state.
+	if err = os.WriteFile(
+		"/proc/sys/net/ipv6/conf/all/disable_ipv6", []byte("1"), 0o600,
+	); err != nil {
+		t.Fatalf("disabling IPv6 like a device would: %v", err)
+	}
+
+	withIPv6 := spec
+	withIPv6.ManagementIPv6 = "3fff:172:80:80::11/64"
+	withIPv6.GatewayIPv6 = "3fff:172:80:80::1"
+	withIPv6.MeshPeers = []MeshPeer{{
+		ManagementIPv4: "172.80.80.21", ManagementIPv6: "3fff:172:80:80::21",
+		PodAddress: "10.244.1.21",
+	}}
+
+	if err = operations.EnsureInterposition(withIPv6); err != nil {
+		t.Fatalf("EnsureInterposition() with IPv6 disabled in the namespace: %v", err)
+	}
+
+	assertInterposedState("IPv6 disabled by the device")
+
+	v6Rules, _ := netlink.RuleList(netlink.FAMILY_V6)
+	for _, rule := range v6Rules {
+		if rule.Table == interpositionTransportTable {
+			t.Fatalf("IPv6 transport rule installed while IPv6 is disabled: %+v", rule)
+		}
+	}
+
+	// SR Linux takes the device leg down, renames it to mgmt0, and brings it back up while it
+	// boots; the kernel refuses to rename an interface that is up. A re-assertion pass between
+	// the down and the rename must therefore leave the leg's administrative state alone, or
+	// the device never gets its management interface.
+	leg, _ := netlink.LinkByName("eth0")
+	if err = netlink.LinkSetDown(leg); err != nil {
+		t.Fatalf("taking the device leg down like SR Linux: %v", err)
+	}
+
+	if err = operations.EnsureInterposition(withIPv6); err != nil {
+		t.Fatalf("EnsureInterposition() with the device leg down: %v", err)
+	}
+
+	leg, _ = netlink.LinkByName("eth0")
+	if leg.Attrs().Flags&net.FlagUp != 0 {
+		t.Fatal("a re-assertion pass brought the device leg back up behind the device")
+	}
+
+	if err = netlink.LinkSetName(leg, "mgmt0"); err != nil {
+		t.Fatalf("renaming the device leg like SR Linux: %v", err)
+	}
+
+	renamed, _ := netlink.LinkByName("mgmt0")
+	if err = netlink.LinkSetUp(renamed); err != nil {
+		t.Fatalf("bringing the renamed leg up like SR Linux: %v", err)
+	}
+
+	if err = operations.EnsureInterposition(withIPv6); err != nil {
+		t.Fatalf("EnsureInterposition() after the device renamed its leg: %v", err)
+	}
+
+	if _, staleErr := netlink.LinkByName("eth0"); staleErr == nil {
+		t.Fatal("a pass recreated the device leg under its old name after the device renamed it")
+	}
+
+	router, _ := netlink.LinkByName(RouterInterfaceName)
+	renamed, _ = netlink.LinkByName("mgmt0")
+	if renamed == nil || router.Attrs().ParentIndex != renamed.Attrs().Index {
+		t.Fatalf("router leg peer index %d, want the renamed device leg %+v",
+			router.Attrs().ParentIndex, renamed)
+	}
 }
 
 // assertReversePathFiltersCleared verifies the interposition cleared the inherited rp_filter

@@ -29,6 +29,37 @@ const (
 	// interpositionTransportTable is the sidecar-owned policy routing table carrying Kubernetes
 	// transport, distinct from the source-specific management tables.
 	interpositionTransportTable = 20_000
+	// interpositionGatewayReturnRulePriority delivers gateway-bound traffic that enters on the
+	// router leg locally, ahead of the hairpin below: the second crossing of a hairpinned reply,
+	// or a device's own exchange with its gateway. Installed with the hairpin only.
+	interpositionGatewayReturnRulePriority = 894
+	// interpositionGatewayHairpinRulePriority sends gateway-bound traffic that did not enter on
+	// the router leg across the synthetic pair (the transport table carries the gateway as a
+	// host route via the device leg) instead of delivering it locally. Every inbound translated
+	// flow carries the gateway as its client identity, and its translation state lives on the
+	// sidecar legs. A single-namespace device that forwards management ports to a nested guest
+	// (vrnetlab) returns the guest's reply to the gateway through the pod kernel's own
+	// forwarding path, where the gateway is a local address: without the hairpin that reply is
+	// delivered locally and never reaches the state that would return it to the client. Only a
+	// kernel-held address installs it; a device with its own stack answers through the pair.
+	interpositionGatewayHairpinRulePriority = 895
+	// interpositionDeviceLegRulePriority blackholes traffic that re-enters on the device leg for a
+	// management address the device holds in its own stack (a raw-socket dataplane that shares
+	// the pod namespace): the device has already consumed the frame, and the kernel copy would
+	// otherwise be forwarded back through the router leg in a loop. It precedes every lookup.
+	interpositionDeviceLegRulePriority = 896
+	// interpositionIngressRulePriority steers traffic that arrives from the mesh tunnel endpoint
+	// or from the Kubernetes transport for a management address the pod kernel itself holds
+	// into the transport table, ahead of local delivery: it then crosses the synthetic pair and
+	// arrives on the device leg, where a shared segment would have delivered it and where a
+	// device's interface-scoped filters and forwarders expect it.
+	interpositionIngressRulePriority = 897
+	// interpositionLocalRulePriority is where the sidecar keeps the local-table lookup. The
+	// kernel installs it at priority 0, which nothing can precede; the sidecar re-homes it here
+	// so only the ingress rule above runs before local delivery, and so a device that moves the
+	// lookup behind its own rules (SONiC re-inserts it at 1001) cannot push gateway-directed or
+	// device-leg traffic into the transport rules.
+	interpositionLocalRulePriority = 898
 	// interpositionRouterRulePriority selects the transport table for device-originated traffic
 	// entering through the router leg.
 	interpositionRouterRulePriority = 900
@@ -37,8 +68,11 @@ const (
 	// Scoping by source keeps a kernel-dataplane device's own data routes in main authoritative.
 	interpositionTransportRulePriority = 901
 	// interpositionManagementRulePriority selects the transport table for traffic to the Pod's
-	// own management address, so application hooks and mesh-delivered peer traffic reach the
-	// device even when a device stripped or rewrote the main table.
+	// own management address when the pod kernel does not hold that address itself (the
+	// device runs its own stack behind the device leg), so application hooks and
+	// mesh-delivered peer traffic reach the device even when a device stripped or rewrote the
+	// main table. For a kernel-held address the local table delivers, and this rule must be
+	// absent: routed back out the router leg the packet would only loop.
 	interpositionManagementRulePriority = 902
 )
 

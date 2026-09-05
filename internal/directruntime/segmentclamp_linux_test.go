@@ -75,33 +75,17 @@ func testMeshSegmentClampProgramsOwnedTable(t *testing.T) {
 
 	const meshMTU = 1430
 
-	if err := ensureMeshSegmentClamp(meshMTU); err != nil {
-		t.Fatalf("programming segment clamp: %v", err)
+	if err := ensureMeshFilterTable(TransportInterfaceName, RouterInterfaceName, meshMTU); err != nil {
+		t.Fatalf("programming mesh filter table: %v", err)
 	}
 
 	// Reconciling twice must be idempotent and leave exactly one table with the same rules.
-	if err := ensureMeshSegmentClamp(meshMTU); err != nil {
-		t.Fatalf("reprogramming segment clamp: %v", err)
+	if err := ensureMeshFilterTable(TransportInterfaceName, RouterInterfaceName, meshMTU); err != nil {
+		t.Fatalf("reprogramming mesh filter table: %v", err)
 	}
 
 	conn := &nftables.Conn{}
-
-	tables, err := conn.ListTablesOfFamily(nftables.TableFamilyINet)
-	if err != nil {
-		t.Fatalf("listing inet tables: %v", err)
-	}
-
-	var owned *nftables.Table
-
-	for _, table := range tables {
-		if table.Name == meshSegmentClampTableName {
-			owned = table
-		}
-	}
-
-	if owned == nil {
-		t.Fatal("owned segment clamp table was not created")
-	}
+	owned := ownedMeshFilterTable(t, conn)
 
 	chains, err := conn.ListChainsOfTableFamily(nftables.TableFamilyINet)
 	if err != nil {
@@ -110,15 +94,26 @@ func testMeshSegmentClampProgramsOwnedTable(t *testing.T) {
 
 	var forward *nftables.Chain
 
+	zoneChains := map[string]*nftables.Chain{}
+
 	for _, chain := range chains {
-		if chain.Table.Name == meshSegmentClampTableName && chain.Name == "forward" {
+		if chain.Table.Name != meshSegmentClampTableName {
+			continue
+		}
+
+		switch chain.Name {
+		case "forward":
 			forward = chain
+		case "zone-prerouting", "zone-output":
+			zoneChains[chain.Name] = chain
 		}
 	}
 
 	if forward == nil {
 		t.Fatal("segment clamp forward chain was not created")
 	}
+
+	assertConntrackZoneChains(t, conn, owned, zoneChains)
 
 	rules, err := conn.GetRules(owned, forward)
 	if err != nil {
@@ -209,16 +204,6 @@ func assertClampRuleUsesGenericIngress(t *testing.T, rule *nftables.Rule) {
 	t.Fatal("clamp rule has no generic ingress interface match")
 }
 
-// TestMeshSegmentClampIsSkippedWithoutAMeshMTU keeps an unknown path size from programming a
-// clamp of zero, which would make every handshake advertise nothing usable.
-func TestMeshSegmentClampIsSkippedWithoutAMeshMTU(t *testing.T) {
-	t.Parallel()
-
-	if err := ensureMeshSegmentClamp(0); err != nil {
-		t.Fatalf("ensureMeshSegmentClamp(0) error = %v, want no programming at all", err)
-	}
-}
-
 func TestUnsupportedMeshSegmentClampErrorsAreOptional(t *testing.T) {
 	t.Parallel()
 
@@ -235,4 +220,67 @@ func TestUnsupportedMeshSegmentClampErrorsAreOptional(t *testing.T) {
 	if isUnsupportedMeshSegmentClampError(unix.EINVAL) {
 		t.Fatal("isUnsupportedMeshSegmentClampError(EINVAL) = true, want false")
 	}
+}
+
+// assertConntrackZoneChains checks that the sidecar legs and locally originated traffic get the
+// sidecar conntrack zone: three ingress rules and one output rule, each setting the zone.
+func assertConntrackZoneChains(
+	t *testing.T,
+	conn *nftables.Conn,
+	owned *nftables.Table,
+	zoneChains map[string]*nftables.Chain,
+) {
+	t.Helper()
+
+	for name, want := range map[string]int{"zone-prerouting": 3, "zone-output": 1} {
+		chain, ok := zoneChains[name]
+		if !ok {
+			t.Fatalf("conntrack zone chain %q was not created", name)
+		}
+
+		zoneRules, zoneErr := conn.GetRules(owned, chain)
+		if zoneErr != nil || len(zoneRules) != want {
+			t.Fatalf("zone chain %q rules = %d (%v), want %d", name, len(zoneRules), zoneErr, want)
+		}
+
+		for _, rule := range zoneRules {
+			setsZone := false
+
+			// The library reads a ct set back without its source-register marker; the key is
+			// what identifies the zone assignment.
+			for _, expression := range rule.Exprs {
+				if ct, isCt := expression.(*expr.Ct); isCt && ct.Key == expr.CtKeyZONE {
+					setsZone = true
+				}
+			}
+
+			if !setsZone {
+				t.Fatalf(
+					"zone chain %q rule does not set the conntrack zone: %+v",
+					name,
+					rule.Exprs,
+				)
+			}
+		}
+	}
+}
+
+// ownedMeshFilterTable finds the sidecar-owned inet table.
+func ownedMeshFilterTable(t *testing.T, conn *nftables.Conn) *nftables.Table {
+	t.Helper()
+
+	tables, err := conn.ListTablesOfFamily(nftables.TableFamilyINet)
+	if err != nil {
+		t.Fatalf("listing inet tables: %v", err)
+	}
+
+	for _, table := range tables {
+		if table.Name == meshSegmentClampTableName {
+			return table
+		}
+	}
+
+	t.Fatal("owned mesh filter table was not created")
+
+	return nil
 }
