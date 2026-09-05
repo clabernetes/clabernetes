@@ -843,8 +843,9 @@ func TestManagementConnectivityAddsPackageSelectedAddressesBeforeReadiness(t *te
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory: state,
-			PodAddress:     "10.244.0.12",
+			StateDirectory:   state,
+			PodAddress:       "10.244.0.12",
+			FilterOperations: &fakeTransportFilterOperations{},
 		},
 		operations,
 		nil,
@@ -896,7 +897,9 @@ func TestManagementConnectivityRejectsPodTransportPrefixOverlapBeforeAddressMuta
 		input,
 		plan,
 		clabernetesinternaldirectruntime.ConnectivityOptions{
-			StateDirectory: t.TempDir(), PodAddress: "10.244.2.180",
+			StateDirectory:   t.TempDir(),
+			PodAddress:       "10.244.2.180",
+			FilterOperations: &fakeTransportFilterOperations{},
 		},
 		operations,
 		nil,
