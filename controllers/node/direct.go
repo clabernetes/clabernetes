@@ -166,14 +166,10 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	podAddresses, err := r.directPodAddressesByNodeUID(ctx, node.GetNamespace())
-	if err != nil {
-		return err
-	}
-	if err = r.reconcileDirectPeerDirectory(
+	if err = r.refreshDirectPeerDirectory(
 		ctx,
 		node.GetNamespace(),
-		compileNamespaceManagementIdentities(nodesByName, profile.Mgmt, podAddresses),
+		profile.Mgmt,
 	); err != nil {
 		return err
 	}

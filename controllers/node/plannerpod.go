@@ -20,6 +20,8 @@ import (
 )
 
 const (
+	plannerManagerBinary    = "/clabernetes/manager"
+	plannerRevisionArgument = "--revision"
 	plannerInputName        = "planner-input"
 	plannerInputKey         = "input.json"
 	plannerInputMountPath   = "/var/run/clabernetes/planner/input"
@@ -169,7 +171,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 		initContainers = append(initContainers, k8scorev1.Container{
 			Name: plannerURLFetcherName, Image: input.Image,
 			ImagePullPolicy: k8scorev1.PullIfNotPresent,
-			Command:         []string{"/clabernetes/manager"},
+			Command:         []string{plannerManagerBinary},
 			Args: []string{
 				"node-payloads",
 				plannerInputArgument, plannerInputMountPath + "/" + plannerInputKey,
@@ -209,7 +211,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 	workerArgs := []string{
 		workerCommand,
 		plannerInputArgument, plannerInputMountPath + "/" + plannerInputKey,
-		"--revision", input.PlannerRevision,
+		plannerRevisionArgument, input.PlannerRevision,
 		plannerMaxInputArgument, strconv.FormatInt(input.MaxInputBytes, 10),
 	}
 	if len(payloadMounts) != 0 {
@@ -224,7 +226,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 		workerArgs = []string{
 			workerCommand,
 			plannerInputArgument, "-",
-			"--revision", input.PlannerRevision,
+			plannerRevisionArgument, input.PlannerRevision,
 			plannerMaxInputArgument, strconv.FormatInt(input.MaxInputBytes, 10),
 			"--session",
 			"--certificates", path.Join(plannerScratchPath, "certificates"),
@@ -338,7 +340,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 				ImagePullPolicy: k8scorev1.PullIfNotPresent,
 				Stdin:           input.Session,
 				StdinOnce:       input.Session,
-				Command:         []string{"/clabernetes/manager"},
+				Command:         []string{plannerManagerBinary},
 				Args:            workerArgs,
 				Env:             []k8scorev1.EnvVar{{Name: "TMPDIR", Value: plannerScratchPath}},
 				SecurityContext: securityContext,

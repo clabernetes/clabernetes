@@ -93,6 +93,8 @@ spec:
               value: info
             - name: NODE_RUNTIME_IMAGE
               value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
+            - name: PLANNER_POOL_ENABLED
+              value: "true"
           resources:
             requests:
               memory: 128Mi
@@ -121,6 +123,8 @@ spec:
               value: info
             - name: NODE_RUNTIME_IMAGE
               value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
+            - name: PLANNER_POOL_ENABLED
+              value: "true"
           resources:
             requests:
               memory: 128Mi

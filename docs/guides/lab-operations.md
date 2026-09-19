@@ -16,7 +16,6 @@ For every Node:
   discovery, and one headless Service per declared alias
 - immutable plan ConfigMaps named `<node>-plan-<digest>`, `<node>-plan-input-<digest>`, and
   `<node>-connectivity-<digest>`, replaced when the plan changes
-- a short-lived planning Pod named `<node>-planner-...` while a new plan is computed
 - a PersistentVolumeClaim named after the Node when persistence is enabled
 
 Per namespace:
@@ -27,6 +26,12 @@ Per namespace:
   Secret per Node that sets `certificate.issue`
 
 Do not edit these objects. The controller owns them and reverts drift.
+
+Planning uses a shared Deployment named `clabernetes-planner-pool` in the manager namespace,
+with four reusable workers by default. New plans run in fresh processes inside those workers;
+unchanged Nodes reuse cached plans. Configure worker count with the Helm value
+`plannerPool.replicas`. With `plannerPool.enabled: false`, each new plan instead uses a
+short-lived `<node>-planner-...` Pod in the lab namespace.
 
 ## Node status
 

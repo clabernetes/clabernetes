@@ -307,7 +307,8 @@ func DecodeSessionResult(raw []byte, maxBytes int) (SessionResult, error) {
 
 // SessionFrameDecoder incrementally extracts protocol frames while ignoring imported stdout.
 type SessionFrameDecoder struct {
-	scanner *bufio.Scanner
+	scanner    *bufio.Scanner
+	diagnostic *Error
 }
 
 // NewSessionFrameDecoder returns a bounded decoder for an attached worker stream.
@@ -321,6 +322,9 @@ func NewSessionFrameDecoder(input io.Reader, maxBytes int) *SessionFrameDecoder 
 	return &SessionFrameDecoder{scanner: scanner}
 }
 
+// Diagnostic returns a structured worker failure encountered before the stream ended.
+func (d *SessionFrameDecoder) Diagnostic() *Error { return d.diagnostic }
+
 // Next returns the next valid prefixed protocol frame.
 func (d *SessionFrameDecoder) Next() (SessionFrame, error) {
 	if d == nil || d.scanner == nil {
@@ -328,6 +332,15 @@ func (d *SessionFrameDecoder) Next() (SessionFrame, error) {
 	}
 	for d.scanner.Scan() {
 		line := d.scanner.Text()
+		if FrameKind([]byte(line)) == WorkerFrameError {
+			diagnostic, err := DecodeWorkerError([]byte(line), defaultMaxSessionBytes)
+			if err != nil {
+				return SessionFrame{}, err
+			}
+			d.diagnostic = diagnostic
+
+			continue
+		}
 		if !strings.HasPrefix(line, sessionFramePrefix) {
 			continue
 		}

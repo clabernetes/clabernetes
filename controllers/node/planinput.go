@@ -20,6 +20,8 @@ const (
 	connectivityWire     = "wire"
 )
 
+const controllerInputBehavior = "controller-input"
+
 // PlanInputCompileRequest contains only resolved API identities and generic planning inputs.
 // Images, payloads, and management allocations are resolved independently so secret bytes never
 // enter this compiler or the resulting planning input.
@@ -275,6 +277,6 @@ func planInputError(
 	message string,
 ) error {
 	return &clabernetesinternaldeviceplan.Error{
-		Code: code, Field: field, Behavior: "controller-input", Message: message,
+		Code: code, Field: field, Behavior: controllerInputBehavior, Message: message,
 	}
 }

@@ -22,6 +22,8 @@ func TestClabverterBasic(t *testing.T) {
 
 	namespace := clabernetestesthelper.NewTestNamespace(testName)
 
+	// The fixture uses cv-host13 so the parallel topology/basic suite can own eth13
+	// on the same Kubernetes worker. Namespaces do not isolate host interfaces.
 	c := clabernetesclabverter.MustNewClabverter(
 		"test-fixtures/basic_clab.yaml",
 		"",

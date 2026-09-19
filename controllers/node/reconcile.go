@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"reflect"
+	"strings"
+	"sync"
 	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -46,8 +48,10 @@ type Reconciler struct {
 	Log    claberneteslogging.Instance
 	Client ctrlruntimeclient.Client
 
-	configManagerGetter clabernetesconfig.ManagerGetterFunc
-	apiReader           ctrlruntimeclient.Reader
+	configManagerGetter  clabernetesconfig.ManagerGetterFunc
+	apiReader            ctrlruntimeclient.Reader
+	peerDirectoryMu      sync.Mutex
+	peerDirectoryWriters map[string]*peerDirectoryWriter
 
 	namespaceResourcesReconciler *NamespaceResourcesReconciler
 
@@ -146,6 +150,9 @@ func (c *Controller) Reconcile(
 	}
 
 	err = c.reconciler.Reconcile(ctx, node)
+	if directDependencyPending(err) {
+		return ctrlruntime.Result{RequeueAfter: plannerPoolRetryDelay}, nil
+	}
 	if err != nil {
 		return ctrlruntime.Result{}, err
 	}
@@ -156,6 +163,25 @@ func (c *Controller) Reconcile(
 	// objects on every pass, so a periodic pass is both the stall watchdog for a dropped
 	// Pod event and the backstop for payload edits the watches cannot see.
 	return ctrlruntime.Result{RequeueAfter: directRequeueAfter(node)}, nil
+}
+
+// Expected convergence waits must not accumulate exponential failure backoff. Keep real
+// validation and identity errors on the error path; only incomplete Link inventory is a wait.
+func directDependencyPending(err error) bool {
+	// Joined errors include a failed diagnostic status update, which must remain visible.
+	if _, joined := err.(interface{ Unwrap() []error }); joined {
+		return false
+	}
+	if stderrors.Is(err, ErrPlannerPoolBusy) || apimachineryerrors.IsConflict(err) ||
+		apimachineryerrors.IsAlreadyExists(err) {
+		return true
+	}
+	var planningErr *clabernetesinternaldeviceplan.Error
+
+	return stderrors.As(err, &planningErr) &&
+		planningErr.Code == clabernetesinternaldeviceplan.ErrorMissingInput &&
+		planningErr.Behavior == controllerInputBehavior &&
+		strings.HasPrefix(planningErr.Field, "links.")
 }
 
 const (
@@ -198,6 +224,9 @@ func (r *Reconciler) Reconcile(
 	err := r.reconcileDirect(ctx, node)
 	if err == nil {
 		return nil
+	}
+	if stderrors.Is(err, ErrPlannerPoolBusy) {
+		return err
 	}
 	if statusErr := r.reportDirectPreflightFailure(ctx, node, err); statusErr != nil {
 		return stderrors.Join(err, statusErr)

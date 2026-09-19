@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	clabernetesclicker "github.com/clabernetes/clabernetes/clicker"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
@@ -92,6 +95,30 @@ func Entrypoint() *cli.App {
 		Commands: []*cli.Command{
 			devicePayloadWorkerCommand(),
 			devicePlanWorkerCommand(),
+			{
+				Name:  "node-plan-pool",
+				Usage: "wait for isolated planner requests through Kubernetes exec",
+				Action: func(c *cli.Context) error {
+					ctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+					defer stop()
+
+					return clabernetesinternaldeviceplan.RunPoolIdle(ctx)
+				},
+			},
+			{
+				Name: "node-plan-pool-exec", Usage: "supervise one isolated planner pool request",
+				Flags: []cli.Flag{&cli.StringFlag{Name: devicePlanRevision, Required: true}},
+				Action: func(c *cli.Context) error {
+					return clabernetesinternaldeviceplan.RunPoolProcess(
+						c.Context,
+						os.Stdin,
+						c.App.Writer,
+						c.App.ErrWriter,
+						c.String(devicePlanRevision),
+						5*time.Minute,
+					)
+				},
+			},
 			deviceRuntimeCommand(),
 			{
 				Name:  "run",

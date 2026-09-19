@@ -4,23 +4,75 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sync"
 
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	clientretry "k8s.io/client-go/util/retry"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type peerDirectoryWriter struct {
+	mu    sync.Mutex
+	users int
+}
+
+// Serialize each namespace's snapshot and writes together. Taking a snapshot before waiting
+// for the writer would allow an older Pod-address snapshot to overwrite a newer one.
+func (r *Reconciler) refreshDirectPeerDirectory(
+	ctx context.Context,
+	namespace string,
+	management *clabernetesapisv1alpha1.ManagementPolicy,
+) error {
+	r.peerDirectoryMu.Lock()
+	if r.peerDirectoryWriters == nil {
+		r.peerDirectoryWriters = map[string]*peerDirectoryWriter{}
+	}
+	writer := r.peerDirectoryWriters[namespace]
+	if writer == nil {
+		writer = &peerDirectoryWriter{}
+		r.peerDirectoryWriters[namespace] = writer
+	}
+	writer.users++
+	r.peerDirectoryMu.Unlock()
+	writer.mu.Lock()
+	defer func() {
+		writer.mu.Unlock()
+		r.peerDirectoryMu.Lock()
+		defer r.peerDirectoryMu.Unlock()
+		writer.users--
+		if writer.users == 0 {
+			delete(r.peerDirectoryWriters, namespace)
+		}
+	}()
+
+	nodes := &clabernetesapisv1alpha1.NodeList{}
+	if err := r.Client.List(ctx, nodes, ctrlruntimeclient.InNamespace(namespace)); err != nil {
+		return fmt.Errorf("listing peer directory Nodes: %w", err)
+	}
+	addresses, err := r.directPodAddressesByNodeUID(ctx, namespace)
+	if err != nil {
+		return err
+	}
+
+	return r.reconcileDirectPeerDirectory(ctx, namespace, compileNamespaceManagementIdentities(
+		clabernetesutilcontainerlab.NodesByName(nodes.Items), management, addresses,
+	))
+}
 
 // reconcileDirectPeerDirectory maintains the namespace-scoped peer directory shards every
 // device Pod mounts. Content changes reach running Pods through the kubelet's ConfigMap sync,
 // so lab membership and Pod placement changes propagate without touching any Deployment — which
 // would recreate its Pod. The directory is deterministic over the namespace node set and Pod
-// placement, so concurrent reconciles of different primaries converge on identical bytes, and
+// placement, so reconciles of different primaries converge on identical bytes, and
 // only the shards whose bytes changed are written. The single ConfigMap of the pre-sharding
 // shape is removed.
 func (r *Reconciler) reconcileDirectPeerDirectory(
@@ -67,48 +119,47 @@ func (r *Reconciler) reconcileDirectPeerDirectoryShard(
 	ctx context.Context,
 	rendered *k8scorev1.ConfigMap,
 ) error {
-	existing := &k8scorev1.ConfigMap{}
+	reader := ctrlruntimeclient.Reader(r.Client)
 
-	err := r.Client.Get(
-		ctx,
-		apimachinerytypes.NamespacedName{
-			Namespace: rendered.GetNamespace(),
-			Name:      rendered.GetName(),
-		},
-		existing,
-	)
-	if apimachineryerrors.IsNotFound(err) {
-		if err = r.Client.Create(ctx, rendered); err != nil {
-			return fmt.Errorf("creating peer directory ConfigMap: %w", err)
+	return clientretry.OnError(clientretry.DefaultRetry, func(err error) bool {
+		return apimachineryerrors.IsConflict(err) || apimachineryerrors.IsAlreadyExists(err)
+	}, func() error {
+		// The first read can use the cache for the common unchanged case. A conflicting
+		// write must retry against the API server rather than the same stale cache entry.
+		currentReader := reader
+		if r.apiReader != nil {
+			reader = r.apiReader
+		}
+		existing := &k8scorev1.ConfigMap{}
+		err := currentReader.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(rendered), existing)
+		if apimachineryerrors.IsNotFound(err) {
+			if err = r.Client.Create(ctx, rendered.DeepCopy()); err != nil {
+				return fmt.Errorf("creating peer directory ConfigMap: %w", err)
+			}
+
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("reading peer directory ConfigMap: %w", err)
+		}
+		if existing.Data[clabernetesinternaldirectruntime.PeerDirectoryConfigMapKey] ==
+			rendered.Data[clabernetesinternaldirectruntime.PeerDirectoryConfigMapKey] &&
+			clabernetesutilkubernetes.ExistingMapStringStringContainsAllExpectedKeyValues(
+				existing.Labels, rendered.Labels,
+			) {
+			return nil
+		}
+		existing.Data = rendered.Data
+		if existing.Labels == nil {
+			existing.Labels = map[string]string{}
+		}
+		maps.Copy(existing.Labels, rendered.Labels)
+		if err = r.Client.Update(ctx, existing); err != nil {
+			return fmt.Errorf("updating peer directory ConfigMap: %w", err)
 		}
 
 		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("reading peer directory ConfigMap: %w", err)
-	}
-
-	if existing.Data[clabernetesinternaldirectruntime.PeerDirectoryConfigMapKey] ==
-		rendered.Data[clabernetesinternaldirectruntime.PeerDirectoryConfigMapKey] &&
-		clabernetesutilkubernetes.ExistingMapStringStringContainsAllExpectedKeyValues(
-			existing.Labels, rendered.Labels,
-		) {
-		return nil
-	}
-
-	existing.Data = rendered.Data
-	if existing.Labels == nil {
-		existing.Labels = map[string]string{}
-	}
-
-	maps.Copy(existing.Labels, rendered.Labels)
-
-	if err = r.Client.Update(ctx, existing); err != nil {
-		return fmt.Errorf("updating peer directory ConfigMap: %w", err)
-	}
-
-	return nil
+	})
 }
 
 // removeLegacyDirectPeerDirectory deletes the single directory ConfigMap of the pre-sharding

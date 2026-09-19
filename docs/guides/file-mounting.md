@@ -205,10 +205,12 @@ change to the accepted plan. Compute it with `sha256sum <file>`.
 - Must be a direct file download (not HTML page)
 - GitHub: Use "raw" URLs
 - Must be an absolute HTTP(S) URL without embedded credentials
-- Must be a publicly resolvable endpoint: the fetch runs from the planning worker and again from
+- Must be a publicly resolvable endpoint: the fetch runs from the controller (or the planning
+  worker when the reusable pool is disabled) and again from
   the preparation init container, and hosts that resolve to private, loopback, or otherwise
   non-public addresses are rejected
 - Downloads are capped at 64 MB
+- The reusable planner pool also limits all transferred payloads together to 64 MiB per request
 
 **Good URLs:**
 

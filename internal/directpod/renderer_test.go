@@ -395,13 +395,13 @@ func TestRenderCreatesDirectApplicationContainersFromGenericPlan(t *testing.T) {
 		t.Fatalf("connectivity Pod UID ownership input = %#v", connectivity)
 	}
 
-	// Both sidecar probes are HTTP probes against the sidecar's readiness endpoint on the Pod
-	// address: an exec probe would start the runtime binary every second in every Pod.
-	for _, probe := range []*k8scorev1.Probe{
-		connectivity.StartupProbe, connectivity.ReadinessProbe,
+	// Startup gates local setup; readiness additionally gates remote peer convergence.
+	for expectedPath, probe := range map[string]*k8scorev1.Probe{
+		clabernetesinternaldirectruntime.ConnectivityStartupPath:   connectivity.StartupProbe,
+		clabernetesinternaldirectruntime.ConnectivityReadinessPath: connectivity.ReadinessProbe,
 	} {
 		if probe == nil || probe.Exec != nil || probe.HTTPGet == nil ||
-			probe.HTTPGet.Path != clabernetesinternaldirectruntime.ConnectivityReadinessPath ||
+			probe.HTTPGet.Path != expectedPath ||
 			probe.HTTPGet.Port.IntValue() != clabernetesconstants.ConnectivityReadinessPort {
 			t.Fatalf("connectivity readiness probes = %#v", connectivity)
 		}

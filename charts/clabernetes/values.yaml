@@ -53,6 +53,20 @@ manager:
   restrictedRBAC:
     enabled: false
     targetNamespaces: []
+
+# Reusable, network-isolated workers. Each request runs in a fresh process and private scratch.
+# Disable to use the disposable per-node planner Pods during rollout or troubleshooting.
+plannerPool:
+  enabled: true
+  replicas: 4
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
 #
 # global config
 #

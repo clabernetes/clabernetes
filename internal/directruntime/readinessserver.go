@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
@@ -14,6 +15,8 @@ import (
 )
 
 const (
+	// ConnectivityStartupPath reports completion of local initialization, independently of peers.
+	ConnectivityStartupPath = "/startupz"
 	// ConnectivityReadinessPath is the HTTP path the kubelet probes for connectivity readiness.
 	ConnectivityReadinessPath = "/readyz"
 	// connectivityReadinessHeaderTimeout bounds a probe request header.
@@ -21,12 +24,13 @@ const (
 )
 
 // connectivityReadinessServer answers the kubelet's startup and readiness probes over HTTP on
-// the Pod address. The answer is the same readiness evaluation the connectivity-ready command
-// performs; serving it from the running sidecar spares the node one runtime-binary exec per
+// the Pod address. Startup reports local initialization; readiness additionally checks the
+// plan and revision markers. Serving probes here spares the node one runtime-binary exec per
 // second per Pod, which is what bounded device Pod density before.
 type connectivityReadinessServer struct {
-	listener net.Listener
-	server   *http.Server
+	listener    net.Listener
+	server      *http.Server
+	initialized atomic.Bool
 }
 
 // startConnectivityReadinessServer binds the readiness endpoint on the Pod address; without a
@@ -59,37 +63,10 @@ func startConnectivityReadinessServer(
 		return nil
 	}
 
-	handler := http.NewServeMux()
-	handler.HandleFunc(
-		ConnectivityReadinessPath,
-		func(writer http.ResponseWriter, request *http.Request) {
-			if request.Method != http.MethodGet {
-				http.Error(writer, "method is not allowed", http.StatusMethodNotAllowed)
-
-				return
-			}
-
-			if err := ConnectivityReadyWithRevision(
-				plan,
-				options.StateDirectory,
-				options.ConnectivityRevisionPath,
-			); err != nil {
-				http.Error(writer, err.Error(), http.StatusServiceUnavailable)
-
-				return
-			}
-
-			writer.WriteHeader(http.StatusOK)
-			_, _ = writer.Write([]byte("ok\n"))
-		},
-	)
-
-	ready := &connectivityReadinessServer{
-		listener: listener,
-		server: &http.Server{
-			Handler:           handler,
-			ReadHeaderTimeout: connectivityReadinessHeaderTimeout,
-		},
+	ready := &connectivityReadinessServer{listener: listener}
+	ready.server = &http.Server{
+		Handler:           ready.handler(plan, options),
+		ReadHeaderTimeout: connectivityReadinessHeaderTimeout,
 	}
 
 	go func() {
@@ -111,4 +88,49 @@ func (s *connectivityReadinessServer) Close() error {
 	}
 
 	return err
+}
+
+// markInitialized opens the startup gate only after local interfaces and package fixups
+// exist. An absent remote peer must keep readiness closed without restarting this helper.
+func (s *connectivityReadinessServer) markInitialized() {
+	if s != nil {
+		s.initialized.Store(true)
+	}
+}
+
+func (s *connectivityReadinessServer) handler(
+	plan clabernetesinternaldeviceplan.Plan,
+	options ConnectivityOptions,
+) http.Handler {
+	mux := http.NewServeMux()
+	for _, endpoint := range []string{ConnectivityStartupPath, ConnectivityReadinessPath} {
+		mux.HandleFunc(endpoint, func(writer http.ResponseWriter, request *http.Request) {
+			if request.Method != http.MethodGet {
+				http.Error(writer, "method is not allowed", http.StatusMethodNotAllowed)
+
+				return
+			}
+			if !s.initialized.Load() {
+				http.Error(
+					writer,
+					"local initialization is incomplete",
+					http.StatusServiceUnavailable,
+				)
+
+				return
+			}
+			if endpoint == ConnectivityReadinessPath {
+				if err := ConnectivityReadyWithRevision(plan, options.StateDirectory,
+					options.ConnectivityRevisionPath); err != nil {
+					http.Error(writer, err.Error(), http.StatusServiceUnavailable)
+
+					return
+				}
+			}
+			writer.WriteHeader(http.StatusOK)
+			_, _ = writer.Write([]byte("ok\n"))
+		})
+	}
+
+	return mux
 }

@@ -91,9 +91,10 @@ resources are emitted.
 ### Planning
 
 Imported containerlab code mixes intent with side effects, so kind hooks never run inside the
-long-running manager. The node controller instead launches a short-lived, locked-down and
-deadline-bounded **planning Pod** per plan input. The controller first resolves metadata for each
-logical Node's declared image, then attaches a private request/response stream to the worker.
+long-running manager. By default, a **pool of four planning Pods** runs in the manager namespace.
+Each worker handles one request at a time in a fresh, deadline-bounded subprocess with a private
+workspace. The controller first resolves metadata for each logical Node's declared image, then
+opens a private request/response stream through Kubernetes exec to an available worker.
 Inside it, the imported registry
 and node hooks run against a generic recording runtime and a disposable workspace: container
 creation, files, mounts, lifecycle, exec, namespace, and interface operations are *recorded*
@@ -111,10 +112,24 @@ attempt instead of driving normal startup. The kubelet performs
 the only real image pull, and readiness fails on a material digest mismatch between the planned
 image and the kubelet-reported `imageID`.
 
-The ordinary path is therefore: resolve declared-image metadata, run one planner Pod, then create
+The ordinary path is therefore: resolve declared-image metadata, use an existing worker, then create
 the device Pod. There are no separate image-discovery Pods. Accepted finalized inputs and plans
 are stored in immutable, digest-named, owner-referenced ConfigMaps that contain no secret bytes,
-so unchanged Nodes skip the planner Pod; payloads and certificates ride as referenced objects.
+so unchanged Nodes skip planning. Different Nodes keep separate plans even when their kind and
+image match: names, addresses, links, payloads, certificates, and entropy remain request-specific.
+Private payloads and entropy travel over the exec stream, and each request's workspace is removed
+before the worker is reused. Imported Go state is discarded with the subprocess. A kernel lock
+prevents overlapping requests, including across manager restarts. Each execution has a five-minute
+maximum lifetime; failed executions can be retried without retaining partial plans.
+
+Set `plannerPool.replicas` in the Helm values to change parallel planning capacity. Excess requests
+wait in controller reconciliation without creating more Pods. The Node controller currently permits
+16 concurrent reconciles, so replicas above 16 cannot increase concurrent planning without also
+raising that controller limit and validating the added load. Transferred payloads are limited to
+64 MiB in total per request. Set `plannerPool.enabled: false` to use the original disposable
+planning Pod path, including when larger aggregate payloads are required. The device Pod's
+`planner` preparation init container remains necessary in either mode.
+
 Each cold plan owns one
 bounded mutable connectivity-revision ConfigMap so live-capable Link changes update interfaces
 without rolling the Pod.
@@ -129,8 +144,10 @@ Each rendered Pod runs, in order:
    with the runtime-completed management identity, so package templates emit the real
    management address, prefix, and gateway;
 2. a **restartable privileged connectivity init-sidecar** whose startup probe gates device
-   start until the accepted cold-start interface set exists. It stays running to reconcile
-   live Link changes, invoke imported endpoint hooks, and publish connectivity readiness; and
+   start until local initialization, the accepted cold-start interface set, and imported endpoint
+   hooks are complete. Missing remote peers keep its readiness probe failing without restarting
+   the helper or blocking application startup. It stays running to reconcile live Link changes
+   and publish connectivity readiness; and
 3. one **regular application container** per grouped logical Node or planned chassis component,
    running the unmodified device image. Kubernetes-native image pull policy, pull Secrets,
    environment, users, ports, resources, devices, capabilities, privilege, seccomp/AppArmor,

@@ -2508,6 +2508,10 @@ func renderHelpers(
 	}
 	// The sidecar answers its probes over HTTP on the Pod address: an exec probe would start the
 	// runtime binary every second in every Pod, which is what bounded Pod density on a worker.
+	connectivityStartupHandler := k8scorev1.ProbeHandler{HTTPGet: &k8scorev1.HTTPGetAction{
+		Path: clabernetesinternaldirectruntime.ConnectivityStartupPath,
+		Port: intstr.FromInt32(clabernetesconstants.ConnectivityReadinessPort),
+	}}
 	connectivityReadyHandler := k8scorev1.ProbeHandler{HTTPGet: &k8scorev1.HTTPGetAction{
 		Path: clabernetesinternaldirectruntime.ConnectivityReadinessPath,
 		Port: intstr.FromInt32(clabernetesconstants.ConnectivityReadinessPort),
@@ -2660,7 +2664,7 @@ func renderHelpers(
 				Privileged: &trueValue, RunAsUser: &rootUser,
 			},
 			StartupProbe: &k8scorev1.Probe{
-				ProbeHandler:  connectivityReadyHandler,
+				ProbeHandler:  connectivityStartupHandler,
 				PeriodSeconds: 1, TimeoutSeconds: 1,
 				SuccessThreshold: 1, FailureThreshold: 300,
 			},

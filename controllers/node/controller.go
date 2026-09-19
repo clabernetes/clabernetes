@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 
 	clabernetesapis "github.com/clabernetes/clabernetes/apis"
@@ -88,7 +89,7 @@ func NewController(
 	})
 	reconciler.PlannerReconciler.ReadLogs = readLogs
 
-	return &Controller{
+	controller := &Controller{
 		BaseController: baseController,
 		reconciler:     reconciler,
 		session: &PlannerSessionReconciler{
@@ -103,6 +104,59 @@ func NewController(
 			ConfigManagerGetter: clabernetesconfig.GetManager,
 			Platform:            reconciler.DirectPlatform,
 		},
+	}
+	if os.Getenv("PLANNER_POOL_ENABLED") == "true" {
+		reconciler.PlannerReconciler.Pool = &PlannerPool{
+			Client: baseController.Client, Reader: clabernetes.GetCtrlRuntimeMgr().GetAPIReader(),
+			Namespace: clabernetes.GetNamespace(), AppName: clabernetes.GetAppName(),
+			Image: reconciler.DirectRuntimeImage, Sessions: controller.session,
+			Execute: newPlannerPoolExecutor(
+				clabernetes.GetKubeConfig(),
+				clabernetes.GetKubeClient(),
+			),
+		}
+	}
+
+	return controller
+}
+
+func newPlannerPoolExecutor(
+	config *clientgorest.Config,
+	client *kubernetes.Clientset,
+) PlannerSessionAttacher {
+	return func(
+		ctx context.Context, namespace, podName, containerName string,
+		input io.Reader, output, stderr io.Writer,
+	) error {
+		request := client.CoreV1().
+			RESTClient().
+			Post().
+			Namespace(namespace).
+			Resource("pods").
+			Name(podName).
+			SubResource("exec").
+			VersionedParams(&k8scorev1.PodExecOptions{
+				Container: containerName, Stdin: true, Stdout: true, Stderr: true,
+				Command: []string{
+					plannerManagerBinary,
+					"node-plan-pool-exec",
+					plannerRevisionArgument,
+					clabernetesconstants.Version,
+				},
+			}, clientgoscheme.ParameterCodec)
+		executor, err := clientgoremotecommand.NewSPDYExecutor(
+			config,
+			http.MethodPost,
+			request.URL(),
+		)
+		if err != nil {
+			return err
+		}
+
+		return executor.StreamWithContext(
+			ctx,
+			clientgoremotecommand.StreamOptions{Stdin: input, Stdout: output, Stderr: stderr},
+		)
 	}
 }
 
@@ -224,6 +278,10 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 	if c.session == nil {
 		return errors.New("planner session reconciler is required")
 	}
+	nodeConcurrency := 1
+	if c.reconciler.PlannerReconciler.Pool != nil {
+		nodeConcurrency = defaultPlannerSessionConcurrency
+	}
 	if err = ctrlruntime.NewControllerManagedBy(mgr).
 		Named("clabernetes-planner-session").
 		WithOptions(ctrlruntimecontroller.Options{
@@ -242,7 +300,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 	return ctrlruntime.NewControllerManagedBy(mgr).
 		WithOptions(
 			ctrlruntimecontroller.Options{
-				MaxConcurrentReconciles: 1,
+				MaxConcurrentReconciles: nodeConcurrency,
 			},
 		).
 		For(&clabernetesapisv1alpha1.Node{}).

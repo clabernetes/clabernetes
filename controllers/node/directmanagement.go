@@ -526,7 +526,7 @@ func directNodeManagementError(
 	return &clabernetesinternaldeviceplan.Error{
 		Code: clabernetesinternaldeviceplan.ErrorInvalidInput, NodeID: string(node.GetUID()),
 		Field:    "nodes." + node.GetName() + ".spec." + field,
-		Behavior: "controller-input", Message: message,
+		Behavior: controllerInputBehavior, Message: message,
 	}
 }
 
