@@ -1523,6 +1523,10 @@ func (r *Reconciler) directMetadata(
 		annotations = map[string]string{}
 	}
 	maps.Copy(annotations, globalAnnotations)
+	// Admission is controller state, not workload metadata. Enabling the global limit
+	// must not change existing Pod templates and restart adopted workloads.
+	delete(annotations, clabernetesconstants.AnnotationStartupAdmitted)
+	delete(annotations, clabernetesconstants.AnnotationStartupHold)
 
 	return labels, annotations
 }

@@ -22,6 +22,9 @@ metadata:
   {{- end }}
 data:
   mergeMode: {{ .Values.globalConfig.mergeMode }}
+  {{- if hasKey .Values.globalConfig.rollout "batchSize" }}
+  rolloutBatchSize: {{ .Values.globalConfig.rollout.batchSize | quote }}
+  {{- end }}
   globalAnnotations: |-
     ---
 {{ .Values.globalAnnotations | toYaml | indent 4 }}

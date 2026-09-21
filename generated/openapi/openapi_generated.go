@@ -55,6 +55,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigMetadata(
 			ref,
 		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigRollout": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigRollout(
+			ref,
+		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigSpec": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 			ref,
 		),
@@ -717,6 +720,28 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigMetadata(
 	}
 }
 
+func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigRollout(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ConfigRollout controls installation-wide admission of new primary device workloads.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"batchSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BatchSize admits at most this many new primary Pod groups before waiting for all admitted sandboxes to be ready. It applies to standalone Nodes and Topology output. Zero or omission disables this global limit. Existing workloads are not restarted.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
@@ -753,11 +778,19 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 							),
 						},
 					},
+					"rollout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Rollout limits initial device workload startup across all namespaces in this installation.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigRollout",
+							),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigRollout"},
 	}
 }
 

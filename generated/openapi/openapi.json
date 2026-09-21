@@ -602,6 +602,18 @@
                                     }
                                 },
                                 "type": "object"
+                            },
+                            "rollout": {
+                                "description": "Rollout limits initial device workload startup across all namespaces in this installation.",
+                                "properties": {
+                                    "batchSize": {
+                                        "description": "BatchSize admits at most this many new primary Pod groups before waiting for all\nadmitted sandboxes to be ready. It applies to standalone Nodes and Topology output.\nZero or omission disables this global limit. Existing workloads are not restarted.",
+                                        "format": "int32",
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    }
+                                },
+                                "type": "object"
                             }
                         },
                         "type": "object"

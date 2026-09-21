@@ -10,6 +10,7 @@ import (
 	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	k8scorev1 "k8s.io/api/core/v1"
 )
@@ -17,17 +18,27 @@ import (
 // TestPlannerPool200LightNodes is an opt-in capacity experiment using idle Linux nodes.
 // It retains the management mesh but adds no explicit Links, traffic generators or PVCs.
 func TestPlannerPool200LightNodes(t *testing.T) {
-	testPlannerPoolScale(t, false)
+	testPlannerPoolScale(t, false, 0, false)
+}
+
+// TestPlannerPool200BatchedNodes measures a batched Topology with a /22 management mesh and no PVCs.
+func TestPlannerPool200BatchedNodes(t *testing.T) {
+	testPlannerPoolScale(t, false, 100, false)
 }
 
 // TestPlannerPool200LinkedNodes compiles a containerlab topology file into a 200-node ring
 // and checks traffic in both directions on every declared data link.
 func TestPlannerPool200LinkedNodes(t *testing.T) {
-	testPlannerPoolScale(t, true)
+	testPlannerPoolScale(t, true, 0, false)
+}
+
+// TestPlannerPool200GlobalBatchedLinkedNodes exercises the global limit without a Topology.
+func TestPlannerPool200GlobalBatchedLinkedNodes(t *testing.T) {
+	testPlannerPoolScale(t, true, 100, true)
 }
 
 //nolint:gocognit,gocyclo // Keep the benchmark setup, timing and validation in one opt-in scenario.
-func testPlannerPoolScale(t *testing.T, linked bool) {
+func testPlannerPoolScale(t *testing.T, linked bool, batchSize int, standalone bool) {
 	t.Helper()
 	if os.Getenv("PLANNER_POOL_SCALE_E2E") == "" {
 		t.Skip("PLANNER_POOL_SCALE_E2E is not set")
@@ -41,6 +52,9 @@ func testPlannerPoolScale(t *testing.T, linked bool) {
 	if len(before) == 0 {
 		t.Fatal("no ready planner pool workers")
 	}
+	if standalone {
+		poolSetGlobalBatchSize(t, managerNamespace, batchSize)
+	}
 	namespace := clabernetestesthelper.NewTestNamespace("planner-pool-200")
 	clabernetestesthelper.KubectlCreateNamespace(t, namespace)
 	defer func() {
@@ -50,9 +64,14 @@ func testPlannerPoolScale(t *testing.T, linked bool) {
 	}()
 	poolKubectl(t, "label", "namespace", namespace, "c9s.run/scale-test=planner-pool-200")
 	var manifest strings.Builder
-	if linked {
+	switch {
+	case standalone:
+		manifest.WriteString(poolStandaloneRingManifest(count))
+	case batchSize > 0:
+		manifest.WriteString(poolBatchedScaleManifest(count, batchSize))
+	case linked:
 		manifest.WriteString(poolRingManifest(t))
-	} else {
+	default:
 		poolApply(t, namespace, `apiVersion: c9s.run/v1alpha1
 kind: NodeProfile
 metadata:
@@ -93,6 +112,12 @@ spec:
 		}
 		planned, ready := 0, 0
 		for _, node := range nodes.Items {
+			if standalone && node.Status.PlanDigest != "" &&
+				node.Annotations[clabernetesconstants.AnnotationStartupAdmitted] != string(
+					node.UID,
+				) {
+				t.Fatalf("Node %s planned without global admission", node.Name)
+			}
 			if node.Status.PlanDigest != "" {
 				planned++
 			}
@@ -107,7 +132,17 @@ spec:
 			allPlanned = elapsed
 		}
 		if ready == count {
-			break
+			if batchSize == 0 || standalone {
+				break
+			}
+			var topology clabernetesapisv1alpha1.Topology
+			if err := json.Unmarshal(poolKubectl(t, "get", "topology", "busybox", "-n", namespace, "-o", "json"), &topology); err != nil {
+				t.Fatal(err)
+			}
+			if topology.Status.TopologyReady && topology.Status.ReadyNodeCount == count &&
+				topology.Status.ObservedGeneration == topology.Generation {
+				break
+			}
 		}
 		if elapsed > 15*time.Minute {
 			t.Fatalf(
@@ -135,13 +170,24 @@ spec:
 		)
 	}
 	placement := map[string]int{}
+	expectedMemory := int64(16 << 20)
+	if batchSize > 0 {
+		expectedMemory = 64 << 20
+		var pvcs k8scorev1.PersistentVolumeClaimList
+		if err := json.Unmarshal(poolKubectl(t, "get", "pvc", "-n", namespace, "-o", "json"), &pvcs); err != nil {
+			t.Fatal(err)
+		}
+		if len(pvcs.Items) != 0 {
+			t.Fatalf("expected no PVCs, found %d", len(pvcs.Items))
+		}
+	}
 	for _, pod := range pods.Items {
 		placement[pod.Spec.NodeName]++
 		assertPoolPodNoRestarts(t, pod)
 		for _, container := range pod.Spec.Containers {
 			if strings.Contains(container.Image, "busybox") {
 				if container.Resources.Requests.Cpu().MilliValue() != 10 ||
-					container.Resources.Requests.Memory().Value() != 16<<20 {
+					container.Resources.Requests.Memory().Value() != expectedMemory {
 					t.Fatalf("light requests not applied to %s", pod.Name)
 				}
 			}
@@ -156,8 +202,10 @@ spec:
 		if path := os.Getenv("PLANNER_POOL_SCALE_REPORT"); path != "" {
 			report, err := json.MarshalIndent(map[string]any{
 				"namespace": namespace, "nodes": count, "startedAt": started.UTC(),
-				"passed": !t.Failed(), "linkedTopology": linked,
-				"allPlannedSeconds": allPlanned.Seconds(), "allReadySeconds": allReady.Seconds(),
+				"passed": !t.Failed(), "linkedTopology": linked && !standalone,
+				"standaloneNodesAndLinks": standalone,
+				"batchSize":               batchSize,
+				"allPlannedSeconds":       allPlanned.Seconds(), "allReadySeconds": allReady.Seconds(),
 				"placement": placement, "plannerWorkers": before,
 				"links": links, "crossWorkerLinks": crossWorkerLinks,
 			}, "", "  ")
@@ -172,11 +220,62 @@ spec:
 	t.Logf("all planned=%s all ready=%s placement=%v workers=%v",
 		allPlanned.Round(time.Second), allReady.Round(time.Second), placement, before)
 	if linked {
+		if !standalone {
+			waitForPoolRingTopology(t, namespace, count)
+		}
 		links, crossWorkerLinks = poolRingConnectivity(t, namespace, pods.Items)
 	}
 	for _, pod := range poolPods(t, namespace, "c9s.run/direct-workload").Items {
 		assertPoolPodNoRestarts(t, pod)
 	}
+}
+
+func poolBatchedScaleManifest(count, batchSize int) string {
+	var manifest strings.Builder
+	fmt.Fprintf(&manifest, `apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: busybox
+spec:
+  rollout:
+    batchSize: %d
+  expose:
+    exposeType: None
+    disableAutoExpose: true
+  deployment:
+    persistence:
+      enabled: false
+    resources:
+      default:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+  definition:
+    containerlab: |
+      name: busybox
+      mgmt:
+        ipv4-subnet: 172.30.0.0/22
+        ipv4-gw: 172.30.0.1
+      topology:
+        defaults:
+          kind: linux
+          image: docker.io/library/busybox:1.37.0-musl
+          entrypoint: sleep
+          cmd: "2147483647"
+        nodes:
+`, batchSize)
+	for index := range count {
+		address := index + 2
+		fmt.Fprintf(
+			&manifest,
+			"          bb-%03d:\n            mgmt-ipv4: 172.30.%d.%d\n",
+			index,
+			address/256,
+			address%256,
+		)
+	}
+
+	return manifest.String()
 }
 
 func assertPoolPodNoRestarts(t *testing.T, pod k8scorev1.Pod) {

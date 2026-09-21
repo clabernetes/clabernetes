@@ -55,6 +55,9 @@ type Controller struct {
 
 	reconciler *Reconciler
 	session    *PlannerSessionReconciler
+	// Pending successful admission writes bridge informer lag; only the serial admission
+	// controller accesses this map. Durable admission remains on the Node itself.
+	startupAdmissions map[apimachinerytypes.UID]struct{}
 }
 
 // NewController returns a new Controller.
@@ -277,6 +280,9 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		return err
 	}
 	if err := c.setupPeerDirectoryController(mgr); err != nil {
+		return err
+	}
+	if err := c.setupStartupAdmissionController(mgr); err != nil {
 		return err
 	}
 

@@ -95,6 +95,10 @@ globalConfig:
   #
   mergeMode: merge
 
+  # Optional installation-wide startup limit for standalone Nodes and Topology output.
+  # Set batchSize to a positive number to enable; explicit zero disables the limit.
+  rollout: {}
+
   imagePull:
     # policy is the Kubernetes imagePullPolicy default for direct application containers whose
     # source Node definition does not explicitly declare one.

@@ -122,6 +122,8 @@ type Manager interface { //nolint: interfacebloat
 	// stop signal to the Kubernetes lifecycle.stopSignal field -- this requires the cluster to
 	// enable the ContainerStopSignals feature gate.
 	GetContainerStopSignals() bool
+	// GetRolloutBatchSize returns the installation-wide startup batch limit (zero disables it).
+	GetRolloutBatchSize() int32
 }
 
 type manager struct {

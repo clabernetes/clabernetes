@@ -65,7 +65,6 @@ func waitForPoolRingTopology(t *testing.T, namespace string, count int) {
 func poolRingConnectivity(t *testing.T, namespace string, pods []k8scorev1.Pod) (int, int) {
 	t.Helper()
 	const count = 200
-	waitForPoolRingTopology(t, namespace, count)
 	var links clabernetesapisv1alpha1.LinkList
 	if err := json.Unmarshal(poolKubectl(t, "get", "links", "-n", namespace, "-o", "json"), &links); err != nil {
 		t.Fatal(err)

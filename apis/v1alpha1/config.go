@@ -31,6 +31,19 @@ type ConfigSpec struct {
 	// Deployment holds generic direct device workload defaults.
 	// +optional
 	Deployment ConfigDeployment `json:"deployment"`
+	// Rollout limits initial device workload startup across all namespaces in this installation.
+	// +optional
+	Rollout *ConfigRollout `json:"rollout,omitempty"`
+}
+
+// ConfigRollout controls installation-wide admission of new primary device workloads.
+type ConfigRollout struct {
+	// BatchSize admits at most this many new primary Pod groups before waiting for all
+	// admitted sandboxes to be ready. It applies to standalone Nodes and Topology output.
+	// Zero or omission disables this global limit. Existing workloads are not restarted.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	BatchSize int32 `json:"batchSize,omitempty"`
 }
 
 // ConfigStatus is the status for a Config resource.

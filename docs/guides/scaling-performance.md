@@ -8,6 +8,44 @@ Measure the stages separately before changing planner concurrency or worker capa
 
 ## Limit startup pressure with batches
 
+Set an installation-wide limit on the `clabernetes` Config in the manager namespace
+to cover standalone `Node`/`Link` resources and Topology-generated workloads:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Config
+metadata:
+  name: clabernetes
+  namespace: c9s-e2e # use your manager namespace
+spec:
+  rollout:
+    batchSize: 100
+```
+
+For an existing Config, patch only `spec.rollout` to preserve the other settings.
+Helm can bootstrap the same setting with `globalConfig.rollout.batchSize=100`.
+The chart's normal `merge` mode preserves an existing rollout policy, including an
+explicit zero; use the Config to change it or deliberately select bootstrap overwrite.
+
+This limit is shared across namespaces. One admission queue releases up to the
+configured number of new primary Pod groups, then waits for all admitted workloads
+to report `PodReadyToStartContainers=True`. It does not wait for application or link
+readiness, which can depend on a later batch. Streaming Node creation can produce
+smaller batches when fewer Nodes are available at admission time. Publish complete
+Node and Link intent; the limit paces startup, not resource creation.
+
+Admission is persisted as `c9s.run/startup-admitted` with the Node UID. Shared-network
+members count as one Pod, and manager restarts retain admission. Existing workloads
+are adopted without being restarted. Removing the setting or setting it to zero
+disables the global limit. Reducing it applies to later batches; it does not revoke
+admission already granted. A stuck admitted workload blocks the next global batch:
+fix or delete that Node, or explicitly disable the limit to release pending Nodes.
+This controls initial startup of new Node groups, not Kubernetes replacement Pods
+or rolling changes to already admitted workloads.
+
+The Topology setting below is an additional per-lab limit. Omitting it or setting it
+to zero does not bypass an enabled installation-wide limit.
+
 Topology startup can release new device workloads in increments:
 
 ```yaml
@@ -45,11 +83,11 @@ device readiness checks. Kubernetes must report `PodReadyToStartContainers`; an
 unschedulable Pod, failed sandbox, or unavailable condition holds subsequent batches.
 Inspect the admitted Pods and their Events to diagnose a stalled batch.
 
-This policy controls new workloads emitted by a Topology, including newly added or
+The per-Topology policy controls new workloads emitted by a Topology, including newly added or
 recreated Node resources. It does not pace rolling changes or replacement Pods for
-already admitted Nodes, and it does not apply to independently authored Nodes.
+already admitted Nodes. Independently authored Nodes use the Config policy above.
 Changing the size affects subsequent batches; it does not stop a batch already
-admitted. Setting the size to `0` releases all remaining held Nodes. The limit is
+admitted. Setting the size to `0` releases all remaining held Nodes. Without the Config policy, this limit is
 per Topology, so simultaneous labs can still create a larger combined burst.
 
 Batching trades some parallelism for lower peak load. The value `100` is a starting

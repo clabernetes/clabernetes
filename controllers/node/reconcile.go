@@ -157,6 +157,9 @@ func (c *Controller) Reconcile(
 	if node.Annotations[clabernetesconstants.AnnotationStartupHold] != "" {
 		return ctrlruntime.Result{RequeueAfter: directRequeueInterval}, nil
 	}
+	if startupAdmissionRequired(node, c.reconciler.startupBatchSize()) {
+		return ctrlruntime.Result{RequeueAfter: directRequeueInterval}, nil
+	}
 
 	err = c.reconciler.Reconcile(ctx, node)
 	if directDependencyPending(err) {

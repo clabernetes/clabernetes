@@ -26,6 +26,7 @@ type fakeManager struct {
 	registryMetadataTrust   []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
 	registryMetadataMirrors []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry
 	containerStopSignals    bool
+	rolloutBatchSize        int32
 }
 
 // FakeOption defined type alias to be used below.
@@ -133,4 +134,15 @@ func (f fakeManager) GetRegistryMetadataMirrors() (
 
 func (f fakeManager) GetContainerStopSignals() bool {
 	return f.containerStopSignals
+}
+
+// WithRolloutBatchSize configures the installation-wide startup limit for tests.
+func WithRolloutBatchSize(size int32) FakeOption {
+	return func(fm *fakeManager) {
+		fm.rolloutBatchSize = size
+	}
+}
+
+func (f fakeManager) GetRolloutBatchSize() int32 {
+	return f.rolloutBatchSize
 }

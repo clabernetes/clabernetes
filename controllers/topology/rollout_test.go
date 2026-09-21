@@ -204,3 +204,39 @@ func TestStartupBatchWaitsForCompleteInventory(t *testing.T) {
 		t.Fatal("admitted against partial management/link inventory")
 	}
 }
+
+func TestTopologyNodeUpdatePreservesGlobalStartupAdmission(t *testing.T) {
+	t.Parallel()
+	topology := conflictTestTopology()
+	node := &clabernetesapisv1alpha1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "device", Namespace: topology.Namespace, UID: "device-uid",
+			Annotations: map[string]string{
+				clabernetesconstants.AnnotationStartupAdmitted: "device-uid",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(topology, clabernetesapisv1alpha1.SchemeGroupVersion.WithKind("Topology")),
+			},
+		},
+	}
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(conflictTestScheme(t)).
+		WithObjects(node).Build()
+	r := &Reconciler{Client: client, Log: &claberneteslogging.FakeInstance{}}
+	rendered := node.DeepCopy()
+	rendered.Annotations = nil
+	rendered.Spec.Image = "new-image"
+	if err := r.reconcileNodes(t.Context(), topology, []*clabernetesapisv1alpha1.Node{rendered}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Get(t.Context(), ctrlruntimeclient.ObjectKeyFromObject(node), node); err != nil {
+		t.Fatal(err)
+	}
+	if node.Spec.Image != "new-image" ||
+		node.Annotations[clabernetesconstants.AnnotationStartupAdmitted] != string(node.UID) {
+		t.Fatalf(
+			"Node update lost global admission: spec=%+v annotations=%v",
+			node.Spec,
+			node.Annotations,
+		)
+	}
+}

@@ -399,7 +399,12 @@ func (r *Reconciler) reconcileNodes(
 			node.Annotations = map[string]string{}
 		}
 		delete(node.Annotations, clabernetesconstants.AnnotationStartupHold)
+		delete(node.Annotations, clabernetesconstants.AnnotationStartupAdmitted)
 		if current := existing[node.Name]; current != nil {
+			admission := current.Annotations[clabernetesconstants.AnnotationStartupAdmitted]
+			if admission != "" {
+				node.Annotations[clabernetesconstants.AnnotationStartupAdmitted] = admission
+			}
 			if hold := current.Annotations[clabernetesconstants.AnnotationStartupHold]; hold != "" {
 				node.Annotations[clabernetesconstants.AnnotationStartupHold] = hold
 			}
