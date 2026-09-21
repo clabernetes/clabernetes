@@ -17,14 +17,22 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 )
 
-// TestPlannerPoolMixedVendorLinks exercises a topology file, parallel data links, distributed
-// SR-SIM components, and a second SR Linux/cEOS link added only after baseline traffic succeeds.
-//
-//nolint:gocyclo // Keep the baseline and link-add assertions in one sequential scenario.
+// TestPlannerPoolMixedVendorLinks exercises both startup policies, parallel data links,
+// management/DNS, and adding a link and then a new cEOS node to a running lab.
 func TestPlannerPoolMixedVendorLinks(t *testing.T) {
 	if os.Getenv("PLANNER_POOL_MIXED_E2E") == "" {
 		t.Skip("PLANNER_POOL_MIXED_E2E is not set")
 	}
+	for _, batchSize := range []int{0, 2} {
+		t.Run("batch-"+strconv.Itoa(batchSize), func(t *testing.T) {
+			runPoolMixedVendorLinks(t, batchSize)
+		})
+	}
+}
+
+//nolint:gocyclo // Keep the baseline and mutation assertions in one sequential scenario.
+func runPoolMixedVendorLinks(t *testing.T, batchSize int) {
+	t.Helper()
 	license := os.Getenv("SRSIM_LICENSE")
 	if strings.TrimSpace(license) == "" {
 		t.Fatal("the mixed-vendor test requires SRSIM_LICENSE")
@@ -57,23 +65,28 @@ func TestPlannerPoolMixedVendorLinks(t *testing.T) {
 		"--from-file=license.txt="+licensePath)
 
 	started := time.Now()
-	poolApply(t, namespace, poolMixedManifest(t, false))
-	before := waitForPoolMixedReady(t, namespace, 12)
+	poolApply(t, namespace, poolMixedManifest(t, 0, batchSize))
+	before := waitForPoolMixedReady(t, namespace, 12, false)
 	t.Logf("all six Nodes and twelve Links ready in %s", time.Since(started))
+	poolMixedConfigureSRSimDNS(t, namespace)
 	baselineWires := poolMixedWires(t, namespace, before)
 	probes := poolMixedProbes()
 	poolMixedCheckTraffic(t, namespace, probes)
-	t.Logf("baseline healthy: all twelve data links passed; elapsed %s", time.Since(started))
+	management := poolMixedCheckManagement(t, namespace, before)
+	t.Logf(
+		"baseline data links passed; management checks completed; elapsed %s",
+		time.Since(started),
+	)
 	srlPlan, ceosPlan := nodePlanDigest(t, namespace, "srl"), nodePlanDigest(t, namespace, "ceos")
 
 	// Change only the file's link inventory. Configure the new data ports after the runtime
 	// applies it, so a startup-config change cannot inadvertently force SR Linux to restart.
 	added := time.Now()
-	poolApply(t, namespace, poolMixedManifest(t, true))
+	poolApply(t, namespace, poolMixedManifest(t, 1, batchSize))
 	waitForPlanDigestChange(t, namespace, "srl", srlPlan)
 	waitForPlanDigestChange(t, namespace, "ceos", ceosPlan)
 	waitForDevicePodReplacement(t, namespace, "ceos", before["ceos"].Name)
-	after := waitForPoolMixedReady(t, namespace, 13)
+	after := waitForPoolMixedReady(t, namespace, 13, false)
 	for name, oldPod := range before {
 		changed := oldPod.UID != after[name].UID
 		if changed != (name == "ceos") {
@@ -92,13 +105,51 @@ func TestPlannerPoolMixedVendorLinks(t *testing.T) {
 		poolMixedProbe{"ceos", "10.210.13.2", "10.210.13.1"},
 	)
 	poolMixedCheckTraffic(t, namespace, probes)
-	after = waitForPoolMixedReady(t, namespace, 13)
+	after = waitForPoolMixedReady(t, namespace, 13, false)
 	afterWires := poolMixedWires(t, namespace, after)
 	for name, wire := range baselineWires {
 		if current := afterWires[name]; current != wire {
 			t.Fatalf("existing link %s changed wire ID: %d -> %d", name, wire, current)
 		}
 	}
+	poolMixedAssertManagementStable(t, management, poolMixedCheckManagement(t, namespace, after))
+
+	// Add a new workload and a link in one Topology update. Existing SR Linux links must
+	// remain live; the already running cEOS is unaffected because its interfaces do not change.
+	added = time.Now()
+	srlPlan = nodePlanDigest(t, namespace, "srl")
+	poolApply(t, namespace, poolMixedManifest(t, 2, batchSize))
+	waitForPlanDigestChange(t, namespace, "srl", srlPlan)
+	final := waitForPoolMixedReady(t, namespace, 14, true)
+	for name, previous := range after {
+		if previous.UID != final[name].UID {
+			t.Fatalf(
+				"adding ceos-new replaced existing %s Pod: %s -> %s",
+				name,
+				previous.UID,
+				final[name].UID,
+			)
+		}
+	}
+	poolMixedConfigureAddedNodePort(t, namespace)
+	probes = append(probes,
+		poolMixedProbe{"srl", "10.210.14.1", "10.210.14.2"},
+		poolMixedProbe{"ceos-new", "10.210.14.2", "10.210.14.1"},
+	)
+	poolMixedCheckTraffic(t, namespace, probes)
+	poolMixedAssertManagementStable(t, management, poolMixedCheckManagement(t, namespace, final))
+	finalWires := poolMixedWires(t, namespace, final)
+	for name, wire := range afterWires {
+		if finalWires[name] != wire {
+			t.Fatalf(
+				"adding ceos-new changed existing wire %s: %d -> %d",
+				name,
+				wire,
+				finalWires[name],
+			)
+		}
+	}
+	t.Logf("new cEOS node and SR Linux link ready; data traffic verified in %s", time.Since(added))
 	if current := poolPodUIDs(t, managerNamespace); !reflect.DeepEqual(workers, current) {
 		t.Fatalf("planner workers changed: %v -> %v", workers, current)
 	}
@@ -111,18 +162,35 @@ func TestPlannerPoolMixedVendorLinks(t *testing.T) {
 		t.Fatal("unexpected disposable planner Pods")
 	}
 	t.Logf(
-		"all thirteen links passed, new link in both directions; unchanged pool; total %s",
+		"all fourteen links passed, added links in both directions; unchanged pool; total %s",
 		time.Since(started),
 	)
 }
 
-func poolMixedManifest(t *testing.T, added bool) string {
+func poolMixedManifest(t *testing.T, stage, batchSize int) string {
 	t.Helper()
 	raw, err := os.ReadFile("test-fixtures/planner-pool-mixed.clab.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	definition := string(raw)
+	if stage >= 2 {
+		definition = strings.Replace(definition, "    ceos:\n", `    ceos-new:
+      kind: arista_ceos
+      image: ghcr.io/clab-labs/ceos:4.33.1F
+      ports: [22/tcp]
+      startup-config: |
+        {{ if .DNS }}{{ range .DNS.Servers }}
+        ip name-server {{ . }}
+        {{ end }}{{ end }}
+        interface Ethernet1
+           no switchport
+           ip address 10.210.14.2/30
+           no shutdown
+        end
+    ceos:
+`, 1)
+	}
 	for _, image := range []struct{ variable, fallback string }{
 		{"SRL_IMAGE", "ghcr.io/clab-labs/srlinux:25.10.1"},
 		{"CEOS_IMAGE", "ghcr.io/clab-labs/ceos:4.33.1F"},
@@ -132,8 +200,15 @@ func poolMixedManifest(t *testing.T, added bool) string {
 			definition = strings.ReplaceAll(definition, image.fallback, override)
 		}
 	}
-	if added {
+	if stage >= 1 {
 		definition += "    - endpoints: [\"srl:e1-5\", \"ceos:eth5\"]\n"
+	}
+	if stage >= 2 {
+		definition += "    - endpoints: [\"srl:e1-6\", \"ceos-new:eth1\"]\n"
+	}
+	rollout := ""
+	if batchSize > 0 {
+		rollout = "  rollout:\n    batchSize: " + strconv.Itoa(batchSize) + "\n"
 	}
 
 	return `apiVersion: c9s.run/v1alpha1
@@ -141,6 +216,7 @@ kind: Topology
 metadata:
   name: planner-pool-mixed
 spec:
+` + rollout + `
   statusProbes:
     enabled: true
   expose:
@@ -170,9 +246,15 @@ spec:
       ` + strings.ReplaceAll(strings.TrimSpace(definition), "\n", "\n      ") + "\n"
 }
 
-func waitForPoolMixedReady(t *testing.T, namespace string, linkCount int) map[string]k8scorev1.Pod {
+func waitForPoolMixedReady(
+	t *testing.T, namespace string, linkCount int, addedNode bool,
+) map[string]k8scorev1.Pod {
 	t.Helper()
-	for _, name := range []string{"srl", "ceos", "sros", "mt-srl", "mt-ceos", "mt-sros"} {
+	names := []string{"srl", "ceos", "sros", "mt-srl", "mt-ceos", "mt-sros"}
+	if addedNode {
+		names = append(names, "ceos-new")
+	}
+	for _, name := range names {
 		waitForDirectNodeReady(t, namespace, name)
 	}
 	deadline := time.Now().Add(time.Minute)
@@ -193,8 +275,8 @@ func waitForPoolMixedReady(t *testing.T, namespace string, linkCount int) map[st
 		}
 		if topology.Status.TopologyReady &&
 			topology.Status.ObservedGeneration == topology.Generation &&
-			topology.Status.NodeCount == 6 &&
-			topology.Status.ReadyNodeCount == 6 &&
+			topology.Status.NodeCount == len(names) &&
+			topology.Status.ReadyNodeCount == len(names) &&
 			topology.Status.LinkCount == linkCount {
 			break
 		}
@@ -211,8 +293,12 @@ func waitForPoolMixedReady(t *testing.T, namespace string, linkCount int) map[st
 		assertPoolMixedPodReady(t, pod)
 		result[pod.Labels["c9s.run/direct-workload"]] = pod
 	}
-	if len(result) != 6 || len(result["sros"].Spec.Containers) != 2 {
-		t.Fatalf("expected six workloads including two SR-SIM component containers: %+v", result)
+	if len(result) != len(names) || len(result["sros"].Spec.Containers) != 2 {
+		t.Fatalf(
+			"expected %d workloads including two SR-SIM component containers: %+v",
+			len(names),
+			result,
+		)
 	}
 
 	return result
@@ -220,11 +306,20 @@ func waitForPoolMixedReady(t *testing.T, namespace string, linkCount int) map[st
 
 func assertPoolMixedPodReady(t *testing.T, pod k8scorev1.Pod) {
 	t.Helper()
-	assertPoolPodNoRestarts(t, pod)
 	if !localHelperStarted(pod) {
 		t.Fatalf("helper not started in %s", pod.Name)
 	}
 	for _, status := range append(pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses...) {
+		// Record a recovered restart as a failure without hiding the remaining traffic checks.
+		if status.RestartCount != 0 {
+			t.Errorf(
+				"%s/%s container %s restarted %d times",
+				pod.Namespace,
+				pod.Name,
+				status.Name,
+				status.RestartCount,
+			)
+		}
 		if status.Name == "clabwire" || strings.HasPrefix(status.Name, "node-") {
 			if !status.Ready || status.State.Running == nil {
 				t.Fatalf("%s/%s is not running and ready", pod.Name, status.Name)
@@ -322,6 +417,8 @@ func poolMixedPing(
 	t.Helper()
 	command := []string{
 		"ping",
+		"-i",
+		"0.2",
 		"-I",
 		probe.source,
 		"-c",

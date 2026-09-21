@@ -37,6 +37,11 @@ func (c *Controller) externalEnqueueHandler(
 			}
 		}
 		if invalidate {
+			if c.reconciler != nil && c.reconciler.observations != nil {
+				for _, request := range requests {
+					c.reconciler.observations.Invalidate(request.NamespacedName)
+				}
+			}
 			c.invalidateDirectStatusesForRequests(ctx, requests)
 		}
 		for _, request := range requests {

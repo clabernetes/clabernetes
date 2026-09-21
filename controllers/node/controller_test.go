@@ -67,6 +67,7 @@ func TestNodeProfileEventEnqueuesOnlyReferencingGroups(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(primary, secondary, unrelated).
 		WithIndex(
 			&clabernetesapisv1alpha1.Node{},
@@ -113,6 +114,7 @@ func TestNodeGroupMoveResolvesFormerAndNewPrimaryWorkloads(t *testing.T) {
 	}
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(firstPrimary, secondPrimary, current).
 		Build()
 	controller := &Controller{BaseController: &clabernetescontrollers.BaseController{
@@ -152,6 +154,7 @@ func TestLinkUpdateEnqueuesOldAndNewEndpointPrimaries(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(nodes...).
 		Build()
 	controller := &Controller{
@@ -191,6 +194,7 @@ func TestLinkSpecUpdateEnqueuesTerminatingPrimaries(t *testing.T) {
 	}
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(r1, r2).
 		Build()
 	controller := &Controller{
@@ -261,6 +265,7 @@ func TestPayloadObjectEventEnqueuesReferencingPodGroups(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(primary, secondary, standalone, unrelated).
 		Build()
 	controller := &Controller{
@@ -324,6 +329,7 @@ func TestPayloadObjectEventInvalidatesReadyGroupStatuses(t *testing.T) {
 	scheme := nodeReconcileTestScheme(t)
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
 		WithObjects(primary, secondary).
 		Build()

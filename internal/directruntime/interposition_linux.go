@@ -425,7 +425,7 @@ func preserveTransportInterface(
 
 // linkByAddress finds the exact interface carrying the given address.
 func linkByAddress(address netip.Addr) (netlink.Link, error) {
-	links, err := netlink.LinkList()
+	links, err := listPodLinks()
 	if err != nil {
 		return nil, fmt.Errorf("listing interfaces: %w", err)
 	}

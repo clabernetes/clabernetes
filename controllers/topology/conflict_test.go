@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
@@ -182,8 +183,8 @@ func TestReconcileChildConflictBlocksChildrenAndClearsAfterResolution(t *testing
 		t.Fatalf("reconciling resolved topology failed: %s", err)
 	}
 
-	if result.RequeueAfter != 0 {
-		t.Fatalf("expected no conflict requeue after resolution, got %+v", result)
+	if result.RequeueAfter != time.Minute {
+		t.Fatalf("expected observation watchdog after resolution, got %+v", result)
 	}
 
 	if topology.Status.Error != "" {

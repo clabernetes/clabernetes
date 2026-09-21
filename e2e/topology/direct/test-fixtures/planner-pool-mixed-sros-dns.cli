@@ -1,0 +1,6 @@
+/bof exclusive
+dns primary-server __DNS_SERVER__
+dns domain __DNS_DOMAIN__
+commit
+exit all
+admin show configuration bof

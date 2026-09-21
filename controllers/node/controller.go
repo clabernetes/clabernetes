@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 
 	clabernetesapis "github.com/clabernetes/clabernetes/apis"
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -28,6 +29,7 @@ import (
 	clientgoremotecommand "k8s.io/client-go/tools/remotecommand"
 	clientgoworkqueue "k8s.io/client-go/util/workqueue"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	ctrlruntimebuilder "sigs.k8s.io/controller-runtime/pkg/builder"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
@@ -36,7 +38,10 @@ import (
 	ctrlruntimereconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const profileReferenceField = "spec.profileRef.name"
+const (
+	profileReferenceField = "spec.profileRef.name"
+	payloadReferenceField = "spec.payloadReferences"
+)
 
 const defaultPlannerSessionConcurrency = 16
 
@@ -72,6 +77,7 @@ func NewController(
 		clabernetesconfig.GetManager,
 	)
 	reconciler.DirectRuntimeImage = clabernetes.GetNodeRuntimeImage()
+	reconciler.observations = &clabernetescontrollers.ObservationCache[*directObservation]{}
 	reconciler.DirectContainerExecutor = newDirectContainerExecutor(
 		clabernetes.GetKubeConfig(),
 		clabernetes.GetKubeClient(),
@@ -265,6 +271,14 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		clabernetesapis.Node,
 	)
 	c.reconciler.EventRecorder = mgr.GetEventRecorder("clabernetes-node-controller")
+	if err := mgr.GetFieldIndexer().IndexField(
+		c.Ctx, &clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex,
+	); err != nil {
+		return err
+	}
+	if err := c.setupPeerDirectoryController(mgr); err != nil {
+		return err
+	}
 
 	err := mgr.GetFieldIndexer().IndexField(
 		c.Ctx,
@@ -303,13 +317,19 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 				MaxConcurrentReconciles: nodeConcurrency,
 			},
 		).
-		For(&clabernetesapisv1alpha1.Node{}).
+		For(&clabernetesapisv1alpha1.Node{}, ctrlruntimebuilder.WithPredicates(
+			clabernetescontrollers.ObservationPredicate(c.reconciler.observations.Invalidate),
+		),
+		).
 		// group co-members: a (grouped) node's primary renders that node's services, status
 		// and the shared pod, so events on any node also enqueue its (old and new) primary
 		Watches(
 			&clabernetesapisv1alpha1.Node{},
-			c.primaryEnqueueHandler(),
+			clabernetescontrollers.ObserveWith(
+				c.primaryEnqueueHandler(), c.reconciler.observations.Invalidate,
+			),
 		).
+
 		// NodeProfile changes enqueue only groups with explicit references to that profile.
 		Watches(
 			&clabernetesapisv1alpha1.NodeProfile{},
@@ -328,19 +348,19 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// owned objects
 		Watches(
 			&k8sappsv1.Deployment{},
-			ctrlruntimehandler.EnqueueRequestForOwner(
+			clabernetescontrollers.ObserveWith(ctrlruntimehandler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&clabernetesapisv1alpha1.Node{},
-			),
+			), c.reconciler.observations.Invalidate),
 		).
 		Watches(
 			&k8scorev1.ConfigMap{},
-			ctrlruntimehandler.EnqueueRequestForOwner(
+			clabernetescontrollers.ObserveWith(ctrlruntimehandler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&clabernetesapisv1alpha1.Node{},
-			),
+			), c.reconciler.observations.Invalidate),
 		).
 		// referenced payload objects are not Node-owned; changes must still re-plan the
 		// pod group that consumes them.
@@ -354,40 +374,43 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		).
 		Watches(
 			&k8scorev1.Secret{},
-			ctrlruntimehandler.EnqueueRequestForOwner(
+			clabernetescontrollers.ObserveWith(ctrlruntimehandler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&clabernetesapisv1alpha1.Node{},
-			),
+			), c.reconciler.observations.Invalidate),
 		).
 		Watches(
 			&k8snetworkingv1.NetworkPolicy{},
-			ctrlruntimehandler.EnqueueRequestForOwner(
+			clabernetescontrollers.ObserveWith(ctrlruntimehandler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&clabernetesapisv1alpha1.Node{},
-			),
+			), c.reconciler.observations.Invalidate),
 		).
 		Watches(
 			&k8scorev1.Service{},
-			ctrlruntimehandler.EnqueueRequestForOwner(
+			clabernetescontrollers.ObserveWith(ctrlruntimehandler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&clabernetesapisv1alpha1.Node{},
-			),
+			), c.reconciler.observations.Invalidate),
 		).
 		Watches(
 			&k8scorev1.PersistentVolumeClaim{},
-			ctrlruntimehandler.EnqueueRequestForOwner(
+			clabernetescontrollers.ObserveWith(ctrlruntimehandler.EnqueueRequestForOwner(
 				mgr.GetScheme(),
 				mgr.GetRESTMapper(),
 				&clabernetesapisv1alpha1.Node{},
-			),
+			), c.reconciler.observations.Invalidate),
 		).
 		// pods feed the probe statuses
 		Watches(
 			&k8scorev1.Pod{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueNodeForPod),
+			clabernetescontrollers.ObserveWith(
+				ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueNodeForPod),
+				c.reconciler.observations.Invalidate,
+			),
 		).
 		Complete(c)
 }
@@ -435,6 +458,11 @@ func (c *Controller) enqueuePrimaryFor(
 ) []ctrlruntimereconcile.Request {
 	node, ok := obj.(*clabernetesapisv1alpha1.Node)
 	if !ok {
+		return nil
+	}
+	if !strings.HasPrefix(node.Spec.NetworkMode, "container:") {
+		// Standalone primaries are already enqueued by For(Node). Avoid two namespace
+		// copies for every status update in the overwhelmingly common single-Pod case.
 		return nil
 	}
 
@@ -634,9 +662,11 @@ func (c *Controller) enqueuePrimariesForPayloadObject(
 	obj ctrlruntimeclient.Object,
 ) []ctrlruntimereconcile.Request {
 	var references func(*clabernetesapisv1alpha1.Node) bool
+	var referenceKey string
 
 	switch payloadObject := obj.(type) {
 	case *k8scorev1.ConfigMap:
+		referenceKey = "ConfigMap/" + payloadObject.Name
 		references = func(node *clabernetesapisv1alpha1.Node) bool {
 			for _, declaration := range node.Spec.FilesFromConfigMap {
 				if declaration.ConfigMapName == payloadObject.GetName() {
@@ -647,6 +677,7 @@ func (c *Controller) enqueuePrimariesForPayloadObject(
 			return false
 		}
 	case *k8scorev1.Secret:
+		referenceKey = "Secret/" + payloadObject.Name
 		references = func(node *clabernetesapisv1alpha1.Node) bool {
 			for _, declaration := range node.Spec.FilesFromSecret {
 				if declaration.SecretName == payloadObject.GetName() {
@@ -657,6 +688,18 @@ func (c *Controller) enqueuePrimariesForPayloadObject(
 			return false
 		}
 	default:
+		return nil
+	}
+	referencing := &clabernetesapisv1alpha1.NodeList{}
+	if err := c.Client.List(
+		ctx, referencing, ctrlruntimeclient.InNamespace(obj.GetNamespace()),
+		ctrlruntimeclient.MatchingFields{payloadReferenceField: referenceKey},
+	); err != nil {
+		c.Log.Criticalf("failed listing indexed payload references, err: %s", err)
+
+		return nil
+	}
+	if len(referencing.Items) == 0 {
 		return nil
 	}
 
@@ -702,6 +745,22 @@ func (c *Controller) enqueuePrimariesForPayloadObject(
 	}
 
 	return requests
+}
+
+func payloadReferenceIndex(obj ctrlruntimeclient.Object) []string {
+	node, ok := obj.(*clabernetesapisv1alpha1.Node)
+	if !ok {
+		return nil
+	}
+	var keys []string
+	for _, ref := range node.Spec.FilesFromConfigMap {
+		keys = append(keys, "ConfigMap/"+ref.ConfigMapName)
+	}
+	for _, ref := range node.Spec.FilesFromSecret {
+		keys = append(keys, "Secret/"+ref.SecretName)
+	}
+
+	return keys
 }
 
 // enqueuePrimariesForLink enqueues the primary nodes terminating each side of a link -- link

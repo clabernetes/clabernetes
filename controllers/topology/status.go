@@ -125,6 +125,10 @@ func (r *Reconciler) updateTopologyStatus(
 			return err
 		}
 
+		if current.GetUID() != topology.GetUID() ||
+			current.GetGeneration() != topology.GetGeneration() {
+			return nil
+		}
 		if reflect.DeepEqual(current.Status, *desiredStatus) {
 			updated = current
 

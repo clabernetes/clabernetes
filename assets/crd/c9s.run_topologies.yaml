@@ -1351,6 +1351,20 @@ spec:
                     type: array
                     x-kubernetes-list-type: set
                 type: object
+              rollout:
+                description: |-
+                  Rollout optionally limits admission of new device workloads in startup batches.
+                  Existing workloads are not restarted or paused when this policy changes.
+                properties:
+                  batchSize:
+                    description: |-
+                      BatchSize is the number of new primary workloads admitted together. Zero disables
+                      batching. The next batch starts after all admitted workloads have a network-ready
+                      Pod sandbox; full device/link readiness may depend on later batches.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                type: object
               statusProbes:
                 description: StatusProbes holds additional direct application readiness
                   policy.

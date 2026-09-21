@@ -14,6 +14,7 @@ import (
 	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,6 +35,13 @@ type Reconciler struct {
 
 	configManagerGetter clabernetesconfig.ManagerGetterFunc
 	apiReader           ctrlruntimeclient.Reader
+	observations        *clabernetescontrollers.ObservationCache[*topologyObservation]
+}
+
+type topologyObservation struct {
+	topology  *clabernetesapisv1alpha1.Topology
+	compiled  *clabernetescompiler.CompiledTopology
+	checkedAt time.Time
 }
 
 // NewReconciler creates a new topology Reconciler.
@@ -63,6 +71,9 @@ func (c *Controller) Reconcile(
 	err := c.BaseController.Client.Get(ctx, req.NamespacedName, topology)
 	if err != nil {
 		if apimachineryerrors.IsNotFound(err) {
+			if c.reconciler.observations != nil {
+				c.reconciler.observations.Invalidate(req.NamespacedName)
+			}
 			// was deleted; owner references garbage collect the emitted objects
 			c.BaseController.LogReconcileCompleteObjectNotExist(req)
 
@@ -97,6 +108,18 @@ func (r *Reconciler) Reconcile(
 	ctx context.Context,
 	topology *clabernetesapisv1alpha1.Topology,
 ) (ctrlruntime.Result, error) {
+	if startupBatchSize(topology) < 0 {
+		return ctrlruntime.Result{}, errInvalidBatchSize
+	}
+	var token uint64
+	if r.observations != nil {
+		cached, epoch, valid := r.observations.Load(ctrlruntimeclient.ObjectKeyFromObject(topology))
+		token = epoch
+		if valid && time.Since(cached.checkedAt) < 5*time.Minute &&
+			!clabernetescontrollers.DesiredStateChanged(cached.topology, topology) {
+			return r.observeTopology(ctx, topology, cached.compiled)
+		}
+	}
 	compiled, err := clabernetescompiler.CompileTopology(r.Log, topology)
 	if err != nil {
 		r.Log.Criticalf("failed compiling topology definition, err: %s", err)
@@ -158,7 +181,36 @@ func (r *Reconciler) Reconcile(
 		return ctrlruntime.Result{}, err
 	}
 
-	return ctrlruntime.Result{}, r.reconcileStatus(ctx, topology, compiled)
+	if r.observations != nil {
+		r.observations.Store(
+			ctrlruntimeclient.ObjectKeyFromObject(topology),
+			token,
+			&topologyObservation{
+				topology:  topology.DeepCopy(),
+				compiled:  compiled,
+				checkedAt: time.Now(),
+			},
+		)
+	}
+
+	return r.observeTopology(ctx, topology, compiled)
+}
+
+func (r *Reconciler) observeTopology(
+	ctx context.Context,
+	topology *clabernetesapisv1alpha1.Topology,
+	compiled *clabernetescompiler.CompiledTopology,
+) (ctrlruntime.Result, error) {
+	pending, err := r.advanceStartupBatch(ctx, topology, compiled)
+	if err != nil {
+		return ctrlruntime.Result{}, err
+	}
+	result := ctrlruntime.Result{RequeueAfter: time.Minute}
+	if pending {
+		result.RequeueAfter = time.Second
+	}
+
+	return result, r.reconcileStatus(ctx, topology, compiled)
 }
 
 const topologyChildConflictRequeueAfter = 10 * time.Second
@@ -341,6 +393,19 @@ func (r *Reconciler) reconcileNodes(
 		}
 
 		existing[ownedNodes.Items[idx].GetName()] = &ownedNodes.Items[idx]
+	}
+	for _, node := range rendered {
+		if node.Annotations == nil {
+			node.Annotations = map[string]string{}
+		}
+		delete(node.Annotations, clabernetesconstants.AnnotationStartupHold)
+		if current := existing[node.Name]; current != nil {
+			if hold := current.Annotations[clabernetesconstants.AnnotationStartupHold]; hold != "" {
+				node.Annotations[clabernetesconstants.AnnotationStartupHold] = hold
+			}
+		} else if startupBatchSize(topology) > 0 {
+			node.Annotations[clabernetesconstants.AnnotationStartupHold] = string(topology.UID)
+		}
 	}
 
 	return reconcileEmitted(

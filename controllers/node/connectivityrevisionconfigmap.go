@@ -254,6 +254,26 @@ func (r *ConnectivityRevisionConfigMapReconciler) GarbageCollect(
 	node *clabernetesapisv1alpha1.Node,
 	keepName string,
 ) error {
+	revisions := &k8scorev1.ConfigMapList{}
+	if err := r.Client.List(
+		ctx,
+		revisions,
+		ctrlruntimeclient.InNamespace(node.GetNamespace()),
+		ctrlruntimeclient.MatchingLabels{
+			clabernetesconstants.LabelComponent: connectivityRevisionComponentLabelValue,
+			planOwnerUIDLabel:                   string(node.GetUID()),
+		},
+	); err != nil {
+		return fmt.Errorf("listing direct connectivity revision ConfigMaps: %w", err)
+	}
+	// Fresh startup has only the retained revision. Avoid copying the whole namespace's
+	// Pods unless there is actually an owned, superseded ConfigMap to collect.
+	candidates := slices.DeleteFunc(revisions.Items, func(revision k8scorev1.ConfigMap) bool {
+		return revision.GetName() == keepName || !controlledByNodeUID(&revision, node.GetUID())
+	})
+	if len(candidates) == 0 {
+		return nil
+	}
 	pods := &k8scorev1.PodList{}
 	if err := r.Client.List(
 		ctx,
@@ -276,22 +296,9 @@ func (r *ConnectivityRevisionConfigMapReconciler) GarbageCollect(
 			}
 		}
 	}
-	revisions := &k8scorev1.ConfigMapList{}
-	if err := r.Client.List(
-		ctx,
-		revisions,
-		ctrlruntimeclient.InNamespace(node.GetNamespace()),
-		ctrlruntimeclient.MatchingLabels{
-			clabernetesconstants.LabelComponent: connectivityRevisionComponentLabelValue,
-			planOwnerUIDLabel:                   string(node.GetUID()),
-		},
-	); err != nil {
-		return fmt.Errorf("listing direct connectivity revision ConfigMaps: %w", err)
-	}
-	for index := range revisions.Items {
-		revision := &revisions.Items[index]
-		if revision.GetName() == keepName || referenced[revision.GetName()] ||
-			!controlledByNodeUID(revision, node.GetUID()) {
+	for index := range candidates {
+		revision := &candidates[index]
+		if referenced[revision.GetName()] {
 			continue
 		}
 		if err := r.Client.Delete(ctx, revision); err != nil &&

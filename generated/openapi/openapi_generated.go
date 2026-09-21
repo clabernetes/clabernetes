@@ -199,6 +199,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyList": schema_clabernetes_clabernetes_apis_v1alpha1_TopologyList(
 			ref,
 		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyRollout": schema_clabernetes_clabernetes_apis_v1alpha1_TopologyRollout(
+			ref,
+		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologySpec": schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 			ref,
 		),
@@ -3845,6 +3848,28 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyList(
 	}
 }
 
+func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyRollout(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TopologyRollout controls startup pressure while retaining the complete Node/Link inventory.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"batchSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BatchSize is the number of new primary workloads admitted together. Zero disables batching. The next batch starts after all admitted workloads have a network-ready Pod sandbox; full device/link readiness may depend on later batches.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
@@ -3899,12 +3924,20 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 							),
 						},
 					},
+					"rollout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Rollout optionally limits admission of new device workloads in startup batches. Existing workloads are not restarted or paused when this policy changes.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyRollout",
+							),
+						},
+					},
 				},
 				Required: []string{"definition"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition", "github.com/clabernetes/clabernetes/apis/v1alpha1.Deployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.Expose", "github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition", "github.com/clabernetes/clabernetes/apis/v1alpha1.Deployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.Expose", "github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes", "github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyRollout"},
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	clabernetesinternalocimetadata "github.com/clabernetes/clabernetes/internal/ocimetadata"
@@ -52,6 +53,8 @@ type Reconciler struct {
 	apiReader            ctrlruntimeclient.Reader
 	peerDirectoryMu      sync.Mutex
 	peerDirectoryWriters map[string]*peerDirectoryWriter
+	observations         *clabernetescontrollers.ObservationCache[*directObservation]
+	peerDirectoryAsync   bool
 
 	namespaceResourcesReconciler *NamespaceResourcesReconciler
 
@@ -126,6 +129,9 @@ func (c *Controller) Reconcile(
 	err := c.BaseController.Client.Get(ctx, req.NamespacedName, node)
 	if err != nil {
 		if apimachineryerrors.IsNotFound(err) {
+			if c.reconciler.observations != nil {
+				c.reconciler.observations.Invalidate(req.NamespacedName)
+			}
 			// Delete events are logged by the Node event handler. Dependent object events can
 			// enqueue the same deleted Node several more times, so keep these stale requests quiet.
 			c.BaseController.Log.Debugf(
@@ -148,6 +154,9 @@ func (c *Controller) Reconcile(
 	if c.BaseController.ShouldIgnoreReconcile(node) {
 		return ctrlruntime.Result{}, nil
 	}
+	if node.Annotations[clabernetesconstants.AnnotationStartupHold] != "" {
+		return ctrlruntime.Result{RequeueAfter: directRequeueInterval}, nil
+	}
 
 	err = c.reconciler.Reconcile(ctx, node)
 	if directDependencyPending(err) {
@@ -159,10 +168,9 @@ func (c *Controller) Reconcile(
 
 	c.BaseController.LogReconcileCompleteSuccess(req)
 
-	// Direct pipelines park between worker Pod phases and revalidate referenced payload
-	// objects on every pass, so a periodic pass is both the stall watchdog for a dropped
-	// Pod event and the backstop for payload edits the watches cannot see.
-	return ctrlruntime.Result{RequeueAfter: directRequeueAfter(node)}, nil
+	// The fixed snapshot deadline prevents status events from postponing full validation.
+	// Periodic passes backstop missed input events and stalled worker/Pod phases.
+	return ctrlruntime.Result{RequeueAfter: c.reconciler.observationRequeueAfter(node)}, nil
 }
 
 // Expected convergence waits must not accumulate exponential failure backoff. Keep real
@@ -217,12 +225,33 @@ func (r *Reconciler) Reconcile(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
 ) error {
+	var token uint64
+	capture := &directObservationCapture{}
+	if r.observations != nil {
+		var snapshot *directObservation
+		var valid bool
+		snapshot, token, valid = r.observations.Load(ctrlruntimeclient.ObjectKeyFromObject(node))
+		if valid {
+			if handled, err := r.refreshObservedStatus(ctx, node, snapshot); handled || err != nil {
+				return err
+			}
+		}
+		ctx = context.WithValue(ctx, directObservationContextKey{}, capture)
+	}
 	if err := r.invalidateStaleDirectStatus(ctx, node); err != nil {
 		return err
 	}
 
 	err := r.reconcileDirect(ctx, node)
 	if err == nil {
+		if r.observations != nil && capture.snapshot != nil {
+			r.observations.Store(
+				ctrlruntimeclient.ObjectKeyFromObject(node),
+				token,
+				capture.snapshot,
+			)
+		}
+
 		return nil
 	}
 	if stderrors.Is(err, ErrPlannerPoolBusy) {
@@ -260,7 +289,7 @@ func (r *Reconciler) updateNodeStatus(
 		if err != nil {
 			return err
 		}
-		if current.GetGeneration() != node.GetGeneration() {
+		if current.GetUID() != node.GetUID() || current.GetGeneration() != node.GetGeneration() {
 			// This reconcile loaded a stale object. Do not let its projected status overwrite a
 			// newer generation; the newer reconcile request owns that projection.
 			updated = current

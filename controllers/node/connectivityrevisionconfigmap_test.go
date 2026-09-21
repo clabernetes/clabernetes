@@ -15,7 +15,41 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
+
+func TestConnectivityRevisionCleanupSkipsPodsWithoutSupersededOwnedRevisions(t *testing.T) {
+	t.Parallel()
+	node := planTestNode("router")
+	r := &ConnectivityRevisionConfigMapReconciler{}
+	retained, err := r.Render(node, testConnectivityRevision("a", "a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign, err := r.Render(node, testConnectivityRevision("b", "b"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A matching label alone does not make a revision eligible for collection.
+	foreign.OwnerReferences[0].UID = "another-node"
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(planTestScheme(t)).
+		WithObjects(retained, foreign).Build()
+	r.Client = interceptor.NewClient(client, interceptor.Funcs{
+		List: func(ctx context.Context, c ctrlruntimeclient.WithWatch, list ctrlruntimeclient.ObjectList, opts ...ctrlruntimeclient.ListOption) error {
+			if _, ok := list.(*k8scorev1.PodList); ok {
+				t.Fatal("fresh startup copied namespace Pods without an eligible old revision")
+			}
+
+			return c.List(ctx, list, opts...)
+		},
+	})
+	if err = r.GarbageCollect(t.Context(), node, retained.Name); err != nil {
+		t.Fatal(err)
+	}
+	if err = client.Get(t.Context(), ctrlruntimeclient.ObjectKeyFromObject(foreign), &k8scorev1.ConfigMap{}); err != nil {
+		t.Fatal("foreign revision was removed", err)
+	}
+}
 
 func TestConnectivityRevisionConfigMapRetainsGenericLifecycleActionState(t *testing.T) {
 	t.Parallel()

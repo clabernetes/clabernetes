@@ -33,6 +33,7 @@ func TestExternalInputReplayPreservesReadyNodes(t *testing.T) {
 					{SecretName: "input"},
 				}
 				client := ctrlruntimefake.NewClientBuilder().WithScheme(nodeReconcileTestScheme(t)).
+					WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 					WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).WithObjects(node).
 					WithIndex(&clabernetesapisv1alpha1.Node{}, profileReferenceField, profileReferenceIndex).
 					Build()

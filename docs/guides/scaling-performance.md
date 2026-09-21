@@ -6,6 +6,97 @@ description: Separate planning, Kubernetes object creation, network allocation, 
 A large topology can have enough worker CPU and memory and still start slowly.
 Measure the stages separately before changing planner concurrency or worker capacity.
 
+## Limit startup pressure with batches
+
+Topology startup can release new device workloads in increments:
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: batched-lab
+spec:
+  rollout:
+    batchSize: 100
+  definition:
+    containerlab: |
+      name: batched-lab
+      topology:
+        nodes:
+          device1:
+            kind: linux
+            image: busybox:1.37
+```
+
+With 1,000 independent devices, this admits 100, then another 100, and so on.
+`batchSize` counts primary workloads (Pods); containers sharing a network namespace
+are admitted together. Omit the setting or set it to `0` for unrestricted startup.
+
+All Node, Link, and NodeProfile definitions are created first so address allocation
+and link resolution see the complete lab. Unadmitted Nodes carry the controller-owned
+`c9s.run/startup-hold` annotation and do not start planning. Admission is persisted on
+the Nodes, so a manager restart resumes the batch already in progress.
+
+The next batch starts after all previously admitted workloads have a Pod reporting
+`PodReadyToStartContainers=True`. This limits the burst through kubelet and CNI setup.
+It deliberately does not wait for full application/link readiness, which can depend
+on devices in later batches. Topology readiness still requires the normal complete
+device readiness checks. Kubernetes must report `PodReadyToStartContainers`; an
+unschedulable Pod, failed sandbox, or unavailable condition holds subsequent batches.
+Inspect the admitted Pods and their Events to diagnose a stalled batch.
+
+This policy controls new workloads emitted by a Topology, including newly added or
+recreated Node resources. It does not pace rolling changes or replacement Pods for
+already admitted Nodes, and it does not apply to independently authored Nodes.
+Changing the size affects subsequent batches; it does not stop a batch already
+admitted. Setting the size to `0` releases all remaining held Nodes. The limit is
+per Topology, so simultaneous labs can still create a larger combined burst.
+
+Batching trades some parallelism for lower peak load. The value `100` is a starting
+point for measurement, not a demonstrated optimum. The combined changes improved
+the 1,000-device run below; their individual contributions have not been isolated.
+Keep dual-stack enabled when comparing batch sizes.
+
+## Controller work and diagnostics
+
+The controller retains a successful desired-state reconciliation for status-only
+updates. Node observations refresh device status without repeating planning, full
+namespace inventory, or authoritative entropy validation. Topology observations
+aggregate child status without recompiling the definition and rechecking every
+child's ownership. Input changes, owned-resource drift, and periodic full validation
+invalidate this reuse; a manager restart rebuilds it. Full reconciliation retains
+the existing authoritative identity and ownership checks.
+
+ConfigMap/Secret references use a Node index. Peer-directory updates run on an
+independent namespace queue with a 250ms coalescing delay and only write changed
+shards. Intermediate successful condition milestones remain in Node status but no
+longer each create an Event. Readiness, failures, and lifecycle diagnostics remain
+available. Planning and Node observations still share Node reconcile workers; these
+changes do not introduce a separate planning scheduler or remove per-device objects.
+
+For an investigation, set the Helm value `manager.diagnostics=true`. This enables
+controller-runtime metrics on loopback port 9090 and Go pprof on loopback port 6060,
+with sampled block and mutex profiling. Both are disabled by default and have no
+Service. Forward ports from the active manager Pod:
+
+```bash
+kubectl -n YOUR_C9S_NAMESPACE port-forward pod/YOUR_ACTIVE_MANAGER_POD \
+  9090:9090 6060:6060
+```
+
+In another terminal, capture metrics and a short CPU profile:
+
+```bash
+curl -fsS http://127.0.0.1:9090/metrics > manager-metrics.txt
+curl -fsS 'http://127.0.0.1:6060/debug/pprof/profile?seconds=30' > manager-cpu.pprof
+go tool pprof manager-cpu.pprof
+```
+
+Correlate controller queue/reconcile metrics and profiles with API/etcd latency and
+the Pod milestones below. A reduced request count alone does not establish which
+stage became faster. The original measurements below predate these changes; the
+follow-up section identifies the optimized images separately.
+
 ## Record distinct milestones
 
 For each run, retain the topology, image identifiers, configuration, and raw timestamps.
@@ -261,19 +352,144 @@ The source and measurements identify four concrete contributors:
    that directory from the full Node path. Deployments, ReplicaSets, Services,
    endpoint resources, and their status updates add further Kubernetes work.
 
-The first optimization should separate readiness/status refresh from full desired
-state reconciliation in both controllers. Preserve child ownership and drift
-checks when their inputs change, and preserve immutable Secret ownership/content
-validation while avoiding an authoritative read on every readiness event. Then
-reduce routine progress Events and batch shared-directory changes. The observed
-traffic identifies these targets; an implementation A/B test is still needed to
-measure their individual contribution to large-topology startup time.
+This investigation identified separation of readiness/status refresh from full
+desired-state reconciliation in both controllers as the first optimization target.
+That separation must preserve child ownership and drift checks when inputs change,
+and immutable Secret ownership/content validation, while avoiding an authoritative
+read on every readiness event. Other targets were routine progress Events and
+shared-directory changes. The follow-up implements these changes together; an
+isolated A/B test is still needed to measure their individual contributions.
 
 All 50 Topology Pods had dual-stack addresses. Six sampled cross-worker management
 pings passed. All three runs completed, and their dedicated namespaces were
 removed. Raw counters, watches, manifests, scripts, and the analysis
 are retained locally in `build/benchmarks/2026-09-21-api-pressure/`. The broad e2e
 suite was not run; this investigation used the three bounded cluster experiments.
+
+## Small comparisons after controller optimization
+
+The follow-up image `local-0f41aded-dirty-c00dcddfa992` adds status-only observation,
+indexed payload references, coalesced peer-directory updates, reduced progress
+Events, and optional startup batching. The seven workers, 14 planner workers,
+dual-stack CNI, BusyBox image, `/22` management network, 64Mi/10m requests, and
+absence of PVCs were retained.
+
+| Devices / batch size | Observed Topology Ready | Last plan and Deployment | Last Pod created | Last Pod Ready | Sandbox median / p95 / max |
+| --- | --- | --- | --- | --- | --- |
+| 50 / unrestricted | 34.6s | 7s | 11s | 32s | 1s / 2s / 3s |
+| 200 / unrestricted | 66.5s | 13s | 43s | 63s | 2s / 4s / 5s |
+| 200 / 100 | 75.0s | 32s | 50s | 71s | 2s / 3s / 4s |
+
+At 50 devices, successful Secret GETs fell from 1,183 to 351, and Node/NodeProfile
+namespace LISTs fell from 407 to four. Controller Event occurrences fell from 458
+to 156. These counters include other Kubernetes clients; the earlier capture also
+included a five-second tail after readiness. Their reduction is evidence of less
+work, not a direct attribution of wall-clock savings. The observed total changed
+from 38.2s to 34.6s in these single sequential runs.
+
+For 200 unrestricted devices, all Deployments existed at 13s, yet the last Pod was
+created at 43s. Deployment creation to ReplicaSet creation had a 14s median and
+27s maximum; ReplicaSet creation to Pod creation had a 0s median and 3s maximum.
+API POST means were approximately 30ms for Deployments, 22ms for ReplicaSets, and
+54ms for Pods. The remaining creation delay therefore lies largely between the
+Deployment and ReplicaSet controllers' observed milestones. These measurements
+do not distinguish controller-manager CPU, client rate limiting, or queue
+scheduling, and do not justify attributing that delay to Calico.
+
+Calico IPAM lock holds averaged 0.40–0.53s per worker without batching and
+0.37–0.48s with batches of 100. All 200 allocations were captured in each run;
+there were no API queue rejections. The second batch's first Deployment was created
+one second after the first batch's last network-ready sandbox. Batching was slower
+at this size, so it is a pressure-control option rather than a proven small-lab
+speed improvement. The previous namespace had no CNI operations in the captured
+batched run's time window.
+
+All devices in these three runs passed expected management address/prefix, default
+route, and neighbor ping checks by IP and hostname. Every device Pod had both
+underlay address families. Each small namespace was removed after verification.
+
+A 30-second manager CPU profile from the unrestricted 200-device run recorded
+42.75 CPU-seconds, with 41% of samples in background garbage collection. Namespace
+Pod copies during connectivity-revision cleanup accounted for 6.2% of cumulative
+CPU samples. Cleanup now first checks whether an owned superseded revision exists;
+fresh startup avoids the namespace Pod scan. Existing reference and ownership
+protection remains on the actual deletion path. The follow-up image is `local-scaling-gc-20260921`, manager digest
+`sha256:98eac2354a3ba9b1730c3eab986353ddacf6eb67c8bdb718549139b09c3098da`.
+A 50-device check with batches of 25 reached Topology Ready in 36.3s, with sandbox
+median/p95/max of 1s/2s/2s, no API queue rejections, and 50/50 management-network
+checks passing. This validates the combined path; it is not an isolated measurement
+of the cleanup optimization's speedup.
+
+Raw manifests, timestamps, counters, CNI logs, network results, and the CPU profile
+are under `build/benchmarks/2026-09-21-batched-startup/`. These are focused scaling
+experiments, separate from the broad e2e suite.
+
+## Follow-up with 1,000 devices and batches of 100
+
+After the small checks passed, the same `local-scaling-gc-20260921` image ran 1,000
+BusyBox devices with `spec.rollout.batchSize: 100`. The seven workers, two planner
+workers per Kubernetes worker, dual-stack Calico, `/22` management network, 64Mi/10m
+requests, and no-PVC configuration were retained. All earlier benchmark namespaces
+and Pods were gone before submission.
+
+| Measurement | Earlier optimized image, unrestricted | New controller changes, batch 100 |
+| --- | --- | --- |
+| Observed Topology Ready | 789.9s | 314.9s |
+| Last plan applied | 338s | 267s |
+| Last Pod created | 340s | 290s |
+| Last Pod Ready | 774s | 311s |
+| Scheduled to sandbox ready, median / p95 / max | 123s / 430s / 468s | 2s / 4s / 11s |
+| Mean IPAM lock hold, range across captured workers | 5.02–5.17s | 0.38–0.48s |
+| IPAM block API GET / PUT mean | 175ms / 207ms | 9.9ms / 19.3ms |
+| API queue rejections | 296 | 0 |
+| FailedMount occurrences / affected Pods | 79 / 27 | 9 / 4 |
+
+The new run reached observed readiness in 5m15s, about 60% less time than the earlier
+13m10s run. Calico logs contain all 1,000 allocations across seven workers; the
+earlier IPAM lock sample covered 282 allocations on two workers. The largest new
+IPAM lock wait was 9.3s, versus about 463s previously. Etcd GETs for IPAM blocks
+averaged 5.6ms. The previous several-minute network-setup tail did not recur.
+
+Every device passed its expected management IPv4/prefix, default route, and ping
+to the next device by IP and hostname on the first verification attempt. The 1,000
+directed neighbor checks included 602 cross-worker pairs; this is not an all-pairs
+test. Every Pod had unique IPv4 and IPv6 underlay addresses, and there were no PVCs
+or container restarts. Network verification took another 69.7s after readiness and
+is outside the startup measurement. Nine ConfigMap/Secret cache-sync mount failures
+on four Pods recovered, as did 273 startup-probe warning occurrences. The namespace
+`c9s-scale-n1000-b100-gc` was retained for inspection.
+
+### What still takes time
+
+Deployment creation to ReplicaSet creation took 12s at the median, 22s at p95, and
+24s at maximum. ReplicaSet creation to Pod creation took 0s at the median and 2s at
+maximum. Mean API POST latency was 21ms for Deployments, 25ms for ReplicaSets, and
+62ms for Pods. These timestamps locate a remaining delay in the Deployment
+controller stage, but do not identify whether its CPU, client rate limiting, or
+queue scheduling is responsible.
+
+Each batch after the first produced its Deployments over roughly 5–7 seconds, but
+the last sandbox in a batch often arrived another 19–27 seconds after its last
+Deployment. The next batch's first Deployment followed the preceding batch's last
+sandbox within 0–1 seconds at timestamp resolution. Thus batch admission was
+responsive, while ten batches repeatedly paid the Kubernetes workload-creation
+delay. The last plan time of 267s includes intentional waiting for earlier batches;
+it is not 267 seconds of planner execution. Sandbox-ready to full Pod Ready added
+a median 19s, overlapping startup of the next batch.
+
+Total watch payload was still about 5.02GB, compared with 4.33GB in the older
+capture, despite much lower IPAM latency. These cluster-wide totals use different
+duration windows and include background traffic; request counts or payload totals
+alone cannot explain the earlier slowdown. Per-device objects, mount watches,
+helper startup, and status updates still create substantial work.
+
+The result validates the combined controller optimizations and batch policy on
+this cluster, not batching alone or an optimal batch size. There was no new
+1,000-device unrestricted comparison. The smaller 200-device comparison actually
+favored unrestricted startup. Further work should measure the Deployment-controller
+delay and compare admission sizes before increasing planner concurrency or changing
+Calico. Raw evidence, including per-batch timestamps and all network probes, is in
+`build/benchmarks/2026-09-21-batched-startup/n1000-b100-gc/`.
 
 ## References
 

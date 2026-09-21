@@ -5,6 +5,7 @@ topology:
     srl:
       kind: nokia_srlinux
       image: ghcr.io/clab-labs/srlinux:25.10.1
+      ports: [22/tcp]
       startup-config: |
         set / interface ethernet-1/1 admin-state enable
         set / interface ethernet-1/1 subinterface 0 ipv4 admin-state enable
@@ -25,7 +26,11 @@ topology:
     ceos:
       kind: arista_ceos
       image: ghcr.io/clab-labs/ceos:4.33.1F
+      ports: [22/tcp]
       startup-config: |
+        {{ if .DNS }}{{ range .DNS.Servers }}
+        ip name-server {{ . }}
+        {{ end }}{{ end }}
         interface Ethernet1
            no switchport
            ip address 10.210.3.1/30
@@ -46,6 +51,7 @@ topology:
     sros:
       kind: nokia_srsim
       image: ghcr.io/clab-labs/nokia_srsim:26.7.R1
+      ports: [22/tcp]
       type: sr-1-92s
       license: /opt/nokia/sros/license.txt
       components:
@@ -77,6 +83,9 @@ topology:
     mt-srl:
       kind: linux
       image: ghcr.io/srl-labs/network-multitool:latest
+      # Native SR OS resolves through DNS, not the CPM's Linux hosts file. Publish a
+      # headless alias so its short peer-name probe can use the namespace DNS domain.
+      aliases: [mt-srl-dns]
       exec:
         - ip address replace 10.210.1.2/30 dev eth1
         - ip address replace 10.210.2.2/30 dev eth2

@@ -166,12 +166,14 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	if err = r.refreshDirectPeerDirectory(
-		ctx,
-		node.GetNamespace(),
-		profile.Mgmt,
-	); err != nil {
-		return err
+	if !r.peerDirectoryAsync {
+		if err = r.refreshDirectPeerDirectory(
+			ctx,
+			node.GetNamespace(),
+			profile.Mgmt,
+		); err != nil {
+			return err
+		}
 	}
 	baseRequest := PlanInputCompileRequest{
 		Primary: node, GroupMembers: groupMembers, NodesByName: nodesByName,
@@ -585,7 +587,21 @@ func (r *Reconciler) reconcileDirect(
 		return err
 	}
 
-	return r.garbageCollectWorkerArtifacts(ctx, node, keepWorkerArtifacts)
+	if err = r.garbageCollectWorkerArtifacts(ctx, node, keepWorkerArtifacts); err != nil {
+		return err
+	}
+	captureDirectObservation(
+		ctx,
+		node,
+		statusPlan,
+		currentDeployment,
+		groupMembers,
+		nodesByName,
+		directExposedPorts,
+		profile,
+		linkLifecycleMode,
+	)
+	return nil
 }
 
 func (r *Reconciler) reconcileDirectSecondary(

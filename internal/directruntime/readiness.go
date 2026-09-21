@@ -74,6 +74,10 @@ func RunReadiness(
 		return errors.New("readiness target container is absent from the plan")
 	}
 
+	// Applications may replace the kubelet hosts mount during boot. Refresh from inside
+	// the application so both those replacements and later peer additions are observed.
+	refreshApplicationHosts(normalized, newLaunchOperations())
+
 	prepareImportedRuntimeCLI(normalized, containerID)
 
 	if err = runOCIHealthcheck(ctx, target.Healthcheck); err != nil {

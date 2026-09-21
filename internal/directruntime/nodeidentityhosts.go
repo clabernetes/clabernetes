@@ -20,7 +20,7 @@ const (
 )
 
 // podHostsFilePath is the kubelet-managed hosts file bind-mounted into every container of the
-// Pod; a write from any container is visible in all of them.
+// Pod. Applications can replace that mount, so application probes also refresh their own file.
 const podHostsFilePath = "/etc/hosts"
 
 // applyOwnedHostsBestEffort realizes the c9s-owned hosts entries: the Pod's own node name

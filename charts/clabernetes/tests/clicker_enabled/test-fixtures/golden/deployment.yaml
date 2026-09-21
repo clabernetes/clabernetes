@@ -95,6 +95,8 @@ spec:
               value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
             - name: PLANNER_POOL_ENABLED
               value: "true"
+            - name: C9S_DIAGNOSTICS
+              value: "false"
           resources:
             requests:
               memory: 128Mi
@@ -125,6 +127,8 @@ spec:
               value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
             - name: PLANNER_POOL_ENABLED
               value: "true"
+            - name: C9S_DIAGNOSTICS
+              value: "false"
           resources:
             requests:
               memory: 128Mi
