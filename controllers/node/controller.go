@@ -313,9 +313,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// NodeProfile changes enqueue only groups with explicit references to that profile.
 		Watches(
 			&clabernetesapisv1alpha1.NodeProfile{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(
-				c.enqueuePrimariesForNodeProfileAndInvalidate,
-			),
+			c.externalEnqueueHandler(c.enqueuePrimariesForNodeProfile),
 		).
 		// links feed the connectivity plans of the primaries terminating them
 		Watches(
@@ -325,7 +323,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// global config is the base of every profile resolution
 		Watches(
 			&clabernetesapisv1alpha1.Config{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(c.enqueueAllNodesAndInvalidate),
+			c.externalEnqueueHandler(c.enqueueAllNodes),
 		).
 		// owned objects
 		Watches(
@@ -348,15 +346,11 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// pod group that consumes them.
 		Watches(
 			&k8scorev1.ConfigMap{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(
-				c.enqueuePrimariesForPayloadObjectAndInvalidate,
-			),
+			c.externalEnqueueHandler(c.enqueuePrimariesForPayloadObject),
 		).
 		Watches(
 			&k8scorev1.Secret{},
-			ctrlruntimehandler.EnqueueRequestsFromMapFunc(
-				c.enqueuePrimariesForPayloadObjectAndInvalidate,
-			),
+			c.externalEnqueueHandler(c.enqueuePrimariesForPayloadObject),
 		).
 		Watches(
 			&k8scorev1.Secret{},
@@ -430,36 +424,6 @@ func (c *Controller) invalidateDirectStatusesForRequests(
 			c.Log.Criticalf("failed invalidating direct Node statuses, err: %s", err)
 		}
 	}
-}
-
-func (c *Controller) enqueuePrimariesForNodeProfileAndInvalidate(
-	ctx context.Context,
-	obj ctrlruntimeclient.Object,
-) []ctrlruntimereconcile.Request {
-	requests := c.enqueuePrimariesForNodeProfile(ctx, obj)
-	c.invalidateDirectStatusesForRequests(ctx, requests)
-
-	return requests
-}
-
-func (c *Controller) enqueueAllNodesAndInvalidate(
-	ctx context.Context,
-	obj ctrlruntimeclient.Object,
-) []ctrlruntimereconcile.Request {
-	requests := c.enqueueAllNodes(ctx, obj)
-	c.invalidateDirectStatusesForRequests(ctx, requests)
-
-	return requests
-}
-
-func (c *Controller) enqueuePrimariesForPayloadObjectAndInvalidate(
-	ctx context.Context,
-	obj ctrlruntimeclient.Object,
-) []ctrlruntimereconcile.Request {
-	requests := c.enqueuePrimariesForPayloadObject(ctx, obj)
-	c.invalidateDirectStatusesForRequests(ctx, requests)
-
-	return requests
 }
 
 // enqueuePrimaryFor resolves the primary node hosting the given node object and returns a
@@ -551,42 +515,7 @@ func (c *Controller) primaryEnqueueHandler() ctrlruntimehandler.EventHandler {
 // endpoint rewires (the former primary must remove the old termination), while spec-only
 // changes still enqueue the unchanged terminating primaries for live reconciliation.
 func (c *Controller) linkEnqueueHandler() ctrlruntimehandler.EventHandler {
-	enqueue := func(
-		ctx context.Context,
-		queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
-		objects ...ctrlruntimeclient.Object,
-	) {
-		requests := c.enqueuePrimariesForLinkObjects(ctx, objects...)
-		c.invalidateDirectStatusesForRequests(ctx, requests)
-
-		for _, request := range requests {
-			queue.Add(request)
-		}
-	}
-
-	return ctrlruntimehandler.Funcs{
-		CreateFunc: func(
-			ctx context.Context,
-			event ctrlruntimeevent.CreateEvent,
-			queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
-		) {
-			enqueue(ctx, queue, event.Object)
-		},
-		UpdateFunc: func(
-			ctx context.Context,
-			event ctrlruntimeevent.UpdateEvent,
-			queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
-		) {
-			enqueue(ctx, queue, event.ObjectOld, event.ObjectNew)
-		},
-		DeleteFunc: func(
-			ctx context.Context,
-			event ctrlruntimeevent.DeleteEvent,
-			queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
-		) {
-			enqueue(ctx, queue, event.Object)
-		},
-	}
+	return c.externalEnqueueHandler(c.enqueuePrimariesForLink)
 }
 
 func profileReferenceIndex(obj ctrlruntimeclient.Object) []string {
@@ -819,39 +748,6 @@ func (c *Controller) enqueuePrimariesForLink(
 				Name:      primary,
 			},
 		})
-	}
-
-	return requests
-}
-
-func (c *Controller) enqueuePrimariesForLinkObjects(
-	ctx context.Context,
-	objects ...ctrlruntimeclient.Object,
-) []ctrlruntimereconcile.Request {
-	requestsByName := make(map[apimachinerytypes.NamespacedName]ctrlruntimereconcile.Request)
-
-	for _, obj := range objects {
-		for _, request := range c.enqueuePrimariesForLink(ctx, obj) {
-			requestsByName[request.NamespacedName] = request
-		}
-	}
-
-	names := make([]apimachinerytypes.NamespacedName, 0, len(requestsByName))
-	for name := range requestsByName {
-		names = append(names, name)
-	}
-
-	sort.Slice(names, func(i, j int) bool {
-		if names[i].Namespace != names[j].Namespace {
-			return names[i].Namespace < names[j].Namespace
-		}
-
-		return names[i].Name < names[j].Name
-	})
-
-	requests := make([]ctrlruntimereconcile.Request, 0, len(names))
-	for _, name := range names {
-		requests = append(requests, requestsByName[name])
 	}
 
 	return requests

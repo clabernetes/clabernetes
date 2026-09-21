@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -18,6 +17,7 @@ import (
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimeutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -174,8 +174,6 @@ type renderedChild struct {
 	object ctrlruntimeclient.Object
 }
 
-var errRenderedChildNotObject = errors.New("rendered child is not a Kubernetes object")
-
 func (c renderedChildren) all() []renderedChild {
 	children := make([]renderedChild, 0, len(c.nodeProfiles)+len(c.links)+len(c.nodes))
 
@@ -213,6 +211,35 @@ func (r *Reconciler) findChildResourceConflicts(
 		reader = r.Client
 	}
 
+	// Ownership checks must bypass the informer cache, but need only metadata. Batch
+	// them by kind instead of making one API request per child on every status update.
+	existing := make(map[string]metav1.PartialObjectMetadata)
+	for _, inventory := range []struct {
+		kind     string
+		listKind string
+		count    int
+	}{
+		{"nodeprofile", "NodeProfileList", len(rendered.nodeProfiles)},
+		{"link", "LinkList", len(rendered.links)},
+		{"node", "NodeList", len(rendered.nodes)},
+	} {
+		if inventory.count == 0 {
+			continue
+		}
+
+		objects := &metav1.PartialObjectMetadataList{}
+		objects.SetGroupVersionKind(
+			clabernetesapisv1alpha1.SchemeGroupVersion.WithKind(inventory.listKind),
+		)
+		err := reader.List(ctx, objects, ctrlruntimeclient.InNamespace(topology.GetNamespace()))
+		if err != nil {
+			return nil, err
+		}
+		for _, object := range objects.Items {
+			existing[inventory.kind+"/"+object.GetName()] = object
+		}
+	}
+
 	seen := make(map[string]struct{})
 	conflictSet := make(map[string]struct{})
 
@@ -226,28 +253,8 @@ func (r *Reconciler) findChildResourceConflicts(
 
 		seen[conflictName] = struct{}{}
 
-		existing, ok := child.object.DeepCopyObject().(ctrlruntimeclient.Object)
-		if !ok {
-			return nil, fmt.Errorf("%w: %s", errRenderedChildNotObject, conflictName)
-		}
-
-		err := reader.Get(
-			ctx,
-			ctrlruntimeclient.ObjectKey{
-				Namespace: topology.GetNamespace(),
-				Name:      child.object.GetName(),
-			},
-			existing,
-		)
-		if err != nil {
-			if apimachineryerrors.IsNotFound(err) {
-				continue
-			}
-
-			return nil, err
-		}
-
-		if !generatedForTopology(existing, topology) {
+		if object, exists := existing[conflictName]; exists &&
+			!generatedForTopology(&object, topology) {
 			conflictSet[conflictName] = struct{}{}
 		}
 	}

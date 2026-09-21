@@ -5,13 +5,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	k8scorev1 "k8s.io/api/core/v1"
+	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
 func TestDirectProbePolicyUsesImmutableSecretWithoutSerializingPassword(t *testing.T) {
@@ -103,5 +107,89 @@ func TestDirectProbePolicyUsesImmutableSecretWithoutSerializingPassword(t *testi
 	if again.SecretName != resolution.SecretName ||
 		!reflect.DeepEqual(again.Policies, resolution.Policies) {
 		t.Fatalf("idempotent probe resolution = %#v, want %#v", again, resolution)
+	}
+}
+
+//nolint:gocognit // Exercise both deletion and a concurrent ownership change against the same fixtures.
+func TestProbeSecretCleanupUsesCacheAndProtectsChangedObjects(t *testing.T) {
+	t.Parallel()
+	for _, changedAfterList := range []bool{false, true} {
+		t.Run(fmt.Sprintf("changed-after-list=%t", changedAfterList), func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			owner := planInputTestNode("device", "device-uid", "linux", "busybox")
+			secret := &k8scorev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: "obsolete-probes", Namespace: owner.GetNamespace(), UID: "obsolete-uid",
+				Labels: map[string]string{
+					directProbeSecretLabel:   "credentials",
+					directProbeOwnerUIDLabel: string(owner.GetUID()),
+				},
+				OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(owner,
+					clabernetesapisv1alpha1.SchemeGroupVersion.WithKind(nodeCRKind))},
+			}}
+			keep := secret.DeepCopy()
+			keep.Name = "current-probes"
+			keep.UID = "current-uid"
+			foreign := secret.DeepCopy()
+			foreign.Name = "foreign-probes"
+			foreign.UID = "foreign-uid"
+			foreign.OwnerReferences[0].UID = "another-node"
+			base := ctrlruntimefake.NewClientBuilder().WithScheme(plannerTestScheme(t)).
+				WithObjects(secret, keep, foreign).Build()
+			cacheLists := 0
+			cached := interceptor.NewClient(base, interceptor.Funcs{
+				List: func(ctx context.Context, client ctrlruntimeclient.WithWatch,
+					list ctrlruntimeclient.ObjectList, opts ...ctrlruntimeclient.ListOption,
+				) error {
+					cacheLists++
+					if err := client.List(ctx, list, opts...); err != nil {
+						return err
+					}
+					if !changedAfterList {
+						return nil
+					}
+					current := &k8scorev1.Secret{}
+					if err := client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(secret), current); err != nil {
+						return err
+					}
+					current.OwnerReferences[0].UID = "another-node"
+
+					return client.Update(ctx, current)
+				},
+			})
+			uncached := interceptor.NewClient(base, interceptor.Funcs{
+				List: func(context.Context, ctrlruntimeclient.WithWatch,
+					ctrlruntimeclient.ObjectList, ...ctrlruntimeclient.ListOption,
+				) error {
+					t.Fatal("cleanup issued a live Secret LIST")
+
+					return nil
+				},
+			})
+			reconciler := &Reconciler{Client: cached, apiReader: uncached}
+			err := reconciler.garbageCollectDirectProbeSecrets(ctx, owner, keep.Name)
+			if changedAfterList {
+				if !apimachineryerrors.IsConflict(err) {
+					t.Fatalf("stale deletion error = %v, want conflict", err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if cacheLists != 1 {
+				t.Fatalf("cache lists = %d, want 1", cacheLists)
+			}
+			for _, object := range []*k8scorev1.Secret{keep, foreign} {
+				if err = base.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(object), &k8scorev1.Secret{}); err != nil {
+					t.Fatalf("preserved Secret %s: %v", object.Name, err)
+				}
+			}
+			err = base.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(secret), &k8scorev1.Secret{})
+			if changedAfterList && err != nil {
+				t.Fatalf("changed Secret was not preserved: %v", err)
+			}
+			if !changedAfterList && !apimachineryerrors.IsNotFound(err) {
+				t.Fatalf("obsolete Secret was not collected: %v", err)
+			}
+		})
 	}
 }

@@ -60,6 +60,8 @@ build/try-c9s/*/
 build/e2e/bin/
 # ignore the pinned DevSpace binary downloaded by `make dev`
 build/dev/bin/
+# local scaling experiment snapshots and metrics
+build/benchmarks/
 
 # for crd -> openapi gen
 venv
