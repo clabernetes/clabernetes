@@ -71,6 +71,14 @@ func readGeneratedExtendedAttributes(
 		get = unix.Lgetxattr
 	}
 
+	return readGeneratedExtendedAttributesWith(path, list, get)
+}
+
+func readGeneratedExtendedAttributesWith(
+	path string,
+	list func(string, []byte) (int, error),
+	get func(string, string, []byte) (int, error),
+) ([]generatedExtendedAttribute, error) {
 	size, err := list(path, nil)
 	if errors.Is(err, unix.ENOTSUP) {
 		return nil, nil
@@ -107,10 +115,17 @@ func readGeneratedExtendedAttributes(
 	}
 
 	slices.Sort(names)
-	result := make([]generatedExtendedAttribute, 0, len(names))
+	var result []generatedExtendedAttribute
 	total := 0
 
 	for _, name := range names {
+		// SELinux labels belong to the host/container security context, not the generated
+		// package. Planning and preparation can use differently labelled filesystems or
+		// Pods. Never fingerprint or copy that context; retain the destination's label.
+		if name == "security.selinux" {
+			continue
+		}
+
 		if name == "" || len(name) > 255 || strings.ContainsRune(name, 0) {
 			return nil, generatedMetadataError(
 				"imported artifact has an invalid attribute name",
