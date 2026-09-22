@@ -33,9 +33,11 @@ type meshNeighborResolver struct {
 func (r *meshNeighborResolver) start(index int) error {
 	if r.handle != nil && r.index == index {
 		r.mu.Lock()
-		defer r.mu.Unlock()
-
-		return r.failure
+		healthy := r.failure == nil
+		r.mu.Unlock()
+		if healthy {
+			return nil
+		}
 	}
 	r.close()
 	handle, err := netlink.NewHandle(unix.NETLINK_ROUTE)

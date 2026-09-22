@@ -139,7 +139,13 @@ func (c *Controller) reconcileStartupAdmission(
 		return retry, err
 	}
 	if size <= 0 {
-		return retry, nil
+		// Pod watches drive host admission. Only active gates need the short retry;
+		// a slow watchdog bridges Config-manager delivery ordering while idle.
+		if slices.ContainsFunc(pods.Items, startupHostPending) {
+			return retry, nil
+		}
+
+		return ctrlruntime.Result{RequeueAfter: directRequeueInterval}, nil
 	}
 	newest := startupAdmissionPods(pods.Items)
 	c.observeStartupAdmissions(nodes.Items, size)
@@ -317,4 +323,9 @@ func (c *Controller) pendingStartupGroups(
 	}
 
 	return pending, blocked, nil
+}
+
+func startupHostPending(pod k8scorev1.Pod) bool {
+	return pod.DeletionTimestamp == nil && hasStartupHostGate(pod.Spec) &&
+		!startupPrimaryStarted(&pod)
 }

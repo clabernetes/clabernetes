@@ -4,11 +4,14 @@ package directruntime
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 func cacheTestSource(t *testing.T, content []byte) *os.File {
@@ -47,6 +50,9 @@ func TestLifecycleCacheConcurrentReuseAndRepair(t *testing.T) {
 				return
 			}
 			cached, cacheErr := populateLifecycleCache(root, source, digest+".bin", digest)
+			if errors.Is(cacheErr, unix.EWOULDBLOCK) {
+				return // A contended cache falls back to the image copy.
+			}
 			if cacheErr != nil {
 				t.Error(cacheErr)
 
@@ -171,5 +177,67 @@ func TestLifecycleCloneKeepsSourceAndFallbackPosition(t *testing.T) {
 	got, err = os.ReadFile(source.Name())
 	if err != nil || !bytes.Equal(got, content) {
 		t.Fatalf("destination write changed its source: %v", err)
+	}
+}
+
+func TestLifecycleCacheContentionDoesNotBlock(t *testing.T) {
+	t.Parallel()
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	lock, err := root.OpenFile("install.lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lock.Close() }()
+	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	source := cacheTestSource(t, []byte("trusted binary"))
+	digest, err := lifecycleBinaryDigest(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached, err := populateLifecycleCache(root, source, digest+".bin", digest)
+	if cached != nil || !errors.Is(err, unix.EWOULDBLOCK) {
+		t.Fatalf("contended cache = %v, %v", cached, err)
+	}
+}
+
+func TestLifecycleCacheUnsafeEntryFallsBackToTrustedCopy(t *testing.T) {
+	t.Parallel()
+	// Cross filesystems so the initial image-to-Pod clone cannot bypass the cache.
+	source, err := os.CreateTemp("/dev/shm", "c9s-cache-source-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = source.Close(); _ = os.Remove(source.Name()) }()
+	content := []byte("trusted binary")
+	if _, err = source.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	digest, err := lifecycleBinaryDigest(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache := t.TempDir()
+	if err = os.Symlink(source.Name(), filepath.Join(cache, digest+".bin")); err != nil {
+		t.Fatal(err)
+	}
+	destination := cacheTestSource(t, nil)
+	cloned, err := cloneLifecycleBinary(source, destination, cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cloned {
+		if _, err = io.Copy(destination, source); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := os.ReadFile(destination.Name())
+	if err != nil || !bytes.Equal(got, content) {
+		t.Fatalf("trusted fallback differs: %q, %v", got, err)
 	}
 }

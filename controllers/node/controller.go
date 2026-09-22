@@ -11,6 +11,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 
 	clabernetesapis "github.com/clabernetes/clabernetes/apis"
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -55,6 +56,9 @@ type Controller struct {
 
 	reconciler *Reconciler
 	session    *PlannerSessionReconciler
+	dependencyRetryMu sync.Mutex
+	dependencyRetries map[apimachinerytypes.NamespacedName]dependencyRetry
+
 	// Pending successful admission writes bridge informer lag; only the serial admission
 	// controller accesses this map. Durable admission remains on the Node itself.
 	startupAdmissions     map[apimachinerytypes.UID]struct{}

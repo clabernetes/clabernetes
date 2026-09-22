@@ -345,3 +345,42 @@ func TestStatusPatchIncludesRequiredZeroValuesAndClearsOldError(t *testing.T) {
 		t.Fatal("patch has no optimistic lock")
 	}
 }
+
+func TestConditionOnlyChangeIsPersisted(t *testing.T) {
+	t.Parallel()
+	topology := conflictTestTopology()
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(conflictTestScheme(t)).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Topology{}).
+		WithObjects(topology).
+		Build()
+	reconciler := &Reconciler{Client: client}
+	compiled := &clabernetescompiler.CompiledTopology{
+		Kind:  "containerlab",
+		Nodes: map[string]*clabernetesutilcontainerlab.NodeDefinition{"pending": {}},
+	}
+	if err := reconciler.reconcileStatus(t.Context(), topology, compiled); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Get(t.Context(), ctrlruntimeclient.ObjectKeyFromObject(topology), topology); err != nil {
+		t.Fatal(err)
+	}
+	if len(topology.Status.Conditions) == 0 {
+		t.Fatal("missing aggregate condition")
+	}
+	topology.Status.Conditions[0].Reason = "StaleReason"
+	if err := client.Status().Update(t.Context(), topology); err != nil {
+		t.Fatal(err)
+	}
+	// Only the condition differs. Aliasing the old slice would make the equality guard
+	// suppress the patch after SetStatusCondition mutates that shared slice.
+	if err := reconciler.reconcileStatus(t.Context(), topology, compiled); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Get(t.Context(), ctrlruntimeclient.ObjectKeyFromObject(topology), topology); err != nil {
+		t.Fatal(err)
+	}
+	if topology.Status.Conditions[0].Reason == "StaleReason" {
+		t.Fatal("condition-only change was not persisted")
+	}
+}

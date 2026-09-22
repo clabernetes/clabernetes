@@ -889,10 +889,9 @@ func reportDirectConditionEvent(condition metav1.Condition, prior *metav1.Condit
 	case "NodeProfileResolved",
 		"PlanApplied",
 		"PreparationCompleted",
-		"ConnectivityReady",
-		"PlanPending":
+		"ConnectivityReady":
 		return false
-	case directPodPendingReason, "HelperPending":
+	case directPodPendingReason, "HelperPending", "PlanPending":
 		return prior != nil && prior.Status == metav1.ConditionTrue
 	default:
 		return true

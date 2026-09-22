@@ -22,10 +22,11 @@ metadata:
   {{- end }}
 data:
   mergeMode: {{ .Values.globalConfig.mergeMode }}
-  {{- if hasKey .Values.globalConfig.rollout "batchSize" }}
+  {{- $rollout := .Values.globalConfig.rollout | default dict }}
+  {{- if hasKey $rollout "batchSize" }}
   rolloutBatchSize: {{ .Values.globalConfig.rollout.batchSize | quote }}
   {{- end }}
-  {{- if hasKey .Values.globalConfig.rollout "maxConcurrentPerHost" }}
+  {{- if hasKey $rollout "maxConcurrentPerHost" }}
   rolloutMaxConcurrentPerHost: {{ .Values.globalConfig.rollout.maxConcurrentPerHost | quote }}
   {{- end }}
   globalAnnotations: |-

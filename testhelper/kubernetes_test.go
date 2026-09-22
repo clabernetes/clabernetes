@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -65,5 +66,22 @@ func TestNormalizeExposeServiceFinalizers(t *testing.T) {
 				t.Fatalf("normalization lost the appProtocol hint: %+v", normalized.Spec.Ports)
 			}
 		})
+	}
+}
+
+func TestNormalizeNodePreservesUserAnnotations(t *testing.T) {
+	t.Parallel()
+	input := []byte(`metadata:
+  annotations:
+    c9s.run/startup-admitted: runtime-node-uid
+    c9s.run/startup-hold: runtime-topology-uid
+    example.com/user: retained
+`)
+	var node clabernetesapisv1alpha1.Node
+	if err := yaml.Unmarshal(clabernetestesthelper.NormalizeNode(t, input), &node); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(node.Annotations, map[string]string{"example.com/user": "retained"}) {
+		t.Fatalf("unexpected normalized annotations: %v", node.Annotations)
 	}
 }

@@ -51,12 +51,14 @@ func cloneLifecycleBinary(source, destination *os.File, cacheRoot string) (bool,
 	name := digest + ".bin"
 	cached, err := verifiedLifecycleCache(root, name, digest)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, err
+		// The cache is an optimization. Reject unsafe entries, but let the caller
+		// copy the trusted image binary rather than wedging every Pod on this host.
+		return false, nil
 	}
 	if cached == nil {
 		cached, err = populateLifecycleCache(root, source, name, digest)
 		if err != nil {
-			return false, err
+			return false, nil
 		}
 	}
 	defer func() { _ = cached.Close() }()
@@ -134,7 +136,7 @@ func populateLifecycleCache(root *os.Root, source *os.File, name, digest string)
 		return nil, err
 	}
 	defer func() { _ = lock.Close() }()
-	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX); err != nil {
+	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		return nil, err
 	}
 	defer func() { _ = unix.Flock(int(lock.Fd()), unix.LOCK_UN) }()

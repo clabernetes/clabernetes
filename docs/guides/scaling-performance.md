@@ -607,3 +607,32 @@ Calico. Raw evidence, including per-batch timestamps and all network probes, is 
 - [Kubelet configuration](https://kubernetes.io/docs/reference/config-api/kubelet-config.v1beta1/)
 - [Calico CNI configuration](https://docs.tigera.io/calico/latest/reference/configure-cni-plugins)
 - [Calico v3.32.1 IPAM locking](https://github.com/projectcalico/calico/blob/v3.32.1/cni-plugin/pkg/ipamplugin/ipam_plugin.go)
+
+## Reconciliation and validation limits
+
+Node and Topology observations avoid repeated planning while workloads are stable.
+Topology-wide changes to global configuration and foreign-name conflicts can take up
+to five minutes to be detected by the full validation pass. Node, profile, and owned
+child changes covered by watches invalidate their affected observations sooner.
+An expired Node observation that is waiting for a planner or certificate refresh uses
+the normal 60-second watchdog; it does not continuously retry the expired deadline.
+Missing link inputs and planner-pool contention receive five fast retries two seconds
+apart, followed by a 60-second watchdog if no progress occurs. Completed pool workers
+renew the fast-retry window so healthy saturation continues using available capacity.
+Dependency watches can still trigger an
+immediate pass when the input changes.
+
+The Helm `merge` policy preserves the entire existing `spec.rollout` object, including
+zero values. To add a per-host limit to an existing global batch policy, patch the
+Config directly or use `globalConfig.mergeMode=overwrite` with both desired values.
+A Pod that cannot complete startup retains its host admission slot. Inspect its Pod
+conditions, init-container status and events, then repair or remove the failed workload;
+a time-based slot release could allow more simultaneous boots than the configured cap.
+
+CI enables the planner reuse/recovery, delayed-peer startup and per-host admission
+regressions. The 200-node scale variants and licensed mixed-vendor scenarios remain
+opt-in capacity tests requiring sufficient cluster resources and vendor images.
+Set `PLANNER_POOL_SCALE_E2E=1` or `PLANNER_POOL_MIXED_E2E=1` when invoking the standard
+Make e2e targets. Their default package timeout is 150 minutes, allowing all serial
+variants to run; select one test with `E2E_TEST_ARGS=-run=TestName` for a focused run.
+The default suites retain a 30-minute timeout. `E2E_TEST_TIMEOUT` overrides either budget.

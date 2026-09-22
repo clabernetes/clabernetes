@@ -129,6 +129,7 @@ func (c *Controller) Reconcile(
 	err := c.BaseController.Client.Get(ctx, req.NamespacedName, node)
 	if err != nil {
 		if apimachineryerrors.IsNotFound(err) {
+			c.resetDependencyRetry(req.NamespacedName)
 			if c.reconciler.observations != nil {
 				c.reconciler.observations.Invalidate(req.NamespacedName)
 			}
@@ -148,6 +149,8 @@ func (c *Controller) Reconcile(
 	}
 
 	if node.DeletionTimestamp != nil {
+		c.resetDependencyRetry(req.NamespacedName)
+
 		return ctrlruntime.Result{}, nil
 	}
 
@@ -163,8 +166,9 @@ func (c *Controller) Reconcile(
 
 	err = c.reconciler.Reconcile(ctx, node)
 	if directDependencyPending(err) {
-		return ctrlruntime.Result{RequeueAfter: plannerPoolRetryDelay}, nil
+		return ctrlruntime.Result{RequeueAfter: c.dependencyRetryAfter(node, err)}, nil
 	}
+	c.resetDependencyRetry(req.NamespacedName)
 	if err != nil {
 		return ctrlruntime.Result{}, err
 	}
@@ -176,7 +180,7 @@ func (c *Controller) Reconcile(
 	return ctrlruntime.Result{RequeueAfter: c.reconciler.observationRequeueAfter(node)}, nil
 }
 
-// Expected convergence waits must not accumulate exponential failure backoff. Keep real
+// Expected convergence waits get a short fast-retry window, then the watchdog pace. Keep real
 // validation and identity errors on the error path; only incomplete Link inventory is a wait.
 func directDependencyPending(err error) bool {
 	// Joined errors include a failed diagnostic status update, which must remain visible.

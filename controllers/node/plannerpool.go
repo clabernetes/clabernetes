@@ -38,6 +38,7 @@ type PlannerPool struct {
 	Sessions  *PlannerSessionReconciler
 	mutex     sync.Mutex
 	busy      map[string]bool
+	releases  uint64
 }
 
 func (p *PlannerPool) acquire(ctx context.Context) (*k8scorev1.Pod, error) {
@@ -75,6 +76,15 @@ func (p *PlannerPool) release(pod *k8scorev1.Pod) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	delete(p.busy, string(pod.GetUID()))
+	p.releases++
+}
+
+// releaseGeneration lets pending Nodes distinguish healthy saturation from a stalled pool.
+func (p *PlannerPool) releaseGeneration() uint64 {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	return p.releases
 }
 
 //nolint:gocyclo // Validate and persist one complete request at the stream boundary.

@@ -4,6 +4,7 @@ package topology
 import (
 	"context"
 	"testing"
+	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
@@ -58,6 +59,18 @@ func TestTopologyObservationAvoidsInventoryButInvalidationRepairsDrift(t *testin
 	if err := client.Get(ctx, ctrlruntimeclient.ObjectKey{Namespace: topology.Namespace, Name: "frr1"}, node); err != nil {
 		t.Fatal(err)
 	}
+	snapshot, _, valid := r.observations.Load(ctrlruntimeclient.ObjectKeyFromObject(topology))
+	if !valid {
+		t.Fatal("missing topology observation")
+	}
+	snapshot.checkedAt = time.Now().Add(-6 * time.Minute)
+	if _, err := r.Reconcile(ctx, topology); err != nil {
+		t.Fatal(err)
+	}
+	if lists == 0 {
+		t.Fatal("expired observation skipped full ownership validation")
+	}
+	lists = 0
 	original := node.Spec.Image
 	node.Spec.Image = "foreign/image"
 	if err := client.Update(ctx, node); err != nil {

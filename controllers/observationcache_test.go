@@ -2,6 +2,7 @@ package controllers_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
@@ -76,5 +77,30 @@ func TestObservationHandlerDistinguishesStatusFromDrift(t *testing.T) {
 	)
 	if invalidations != 1 {
 		t.Fatal("spec drift did not invalidate snapshot")
+	}
+}
+
+func TestObservationCacheConcurrentInvalidation(t *testing.T) {
+	t.Parallel()
+	cache := &clabernetescontrollers.ObservationCache[string]{}
+	key := apimachinerytypes.NamespacedName{Namespace: "lab", Name: "node"}
+	var workers sync.WaitGroup
+	for range 16 {
+		workers.Go(func() {
+			for range 100 {
+				_, token, _ := cache.Load(key)
+				cache.Invalidate(key)
+				cache.Store(key, token, "stale")
+				if value, _, valid := cache.Load(key); valid {
+					t.Errorf("concurrent invalidation accepted %q", value)
+				}
+			}
+		})
+	}
+	workers.Wait()
+	_, token, _ := cache.Load(key)
+	cache.Store(key, token, "current")
+	if value, _, valid := cache.Load(key); !valid || value != "current" {
+		t.Fatal("cache did not recover after concurrent invalidation")
 	}
 }

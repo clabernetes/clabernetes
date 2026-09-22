@@ -254,3 +254,13 @@ func TestDirectMetadataExcludesStartupAdmission(t *testing.T) {
 		t.Fatal("filter mutated Node admission state")
 	}
 }
+
+func TestIdleStartupAdmissionUsesSlowWatchdog(t *testing.T) {
+	t.Parallel()
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(nodeReconcileTestScheme(t)).Build()
+	controller := admissionTestController(client, 0)
+	result, err := controller.reconcileStartupAdmission(t.Context(), ctrlruntime.Request{})
+	if err != nil || result.RequeueAfter != directRequeueInterval {
+		t.Fatalf("idle admission: result=%v err=%v", result, err)
+	}
+}

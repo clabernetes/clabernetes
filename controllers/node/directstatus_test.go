@@ -45,6 +45,12 @@ func TestDirectConditionEventsRetainFailuresAndFinalReadiness(t *testing.T) {
 		}
 	}
 	if !reportDirectConditionEvent(
+		metav1.Condition{Reason: "PlanPending"},
+		&metav1.Condition{Status: metav1.ConditionTrue},
+	) {
+		t.Fatal("a previously applied plan becoming pending must emit a diagnostic Event")
+	}
+	if !reportDirectConditionEvent(
 		metav1.Condition{Reason: directPodPendingReason},
 		&metav1.Condition{Status: metav1.ConditionTrue},
 	) {

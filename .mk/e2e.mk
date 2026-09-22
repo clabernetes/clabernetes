@@ -18,7 +18,13 @@ E2E_IMAGE_TAG ?= $(C9S_LOCAL_BUILD_ID)
 E2E_TIMEOUT ?= 300s
 # Go's package budget includes serial recovery and the parallel device tests. Keep it above
 # the 12-minute readiness/command waits; E2E_TIMEOUT only controls cluster setup and rollout.
+# Scale variants and both mixed-vendor batches run serially in the direct package.
+# Preserve a bounded aggregate budget when callers enable them without -run.
+ifneq ($(strip $(PLANNER_POOL_SCALE_E2E)$(PLANNER_POOL_MIXED_E2E)),)
+E2E_TEST_TIMEOUT ?= 150m
+else
 E2E_TEST_TIMEOUT ?= 30m
+endif
 # Optional go test selection flags, e.g. -run=TestStartupPerHostAdmission.
 E2E_TEST_ARGS ?=
 E2E_INSTALL_NAMESPACE ?= c9s-e2e

@@ -36,7 +36,11 @@ func (r *Reconciler) observationRequeueAfter(
 	if r.observations != nil {
 		snapshot, _, valid := r.observations.Load(ctrlruntimeclient.ObjectKeyFromObject(node))
 		if valid && snapshot != nil {
-			delay = min(delay, max(time.Millisecond, time.Until(snapshot.revalidateAt)))
+			// An expired snapshot may survive a pending planner or certificate refresh.
+			// Such a pass has no new capture; retain the normal watchdog pace.
+			if remaining := time.Until(snapshot.revalidateAt); remaining > 0 {
+				delay = min(delay, remaining)
+			}
 		}
 	}
 

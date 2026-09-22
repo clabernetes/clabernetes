@@ -266,3 +266,26 @@ func renderedHelmYAML(t *testing.T, output []byte) []byte {
 
 	return output[start:]
 }
+
+func TestOptionalRolloutAndDisabledPlannerPool(t *testing.T) {
+	t.Parallel()
+	chartsDir, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{"null", "{}", "{\"batchSize\":0,\"maxConcurrentPerHost\":2}"} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			raw := clabernetestesthelper.HelmCommand(t, chartsDir, "template", "./clabernetes",
+				"--set", "plannerPool.enabled=false", "--set-json", "globalConfig.rollout="+value)
+			if bytes.Contains(raw, []byte("name: clabernetes-planner-pool")) {
+				t.Fatal("disabled planner pool rendered")
+			}
+			if value != "null" && value != "{}" &&
+				(!bytes.Contains(raw, []byte(`rolloutBatchSize: "0"`)) ||
+					!bytes.Contains(raw, []byte(`rolloutMaxConcurrentPerHost: "2"`))) {
+				t.Fatal("explicit rollout settings were lost")
+			}
+		})
+	}
+}

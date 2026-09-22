@@ -91,6 +91,21 @@ func TestMeshNeighborsResolveOnDemandAtScale(t *testing.T) {
 		if entries := listMeshForwardingEntries(t, vtep); len(entries) != 0 {
 			t.Fatal("foreign-interface or unknown-peer request created forwarding state")
 		}
+		previousHandle := inventory.resolver.handle
+		previousFinished := inventory.resolver.finished
+		inventory.resolver.fail(unix.EIO)
+		if err = ensureMeshPeers(spec, vtep, netip.MustParseAddr("192.0.2.1"),
+			netip.MustParseAddr("172.30.0.1"), true, inventory); err != nil {
+			t.Fatalf("failed resolver did not recover: %v", err)
+		}
+		if inventory.resolver.handle == previousHandle {
+			t.Fatal("failed resolver handle was reused")
+		}
+		select {
+		case <-previousFinished:
+		default:
+			t.Fatal("old resolver goroutine still running")
+		}
 		requestTestMeshPeer(t, "172.30.0.2")
 		requestTestMeshPeer(t, "fd00::2")
 		for _, family := range []int{unix.AF_INET, unix.AF_INET6} {
