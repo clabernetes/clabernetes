@@ -23,7 +23,7 @@ jobs:
       PLANNER_POOL_E2E: "1"
       PLANNER_POOL_NAMESPACE: c9s
       STARTUP_HOST_E2E: "1"
-      STARTUP_HOST_E2E_NODE: c9s-e2e-control-plane
+      STARTUP_HOST_E2E_NODE: c9s-e2e-worker
     steps:
       - name: checkout
         uses: actions/checkout@v7

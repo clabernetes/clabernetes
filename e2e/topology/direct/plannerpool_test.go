@@ -27,7 +27,7 @@ func TestPlannerPoolReuseAndRecovery(t *testing.T) {
 	}
 	image := os.Getenv("SRL_IMAGE")
 	if image == "" {
-		image = "ghcr.io/clab-labs/srlinux:25.10.1"
+		image = "ghcr.io/nokia/srlinux:25.10.1"
 	}
 	namespace := clabernetestesthelper.NewTestNamespace("planner-pool")
 	clabernetestesthelper.KubectlCreateNamespace(t, namespace)
