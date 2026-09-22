@@ -243,6 +243,18 @@ func deviceRuntimeCommand() *cli.Command {
 		Usage: "run a generic direct-node helper",
 		Subcommands: []*cli.Command{
 			{
+				Name:  "startup-gate",
+				Usage: "wait for per-host device startup admission",
+				Flags: []cli.Flag{&cli.StringFlag{Name: "directory", Required: true}},
+				Action: func(c *cli.Context) error {
+					return clabernetesinternaldirectruntime.WaitStartupAdmission(
+						c.Context,
+						c.String("directory"),
+					)
+				},
+			},
+
+			{
 				Name:  "prepare",
 				Usage: "regenerate and verify imported preparation artifacts",
 				Flags: []cli.Flag{

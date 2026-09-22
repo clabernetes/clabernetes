@@ -97,6 +97,7 @@ globalConfig:
 
   # Optional installation-wide startup limit for standalone Nodes and Topology output.
   # Set batchSize to a positive number to enable; explicit zero disables the limit.
+  # maxConcurrentPerHost caps device boots per Kubernetes host; zero disables it.
   rollout: {}
 
   imagePull:

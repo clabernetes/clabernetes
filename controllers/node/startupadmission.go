@@ -45,6 +45,7 @@ func (c *Controller) setupStartupAdmissionController(mgr ctrlruntime.Manager) er
 		WithOptions(ctrlruntimecontroller.Options{MaxConcurrentReconciles: 1}).
 		Watches(&clabernetesapisv1alpha1.Node{}, handler).
 		Watches(&clabernetesapisv1alpha1.Config{}, handler).
+		Watches(&clabernetesapisv1alpha1.Topology{}, handler).
 		Watches(&k8scorev1.Pod{}, handler).
 		Complete(ctrlruntimereconcile.Func(c.reconcileStartupAdmission))
 }
@@ -92,7 +93,10 @@ func startupAdmissionEvents() ctrlruntimehandler.EventHandler {
 			changed := clabernetescontrollers.DesiredStateChanged(e.ObjectOld, e.ObjectNew)
 			if old, ok := e.ObjectOld.(*k8scorev1.Pod); ok {
 				if current, ok := e.ObjectNew.(*k8scorev1.Pod); ok {
-					changed = changed || startupSandboxReady(old) != startupSandboxReady(current)
+					changed = changed || startupSandboxReady(old) != startupSandboxReady(current) ||
+						old.Spec.NodeName != current.Spec.NodeName ||
+						startupPrimaryStarted(old) != startupPrimaryStarted(current) ||
+						old.Status.Phase != current.Status.Phase
 				}
 			}
 			if changed {
@@ -121,9 +125,6 @@ func (c *Controller) reconcileStartupAdmission(
 	// Retry also bridges the independent Config manager's watch delivery order.
 	retry := ctrlruntime.Result{RequeueAfter: time.Second}
 	size := c.reconciler.startupBatchSize()
-	if size <= 0 {
-		return retry, nil
-	}
 	nodes := &clabernetesapisv1alpha1.NodeList{}
 	if err := c.Client.List(ctx, nodes); err != nil {
 		return retry, err
@@ -133,6 +134,12 @@ func (c *Controller) reconcileStartupAdmission(
 		ctx, pods, ctrlruntimeclient.HasLabels{clabernetesconstants.LabelDirectWorkload},
 	); err != nil {
 		return retry, err
+	}
+	if err := c.admitStartupHosts(ctx, nodes.Items, pods.Items); err != nil {
+		return retry, err
+	}
+	if size <= 0 {
+		return retry, nil
 	}
 	newest := startupAdmissionPods(pods.Items)
 	c.observeStartupAdmissions(nodes.Items, size)

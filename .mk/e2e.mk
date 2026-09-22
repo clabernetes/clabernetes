@@ -19,6 +19,8 @@ E2E_TIMEOUT ?= 300s
 # Go's package budget includes serial recovery and the parallel device tests. Keep it above
 # the 12-minute readiness/command waits; E2E_TIMEOUT only controls cluster setup and rollout.
 E2E_TEST_TIMEOUT ?= 30m
+# Optional go test selection flags, e.g. -run=TestStartupPerHostAdmission.
+E2E_TEST_ARGS ?=
 E2E_INSTALL_NAMESPACE ?= c9s-e2e
 E2E_INSTALL_RELEASE ?= c9s-e2e
 CLUSTER ?= kind
@@ -97,7 +99,7 @@ e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally 
 
 .PHONY: e2e-run
 e2e-run: ## Run the e2e Go tests against the caller-selected kube context
-	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -race -timeout=$(E2E_TEST_TIMEOUT) -coverprofile=cover.out ./e2e/...
+	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -race -count=1 -timeout=$(E2E_TEST_TIMEOUT) -coverprofile=cover.out $(E2E_TEST_ARGS) ./e2e/...
 
 .PHONY: e2e-test
 e2e-test: e2e-tools install-test-tools ## Run e2e tests using the existing KinD setup

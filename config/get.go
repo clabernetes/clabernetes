@@ -114,3 +114,13 @@ func (m *manager) GetRolloutBatchSize() int32 {
 
 	return m.config.Rollout.BatchSize
 }
+
+func (m *manager) GetRolloutMaxConcurrentPerHost() int32 {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	if m.config.Rollout == nil {
+		return 0
+	}
+
+	return m.config.Rollout.MaxConcurrentPerHost
+}

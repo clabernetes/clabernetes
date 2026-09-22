@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -36,6 +37,8 @@ type Reconciler struct {
 	configManagerGetter clabernetesconfig.ManagerGetterFunc
 	apiReader           ctrlruntimeclient.Reader
 	observations        *clabernetescontrollers.ObservationCache[*topologyObservation]
+	statusLock          sync.Mutex
+	statusWritten       map[ctrlruntimeclient.ObjectKey]statusWrite
 }
 
 type topologyObservation struct {
@@ -74,6 +77,7 @@ func (c *Controller) Reconcile(
 			if c.reconciler.observations != nil {
 				c.reconciler.observations.Invalidate(req.NamespacedName)
 			}
+			c.reconciler.forgetStatusWrite(req.NamespacedName)
 			// was deleted; owner references garbage collect the emitted objects
 			c.BaseController.LogReconcileCompleteObjectNotExist(req)
 
@@ -210,7 +214,12 @@ func (r *Reconciler) observeTopology(
 		result.RequeueAfter = time.Second
 	}
 
-	return result, r.reconcileStatus(ctx, topology, compiled)
+	err = r.reconcileStatus(ctx, topology, compiled)
+	if delay := r.pendingStatusDelay(topology); delay > 0 && delay < result.RequeueAfter {
+		result.RequeueAfter = delay
+	}
+
+	return result, err
 }
 
 const topologyChildConflictRequeueAfter = 10 * time.Second

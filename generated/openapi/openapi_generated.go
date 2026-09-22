@@ -736,6 +736,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigRollout(
 							Format:      "int32",
 						},
 					},
+					"maxConcurrentPerHost": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxConcurrentPerHost limits primary workloads booting on each Kubernetes host. A slot is released when the primary container passes its startup probe, without waiting for links or BGP. Zero disables this limit. Config and Topology limits both apply. Enabling the gate affects newly created workloads only.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
 				},
 			},
 		},
@@ -3900,6 +3907,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyRollout(
 					"batchSize": {
 						SchemaProps: spec.SchemaProps{
 							Description: "BatchSize is the number of new primary workloads admitted together. Zero disables batching. The next batch starts after all admitted workloads have a network-ready Pod sandbox; full device/link readiness may depend on later batches.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxConcurrentPerHost": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxConcurrentPerHost limits primary workloads booting on each Kubernetes host. A slot is released when the primary container passes its startup probe, without waiting for links or BGP. Zero disables this limit. Config and Topology limits both apply. Enabling the gate affects newly created workloads only.",
 							Type:        []string{"integer"},
 							Format:      "int32",
 						},

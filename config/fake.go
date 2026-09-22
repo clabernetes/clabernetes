@@ -17,16 +17,17 @@ func GetFakeManager() Manager {
 
 // fakeManager defined type alias to be used below.
 type fakeManager struct {
-	nodeSelectorsByImage    map[string]map[string]string
-	defaultResources        *k8scorev1.ResourceRequirements
-	imagePullPolicy         string
-	imagePullSecrets        []string
-	globalAnnotations       map[string]string
-	globalLabels            map[string]string
-	registryMetadataTrust   []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
-	registryMetadataMirrors []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry
-	containerStopSignals    bool
-	rolloutBatchSize        int32
+	nodeSelectorsByImage        map[string]map[string]string
+	defaultResources            *k8scorev1.ResourceRequirements
+	imagePullPolicy             string
+	imagePullSecrets            []string
+	globalAnnotations           map[string]string
+	globalLabels                map[string]string
+	registryMetadataTrust       []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
+	registryMetadataMirrors     []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry
+	containerStopSignals        bool
+	rolloutBatchSize            int32
+	rolloutMaxConcurrentPerHost int32
 }
 
 // FakeOption defined type alias to be used below.
@@ -146,3 +147,9 @@ func WithRolloutBatchSize(size int32) FakeOption {
 func (f fakeManager) GetRolloutBatchSize() int32 {
 	return f.rolloutBatchSize
 }
+
+// WithRolloutMaxConcurrentPerHost configures the installation-wide per-host boot limit.
+func WithRolloutMaxConcurrentPerHost(size int32) FakeOption {
+	return func(fm *fakeManager) { fm.rolloutMaxConcurrentPerHost = size }
+}
+func (f fakeManager) GetRolloutMaxConcurrentPerHost() int32 { return f.rolloutMaxConcurrentPerHost }

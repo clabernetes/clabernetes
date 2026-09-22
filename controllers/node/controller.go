@@ -57,7 +57,8 @@ type Controller struct {
 	session    *PlannerSessionReconciler
 	// Pending successful admission writes bridge informer lag; only the serial admission
 	// controller accesses this map. Durable admission remains on the Node itself.
-	startupAdmissions map[apimachinerytypes.UID]struct{}
+	startupAdmissions     map[apimachinerytypes.UID]struct{}
+	startupHostAdmissions map[apimachinerytypes.UID]struct{}
 }
 
 // NewController returns a new Controller.

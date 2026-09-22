@@ -124,6 +124,8 @@ type Manager interface { //nolint: interfacebloat
 	GetContainerStopSignals() bool
 	// GetRolloutBatchSize returns the installation-wide startup batch limit (zero disables it).
 	GetRolloutBatchSize() int32
+	// GetRolloutMaxConcurrentPerHost returns the installation-wide per-host boot limit.
+	GetRolloutMaxConcurrentPerHost() int32
 }
 
 type manager struct {

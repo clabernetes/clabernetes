@@ -112,6 +112,8 @@ const (
 
 // Options supplies c9s/Kubernetes realization policy that does not belong to kind planning.
 type Options struct {
+	// StartupGate holds device boot until the per-host admission controller grants this Pod.
+	StartupGate                       bool
 	Name                              string
 	Namespace                         string
 	PlanConfigMapName                 string
@@ -711,6 +713,12 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if options.StartupGate {
+		gate, volume := startupGate(options.PreparationImage)
+		initContainers = append([]k8scorev1.Container{gate}, initContainers...)
+		volumes = append(volumes, volume)
 	}
 
 	one := int32(1)

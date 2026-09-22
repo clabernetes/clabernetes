@@ -25,6 +25,9 @@ data:
   {{- if hasKey .Values.globalConfig.rollout "batchSize" }}
   rolloutBatchSize: {{ .Values.globalConfig.rollout.batchSize | quote }}
   {{- end }}
+  {{- if hasKey .Values.globalConfig.rollout "maxConcurrentPerHost" }}
+  rolloutMaxConcurrentPerHost: {{ .Values.globalConfig.rollout.maxConcurrentPerHost | quote }}
+  {{- end }}
   globalAnnotations: |-
     ---
 {{ .Values.globalAnnotations | toYaml | indent 4 }}

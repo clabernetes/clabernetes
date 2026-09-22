@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
@@ -62,10 +63,11 @@ type topologyConflictOnceStatusWriter struct {
 	parent *topologyConflictOnceClient
 }
 
-func (w *topologyConflictOnceStatusWriter) Update(
+func (w *topologyConflictOnceStatusWriter) Patch(
 	ctx context.Context,
 	obj ctrlruntimeclient.Object,
-	opts ...ctrlruntimeclient.SubResourceUpdateOption,
+	patch ctrlruntimeclient.Patch,
+	opts ...ctrlruntimeclient.SubResourcePatchOption,
 ) error {
 	w.parent.updateCalls++
 	if w.parent.updateCalls == 1 {
@@ -83,7 +85,7 @@ func (w *topologyConflictOnceStatusWriter) Update(
 		)
 	}
 
-	return w.SubResourceWriter.Update(ctx, obj, opts...)
+	return w.SubResourceWriter.Patch(ctx, obj, patch, opts...)
 }
 
 func TestUpdateTopologyStatusRetriesResourceVersionConflict(t *testing.T) {
@@ -132,8 +134,8 @@ func TestUpdateTopologyStatusRetriesResourceVersionConflict(t *testing.T) {
 		t.Fatalf("status update calls = %d, want 2", client.updateCalls)
 	}
 
-	if apiReader.getCalls != 2 {
-		t.Fatalf("direct status reads = %d, want 2", apiReader.getCalls)
+	if apiReader.getCalls != 1 {
+		t.Fatalf("direct status reads = %d, want 1 conflict refresh", apiReader.getCalls)
 	}
 
 	actual := &clabernetesapisv1alpha1.Topology{}
@@ -231,5 +233,115 @@ func TestReconcileStatusRemainsBounded(t *testing.T) {
 
 	if len(statusJSON) > 2_000 {
 		t.Fatalf("aggregate status unexpectedly grew with child count: %d bytes", len(statusJSON))
+	}
+}
+
+//nolint:gocyclo // Follow progress, cancellation, flush, and final-readiness transitions.
+func TestTopologyProgressCoalescesButFinalReadinessIsImmediate(t *testing.T) {
+	t.Parallel()
+	scheme := apimachineryruntime.NewScheme()
+	if err := clabernetesapisv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	topology := &clabernetesapisv1alpha1.Topology{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "progress",
+			Namespace:  "lab",
+			UID:        "original",
+			Generation: 1,
+		},
+	}
+	topology.Spec.Definition.Containerlab = strings.Repeat("x", 100000)
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(topology).
+		WithStatusSubresource(topology).
+		Build()
+	reader := &countingTopologyReader{Reader: client}
+	r := &Reconciler{Client: client, apiReader: reader}
+	desired := clabernetesapisv1alpha1.TopologyStatus{NodeCount: 100, ObservedGeneration: 1}
+	if err := r.updateTopologyStatus(t.Context(), topology, &desired); err != nil {
+		t.Fatal(err)
+	}
+	desired.ReadyNodeCount = 50
+	if err := r.updateTopologyStatus(t.Context(), topology, &desired); err != nil {
+		t.Fatal(err)
+	}
+	if topology.Status.ReadyNodeCount != 0 || r.pendingStatusDelay(topology) <= 0 {
+		t.Fatal("progress was not deferred with a scheduled flush")
+	}
+	// If progress returns to the stored count, cancel the pending flush rather than
+	// leaving a millisecond requeue loop after its deadline.
+	unchanged := topology.Status
+	if err := r.updateTopologyStatus(t.Context(), topology, &unchanged); err != nil {
+		t.Fatal(err)
+	}
+	if r.pendingStatusDelay(topology) != 0 {
+		t.Fatal("no-op retained a pending flush")
+	}
+	if err := r.updateTopologyStatus(t.Context(), topology, &desired); err != nil {
+		t.Fatal(err)
+	}
+	key := ctrlruntimeclient.ObjectKeyFromObject(topology)
+	last := r.statusWritten[key]
+	last.at = time.Now().Add(-topologyProgressInterval)
+	r.statusWritten[key] = last
+	if err := r.updateTopologyStatus(t.Context(), topology, &desired); err != nil {
+		t.Fatal(err)
+	}
+	if topology.Status.ReadyNodeCount != 50 || r.pendingStatusDelay(topology) != 0 {
+		t.Fatal("deferred progress did not flush")
+	}
+	desired.ReadyNodeCount = 100
+	desired.TopologyReady = true
+	if err := r.updateTopologyStatus(t.Context(), topology, &desired); err != nil {
+		t.Fatal(err)
+	}
+	if !topology.Status.TopologyReady || topology.Status.ReadyNodeCount != 100 {
+		t.Fatal("final readiness was delayed")
+	}
+	if reader.getCalls != 0 {
+		t.Fatalf("normal status writes reread the large Topology %d times", reader.getCalls)
+	}
+}
+
+func TestStatusPatchIncludesRequiredZeroValuesAndClearsOldError(t *testing.T) {
+	t.Parallel()
+	current := &clabernetesapisv1alpha1.Topology{
+		ObjectMeta: metav1.ObjectMeta{ResourceVersion: "123"},
+	}
+	current.Spec.Definition.Containerlab = strings.Repeat("large definition", 100000)
+	current.Status.Error = "old conflict"
+	desired := &clabernetesapisv1alpha1.TopologyStatus{Kind: "containerlab", NodeCount: 4}
+	patch, err := topologyStatusPatch(current, desired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := patch.Data(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	status, ok := payload["status"].(map[string]any)
+	if !ok {
+		t.Fatal("patch status is not an object")
+	}
+	for _, key := range []string{"kind", "conditions", "topologyReady"} {
+		if _, present := status[key]; !present {
+			t.Fatalf("required zero field %s is missing: %s", key, data)
+		}
+	}
+	if value, present := status["error"]; !present || value != nil {
+		t.Fatal("old error would survive merge patch")
+	}
+	if _, present := payload["spec"]; present || len(data) > 1000 {
+		t.Fatal("patch contains the large definition")
+	}
+	metadata, ok := payload["metadata"].(map[string]any)
+	if !ok || metadata["resourceVersion"] != "123" {
+		t.Fatal("patch has no optimistic lock")
 	}
 }

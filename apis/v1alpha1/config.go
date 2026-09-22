@@ -44,6 +44,13 @@ type ConfigRollout struct {
 	// +kubebuilder:validation:Minimum=0
 	// +optional
 	BatchSize int32 `json:"batchSize,omitempty"`
+	// MaxConcurrentPerHost limits primary workloads booting on each Kubernetes host.
+	// A slot is released when the primary container passes its startup probe, without
+	// waiting for links or BGP. Zero disables this limit. Config and Topology limits
+	// both apply. Enabling the gate affects newly created workloads only.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxConcurrentPerHost int32 `json:"maxConcurrentPerHost,omitempty"`
 }
 
 // ConfigStatus is the status for a Config resource.

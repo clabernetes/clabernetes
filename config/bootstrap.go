@@ -27,7 +27,7 @@ type bootstrapConfig struct {
 	rollout                 *clabernetesapisv1alpha1.ConfigRollout
 }
 
-//nolint:gocyclo,funlen // Parse and report all independent bootstrap fields together.
+//nolint:gocognit,gocyclo,funlen // Parse and report all independent bootstrap fields together.
 func bootstrapFromConfigMap(
 	inMap map[string]string,
 ) (*bootstrapConfig, error) {
@@ -43,6 +43,18 @@ func bootstrapFromConfigMap(
 			outErrors = append(outErrors, "rolloutBatchSize must be a nonnegative int32")
 		} else {
 			bc.rollout = &clabernetesapisv1alpha1.ConfigRollout{BatchSize: int32(size)}
+		}
+	}
+
+	if value, present := inMap["rolloutMaxConcurrentPerHost"]; present {
+		size, err := strconv.ParseInt(value, 10, 32)
+		if err != nil || size < 0 {
+			outErrors = append(outErrors, "rolloutMaxConcurrentPerHost must be a nonnegative int32")
+		} else {
+			if bc.rollout == nil {
+				bc.rollout = &clabernetesapisv1alpha1.ConfigRollout{}
+			}
+			bc.rollout.MaxConcurrentPerHost = int32(size)
 		}
 	}
 

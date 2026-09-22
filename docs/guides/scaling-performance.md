@@ -6,6 +6,21 @@ description: Separate planning, Kubernetes object creation, network allocation, 
 A large topology can have enough worker CPU and memory and still start slowly.
 Measure the stages separately before changing planner concurrency or worker capacity.
 
+## Choose resource granularity for large labs
+
+Prefer standalone `Node`, `Link`, and shared `NodeProfile` resources for large labs
+when an embedded Topology definition becomes unwieldy. This distributes desired state
+across smaller objects rather than repeatedly storing and watching one large definition.
+There is no hard 100-node cutoff: configuration size, links, and payloads determine
+object size and control-plane cost. Splitting the definition does not remove the total
+cost of creating, watching, and reconciling all of those resources.
+
+The Config rollout policies below apply directly to standalone Nodes across namespaces;
+no Topology object or Topology-owned labels are required. Topology rollout policy is an
+additional scope for users who choose that resource. Both paths share the same primary
+Pod admission and per-host startup gate. For independently authored resources, publish
+the complete Node/Link intent so planning sees the intended connections.
+
 ## Limit startup pressure with batches
 
 Set an installation-wide limit on the `clabernetes` Config in the manager namespace
@@ -94,6 +109,63 @@ Batching trades some parallelism for lower peak load. The value `100` is a start
 point for measurement, not a demonstrated optimum. The combined changes improved
 the 1,000-device run below; their individual contributions have not been isolated.
 Keep dual-stack enabled when comparing batch sizes.
+
+## Limit simultaneous device boots per host
+
+Sandbox readiness does not mean a network operating system has finished booting.
+Combine the existing batches with `maxConcurrentPerHost` on Config, Topology, or both:
+
+```yaml
+spec:
+  rollout:
+    batchSize: 100
+    maxConcurrentPerHost: 50
+```
+
+The Config limit counts all direct workloads across namespaces on each Kubernetes
+host. A Topology limit additionally caps that lab on each host; it cannot bypass
+the Config limit. Helm bootstraps the Config field with
+`globalConfig.rollout.maxConcurrentPerHost`. Zero or omission disables that limit.
+This is a boot concurrency limit, not a limit on the number of running devices.
+
+New workloads receive a `startup-gate` init container. Kubernetes schedules the Pod
+and creates its sandbox, then the gate waits before preparation and device startup.
+Admission is stored on the live Pod as `c9s.run/startup-host-admitted` with that
+Pod's UID. The gate reads the kubelet's Downward API projection without polling the
+API server. Projection delivery can add a short delay before a granted Pod starts.
+A slot remains occupied until the primary application container passes its startup
+probe (`started: true`), independently of Pod/link readiness or BGP convergence.
+Configure a device-local startup probe; a probe requiring later peers can stall admission.
+Without a startup probe, Kubernetes marks the primary started when it is running.
+Shared-network containers count as one primary workload.
+
+Successful grants survive manager restarts. Replacement Pods of gated workloads
+need fresh grants. Changing a limit affects pending admission without revoking
+existing grants or changing existing Deployment templates. Enabling this option
+therefore gates newly created workloads; it does not retrofit already deployed
+workloads. Existing ungated device boots count against the Config cap. Kubelet
+restarts of containers inside an already admitted Pod are not independently gated.
+A stuck device retains its slot: fix or remove it, or explicitly disable the limit
+to release the queue. This does not pace creation of all Kubernetes objects or CNI
+sandboxes; use `batchSize` alongside it and measure host and API pressure.
+
+Topology progress counts are coalesced over two seconds. Generation, error, and
+lifecycle transitions, including final readiness, are written immediately. Status
+uses a patch rather than resending the embedded definition, and the ordinary write
+path does not reread that definition. Kubernetes still persists and distributes the
+whole changed object, so reducing write frequency remains important.
+
+For live measurements, start `hack/monitor_topology_startup.py` before applying the
+Topology. It uses one Pod watch, records startup milestones and peak observed boots
+per host, and samples small host-usage and Calico tables every 15 seconds. It avoids
+repeated full Pod and Topology lists, backs off when a watch closes, and has a bounded
+overall deadline. BGP and traffic validation run separately after startup.
+
+```bash
+python3 hack/monitor_topology_startup.py \
+  --context kubernetes-admin@new-zealand --namespace srl100-clos \
+  --count 104 --output build/benchmarks/srl100/startup.json
+```
 
 ## Controller work and diagnostics
 

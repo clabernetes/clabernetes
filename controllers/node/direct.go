@@ -410,6 +410,10 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	renderOptions.StartupGate, err = r.startupHostGate(ctx, node, existingDeployment)
+	if err != nil {
+		return err
+	}
 	connectivityDecision, err := r.directConnectivityRevision(
 		ctx,
 		node,
