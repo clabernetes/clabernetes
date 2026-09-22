@@ -56,6 +56,7 @@ const (
 	deviceRuntimePayloads             = "payloads"
 	deviceRuntimeState                = "state"
 	deviceRuntimeBinary               = "lifecycleBinary"
+	deviceRuntimeBinaryCache          = "lifecycleBinaryCache"
 	deviceRuntimePhase                = "phase"
 	deviceRuntimeContainer            = "containerID"
 	deviceRuntimeScratch              = "scratch"
@@ -253,6 +254,7 @@ func deviceRuntimeCommand() *cli.Command {
 					&cli.StringFlag{Name: devicePlanEntropy},
 					&cli.StringFlag{Name: devicePlanRevision, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeBinary},
+					&cli.StringFlag{Name: deviceRuntimeBinaryCache},
 					&cli.StringSliceFlag{Name: deviceRuntimePersistentNode},
 					&cli.StringSliceFlag{Name: deviceRuntimeReset},
 				},
@@ -311,8 +313,9 @@ func deviceRuntimeCommand() *cli.Command {
 						return err
 					}
 
-					return clabernetesinternaldirectruntime.InstallLifecycleBinary(
+					return clabernetesinternaldirectruntime.InstallLifecycleBinaryWithCache(
 						c.String(deviceRuntimeBinary),
+						c.String(deviceRuntimeBinaryCache),
 					)
 				},
 			},

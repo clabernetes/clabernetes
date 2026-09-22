@@ -28,6 +28,7 @@ type peerAddressResolver interface {
 type netlinkOperations struct {
 	resolver  peerAddressResolver
 	namespace EndpointNamespace
+	neighbors *meshNeighborInventory
 }
 
 const vethLinkType = "veth"
@@ -45,7 +46,15 @@ func newLinkOperations(networkNamespace EndpointNamespace) LinkOperations {
 		}
 	}
 
-	return netlinkOperations{resolver: resolver, namespace: networkNamespace}
+	return netlinkOperations{
+		resolver:  resolver,
+		namespace: networkNamespace,
+		neighbors: newMeshNeighborInventory(),
+	}
+}
+
+func (o netlinkOperations) Close() error {
+	return o.neighbors.close()
 }
 
 func (netlinkOperations) EnsureSysctl(name, value string) error {

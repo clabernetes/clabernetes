@@ -1262,6 +1262,11 @@ spec:
                         x-kubernetes-list-type: atomic
                     type: object
                 type: object
+              disableManagement:
+                description: |-
+                  DisableManagement disables the c9s management overlay. Explicit node management addresses
+                  must be omitted. Kubernetes Pod networking and declared topology links remain active.
+                type: boolean
               expose:
                 description: Expose holds configurations relevant to how clabernetes
                   exposes a topology.

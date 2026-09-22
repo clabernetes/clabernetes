@@ -61,6 +61,10 @@ type TopologySpec struct {
 	// ImagePull holds Kubernetes-native defaults compiled into direct device Pods.
 	// +optional
 	ImagePull ImagePull `json:"imagePull"`
+	// DisableManagement disables the c9s management overlay. Explicit node management addresses
+	// must be omitted. Kubernetes Pod networking and declared topology links remain active.
+	// +optional
+	DisableManagement bool `json:"disableManagement,omitempty"`
 	// Rollout optionally limits admission of new device workloads in startup batches.
 	// Existing workloads are not restarted or paused when this policy changes.
 	// +optional

@@ -991,12 +991,12 @@ func (w *fabricWire) tick(now time.Time) {
 			continue
 		}
 
-		leg, err := netlink.LinkByIndex(link.legIndex)
+		operUp, err := fabricWireLegOperUp(w.udpFD, link.legIndex)
 		if err != nil {
 			continue
 		}
 
-		w.observeLegStateLocked(link, leg.Attrs().OperState == netlink.OperUp)
+		w.observeLegStateLocked(link, operUp)
 	}
 
 	// Expire sessions whose peer has been silent past the timeout.
@@ -1061,6 +1061,28 @@ func (w *fabricWire) tick(now time.Time) {
 	for _, link := range resolves {
 		go w.resolvePeer(link)
 	}
+}
+
+// fabricWireLegOperUp samples a sidecar-owned veth without an RTM_GETLINK request.
+// On older kernels RTM_GETLINK takes the worker-wide RTNL mutex and collects full
+// interface statistics, so thousands of periodic samples compete with Pod creation.
+// These read-only ioctls use RCU instead, preserving the same one-second backstop.
+// IFF_RUNNING represents operational carrier on these veth legs; the socket keeps
+// the lookup scoped to the wire's namespace, even if a calling thread moved namespaces.
+func fabricWireLegOperUp(fd, index int) (bool, error) {
+	request, err := unix.NewIfreq("")
+	if err != nil {
+		return false, err
+	}
+	request.SetUint32(uint32(index)) //nolint:gosec // ifindex is a kernel-provided interface index.
+	if err = unix.IoctlIfreq(fd, unix.SIOCGIFNAME, request); err != nil {
+		return false, err
+	}
+	if err = unix.IoctlIfreq(fd, unix.SIOCGIFFLAGS, request); err != nil {
+		return false, err
+	}
+
+	return request.Uint16()&unix.IFF_RUNNING != 0, nil
 }
 
 // resolvePeer refreshes one link's peer transport resolution off the tick goroutine so DNS

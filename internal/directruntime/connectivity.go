@@ -1122,6 +1122,11 @@ func runConnectivity(
 	if operations == nil {
 		return errors.New("connectivity link operations are nil")
 	}
+	if closer, ok := operations.(interface{ Close() error }); ok {
+		defer func() {
+			returnErr = errors.Join(returnErr, closer.Close())
+		}()
+	}
 
 	options.hostEndpointPacer = &hostEndpointPacer{}
 	options.peerDirectory = newPeerDirectoryReader(ConnectivityPeerDirectoryRoot)

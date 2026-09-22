@@ -1,13 +1,14 @@
-//nolint:funlen // single-pass boundary logic reads clearest unsplit.
 package link
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"reflect"
 	"slices"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,28 +17,75 @@ import (
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Reconcile handles reconciliation for this controller.
+// Reconcile resolves the whole allocation domain from one live snapshot. Events for the
+// same namespace share one queue key, so large topologies do not cause per-Link full lists.
 func (c *Controller) Reconcile(
 	ctx context.Context,
 	req ctrlruntime.Request,
 ) (ctrlruntime.Result, error) {
-	c.BaseController.LogReconcileStart(req)
-
-	input, complete, err := c.prepareReconcile(ctx, req)
+	c.LogReconcileStart(req)
+	// Read Links before Nodes: a persisted endpoint binding must not be compared against a
+	// Node snapshot older than that binding. Writes retain resourceVersion conflict checks.
+	links, err := c.listNamespaceLinks(ctx, req.Namespace)
 	if err != nil {
 		return ctrlruntime.Result{}, err
 	}
-
-	if complete {
+	if len(links.Items) == 0 {
 		return ctrlruntime.Result{}, nil
 	}
+	_, nodes, err := c.listNamespaceNodes(ctx, req.Namespace)
+	if err != nil {
+		return ctrlruntime.Result{}, err
+	}
+	slices.SortFunc(links.Items, func(a, b clabernetesapisv1alpha1.Link) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+	conflicts := clabernetesutilcontainerlab.EndpointConflicts(
+		LinksWithResolvedEndpoints(links.Items, nodes),
+	)
+	reservations := newWireReservations(links.Items)
+	for idx := range links.Items {
+		link := &links.Items[idx]
+		previous := link.Status.WireID
+		if err = c.reconcileLink(ctx, link, nodes, conflicts[link.Name], reservations); err != nil {
+			return ctrlruntime.Result{}, err
+		}
+		reservations.record(link, previous)
+	}
+	c.LogReconcileCompleteSuccess(req)
 
-	link := input.link
-	namespaceNodes := input.namespaceNodes
-	nodesByName := input.nodesByName
-	resolvedEndpoints := input.resolvedEndpoints
+	return ctrlruntime.Result{}, nil
+}
 
-	err = ValidateLink(link)
+func (c *Controller) reconcileLink(
+	ctx context.Context,
+	link *clabernetesapisv1alpha1.Link,
+	nodesByName map[string]*clabernetesapisv1alpha1.Node,
+	conflictingLink string,
+	reservations *wireReservations,
+) error {
+	if link.DeletionTimestamp != nil || c.ShouldIgnoreReconcile(link) {
+		return nil
+	}
+	resolvedEndpoints, lifecycleReason := resolveLinkEndpoints(link, nodesByName)
+	if lifecycleReason != "" {
+		c.Log.Infof(
+			"deleting Link %q because %s",
+			ctrlruntimeclient.ObjectKeyFromObject(link).String(),
+			lifecycleReason,
+		)
+		// Do not delete a rewired or replacement Link that changed since this pass's snapshot.
+		uid, version := link.UID, link.ResourceVersion
+		err := c.Client.Delete(ctx, link, &ctrlruntimeclient.DeleteOptions{
+			Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &version},
+		})
+		if apimachineryerrors.IsNotFound(err) {
+			return nil
+		}
+
+		return err
+	}
+	err := ValidateLink(link)
 	if err != nil {
 		// terminally invalid until the spec changes -- clear any stale allocation and stamp the
 		// rejection so no direct endpoint reconciler can continue realizing it. A binding whose
@@ -49,7 +97,7 @@ func (c *Controller) Reconcile(
 			err,
 		)
 
-		return ctrlruntime.Result{}, c.updateLinkStatus(
+		return c.updateLinkStatus(
 			ctx,
 			link,
 			desiredLinkStatus(
@@ -63,13 +111,6 @@ func (c *Controller) Reconcile(
 		)
 	}
 
-	// the namespace's links are read through the live (uncached) reader -- allocation decisions
-	// must see the ids written by the immediately preceding reconciles
-	namespaceLinks, err := c.listNamespaceLinks(ctx, req.Namespace)
-	if err != nil {
-		return ctrlruntime.Result{}, err
-	}
-
 	err = ValidateLinkEndpoints(link, nodesByName)
 	if err != nil {
 		c.BaseController.Log.Criticalf(
@@ -79,7 +120,7 @@ func (c *Controller) Reconcile(
 			err,
 		)
 
-		return ctrlruntime.Result{}, c.updateLinkStatus(
+		return c.updateLinkStatus(
 			ctx,
 			link,
 			desiredLinkStatus(
@@ -93,8 +134,7 @@ func (c *Controller) Reconcile(
 		)
 	}
 
-	resolvedLinks := LinksWithResolvedEndpoints(namespaceLinks.Items, nodesByName)
-	if conflictingLink := FindEndpointConflict(link, resolvedLinks); conflictingLink != "" {
+	if conflictingLink != "" {
 		conflictError := fmt.Sprintf("endpoint already claimed by link %q", conflictingLink)
 
 		c.BaseController.Log.Criticalf(
@@ -104,7 +144,7 @@ func (c *Controller) Reconcile(
 			conflictingLink,
 		)
 
-		return ctrlruntime.Result{}, c.updateLinkStatus(
+		return c.updateLinkStatus(
 			ctx,
 			link,
 			desiredLinkStatus(
@@ -118,18 +158,11 @@ func (c *Controller) Reconcile(
 		)
 	}
 
-	// Wire ids dispatch inside one receiving sidecar from a validated source, so the namespace
-	// is the whole allocation domain -- the namespace Links fetched above (uncached) are all
-	// the state allocation needs.
-	desiredWireID, err := ResolveDesiredWireID(
-		link,
-		namespaceLinks.Items,
-		namespaceNodes.Items,
-	)
+	desiredWireID, err := reservations.desired(link, nodesByName)
 	if err != nil {
 		c.BaseController.Log.Criticalf("failed resolving wire id for link, err: %s", err)
 
-		return ctrlruntime.Result{}, err
+		return err
 	}
 
 	acceptedMessage := "Link endpoints and direct connectivity policy are accepted"
@@ -150,9 +183,7 @@ func (c *Controller) Reconcile(
 	)
 
 	if reflect.DeepEqual(desiredStatus, link.Status) {
-		c.BaseController.LogReconcileCompleteSuccess(req)
-
-		return ctrlruntime.Result{}, nil
+		return nil
 	}
 
 	c.BaseController.Log.Infof(
@@ -172,12 +203,10 @@ func (c *Controller) Reconcile(
 			err,
 		)
 
-		return ctrlruntime.Result{}, err
+		return err
 	}
 
-	c.BaseController.LogReconcileCompleteSuccess(req)
-
-	return ctrlruntime.Result{}, nil
+	return nil
 }
 
 func desiredLinkStatus(
@@ -200,81 +229,6 @@ func desiredLinkStatus(
 	})
 
 	return status
-}
-
-type reconcileInput struct {
-	link              *clabernetesapisv1alpha1.Link
-	namespaceNodes    *clabernetesapisv1alpha1.NodeList
-	nodesByName       map[string]*clabernetesapisv1alpha1.Node
-	resolvedEndpoints *clabernetesapisv1alpha1.LinkResolvedEndpointsStatus
-}
-
-// prepareReconcile reads the latest Link and Node identities and enforces an existing endpoint
-// binding before normal validation/allocation. The bool reports that reconciliation is complete.
-func (c *Controller) prepareReconcile(
-	ctx context.Context,
-	req ctrlruntime.Request,
-) (*reconcileInput, bool, error) {
-	link := &clabernetesapisv1alpha1.Link{}
-
-	reader := c.apiReader
-	if reader == nil {
-		reader = c.BaseController.Client
-	}
-
-	err := reader.Get(ctx, req.NamespacedName, link)
-	if err != nil {
-		if apimachineryerrors.IsNotFound(err) {
-			// Absence of the Link is what frees its wire id.
-			c.BaseController.LogReconcileCompleteObjectNotExist(req)
-
-			return nil, true, nil
-		}
-
-		c.BaseController.LogReconcileFailedGettingObject(req, err)
-
-		return nil, false, err
-	}
-
-	if link.DeletionTimestamp != nil || c.BaseController.ShouldIgnoreReconcile(link) {
-		// Host Link state is Pod-namespace-scoped and dies with the Pod; nothing node-local
-		// gates deletion.
-		return nil, true, nil
-	}
-
-	// Endpoint identity and pod grouping come from the live reader. Bindings whose names no
-	// longer match the spec are intentionally stale (the Link was rewired), so they are cleared
-	// and the new endpoint names are allowed to resolve normally.
-	namespaceNodes, nodesByName, err := c.listNamespaceNodes(ctx, req.Namespace)
-	if err != nil {
-		return nil, false, err
-	}
-
-	resolvedEndpoints, lifecycleReason := resolveLinkEndpoints(link, nodesByName)
-	if lifecycleReason == "" {
-		return &reconcileInput{
-			link:              link,
-			namespaceNodes:    namespaceNodes,
-			nodesByName:       nodesByName,
-			resolvedEndpoints: resolvedEndpoints,
-		}, false, nil
-	}
-
-	c.BaseController.Log.Infof(
-		"deleting Link %q because %s",
-		apimachinerytypes.NamespacedName{
-			Namespace: link.GetNamespace(),
-			Name:      link.GetName(),
-		}.String(),
-		lifecycleReason,
-	)
-
-	err = c.BaseController.Client.Delete(ctx, link)
-	if err != nil && !apimachineryerrors.IsNotFound(err) {
-		return nil, false, err
-	}
-
-	return nil, true, nil
 }
 
 func (c *Controller) listNamespaceLinks(

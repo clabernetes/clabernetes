@@ -1691,6 +1691,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ManagementPolicy(
 				Description: "ManagementPolicy defines direct management-overlay address allocation. Docker network identity, MTU, and external-access controls are deliberately absent.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"disabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Disabled disables management allocation and the c9s management overlay. Kubernetes Pod networking and declared links remain active; explicit management addresses must be omitted.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"ipv4-subnet": {
 						SchemaProps: spec.SchemaProps{
 							Description: "IPv4Subnet is the IPv4 management subnet.",
@@ -3955,6 +3962,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 							Ref: ref(
 								"github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull",
 							),
+						},
+					},
+					"disableManagement": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DisableManagement disables the c9s management overlay. Explicit node management addresses must be omitted. Kubernetes Pod networking and declared topology links remain active.",
+							Type:        []string{"boolean"},
+							Format:      "",
 						},
 					},
 					"rollout": {

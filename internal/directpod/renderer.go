@@ -55,6 +55,7 @@ const (
 	hostNetworkNamespaceSourcePath   = "/proc/1/ns"
 	hostNetworkNamespaceMountPath    = "/var/run/clabernetes/host-network-namespaces"
 	lifecycleVolumeName              = "node-lifecycle-manager"
+	lifecycleCacheVolumeName         = "worker-runtime-binary-cache"
 	lifecycleBinaryRoot              = "/var/lib/clabernetes/lifecycle-bin"
 	lifecycleBinaryPath              = lifecycleBinaryRoot + "/manager"
 	runtimeBinaryPath                = "/clabernetes/manager"
@@ -625,11 +626,18 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 	}
 
 	if hasLifecycle {
+		cacheType := k8scorev1.HostPathDirectoryOrCreate
 		volumes = append(volumes, k8scorev1.Volume{
 			Name: lifecycleVolumeName,
 			VolumeSource: k8scorev1.VolumeSource{
 				EmptyDir: &k8scorev1.EmptyDirVolumeSource{},
 			},
+		}, k8scorev1.Volume{
+			Name: lifecycleCacheVolumeName,
+			VolumeSource: k8scorev1.VolumeSource{HostPath: &k8scorev1.HostPathVolumeSource{
+				Path: clabernetesinternaldirectruntime.LifecycleBinaryCachePath,
+				Type: &cacheType,
+			}},
 		})
 	}
 
@@ -736,14 +744,26 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 					NodeSelector:       maps.Clone(options.NodeSelector),
 					Tolerations:        slices.Clone(options.Tolerations),
 					Affinity:           options.Affinity.DeepCopy(),
-					RestartPolicy:      k8scorev1.RestartPolicyAlways,
-					Hostname:           options.Name,
-					DNSPolicy:          dns.policy,
-					DNSConfig:          dns.config,
-					HostAliases:        renderHostAliases(normalized, options.Name),
-					InitContainers:     initContainers,
-					Containers:         containers,
-					Volumes:            volumes,
+					// Each device has its own single-replica Deployment, so the scheduler's
+					// default spreading cannot balance a lab. Count all direct workloads in
+					// this namespace to avoid concentrating startup work on one kubelet.
+					TopologySpreadConstraints: []k8scorev1.TopologySpreadConstraint{{
+						MaxSkew: 1, TopologyKey: k8scorev1.LabelHostname,
+						WhenUnsatisfiable: k8scorev1.ScheduleAnyway,
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{{
+								Key: directWorkloadLabel, Operator: metav1.LabelSelectorOpExists,
+							}},
+						},
+					}},
+					RestartPolicy:  k8scorev1.RestartPolicyAlways,
+					Hostname:       options.Name,
+					DNSPolicy:      dns.policy,
+					DNSConfig:      dns.config,
+					HostAliases:    renderHostAliases(normalized, options.Name),
+					InitContainers: initContainers,
+					Containers:     containers,
+					Volumes:        volumes,
 				},
 			},
 		},
@@ -2427,11 +2447,16 @@ func renderHelpers(
 	if hasLifecycle {
 		preparationMounts = append(preparationMounts, k8scorev1.VolumeMount{
 			Name: lifecycleVolumeName, MountPath: lifecycleBinaryRoot,
+		}, k8scorev1.VolumeMount{
+			Name:      lifecycleCacheVolumeName,
+			MountPath: clabernetesinternaldirectruntime.LifecycleBinaryCachePath,
 		})
 		preparationArgs = append(
 			preparationArgs,
 			"--lifecycleBinary",
 			lifecycleBinaryPath,
+			"--lifecycleBinaryCache",
+			clabernetesinternaldirectruntime.LifecycleBinaryCachePath,
 		)
 	}
 

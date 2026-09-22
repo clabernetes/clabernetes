@@ -25,6 +25,18 @@ diagnostic. Nothing is silently dropped.
   (`network`, `bridge`, `mtu`, `external-access`, `skip-when-unused`, `driver-opts`) are
   accepted and ignored with a warning; the address-policy fields keep their meaning for the
   management overlay.
+- **Management neighbors are resolved on demand.** The kernel queues the first packet while
+  the sidecar installs the peer directory's authorized address and tunnel mapping. Idle peers
+  consume no IPv4 neighbor or forwarding entries, and unknown destinations are not flooded.
+  Contacted peers retain their entries until they leave the directory; communicating with
+  every peer can still produce all-to-all state. IPv6 gateway proxy entries continue to track
+  every IPv6 peer.
+- **Management overlay is enabled by default.** Set `spec.disableManagement: true` on a Topology, or
+  `spec.mgmt.disabled: true` on a NodeProfile, to omit management address allocation and the
+  management mesh. Omit explicit `mgmt-ipv4` and `mgmt-ipv6` node addresses when using this
+  option. Kubernetes Pod networking and declared data links remain active; management-subnet
+  addresses and management peer names are unavailable. Devices that require a configured
+  management interface may need the overlay enabled.
 - **Exposure is a Service, not a host port.** `ports` entries are destination ports only; the
   host half of Docker-style `host:container` pinning is dropped with a warning because it only
   ever described the local Docker host. Reachability comes from per-node Services
@@ -62,6 +74,10 @@ diagnostic. Nothing is silently dropped.
 
 ## Lifecycle
 
+- **Device Pods prefer an even spread across workers.** c9s counts direct device Pods across
+  their namespace, including devices in separate Deployments. This is a soft scheduling
+  preference; node selectors, affinity, taints, and available resources still determine where
+  a Pod can run, and a single-worker cluster remains supported.
 - **Containers restart with their Pod.** `restart-policy` accepts `always` and
   `unless-stopped`; Docker's `no` and `on-failure` cannot exist in a shared Pod and are
   rejected at compile time.
@@ -81,9 +97,16 @@ diagnostic. Nothing is silently dropped.
 
 ## Files and images
 
-- **No host binds.** Files come from ConfigMaps, Secrets, digest-pinned URLs, generated
+- **No arbitrary host binds.** Files come from ConfigMaps, Secrets, digest-pinned URLs, generated
   artifacts, and PVC-backed persistence; the preparation init container stages and
   digest-verifies everything before the device starts. Arbitrary host paths are rejected.
+- **Runtime binaries use a bounded worker cache.** The preparation container alone mounts
+  `/var/lib/clabernetes/runtime-binary-cache`, which retains four content-verified binary
+  versions (at most 256 MiB each). When this cache and the Pod's storage share a filesystem
+  supporting reflinks, preparation creates an independent copy-on-write binary instead of
+  writing the same executable into every Pod. Application containers receive only their own
+  read-only file, with their own file metadata and SELinux label. Unsupported filesystems use
+  ordinary copies and therefore still need disk space for one runtime binary per Pod.
 - **The kubelet pulls images.** Pull policy and pull Secrets are Kubernetes-native; there is
   no image import, pull-through, or per-lab insecure-registry setting. c9s reads only registry
   metadata and fails readiness if the running image diverges from the planned digest.

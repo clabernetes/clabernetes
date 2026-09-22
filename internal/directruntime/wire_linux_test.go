@@ -56,6 +56,55 @@ func TestFabricWirePumpInIsolatedNamespace(t *testing.T) {
 	})
 }
 
+func TestFabricWireCarrierSamplingByIndex(t *testing.T) {
+	runFabricNetlinkTest(t, "C9S_FABRIC_WIRE_FLAGS_TEST_CHILD", func() {
+		wireTestVethPair(t, "sample-leg", "sample-device", wireTestCraftMTU)
+		leg, err := netlink.LinkByName("sample-leg")
+		if err != nil {
+			t.Fatal(err)
+		}
+		fd, err := unix.Socket(unix.AF_INET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = unix.Close(fd) }()
+		index := leg.Attrs().Index
+		assertCarrier := func(want bool) {
+			t.Helper()
+			waitForWireCondition(t, wireTestCarrierTimeout, "ioctl carrier state", func() bool {
+				up, sampleErr := fabricWireLegOperUp(fd, index)
+				if sampleErr != nil {
+					t.Fatal(sampleErr)
+				}
+				current, lookupErr := netlink.LinkByIndex(index)
+				if lookupErr != nil {
+					t.Fatal(lookupErr)
+				}
+
+				return up == want && up == (current.Attrs().OperState == netlink.OperUp)
+			})
+		}
+		assertCarrier(true)
+		wireTestSetAdmin(t, "sample-device", false)
+		assertCarrier(false)
+		wireTestSetAdmin(t, "sample-device", true)
+		assertCarrier(true)
+		wireTestSetAdmin(t, "sample-leg", false)
+		assertCarrier(false)
+		if err = netlink.LinkSetName(leg, "renamed-leg"); err != nil {
+			t.Fatal(err)
+		}
+		wireTestSetAdmin(t, "renamed-leg", true)
+		assertCarrier(true)
+		if err = netlink.LinkDel(leg); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = fabricWireLegOperUp(fd, index); err == nil {
+			t.Fatal("deleted leg remained readable")
+		}
+	})
+}
+
 type wireTestHarness struct {
 	wireA *fabricWire
 	wireB *fabricWire

@@ -1341,6 +1341,19 @@ func compileDirectManagement(
 	mgmt *clabernetesapisv1alpha1.ManagementPolicy,
 	inboundPorts []clabernetesinternaldeviceplan.Port,
 ) ([]clabernetesinternaldeviceplan.ManagementInput, error) {
+	if mgmt != nil && mgmt.Disabled {
+		for _, name := range groupMembers {
+			if node := nodesByName[name]; node != nil &&
+				(node.Spec.MgmtIPv4 != "" || node.Spec.MgmtIPv6 != "") {
+				return nil, directNodeManagementError(
+					node,
+					"management",
+					"explicit management addresses conflict with disabled management",
+				)
+			}
+		}
+		return nil, nil
+	}
 	if err := validateUniqueExplicitManagementAddresses(nodesByName); err != nil {
 		return nil, directManagementError("addresses", err.Error())
 	}

@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	maxLifecycleFileBytes   = 64 << 20
-	maxLifecycleBinaryBytes = 256 << 20
+	// LifecycleBinaryCachePath contains only verified runtime binaries, never device data.
+	LifecycleBinaryCachePath = "/var/lib/clabernetes/runtime-binary-cache"
+	maxLifecycleFileBytes    = 64 << 20
+	maxLifecycleBinaryBytes  = 256 << 20
 	// containerLogPath is the application process' stdout, which the kubelet collects as the
 	// container log.
 	containerLogPath = "/proc/1/fd/1"
@@ -29,6 +31,13 @@ const (
 // plan-owned shared volume. Device images therefore need neither a shell nor a preinstalled c9s
 // binary for kubelet lifecycle hooks to execute typed runtime-neutral actions.
 func InstallLifecycleBinary(destination string) error {
+	return InstallLifecycleBinaryWithCache(destination, "")
+}
+
+// InstallLifecycleBinaryWithCache shares immutable binary data through copy-on-write where
+// supported. The destination remains a separate inode owned by this Pod; applications never
+// mount the writable node cache. Other filesystems retain the ordinary copy behavior.
+func InstallLifecycleBinaryWithCache(destination, cacheRoot string) error {
 	destination = filepath.Clean(destination)
 	if !filepath.IsAbs(destination) || destination == string(filepath.Separator) {
 		return errors.New("lifecycle binary destination must be a scoped absolute path")
@@ -66,10 +75,11 @@ func InstallLifecycleBinary(destination string) error {
 	}
 	temporaryName := temporary.Name()
 	defer func() { _ = os.Remove(temporaryName) }()
-	written, copyErr := io.Copy(
-		temporary,
-		io.LimitReader(source, maxLifecycleBinaryBytes+1),
-	)
+	cloned, copyErr := cloneLifecycleBinary(source, temporary, cacheRoot)
+	written := info.Size()
+	if copyErr == nil && !cloned {
+		written, copyErr = io.Copy(temporary, io.LimitReader(source, maxLifecycleBinaryBytes+1))
+	}
 	if copyErr == nil && (written < 1 || written > maxLifecycleBinaryBytes) {
 		copyErr = errors.New("copied lifecycle binary is outside the bounded size")
 	}

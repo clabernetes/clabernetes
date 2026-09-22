@@ -240,7 +240,7 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		return err
 	}
 
-	vtep, err := ensureMeshVTEP(spec, podAddress, meshMAC, meshMTU)
+	vtep, err := o.ensureMeshVTEP(spec, podAddress, meshMAC, meshMTU)
 	if err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		return nil
 	}
 
-	return ensureMeshPeers(spec, vtep, podAddress, managementPrefix.Addr(), ipv6Active)
+	return ensureMeshPeers(spec, vtep, podAddress, managementPrefix.Addr(), ipv6Active, o.neighbors)
 }
 
 // routerCarriesIPv6Gateway reports whether the router leg actually holds the IPv6 gateway
@@ -709,6 +709,11 @@ func applyInterpositionSysctls(spec InterpositionSpec) error {
 		// for the gateway, so gateway resolution would return multiple identities.
 		{"net.ipv4.conf." + spec.RouterInterface + ".arp_ignore", "1"},
 		{"net.ipv4.conf." + MeshVTEPName + ".arp_ignore", "1"},
+		// Resolve mesh destinations from the peer directory on demand. The kernel queues
+		// the first packet and asks the sidecar; no ARP request is flooded onto the mesh.
+		{"net.ipv4.neigh." + MeshVTEPName + ".app_solicit", "3"},
+		{"net.ipv4.neigh." + MeshVTEPName + ".ucast_solicit", "0"},
+		{"net.ipv4.neigh." + MeshVTEPName + ".mcast_solicit", "0"},
 		// The router leg answers ARP for every remote peer with the gateway identity: the
 		// device keeps its connected management route and resolves peers exactly as on a shared
 		// segment, while the frames it then sends are routed to the peer's tunnel endpoint. The
@@ -729,6 +734,9 @@ func applyInterpositionSysctls(spec InterpositionSpec) error {
 			[2]string{"net.ipv6.conf." + spec.RouterInterface + ".proxy_ndp", "1"},
 			[2]string{"net.ipv6.conf." + MeshVTEPName + ".disable_ipv6", "0"},
 			[2]string{"net.ipv6.conf." + MeshVTEPName + ".accept_ra", "0"},
+			[2]string{"net.ipv6.neigh." + MeshVTEPName + ".app_solicit", "3"},
+			[2]string{"net.ipv6.neigh." + MeshVTEPName + ".ucast_solicit", "0"},
+			[2]string{"net.ipv6.neigh." + MeshVTEPName + ".mcast_solicit", "0"},
 		)
 	} else {
 		// Without an IPv6 management identity the tunnel endpoint never sources neighbor
@@ -1617,12 +1625,15 @@ func adoptSyntheticLegs(meshMTU int, names ...string) error {
 // remote, no flood entries, the Pod's derived link-layer identity. Unicast toward a peer
 // resolves through the static neighbor and forwarding entries the sidecar installs; an
 // unknown destination fails resolution locally instead of flooding anywhere.
-func ensureMeshVTEP(
+func (o netlinkOperations) ensureMeshVTEP(
 	spec InterpositionSpec,
 	podAddress netip.Addr,
 	meshMAC net.HardwareAddr,
 	meshMTU int,
 ) (netlink.Link, error) {
+	if err := o.neighbors.start(); err != nil {
+		return nil, fmt.Errorf("subscribing to mesh neighbor changes: %w", err)
+	}
 	localIP := net.IP(podAddress.AsSlice())
 
 	existing, exists, err := lookupLink(MeshVTEPName)
@@ -1694,6 +1705,8 @@ func ensureMeshVTEP(
 		return nil, fmt.Errorf("bringing mesh VTEP up: %w", err)
 	}
 
+	o.neighbors.created(created.Attrs().Index)
+
 	return created, nil
 }
 
@@ -1704,17 +1717,17 @@ type meshPeerState struct {
 }
 
 // ensureMeshPeers converges the per-peer mesh state to the spec's peer set: on the tunnel
-// endpoint one permanent neighbor entry per peer management address (toward the peer's derived
-// identity) and one forwarding entry per peer identity (toward the peer's Pod address), and on
+// endpoint one permanent neighbor and forwarding entry per contacted peer, and on
 // the router leg one neighbor-discovery proxy entry per peer IPv6 address. Stale entries,
 // including any flood entry left by an earlier shape, are removed exactly; nothing here is ever
-// learned from traffic.
+// learned from an ARP reply. Kernel solicitations resolve only directory-listed identities.
 func ensureMeshPeers(
 	spec InterpositionSpec,
 	vtep netlink.Link,
 	podAddress netip.Addr,
 	ownManagement netip.Addr,
 	ipv6Active bool,
+	inventory *meshNeighborInventory,
 ) error {
 	peersV4 := map[netip.Addr]meshPeerState{}
 	peersV6 := map[netip.Addr]meshPeerState{}
@@ -1738,7 +1751,6 @@ func ensureMeshPeers(
 
 		state := meshPeerState{pod: net.IP(pod.Unmap().AsSlice()), mac: mac}
 		peersV4[management.Unmap()] = state
-		forwarding[mac.String()] = state
 
 		// IPv6 peer state exists only while this Pod's own IPv6 management path is live: the
 		// tunnel endpoint keeps IPv6 disabled otherwise, and a namespace with IPv6 disabled
@@ -1753,11 +1765,23 @@ func ensureMeshPeers(
 		}
 	}
 
-	if err := ensureMeshForwardingEntries(vtep, forwarding); err != nil {
+	if err := inventory.resolver.start(vtep.Attrs().Index); err != nil {
+		return err
+	}
+	inventory.resolver.mu.Lock()
+	defer inventory.resolver.mu.Unlock()
+	activeV4, activeV6 := inventory.resolver.selectRequested(peersV4, peersV6)
+	for _, peer := range activeV4 {
+		forwarding[peer.mac.String()] = peer
+	}
+	for _, peer := range activeV6 {
+		forwarding[peer.mac.String()] = peer
+	}
+	if err := ensureMeshForwardingEntries(vtep, forwarding, inventory); err != nil {
 		return err
 	}
 
-	if err := ensureMeshNeighbors(vtep, netlink.FAMILY_V4, peersV4); err != nil {
+	if err := ensureMeshNeighbors(vtep, netlink.FAMILY_V4, activeV4, inventory); err != nil {
 		return err
 	}
 
@@ -1765,7 +1789,7 @@ func ensureMeshPeers(
 		return nil
 	}
 
-	if err := ensureMeshNeighbors(vtep, netlink.FAMILY_V6, peersV6); err != nil {
+	if err := ensureMeshNeighbors(vtep, netlink.FAMILY_V6, activeV6, inventory); err != nil {
 		return err
 	}
 
@@ -1777,13 +1801,17 @@ func ensureMeshPeers(
 		)
 	}
 
-	return ensureNeighborProxies(router, peersV6)
+	return ensureNeighborProxies(router, peersV6, inventory)
 }
 
 // ensureMeshForwardingEntries converges the tunnel endpoint's forwarding entries (peer identity
 // to peer Pod address) to exactly the desired set.
-func ensureMeshForwardingEntries(vtep netlink.Link, desired map[string]meshPeerState) error {
-	entries, err := netlink.NeighList(vtep.Attrs().Index, unix.AF_BRIDGE)
+func ensureMeshForwardingEntries(
+	vtep netlink.Link,
+	desired map[string]meshPeerState,
+	inventory *meshNeighborInventory,
+) error {
+	entries, err := inventory.list(vtep.Attrs().Index, unix.AF_BRIDGE, false)
 	if err != nil {
 		return fmt.Errorf("listing mesh forwarding entries: %w", err)
 	}
@@ -1837,8 +1865,9 @@ func ensureMeshNeighbors(
 	vtep netlink.Link,
 	family int,
 	desired map[netip.Addr]meshPeerState,
+	inventory *meshNeighborInventory,
 ) error {
-	entries, err := netlink.NeighList(vtep.Attrs().Index, family)
+	entries, err := inventory.list(vtep.Attrs().Index, family, false)
 	if err != nil {
 		return fmt.Errorf("listing mesh neighbor entries: %w", err)
 	}
@@ -1890,8 +1919,12 @@ func ensureMeshNeighbors(
 
 // ensureNeighborProxies converges the router leg's IPv6 neighbor-discovery proxy entries to
 // exactly the peer IPv6 addresses, the IPv6 counterpart of proxy ARP.
-func ensureNeighborProxies(router netlink.Link, peers map[netip.Addr]meshPeerState) error {
-	entries, err := netlink.NeighProxyList(router.Attrs().Index, netlink.FAMILY_V6)
+func ensureNeighborProxies(
+	router netlink.Link,
+	peers map[netip.Addr]meshPeerState,
+	inventory *meshNeighborInventory,
+) error {
+	entries, err := inventory.list(router.Attrs().Index, netlink.FAMILY_V6, true)
 	if err != nil {
 		return fmt.Errorf("listing neighbor proxies: %w", err)
 	}
