@@ -1,0 +1,76 @@
+---
+# Source: clabernetes/templates/planner-pool.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clabernetes-planner-pool
+  namespace: clabernetes
+spec:
+  podSelector:
+    matchLabels:
+      c9s.run/planner-pool: clabernetes
+  policyTypes: [Ingress, Egress]
+---
+# Source: clabernetes/templates/planner-pool.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clabernetes-planner-pool
+  namespace: clabernetes
+  labels:
+    c9s.run/app: clabernetes
+    c9s.run/component: planner-pool
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      c9s.run/planner-pool: clabernetes
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        c9s.run/app: clabernetes
+        c9s.run/planner-pool: clabernetes
+        c9s.run/component: planner-pool
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 5
+      tolerations:
+        - effect: PreferNoSchedule
+          key: test_toleration
+          operator: Equal
+          value: "true"
+      containers:
+        - name: planner
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
+          imagePullPolicy: IfNotPresent
+          command: ["/clabernetes/manager", "node-plan-pool"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 0
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, FOWNER]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+            requests:
+              cpu: 10m
+              memory: 32Mi
+          volumeMounts:
+            - name: scratch
+              mountPath: /var/run/clabernetes/planner/scratch
+      volumes:
+        - name: scratch
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi

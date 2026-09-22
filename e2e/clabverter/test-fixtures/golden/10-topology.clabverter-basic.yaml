@@ -21,7 +21,7 @@ spec:
 
         links:
           - endpoints: ["srl1:e1-1", "srl2:e1-1"]
-          - endpoints: ["srl1:e1-3", "host:eth13"]
+          - endpoints: ["srl1:e1-3", "host:cv-host13"]
 status:
   kind: containerlab
   linkCount: 2

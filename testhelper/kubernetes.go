@@ -167,6 +167,15 @@ func NormalizeNode(t *testing.T, objectData []byte) []byte {
 	objectData = YQCommand(t, objectData, "del(.status.directContainers)")
 	objectData = YQCommand(t, objectData, "del(.status.directManagement)")
 	objectData = YQCommand(t, objectData, "del(.status.planDigest)")
+	// Admission markers carry runtime UIDs and depend on installation policy.
+	// Their behavioral contract is asserted by the admission suites.
+	objectData = YQCommand(
+		t,
+		objectData,
+		`del(.metadata.annotations."c9s.run/startup-admitted",`+
+			`.metadata.annotations."c9s.run/startup-hold")`,
+	)
+	objectData = YQCommand(t, objectData, "del(.metadata.annotations | select(length == 0))")
 
 	return objectData
 }

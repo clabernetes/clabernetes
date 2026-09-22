@@ -11,4 +11,5 @@ pages:
   - link-wire
   - persistence
   - resource-management
+  - scaling-performance
   - nokia-srsim

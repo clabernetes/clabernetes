@@ -28,6 +28,7 @@ type peerAddressResolver interface {
 type netlinkOperations struct {
 	resolver  peerAddressResolver
 	namespace EndpointNamespace
+	neighbors *meshNeighborInventory
 }
 
 const vethLinkType = "veth"
@@ -45,7 +46,15 @@ func newLinkOperations(networkNamespace EndpointNamespace) LinkOperations {
 		}
 	}
 
-	return netlinkOperations{resolver: resolver, namespace: networkNamespace}
+	return netlinkOperations{
+		resolver:  resolver,
+		namespace: networkNamespace,
+		neighbors: newMeshNeighborInventory(),
+	}
+}
+
+func (o netlinkOperations) Close() error {
+	return o.neighbors.close()
 }
 
 func (netlinkOperations) EnsureSysctl(name, value string) error {
@@ -75,7 +84,7 @@ func (netlinkOperations) ListVethInterfaces(ownerPrefix string) ([]VethInterface
 		return nil, fmt.Errorf("%w: owner prefix is empty", errVethOwnership)
 	}
 
-	links, err := netlink.LinkList()
+	links, err := listPodLinks()
 	if err != nil {
 		return nil, fmt.Errorf("listing interfaces: %w", err)
 	}
@@ -308,7 +317,7 @@ func (netlinkOperations) ResolvePodTransportInterface(podAddress string) (string
 		target = target.To4()
 	}
 
-	links, err := netlink.LinkList()
+	links, err := listPodLinks()
 	if err != nil {
 		return "", fmt.Errorf("listing interfaces for Pod transport address: %w", err)
 	}

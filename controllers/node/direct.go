@@ -166,16 +166,14 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	podAddresses, err := r.directPodAddressesByNodeUID(ctx, node.GetNamespace())
-	if err != nil {
-		return err
-	}
-	if err = r.reconcileDirectPeerDirectory(
-		ctx,
-		node.GetNamespace(),
-		compileNamespaceManagementIdentities(nodesByName, profile.Mgmt, podAddresses),
-	); err != nil {
-		return err
+	if !r.peerDirectoryAsync {
+		if err = r.refreshDirectPeerDirectory(
+			ctx,
+			node.GetNamespace(),
+			profile.Mgmt,
+		); err != nil {
+			return err
+		}
 	}
 	baseRequest := PlanInputCompileRequest{
 		Primary: node, GroupMembers: groupMembers, NodesByName: nodesByName,
@@ -412,6 +410,10 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	renderOptions.StartupGate, err = r.startupHostGate(ctx, node, existingDeployment)
+	if err != nil {
+		return err
+	}
 	connectivityDecision, err := r.directConnectivityRevision(
 		ctx,
 		node,
@@ -589,7 +591,21 @@ func (r *Reconciler) reconcileDirect(
 		return err
 	}
 
-	return r.garbageCollectWorkerArtifacts(ctx, node, keepWorkerArtifacts)
+	if err = r.garbageCollectWorkerArtifacts(ctx, node, keepWorkerArtifacts); err != nil {
+		return err
+	}
+	captureDirectObservation(
+		ctx,
+		node,
+		statusPlan,
+		currentDeployment,
+		groupMembers,
+		nodesByName,
+		directExposedPorts,
+		profile,
+		linkLifecycleMode,
+	)
+	return nil
 }
 
 func (r *Reconciler) reconcileDirectSecondary(
@@ -1329,6 +1345,19 @@ func compileDirectManagement(
 	mgmt *clabernetesapisv1alpha1.ManagementPolicy,
 	inboundPorts []clabernetesinternaldeviceplan.Port,
 ) ([]clabernetesinternaldeviceplan.ManagementInput, error) {
+	if mgmt != nil && mgmt.Disabled {
+		for _, name := range groupMembers {
+			if node := nodesByName[name]; node != nil &&
+				(node.Spec.MgmtIPv4 != "" || node.Spec.MgmtIPv6 != "") {
+				return nil, directNodeManagementError(
+					node,
+					"management",
+					"explicit management addresses conflict with disabled management",
+				)
+			}
+		}
+		return nil, nil
+	}
 	if err := validateUniqueExplicitManagementAddresses(nodesByName); err != nil {
 		return nil, directManagementError("addresses", err.Error())
 	}
@@ -1511,6 +1540,10 @@ func (r *Reconciler) directMetadata(
 		annotations = map[string]string{}
 	}
 	maps.Copy(annotations, globalAnnotations)
+	// Admission is controller state, not workload metadata. Enabling the global limit
+	// must not change existing Pod templates and restart adopted workloads.
+	delete(annotations, clabernetesconstants.AnnotationStartupAdmitted)
+	delete(annotations, clabernetesconstants.AnnotationStartupHold)
 
 	return labels, annotations
 }

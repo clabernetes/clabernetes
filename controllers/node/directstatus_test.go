@@ -27,6 +27,37 @@ import (
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+func TestDirectConditionEventsRetainFailuresAndFinalReadiness(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{
+		"PlanApplied", "PreparationCompleted", "ConnectivityReady", "PlanPending", "HelperPending",
+	} {
+		if reportDirectConditionEvent(metav1.Condition{Reason: reason}, nil) {
+			t.Fatalf("intermediate progress %s emitted an Event", reason)
+		}
+	}
+	for _, reason := range []string{
+		"ContainersReady", "HelperNotReady", "DirectContainersNotReady", "PlanInputInvalid",
+		"LinkLifecycleRestart", "DeviceStateResetAcknowledged",
+	} {
+		if !reportDirectConditionEvent(metav1.Condition{Reason: reason}, nil) {
+			t.Fatalf("diagnostic %s was suppressed", reason)
+		}
+	}
+	if !reportDirectConditionEvent(
+		metav1.Condition{Reason: "PlanPending"},
+		&metav1.Condition{Status: metav1.ConditionTrue},
+	) {
+		t.Fatal("a previously applied plan becoming pending must emit a diagnostic Event")
+	}
+	if !reportDirectConditionEvent(
+		metav1.Condition{Reason: directPodPendingReason},
+		&metav1.Condition{Status: metav1.ConditionTrue},
+	) {
+		t.Fatal("a disappeared ready Pod must emit a diagnostic Event")
+	}
+}
+
 func TestReportDirectPreflightFailureStampsDeploymentApplyErrors(t *testing.T) {
 	t.Parallel()
 

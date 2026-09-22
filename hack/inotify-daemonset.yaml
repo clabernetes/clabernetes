@@ -1,0 +1,83 @@
+# Node-level tuning for dense lab clusters. Apply separately from the c9s Helm release:
+# kubectl apply -f hack/inotify-daemonset.yaml
+# Higher existing limits are preserved. The DaemonSet reapplies these minimums on startup
+# and every 60 seconds, including on replacement Linux workers; no kubelet restart is needed.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: c9s-inotify-tuning
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: c9s-inotify-tuning
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: c9s-inotify-tuning
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: c9s-inotify-tuning
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - operator: Exists
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: inotify
+          image: docker.io/library/busybox:1.37.0-musl
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            runAsUser: 0
+            readOnlyRootFilesystem: true
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              trap 'exit 0' TERM INT
+              ensure_minimum() {
+                key="$1"
+                minimum="$2"
+                current="$(cat "/host-inotify/$key")"
+                if [ "$current" -lt "$minimum" ]; then
+                  printf '%s\n' "$minimum" > "/host-inotify/$key"
+                  echo "fs.inotify.$key: $current -> $minimum"
+                fi
+              }
+              while true; do
+                ensure_minimum max_user_instances 4096
+                ensure_minimum max_user_watches 1048576
+                sleep 60 &
+                wait "$!"
+              done
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 16Mi
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -ec
+                - >-
+                  test "$(cat /host-inotify/max_user_instances)" -ge 4096 &&
+                  test "$(cat /host-inotify/max_user_watches)" -ge 1048576
+            periodSeconds: 30
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: host-inotify
+              mountPath: /host-inotify
+      volumes:
+        - name: host-inotify
+          hostPath:
+            path: /proc/sys/fs/inotify
+            type: Directory

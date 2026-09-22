@@ -1067,6 +1067,26 @@ func TestCompileDirectManagementDefaultsToContainerlabSubnet(t *testing.T) {
 	}
 }
 
+func TestCompileDirectManagementDisabled(t *testing.T) {
+	t.Parallel()
+	node := planInputTestNode("primary", "uid-primary", "linux", "busybox:latest")
+	nodes := map[string]*clabernetesapisv1alpha1.Node{node.Name: node}
+	policy := &clabernetesapisv1alpha1.ManagementPolicy{Disabled: true}
+	management, err := compileDirectManagement([]string{node.Name}, nodes, policy, nil)
+	if err != nil || len(management) != 0 {
+		t.Fatalf("disabled management allocated an identity: %+v, %v", management, err)
+	}
+	if peers := compileNamespaceManagementIdentities(nodes, policy, map[string]string{"uid-primary": "10.244.0.2"}); len(
+		peers,
+	) != 0 {
+		t.Fatalf("disabled management emitted mesh peers: %+v", peers)
+	}
+	node.Spec.MgmtIPv4 = "172.20.20.2"
+	if _, err = compileDirectManagement([]string{node.Name}, nodes, policy, nil); err == nil {
+		t.Fatal("disabled management silently discarded an explicit address")
+	}
+}
+
 func TestCompileDirectManagementCarriesInboundPorts(t *testing.T) {
 	t.Parallel()
 

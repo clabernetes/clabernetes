@@ -1,6 +1,10 @@
 package manager
 
 import (
+	"os"
+	"runtime"
+	"time"
+
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	k8scorev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -38,15 +42,24 @@ func stripUnmanagedObjectData(appName string) toolscache.TransformFunc {
 }
 
 func newManager(scheme *apimachineryruntime.Scheme, appName string) (ctrlruntime.Manager, error) {
+	metricsAddress, profileAddress := "0", ""
+	if os.Getenv("C9S_DIAGNOSTICS") == "true" {
+		metricsAddress, profileAddress = "127.0.0.1:9090", "127.0.0.1:6060"
+		runtime.SetBlockProfileRate(int(time.Millisecond))
+		const mutexProfileFraction = 10
+		runtime.SetMutexProfileFraction(mutexProfileFraction)
+	}
+
 	return ctrlruntime.NewManager(
 		ctrlruntime.GetConfigOrDie(),
 		ctrlruntime.Options{
 			Logger: klog.NewKlogr(),
 			Scheme: scheme,
 			Metrics: ctrlruntimemetricsserver.Options{
-				BindAddress: "0",
+				BindAddress: metricsAddress,
 			},
-			LeaderElection: false,
+			PprofBindAddress: profileAddress,
+			LeaderElection:   false,
 			NewCache: func(
 				config *rest.Config,
 				opts ctrlruntimecache.Options,

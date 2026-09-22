@@ -153,11 +153,12 @@ re-checked every minute.
 
 What bounds a large lab in practice is Pod capacity, not the mesh:
 
-- Each node is one Pod, and a deploy wave briefly adds two short-lived helper Pods per node
-  (planning and image pull). The kubelet allows 110 Pods per node by default (`maxPods`); when
-  a wave exhausts the slots, Pods stay `Pending` with `Too many pods` until the helpers finish
-  and the scheduler retries, then the wave completes. Raise `maxPods` on the workers for large
-  labs.
+- Each ungrouped node is one device Pod. Planning uses four reusable worker Pods by default,
+  shared across labs; `plannerPool.replicas` controls that capacity. Image metadata resolution
+  creates no helper Pods. The kubelet allows 110 Pods per node by default (`maxPods`); when a
+  lab exhausts the available slots, device Pods stay `Pending` with `Too many pods`. Raise
+  `maxPods` or add workers for large labs. Disabling `plannerPool.enabled` restores the
+  disposable planning Pod path and its temporary Pod capacity needs.
 - Peer state converges through the kubelet's ConfigMap projection: a node added to a running
   lab is reachable by name from its peers about half a minute after it is ready, and a Pod
   rescheduled to another worker reaches its peers again within the kubelet's sync period,

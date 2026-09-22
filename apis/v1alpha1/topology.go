@@ -61,6 +61,31 @@ type TopologySpec struct {
 	// ImagePull holds Kubernetes-native defaults compiled into direct device Pods.
 	// +optional
 	ImagePull ImagePull `json:"imagePull"`
+	// DisableManagement disables the c9s management overlay. Explicit node management addresses
+	// must be omitted. Kubernetes Pod networking and declared topology links remain active.
+	// +optional
+	DisableManagement bool `json:"disableManagement,omitempty"`
+	// Rollout optionally limits admission of new device workloads in startup batches.
+	// Existing workloads are not restarted or paused when this policy changes.
+	// +optional
+	Rollout *TopologyRollout `json:"rollout,omitempty"`
+}
+
+// TopologyRollout controls startup pressure while retaining the complete Node/Link inventory.
+type TopologyRollout struct {
+	// BatchSize is the number of new primary workloads admitted together. Zero disables
+	// batching. The next batch starts after all admitted workloads have a network-ready
+	// Pod sandbox; full device/link readiness may depend on later batches.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	BatchSize int32 `json:"batchSize,omitempty"`
+	// MaxConcurrentPerHost limits primary workloads booting on each Kubernetes host.
+	// A slot is released when the primary container passes its startup probe, without
+	// waiting for links or BGP. Zero disables this limit. Config and Topology limits
+	// both apply. Enabling the gate affects newly created workloads only.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxConcurrentPerHost int32 `json:"maxConcurrentPerHost,omitempty"`
 }
 
 // TopologyStatus is the status for a Topology resource. Note that all *per node* (and per link)

@@ -20,6 +20,10 @@ jobs:
     env:
       SRSIM_LICENSE: ${{ secrets.SRSIM_LICENSE }}
       SRSIM_IMAGE: ghcr.io/clabernetes/nokia_srsim:26.7.R1
+      PLANNER_POOL_E2E: "1"
+      PLANNER_POOL_NAMESPACE: c9s
+      STARTUP_HOST_E2E: "1"
+      STARTUP_HOST_E2E_NODE: c9s-e2e-worker
     steps:
       - name: checkout
         uses: actions/checkout@v7
@@ -53,8 +57,7 @@ jobs:
       - name: docker system prune
         run: docker system prune -a -f
 
-      - name: login to GHCR for SR-SIM
-        if: ${{ env.SRSIM_LICENSE != '' }}
+      - name: login to GHCR for device images
         uses: docker/login-action@v4
         with:
           registry: ghcr.io

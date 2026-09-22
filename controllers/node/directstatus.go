@@ -25,6 +25,7 @@ import (
 )
 
 const (
+	directPodPendingReason   = "DirectPodPending"
 	directPlanPendingReason  = "PlanPending"
 	directPlanPendingMessage = "direct device plan is being reconciled for the current " +
 		"desired state"
@@ -375,7 +376,7 @@ func (r *Reconciler) updateDirectStatuses(
 		}
 
 		containersStatus := metav1.ConditionUnknown
-		containersReason := "DirectPodPending"
+		containersReason := directPodPendingReason
 
 		if pod != nil {
 			containersStatus = metav1.ConditionFalse
@@ -704,7 +705,7 @@ func directHelperCondition(
 ) (metav1.ConditionStatus, string, string) {
 	if pod == nil {
 		return metav1.ConditionUnknown,
-			"DirectPodPending",
+			directPodPendingReason,
 			"direct device Pod has not been created for the current plan"
 	}
 
@@ -856,6 +857,11 @@ func (r *Reconciler) recordDirectConditionTransitions(
 			prior.Message == condition.Message {
 			continue
 		}
+		// Conditions retain detailed progress. Events retain completion, actionable failures,
+		// lifecycle operations and regressions after readiness, rather than every boot step.
+		if !reportDirectConditionEvent(condition, prior) {
+			continue
+		}
 
 		eventType := k8scorev1.EventTypeNormal
 		if condition.Status == metav1.ConditionFalse {
@@ -875,6 +881,20 @@ func (r *Reconciler) recordDirectConditionTransitions(
 			planDigest,
 			condition.Message,
 		)
+	}
+}
+
+func reportDirectConditionEvent(condition metav1.Condition, prior *metav1.Condition) bool {
+	switch condition.Reason {
+	case "NodeProfileResolved",
+		"PlanApplied",
+		"PreparationCompleted",
+		"ConnectivityReady":
+		return false
+	case directPodPendingReason, "HelperPending", "PlanPending":
+		return prior != nil && prior.Status == metav1.ConditionTrue
+	default:
+		return true
 	}
 }
 

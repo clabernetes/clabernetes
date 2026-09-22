@@ -59,11 +59,19 @@ func FindEndpointConflict(
 		candidates = append(candidates, *link.DeepCopy())
 	}
 
+	return EndpointConflicts(candidates)[link.GetName()]
+}
+
+// EndpointConflicts resolves endpoint ownership for a whole namespace in one sorted pass.
+// Rejected links do not reserve their unused endpoint, so conflict chains stay deterministic.
+func EndpointConflicts(namespaceLinks []clabernetesapisv1alpha1.Link) map[string]string {
+	candidates := append([]clabernetesapisv1alpha1.Link(nil), namespaceLinks...)
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].GetName() < candidates[j].GetName()
 	})
 
 	claimed := map[string]string{}
+	conflicts := map[string]string{}
 
 	for idx := range candidates {
 		candidate := &candidates[idx]
@@ -72,18 +80,16 @@ func FindEndpointConflict(
 		}
 
 		conflict := conflictForClaimedEndpoints(candidate, claimed)
-		if candidate.GetName() == link.GetName() {
-			return conflict
-		}
-
 		if conflict != "" {
+			conflicts[candidate.GetName()] = conflict
+
 			continue
 		}
 
 		claimLinkEndpoints(candidate, claimed)
 	}
 
-	return ""
+	return conflicts
 }
 
 func endpointKey(endpoint clabernetesapisv1alpha1.LinkEndpointSpec) string {

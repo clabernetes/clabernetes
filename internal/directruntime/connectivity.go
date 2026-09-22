@@ -1122,6 +1122,11 @@ func runConnectivity(
 	if operations == nil {
 		return errors.New("connectivity link operations are nil")
 	}
+	if closer, ok := operations.(interface{ Close() error }); ok {
+		defer func() {
+			returnErr = errors.Join(returnErr, closer.Close())
+		}()
+	}
 
 	options.hostEndpointPacer = &hostEndpointPacer{}
 	options.peerDirectory = newPeerDirectoryReader(ConnectivityPeerDirectoryRoot)
@@ -1232,7 +1237,7 @@ func runConnectivity(
 		return err
 	}
 
-	// The owned hosts entries are asserted before readiness gates application containers, so
+	// The owned hosts entries are asserted before startup releases application containers, so
 	// the device process boots with its own identity and the namespace peers resolvable.
 	assertOwnedHosts(effectivePlan, peers, options.hostsMemo, true)
 
@@ -1261,6 +1266,8 @@ func runConnectivity(
 	); err != nil {
 		return err
 	}
+
+	readiness.markInitialized()
 
 	if connectivityReady {
 		if err = publishConnectivityReadiness(stateDirectory, coldPlanDigest); err != nil {

@@ -74,6 +74,14 @@ func TestNodeLinkDirect(t *testing.T) {
 
 		initialPods[nodeName] = observation
 	}
+	management := poolMixedManagementAddresses(t, namespace, len(nodeNames))
+	for index, nodeName := range nodeNames {
+		peerName := nodeNames[(index+1)%len(nodeNames)]
+		waitForDeviceCommand(t, namespace, initialPods[nodeName], []string{
+			"ip", "netns", "exec", "srbase-mgmt", "ping", "-4", "-c", "2", "-W", "2",
+			management[peerName],
+		}, " 0% packet loss")
+	}
 
 	// The embedded startup configuration must have been materialized, planned, prepared, and
 	// committed by the imported package hooks: ethernet-1/1.0 carries the configured address
@@ -182,6 +190,12 @@ func TestLinuxDataplaneDirect(t *testing.T) {
 	}
 
 	device := observeDevicePod(t, namespace, "lin1")
+	management := poolMixedManagementAddresses(t, namespace, 2)
+	for source, destination := range map[string]string{"lin1": "lin2", "lin2": "lin1"} {
+		waitForDeviceCommand(t, namespace, observeDevicePod(t, namespace, source),
+			[]string{"ping", "-4", "-c", "2", "-W", "2", management[destination]},
+			" 0% packet loss")
+	}
 	waitForDeviceCommand(
 		t,
 		namespace,

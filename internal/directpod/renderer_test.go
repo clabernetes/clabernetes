@@ -395,13 +395,13 @@ func TestRenderCreatesDirectApplicationContainersFromGenericPlan(t *testing.T) {
 		t.Fatalf("connectivity Pod UID ownership input = %#v", connectivity)
 	}
 
-	// Both sidecar probes are HTTP probes against the sidecar's readiness endpoint on the Pod
-	// address: an exec probe would start the runtime binary every second in every Pod.
-	for _, probe := range []*k8scorev1.Probe{
-		connectivity.StartupProbe, connectivity.ReadinessProbe,
+	// Startup gates local setup; readiness additionally gates remote peer convergence.
+	for expectedPath, probe := range map[string]*k8scorev1.Probe{
+		clabernetesinternaldirectruntime.ConnectivityStartupPath:   connectivity.StartupProbe,
+		clabernetesinternaldirectruntime.ConnectivityReadinessPath: connectivity.ReadinessProbe,
 	} {
 		if probe == nil || probe.Exec != nil || probe.HTTPGet == nil ||
-			probe.HTTPGet.Path != clabernetesinternaldirectruntime.ConnectivityReadinessPath ||
+			probe.HTTPGet.Path != expectedPath ||
 			probe.HTTPGet.Port.IntValue() != clabernetesconstants.ConnectivityReadinessPort {
 			t.Fatalf("connectivity readiness probes = %#v", connectivity)
 		}
@@ -2304,4 +2304,37 @@ func hasDownwardEnvironment(container k8scorev1.Container, name, fieldPath strin
 	}
 
 	return false
+}
+
+func TestRenderStartupGatePrecedesPreparation(t *testing.T) {
+	t.Parallel()
+	deployment, err := clabernetesinternaldirectpod.Render(
+		renderablePlan(),
+		clabernetesinternaldirectpod.Options{
+			Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+			InputConfigMapName: "device-a-plan-input-abc", ConnectivityRevisionConfigMapName: "device-a-connectivity",
+			PreparationImage: "example/c9s@sha256:1111", ConnectivityImage: "example/c9s@sha256:1111", StartupGate: true, EnableContainerStopSignals: true,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := deployment.Spec.Template.Spec
+	if spec.InitContainers[0].Name != clabernetesinternaldirectpod.StartupGateContainerName ||
+		spec.InitContainers[1].Name != clabernetesinternaldirectpod.PreparationContainerName {
+		t.Fatal("startup gate must run before preparation")
+	}
+	if _, present := deployment.Spec.Template.Annotations[clabernetesinternaldirectpod.StartupAdmittedAnnotation]; present {
+		t.Fatal("grant must never appear on the Deployment template")
+	}
+	for _, volume := range spec.Volumes {
+		if volume.Name == clabernetesinternaldirectpod.StartupGateContainerName {
+			if volume.DownwardAPI == nil || len(volume.DownwardAPI.Items) != 2 {
+				t.Fatal("missing Pod identity and grant projection")
+			}
+
+			return
+		}
+	}
+	t.Fatal("missing admission volume")
 }

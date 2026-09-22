@@ -456,7 +456,7 @@ func podBoundResolver(podAddress string) *net.Resolver {
 // result means the underlay interface was not identifiable; consumers fall back to their
 // conservative defaults.
 func podFabricUnderlayMTU(podAddress netip.Addr) (int, error) {
-	links, err := netlink.LinkList()
+	links, err := listPodLinks()
 	if err != nil {
 		return 0, fmt.Errorf("listing Pod interfaces: %w", err)
 	}
@@ -757,7 +757,7 @@ func (netlinkOperations) SweepTransportState(ownerPrefix string, keepOwners []st
 		keep[owner] = true
 	}
 
-	links, err := netlink.LinkList()
+	links, err := listPodLinks()
 	if err != nil {
 		return fmt.Errorf("listing interfaces for transport sweep: %w", err)
 	}

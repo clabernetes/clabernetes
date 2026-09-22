@@ -224,7 +224,9 @@ func (r *Reconciler) garbageCollectDirectProbeSecrets(
 	keep string,
 ) error {
 	secrets := &k8scorev1.SecretList{}
-	if err := r.probeSecretReader().List(
+	// Superseded credentials can be collected on the next watch/watchdog pass if
+	// the cache lags. Only reads of credentials used by the plan must be uncached.
+	if err := r.Client.List(
 		ctx,
 		secrets,
 		ctrlruntimeclient.InNamespace(owner.GetNamespace()),
@@ -242,7 +244,9 @@ func (r *Reconciler) garbageCollectDirectProbeSecrets(
 			continue
 		}
 
-		if err := r.Client.Delete(ctx, secret); err != nil && !apimachineryerrors.IsNotFound(err) {
+		if err := r.Client.Delete(ctx, secret, ctrlruntimeclient.Preconditions{
+			UID: &secret.UID, ResourceVersion: &secret.ResourceVersion,
+		}); err != nil && !apimachineryerrors.IsNotFound(err) {
 			return fmt.Errorf("deleting superseded direct probe Secret: %w", err)
 		}
 	}

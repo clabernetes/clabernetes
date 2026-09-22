@@ -78,6 +78,7 @@ type PlannerResult struct {
 type PlannerReconciler struct {
 	Client   ctrlruntimeclient.Client
 	ReadLogs PlannerLogReader
+	Pool     *PlannerPool
 }
 
 // Reconcile advances one immutable planner attempt. A newly created NetworkPolicy returns Pending
@@ -246,6 +247,11 @@ func (r *PlannerReconciler) executeWorkerAttempt(
 	}
 	if found {
 		return frame, podName, false, nil
+	}
+	if r.Pool != nil {
+		frame, err = r.Pool.run(ctx, node, renderInput, inputArtifact)
+
+		return frame, podName, false, err
 	}
 	if _, _, err = (&PlannerInputConfigMapReconciler{
 		Client: r.Client, MaxInputBytes: maxInputBytes,

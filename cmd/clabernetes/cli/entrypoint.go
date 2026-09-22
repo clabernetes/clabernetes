@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	clabernetesclicker "github.com/clabernetes/clabernetes/clicker"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
@@ -53,6 +56,7 @@ const (
 	deviceRuntimePayloads             = "payloads"
 	deviceRuntimeState                = "state"
 	deviceRuntimeBinary               = "lifecycleBinary"
+	deviceRuntimeBinaryCache          = "lifecycleBinaryCache"
 	deviceRuntimePhase                = "phase"
 	deviceRuntimeContainer            = "containerID"
 	deviceRuntimeScratch              = "scratch"
@@ -92,6 +96,30 @@ func Entrypoint() *cli.App {
 		Commands: []*cli.Command{
 			devicePayloadWorkerCommand(),
 			devicePlanWorkerCommand(),
+			{
+				Name:  "node-plan-pool",
+				Usage: "wait for isolated planner requests through Kubernetes exec",
+				Action: func(c *cli.Context) error {
+					ctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+					defer stop()
+
+					return clabernetesinternaldeviceplan.RunPoolIdle(ctx)
+				},
+			},
+			{
+				Name: "node-plan-pool-exec", Usage: "supervise one isolated planner pool request",
+				Flags: []cli.Flag{&cli.StringFlag{Name: devicePlanRevision, Required: true}},
+				Action: func(c *cli.Context) error {
+					return clabernetesinternaldeviceplan.RunPoolProcess(
+						c.Context,
+						os.Stdin,
+						c.App.Writer,
+						c.App.ErrWriter,
+						c.String(devicePlanRevision),
+						5*time.Minute,
+					)
+				},
+			},
 			deviceRuntimeCommand(),
 			{
 				Name:  "run",
@@ -215,6 +243,18 @@ func deviceRuntimeCommand() *cli.Command {
 		Usage: "run a generic direct-node helper",
 		Subcommands: []*cli.Command{
 			{
+				Name:  "startup-gate",
+				Usage: "wait for per-host device startup admission",
+				Flags: []cli.Flag{&cli.StringFlag{Name: "directory", Required: true}},
+				Action: func(c *cli.Context) error {
+					return clabernetesinternaldirectruntime.WaitStartupAdmission(
+						c.Context,
+						c.String("directory"),
+					)
+				},
+			},
+
+			{
 				Name:  "prepare",
 				Usage: "regenerate and verify imported preparation artifacts",
 				Flags: []cli.Flag{
@@ -226,6 +266,7 @@ func deviceRuntimeCommand() *cli.Command {
 					&cli.StringFlag{Name: devicePlanEntropy},
 					&cli.StringFlag{Name: devicePlanRevision, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeBinary},
+					&cli.StringFlag{Name: deviceRuntimeBinaryCache},
 					&cli.StringSliceFlag{Name: deviceRuntimePersistentNode},
 					&cli.StringSliceFlag{Name: deviceRuntimeReset},
 				},
@@ -284,8 +325,9 @@ func deviceRuntimeCommand() *cli.Command {
 						return err
 					}
 
-					return clabernetesinternaldirectruntime.InstallLifecycleBinary(
+					return clabernetesinternaldirectruntime.InstallLifecycleBinaryWithCache(
 						c.String(deviceRuntimeBinary),
+						c.String(deviceRuntimeBinaryCache),
 					)
 				},
 			},

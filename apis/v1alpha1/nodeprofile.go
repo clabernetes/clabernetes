@@ -89,6 +89,10 @@ type NodeProfileDeployment struct {
 // ManagementPolicy defines direct management-overlay address allocation. Docker network identity,
 // MTU, and external-access controls are deliberately absent.
 type ManagementPolicy struct {
+	// Disabled disables management allocation and the c9s management overlay. Kubernetes Pod
+	// networking and declared links remain active; explicit management addresses must be omitted.
+	// +optional
+	Disabled bool `json:"disabled,omitempty"`
 	// IPv4Subnet is the IPv4 management subnet.
 	// +optional
 	IPv4Subnet string `json:"ipv4-subnet,omitempty"`

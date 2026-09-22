@@ -94,6 +94,11 @@ func (r *PlannerSessionReconciler) Reconcile(
 	defer cancel()
 	stdinReader, stdinWriter := io.Pipe()
 	stdoutReader, stdoutWriter := io.Pipe()
+	stopPipes := context.AfterFunc(sessionCtx, func() {
+		_ = stdinReader.CloseWithError(sessionCtx.Err())
+		_ = stdoutWriter.CloseWithError(sessionCtx.Err())
+	})
+	defer stopPipes()
 	errorOutput := &boundedSessionWriter{remaining: plannerSessionErrorBytes}
 	streamDone := make(chan error, 1)
 	go func() {
@@ -106,6 +111,7 @@ func (r *PlannerSessionReconciler) Reconcile(
 			stdoutWriter,
 			errorOutput,
 		)
+		_ = stdinReader.CloseWithError(streamErr)
 		_ = stdoutWriter.CloseWithError(streamErr)
 		streamDone <- streamErr
 	}()
