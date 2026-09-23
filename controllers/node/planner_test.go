@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -26,10 +27,7 @@ func TestPlannerReconcilerCreatesDenyPolicyBeforePodAndValidatesResult(t *testin
 	input := validInput()
 	plan := validPlannerResult(t, input, "planner-v1")
 
-	framed, err := clabernetesinternaldeviceplan.EncodeWorkerOutput(plan)
-	if err != nil {
-		t.Fatal(err)
-	}
+	framed := encodePlannerSessionResult(t, input, plan)
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(plannerTestScheme(t)).
@@ -42,6 +40,7 @@ func TestPlannerReconcilerCreatesDenyPolicyBeforePodAndValidatesResult(t *testin
 				containerName != plannerContainerName {
 				t.Fatalf("unexpected log target %s/%s:%s", namespace, podName, containerName)
 			}
+			acceptPlannerSessionResult(t, client, namespace, podName, framed)
 
 			return append([]byte("imported hook log\n"), framed...), nil
 		},
@@ -91,6 +90,14 @@ func TestPlannerReconcilerCreatesDenyPolicyBeforePodAndValidatesResult(t *testin
 	if err = client.Get(ctx, plannerObjectKey(node.GetNamespace(), second.PodName), pod); err != nil {
 		t.Fatal(err)
 	}
+	if pod.GetLabels()[plannerSessionLabel] != plannerSessionValue ||
+		!pod.Spec.Containers[0].Stdin || !pod.Spec.Containers[0].StdinOnce ||
+		!slices.Contains(pod.Spec.Containers[0].Args, "--session") ||
+		pod.GetAnnotations()[plannerSessionDeadline] != "60" ||
+		pod.Spec.ActiveDeadlineSeconds == nil ||
+		*pod.Spec.ActiveDeadlineSeconds != plannerQueueDeadline {
+		t.Fatalf("planner Pod is not an attached session worker: %#v", pod.Spec.Containers[0])
+	}
 
 	pod.Status.Phase = k8scorev1.PodSucceeded
 	if err = client.Status().Update(ctx, pod); err != nil {
@@ -105,6 +112,20 @@ func TestPlannerReconcilerCreatesDenyPolicyBeforePodAndValidatesResult(t *testin
 	if completed.State != PlannerStateSucceeded || completed.Plan == nil ||
 		completed.Plan.InputDigest != completed.InputDigest {
 		t.Fatalf("completed planner result = %#v", completed)
+	}
+	output := &k8scorev1.ConfigMap{}
+	if err = client.Get(ctx, plannerObjectKey(
+		node.GetNamespace(),
+		completed.PodName,
+	), output); err != nil {
+		t.Fatal(err)
+	}
+	cached, err := clabernetesinternaldeviceplan.DecodeCachedSessionResult(
+		[]byte(output.Data[workerOutputDataKey]),
+		1<<20,
+	)
+	if err != nil || cached.InputDigest != completed.InputDigest {
+		t.Fatalf("compact cached planner result = %#v, %v", cached, err)
 	}
 }
 
@@ -174,10 +195,7 @@ func TestPlannerReconcilerRejectsMismatchedWorkerIdentity(t *testing.T) {
 	input := validInput()
 	plan := validPlannerResult(t, input, "other-revision")
 
-	framed, err := clabernetesinternaldeviceplan.EncodeWorkerOutput(plan)
-	if err != nil {
-		t.Fatal(err)
-	}
+	framed := encodePlannerSessionResult(t, input, plan)
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(plannerTestScheme(t)).
@@ -185,7 +203,12 @@ func TestPlannerReconcilerRejectsMismatchedWorkerIdentity(t *testing.T) {
 		Build()
 	reconciler := &PlannerReconciler{
 		Client: client,
-		ReadLogs: func(context.Context, string, string, string) ([]byte, error) {
+		ReadLogs: func(
+			_ context.Context,
+			namespace, podName, _ string,
+		) ([]byte, error) {
+			acceptPlannerSessionResult(t, client, namespace, podName, framed)
+
 			return framed, nil
 		},
 	}
@@ -194,7 +217,7 @@ func TestPlannerReconcilerRejectsMismatchedWorkerIdentity(t *testing.T) {
 		Node: node, Input: input, Image: "example/c9s@sha256:abc",
 		PlannerRevision: "planner-v1", DeadlineSeconds: 60,
 	}
-	if _, err = reconciler.Reconcile(context.Background(), attempt); err != nil {
+	if _, err := reconciler.Reconcile(context.Background(), attempt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -220,6 +243,71 @@ func TestPlannerReconcilerRejectsMismatchedWorkerIdentity(t *testing.T) {
 	_, err = reconciler.Reconcile(context.Background(), attempt)
 	if !errors.Is(err, ErrPlannerFailed) {
 		t.Fatalf("identity mismatch error = %v, want ErrPlannerFailed", err)
+	}
+}
+
+func encodePlannerSessionResult(
+	t *testing.T,
+	input clabernetesinternaldeviceplan.Input,
+	plan clabernetesinternaldeviceplan.Plan,
+) []byte {
+	t.Helper()
+
+	digest, err := input.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := &bytes.Buffer{}
+	if err = clabernetesinternaldeviceplan.WriteSessionFrame(
+		output,
+		clabernetesinternaldeviceplan.SessionFrame{
+			Version:       clabernetesinternaldeviceplan.SessionProtocolVersion,
+			Type:          clabernetesinternaldeviceplan.SessionFrameResult,
+			SessionDigest: digest,
+			Sequence:      1,
+			Result: &clabernetesinternaldeviceplan.SessionResult{
+				Input: input, Plan: plan,
+			},
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	return output.Bytes()
+}
+
+func acceptPlannerSessionResult(
+	t *testing.T,
+	client ctrlruntimeclient.Client,
+	namespace,
+	podName string,
+	framed []byte,
+) {
+	t.Helper()
+
+	session, err := clabernetesinternaldeviceplan.DecodeSessionResult(framed, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod := &k8scorev1.Pod{}
+	if err = client.Get(
+		context.Background(),
+		plannerObjectKey(namespace, podName),
+		pod,
+	); err != nil {
+		t.Fatal(err)
+	}
+	before := pod.DeepCopy()
+	if pod.Annotations == nil {
+		pod.Annotations = map[string]string{}
+	}
+	pod.Annotations[plannerSessionResult] = session.TerminalDigest
+	if err = client.Patch(
+		context.Background(),
+		pod,
+		ctrlruntimeclient.MergeFrom(before),
+	); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -290,16 +378,16 @@ func TestPlannerObjectNameCoversImmutableExecutionPolicy(t *testing.T) {
 	base := PlannerPodInput{
 		Node: node, Image: "example/c9s@sha256:abc",
 		InputConfigMapName: "router-plan-input-abc", InputDigest: "sha256:abc",
-		PlannerRevision: "planner-v1", WorkerCommand: plannerWorkerImages,
-		MaxInputBytes: 1 << 20, DeadlineSeconds: 60,
+		PlannerRevision: "planner-v1", WorkerCommand: plannerWorkerPlan,
+		MaxInputBytes: 1 << 20, DeadlineSeconds: 60, Session: true,
 	}
 
-	baseName, err := imageDiscoveryPodName(node.GetName(), base)
+	baseName, err := contentAddressedPlannerObjectName(node.GetName(), "-planner-", base)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	again, err := imageDiscoveryPodName(node.GetName(), base)
+	again, err := contentAddressedPlannerObjectName(node.GetName(), "-planner-", base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +403,11 @@ func TestPlannerObjectNameCoversImmutableExecutionPolicy(t *testing.T) {
 
 	changedInputs[3].ImagePullSecrets = []k8scorev1.LocalObjectReference{{Name: "pull-b"}}
 	for _, changed := range changedInputs {
-		changedName, nameErr := imageDiscoveryPodName(node.GetName(), changed)
+		changedName, nameErr := contentAddressedPlannerObjectName(
+			node.GetName(),
+			"-planner-",
+			changed,
+		)
 		if nameErr != nil {
 			t.Fatal(nameErr)
 		}

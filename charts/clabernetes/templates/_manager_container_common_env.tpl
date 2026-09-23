@@ -23,4 +23,8 @@
   {{- else }}
   value: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:{{ .Chart.Version }}"
   {{- end }}
+- name: PLANNER_POOL_ENABLED
+  value: {{ .Values.plannerPool.enabled | quote }}
+- name: C9S_DIAGNOSTICS
+  value: {{ .Values.manager.diagnostics | default false | quote }}
 {{- end -}}

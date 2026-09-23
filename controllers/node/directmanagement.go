@@ -176,6 +176,9 @@ func compileNamespaceManagementIdentities(
 	mgmt *clabernetesapisv1alpha1.ManagementPolicy,
 	podAddressesByNodeUID map[string]string,
 ) []clabernetesinternaldirectruntime.PeerIdentity {
+	if mgmt != nil && mgmt.Disabled {
+		return nil
+	}
 	settings := clabernetesapisv1alpha1.ManagementPolicy{}
 	if mgmt != nil {
 		settings = *mgmt
@@ -526,7 +529,7 @@ func directNodeManagementError(
 	return &clabernetesinternaldeviceplan.Error{
 		Code: clabernetesinternaldeviceplan.ErrorInvalidInput, NodeID: string(node.GetUID()),
 		Field:    "nodes." + node.GetName() + ".spec." + field,
-		Behavior: "controller-input", Message: message,
+		Behavior: controllerInputBehavior, Message: message,
 	}
 }
 

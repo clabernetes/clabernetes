@@ -60,7 +60,7 @@ For every kind in the live imported registry, the c9s planning adapter SHALL use
 
 ### Requirement: Device planning is deterministic and side-effect free
 
-Planning SHALL depend only on explicit versioned inputs, including the resolved Node definition, image metadata, payload metadata, certificate material metadata, management allocation, and interface inventory. Imported hook execution MUST occur in a short-lived, deadline-bounded c9s planning Pod rather than the manager process. The worker MUST have no service-account token, host path, privileged security context, or ambient capability; MUST use a read-only root filesystem plus private scratch; and MUST audit imported calls through a recorder boundary. It MAY retain only `CHOWN` and `FOWNER` after dropping `ALL`, because imported generic preparation records package-owned ownership and ACL metadata and every writable path is confined to private scratch. It MUST NOT pull an image, launch or inspect a running container, access an implicit host path, create a privileged network namespace, or mutate host or runtime state. Identical normalized inputs MUST produce byte-equivalent normalized plans.
+Planning SHALL depend only on explicit versioned inputs, including the resolved Node definition, image metadata, payload metadata, certificate material metadata, management allocation, and interface inventory. Imported hook execution MUST occur in one short-lived, deadline-bounded c9s planning Pod rather than the manager process. The manager SHALL attach a bounded request/response stream to that worker so it can supply genuinely missing OCI metadata or issued certificate material without starting another Pod. The worker MUST have no service-account token, host path, privileged security context, network access, or ambient capability; MUST use a read-only root filesystem plus private scratch; and MUST audit imported calls through a recorder boundary. It MAY retain only `CHOWN` and `FOWNER` after dropping `ALL`, because imported generic preparation records package-owned ownership and ACL metadata and every writable path is confined to private scratch. It MUST NOT pull an image, launch or inspect a running container, access an implicit host path, create a privileged network namespace, or mutate host or runtime state. Identical normalized inputs MUST produce byte-equivalent normalized plans.
 
 Preparation SHALL keep proving reproduction: regenerated artifacts MUST match the accepted plan by path, mode, and digest before any publication. Publication onto a persistent artifact volume SHALL be state-aware: preparation records the digest of every artifact it publishes, and on later runs it MUST NOT overwrite a planned file whose current digest differs from the digest recorded at its last staging, unless the node definition enforces its startup configuration or a device-state reset was requested. A planned file whose current digest still matches its recorded staging digest SHALL be republished when the plan's content changed. On non-persistent volumes publication remains unconditional.
 
@@ -69,10 +69,20 @@ Preparation SHALL keep proving reproduction: regenerated artifacts MUST match th
 - **WHEN** the same normalized planning inputs are evaluated more than once
 - **THEN** the normalized serialized plans are byte-equivalent
 
-#### Scenario: Required input is unavailable
+#### Scenario: Required metadata is not present initially
 
-- **WHEN** a kind decision requires image or payload metadata that was not supplied
-- **THEN** planning returns a structured missing-input error instead of consulting a local Docker daemon or guessing a default
+- **WHEN** imported setup discovers an image reference or certificate requirement absent from the initial input
+- **THEN** the worker requests it from the manager, incorporates the validated response in memory, and continues in the same process without registry or Kubernetes access
+
+#### Scenario: Required input cannot be supplied
+
+- **WHEN** the manager cannot resolve requested image metadata or issue requested certificate material
+- **THEN** planning returns a structured missing-input error instead of consulting a local Docker daemon, guessing a default, or starting another discovery worker
+
+#### Scenario: Imported image role uses known metadata
+
+- **WHEN** imported setup assigns another role to an image reference whose metadata is already in the input for that logical Node
+- **THEN** the worker associates that role in memory without another controller request, registry lookup, or Pod
 
 #### Scenario: Imported code bypasses the runtime interface
 
@@ -186,70 +196,65 @@ Management-parameterized configuration SHALL render from controller-allocated ma
 - **WHEN** planning encounters a node without a complete allocated management identity
 - **THEN** planning fails closed with a diagnostic naming the node and the missing allocation
 
+### Requirement: Planner sessions are bounded and make observable progress
+
+One content-addressed planner Pod SHALL conduct the complete planning conversation for a Node or
+shared workload group. The controller SHALL resolve each declared image before creating the Pod.
+The worker MAY request additional image metadata or certificate material over its attached stream,
+but every accepted response MUST add a fact needed by evaluation. The controller and worker SHALL
+reject repeated requests that add no facts, mismatched responses, protocol violations, and sessions
+that exceed their round or time bounds.
+
+#### Scenario: Ordinary single-image planning
+
+- **WHEN** one logical Node uses its declared image and requires no certificate
+- **THEN** the controller resolves that image once, one planner Pod returns the complete plan, and
+  the controller creates the device workload without an image-discovery Pod
+
+#### Scenario: Certificate material is required
+
+- **WHEN** imported setup declares a certificate requirement
+- **THEN** the manager issues or reuses the bundle and returns it over the attached stream, and the
+  same worker reruns the relevant evaluation and completes the plan
+
+#### Scenario: Session makes no progress
+
+- **WHEN** evaluation repeats an equivalent request after the response added no required fact
+- **THEN** the worker fails with a stable structured diagnostic before the total session deadline
+
 ### Requirement: Planner attempt artifacts have bounded, ownership-safe retention
 
-Direct image-discovery and device-planning attempts SHALL use content-addressed worker identities
-and persist completed worker output in immutable, Node-owned ConfigMaps. For each Node reconcile,
-the controller SHALL retain the successful attempts in the bounded discovery chain needed for
-cached convergence, the accepted workload's input, and any in-flight attempt needed to make
-progress. Superseded worker Pods, NetworkPolicies, input ConfigMaps, and output ConfigMaps SHALL
-be garbage-collected by Node UID and component labels, without deleting resources owned by another
-Node.
+Planner attempts SHALL use content-addressed worker identities and persist the finalized normalized
+input and completed plan in immutable, Node-owned ConfigMaps. For each Node reconcile, the
+controller SHALL retain the accepted workload's input, completed session output, and any in-flight
+attempt needed to make progress. Superseded worker Pods, NetworkPolicies, input ConfigMaps, and
+output ConfigMaps SHALL be garbage-collected by Node UID and component labels, without deleting
+resources owned by another Node.
 
 #### Scenario: Reconcile with a successful current attempt
 
-- **WHEN** image discovery or device planning succeeds for the current input
-- **THEN** the current attempt's input and persisted output remain available for the accepted
-  workload or a later cached lookup, while attempts outside the active convergence chain are
-  eligible for collection
+- **WHEN** a planner session succeeds for the current input
+- **THEN** its finalized input and persisted output remain available for the accepted workload or
+  a later cached lookup, while superseded attempts are eligible for collection
 
 #### Scenario: Reconcile with an in-flight attempt
 
 - **WHEN** a worker Pod or its input has been created but has not produced a durable output
-- **THEN** the controller retains that Pod and input so a later reconcile can observe or complete the
-  attempt instead of deleting work that is still in progress
+- **THEN** the controller retains that Pod and input so a later reconcile can observe or complete
+  the attempt instead of deleting work that is still in progress
 
 #### Scenario: Superseded attempts are collected
 
-- **WHEN** a later attempt has superseded an older discovery or planning attempt
+- **WHEN** a later attempt has superseded an older planning attempt
 - **THEN** the older Node-owned Pod, NetworkPolicy, input ConfigMap, and output ConfigMap are removed
   while current and unrelated resources remain untouched
 
-#### Scenario: Discovery requires multiple rounds to converge
+#### Scenario: Unchanged Node reuses the completed session
 
-- **WHEN** one discovery result adds package-owned image or certificate data needed by a subsequent
-  bounded discovery round
-- **THEN** each successful attempt in that active chain remains cached until convergence can
-  continue from the original seed, after which superseded chains are eligible for collection
+- **WHEN** the declared image digest and all other initial planning identities are unchanged
+- **THEN** the controller accepts the cached finalized input and plan without creating a planner Pod
 
 #### Scenario: A similarly named resource belongs to another Node
 
 - **WHEN** cleanup encounters a worker artifact with a different owner UID
 - **THEN** cleanup leaves that artifact unchanged
-
-### Requirement: Image discovery may reuse a validated cold input
-
-The controller SHALL normally begin image discovery from topology-declared image references with
-package-owned discovery roles omitted. When an existing Node-owned workload exposes an accepted
-cold input, the controller MAY begin from that input with its discovered roles and certificates
-preserved only when the declared image references and complete compiled-input identity match the
-current request. Missing, foreign, incomplete, stale, or mismatched cold input SHALL fall back to
-the normal role-free topology seed.
-
-#### Scenario: Cold input matches the current topology
-
-- **WHEN** the accepted workload's cold input contains the current topology image references and
-  its complete input digest matches the current request after discovery-derived certificates are
-  included
-- **THEN** discovery starts with the cold input's package-owned roles and can converge without the
-  redundant role-free discovery round
-
-#### Scenario: Cold input does not match
-
-- **WHEN** an image reference or any other compiled input differs from the accepted cold input
-- **THEN** discovery ignores the cold input and starts from the role-free topology seed
-
-#### Scenario: No owned workload is available
-
-- **WHEN** the Node has no usable Node-owned workload and cold input
-- **THEN** discovery starts from the role-free topology seed without attempting workload adoption

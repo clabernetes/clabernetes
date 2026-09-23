@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	clabernetesclicker "github.com/clabernetes/clabernetes/clicker"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
@@ -45,12 +48,15 @@ const (
 	devicePlanPayloads                = "payloads"
 	devicePlanCertificates            = "certificates"
 	devicePlanEntropy                 = "entropy"
+	devicePlanSession                 = "session"
+	devicePlanMaxRounds               = "maxRounds"
 	deviceRuntimePlan                 = "plan"
 	deviceRuntimeInput                = "input"
 	deviceRuntimeArtifacts            = "artifacts"
 	deviceRuntimePayloads             = "payloads"
 	deviceRuntimeState                = "state"
 	deviceRuntimeBinary               = "lifecycleBinary"
+	deviceRuntimeBinaryCache          = "lifecycleBinaryCache"
 	deviceRuntimePhase                = "phase"
 	deviceRuntimeContainer            = "containerID"
 	deviceRuntimeScratch              = "scratch"
@@ -89,8 +95,31 @@ func Entrypoint() *cli.App {
 		Usage:   "run clabernetes manager",
 		Commands: []*cli.Command{
 			devicePayloadWorkerCommand(),
-			deviceImageWorkerCommand(),
 			devicePlanWorkerCommand(),
+			{
+				Name:  "node-plan-pool",
+				Usage: "wait for isolated planner requests through Kubernetes exec",
+				Action: func(c *cli.Context) error {
+					ctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+					defer stop()
+
+					return clabernetesinternaldeviceplan.RunPoolIdle(ctx)
+				},
+			},
+			{
+				Name: "node-plan-pool-exec", Usage: "supervise one isolated planner pool request",
+				Flags: []cli.Flag{&cli.StringFlag{Name: devicePlanRevision, Required: true}},
+				Action: func(c *cli.Context) error {
+					return clabernetesinternaldeviceplan.RunPoolProcess(
+						c.Context,
+						os.Stdin,
+						c.App.Writer,
+						c.App.ErrWriter,
+						c.String(devicePlanRevision),
+						5*time.Minute,
+					)
+				},
+			},
 			deviceRuntimeCommand(),
 			{
 				Name:  "run",
@@ -208,47 +237,23 @@ func devicePayloadWorkerCommand() *cli.Command {
 	}
 }
 
-func deviceImageWorkerCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "node-images",
-		Usage: "run isolated imported image-role discovery",
-		Flags: []cli.Flag{
-			&cli.StringFlag{Name: devicePlanInput, Value: "-"},
-			&cli.StringFlag{Name: devicePlanRevision, Required: true},
-			&cli.Int64Flag{Name: devicePlanMaxInputBytes, Value: 1 << 20},
-			&cli.StringFlag{Name: devicePlanPayloads},
-			&cli.StringFlag{Name: devicePlanEntropy},
-		},
-		Action: func(c *cli.Context) error {
-			input, closeInput, err := openDevicePlanInput(c.String(devicePlanInput))
-			if err != nil {
-				return err
-			}
-			defer closeInput()
-
-			ctx := c.Context
-			if ctx == nil {
-				ctx = context.Background()
-			}
-
-			return (clabernetesinternaldeviceplan.ImageWorker{
-				Adapter: clabernetesinternaldeviceplan.Adapter{
-					Revision:    c.String(devicePlanRevision),
-					PayloadRoot: c.String(devicePlanPayloads),
-					EntropyRoot: c.String(devicePlanEntropy),
-				},
-				Input: input, Output: c.App.Writer,
-				MaxInputBytes: c.Int64(devicePlanMaxInputBytes),
-			}).Run(ctx)
-		},
-	}
-}
-
 func deviceRuntimeCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "node-runtime",
 		Usage: "run a generic direct-node helper",
 		Subcommands: []*cli.Command{
+			{
+				Name:  "startup-gate",
+				Usage: "wait for per-host device startup admission",
+				Flags: []cli.Flag{&cli.StringFlag{Name: "directory", Required: true}},
+				Action: func(c *cli.Context) error {
+					return clabernetesinternaldirectruntime.WaitStartupAdmission(
+						c.Context,
+						c.String("directory"),
+					)
+				},
+			},
+
 			{
 				Name:  "prepare",
 				Usage: "regenerate and verify imported preparation artifacts",
@@ -261,6 +266,7 @@ func deviceRuntimeCommand() *cli.Command {
 					&cli.StringFlag{Name: devicePlanEntropy},
 					&cli.StringFlag{Name: devicePlanRevision, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeBinary},
+					&cli.StringFlag{Name: deviceRuntimeBinaryCache},
 					&cli.StringSliceFlag{Name: deviceRuntimePersistentNode},
 					&cli.StringSliceFlag{Name: deviceRuntimeReset},
 				},
@@ -319,8 +325,9 @@ func deviceRuntimeCommand() *cli.Command {
 						return err
 					}
 
-					return clabernetesinternaldirectruntime.InstallLifecycleBinary(
+					return clabernetesinternaldirectruntime.InstallLifecycleBinaryWithCache(
 						c.String(deviceRuntimeBinary),
+						c.String(deviceRuntimeBinaryCache),
 					)
 				},
 			},
@@ -631,6 +638,8 @@ func devicePlanWorkerCommand() *cli.Command {
 			&cli.StringFlag{Name: devicePlanPayloads},
 			&cli.StringFlag{Name: devicePlanCertificates},
 			&cli.StringFlag{Name: devicePlanEntropy},
+			&cli.BoolFlag{Name: devicePlanSession},
+			&cli.IntFlag{Name: devicePlanMaxRounds, Value: 8},
 		},
 		Action: func(c *cli.Context) error {
 			input, closeInput, err := openDevicePlanInput(c.String(devicePlanInput))
@@ -644,14 +653,22 @@ func devicePlanWorkerCommand() *cli.Command {
 				ctx = context.Background()
 			}
 
+			adapter := clabernetesinternaldeviceplan.Adapter{
+				Revision:        c.String(devicePlanRevision),
+				PayloadRoot:     c.String(devicePlanPayloads),
+				CertificateRoot: c.String(devicePlanCertificates),
+				EntropyRoot:     c.String(devicePlanEntropy),
+			}
+			if c.Bool(devicePlanSession) {
+				return (clabernetesinternaldeviceplan.SessionWorker{
+					Adapter: adapter, Input: input, Output: c.App.Writer,
+					MaxFrameBytes: int(c.Int64(devicePlanMaxInputBytes)),
+					MaxRounds:     c.Int(devicePlanMaxRounds),
+				}).Run(ctx)
+			}
+
 			return (clabernetesinternaldeviceplan.Worker{
-				Adapter: clabernetesinternaldeviceplan.Adapter{
-					Revision:        c.String(devicePlanRevision),
-					PayloadRoot:     c.String(devicePlanPayloads),
-					CertificateRoot: c.String(devicePlanCertificates),
-					EntropyRoot:     c.String(devicePlanEntropy),
-				},
-				Input: input, Output: c.App.Writer,
+				Adapter: adapter, Input: input, Output: c.App.Writer,
 				MaxInputBytes: c.Int64(devicePlanMaxInputBytes),
 			}).Run(ctx)
 		},

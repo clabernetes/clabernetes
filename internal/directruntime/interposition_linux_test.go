@@ -11,11 +11,37 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
+
+func requestTestMeshPeer(t *testing.T, address string) {
+	t.Helper()
+	dialer := net.Dialer{Control: markProbeSocket}
+	connection, err := dialer.DialContext(t.Context(), "udp", net.JoinHostPort(address, "9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = connection.Close() }()
+	if _, err = connection.Write([]byte("resolve")); err != nil {
+		t.Fatal(err)
+	}
+	vtep, err := netlink.LinkByName(MeshVTEPName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	family := netlink.FAMILY_V4
+	if netip.MustParseAddr(address).Is6() {
+		family = netlink.FAMILY_V6
+	}
+	waitForWireCondition(t, 3*time.Second, "on-demand management neighbor", func() bool {
+		return listMeshNeighbors(t, vtep, family)[address] != ""
+	})
+}
 
 // listMeshForwardingEntries returns the VTEP's self forwarding entries: identity to Pod address.
 func listMeshForwardingEntries(t *testing.T, vtep netlink.Link) map[string]string {
@@ -89,6 +115,14 @@ func assertMeshPeerReconciliation(t *testing.T, spec InterpositionSpec) {
 
 	pod := netip.MustParseAddr(spec.PodAddress)
 	own := netip.MustParsePrefix(spec.ManagementIPv4).Addr()
+	inventory := newMeshNeighborInventory()
+	t.Cleanup(func() { _ = inventory.close() })
+	dumps := 0
+	inventory.dump = func(index, family int, proxy bool) ([]netlink.Neigh, error) {
+		dumps++
+
+		return dumpMeshNeighbors(index, family, proxy)
+	}
 
 	spec.MeshPeers = []MeshPeer{
 		{ManagementIPv4: "172.80.80.12", PodAddress: "10.244.1.5"},
@@ -98,9 +132,18 @@ func assertMeshPeerReconciliation(t *testing.T, spec InterpositionSpec) {
 		{ManagementIPv4: "172.80.80.99", PodAddress: spec.PodAddress},
 	}
 
-	if err = ensureMeshPeers(spec, vtep, pod, own, false); err != nil {
+	if err = ensureMeshPeers(spec, vtep, pod, own, false, inventory); err != nil {
 		t.Fatalf("ensureMeshPeers() install pass: %v", err)
 	}
+	assertStringMap(t, "idle forwarding", listMeshForwardingEntries(t, vtep), map[string]string{})
+	assertStringMap(
+		t,
+		"idle neighbors",
+		listMeshNeighbors(t, vtep, netlink.FAMILY_V4),
+		map[string]string{},
+	)
+	requestTestMeshPeer(t, "172.80.80.12")
+	requestTestMeshPeer(t, "172.80.80.13")
 
 	assertStringMap(t, "install forwarding", listMeshForwardingEntries(t, vtep), map[string]string{
 		"06:c9:ac:50:50:0c": "10.244.1.5",
@@ -127,8 +170,14 @@ func assertMeshPeerReconciliation(t *testing.T, spec InterpositionSpec) {
 	// Peer 12 moves to another Pod, peer 13 departs.
 	spec.MeshPeers = []MeshPeer{{ManagementIPv4: "172.80.80.12", PodAddress: "10.244.3.2"}}
 
-	if err = ensureMeshPeers(spec, vtep, pod, own, false); err != nil {
-		t.Fatalf("ensureMeshPeers() relocate pass: %v", err)
+	if err = ensureMeshPeers(spec, vtep, pod, own, false, inventory); err != nil {
+		actual, _ := netlink.NeighList(vtep.Attrs().Index, unix.AF_BRIDGE)
+		t.Fatalf(
+			"ensureMeshPeers() relocate pass: %v; cached=%+v actual=%+v",
+			err,
+			inventory.entries,
+			actual,
+		)
 	}
 
 	assertStringMap(t, "relocate forwarding", listMeshForwardingEntries(t, vtep),
@@ -137,12 +186,58 @@ func assertMeshPeerReconciliation(t *testing.T, spec InterpositionSpec) {
 		map[string]string{"172.80.80.12": "06:c9:ac:50:50:0c"})
 
 	// An unchanged pass is a no-op.
-	if err = ensureMeshPeers(spec, vtep, pod, own, false); err != nil {
+	if err = ensureMeshPeers(spec, vtep, pod, own, false, inventory); err != nil {
 		t.Fatalf("ensureMeshPeers() steady pass: %v", err)
 	}
 
 	assertStringMap(t, "steady forwarding", listMeshForwardingEntries(t, vtep),
 		map[string]string{"06:c9:ac:50:50:0c": "10.244.3.2"})
+	if dumps != 2 {
+		t.Fatalf(
+			"steady and changed peers repeated kernel inventory: %d dumps, want 2 cold dumps",
+			dumps,
+		)
+	}
+
+	// A device can flush both tables while the directory is unchanged. Kernel notifications
+	// must repair that drift without waiting for a new membership or doing a full dump.
+	flushTestMeshNeighbors(t, vtep)
+	if err = ensureMeshPeers(spec, vtep, pod, own, false, inventory); err != nil {
+		t.Fatal(err)
+	}
+	assertStringMap(t, "repaired neighbors", listMeshNeighbors(t, vtep, netlink.FAMILY_V4),
+		map[string]string{"172.80.80.12": "06:c9:ac:50:50:0c"})
+	assertStringMap(t, "repaired forwarding", listMeshForwardingEntries(t, vtep),
+		map[string]string{"06:c9:ac:50:50:0c": "10.244.3.2"})
+	if dumps != 2 {
+		t.Fatalf("repair required a full inventory: %d dumps", dumps)
+	}
+
+	// Lost notifications invalidate the snapshot; the next pass must reconstruct it.
+	if err = inventory.apply(syscall.NetlinkMessage{Header: syscall.NlMsghdr{Type: unix.NLMSG_OVERRUN}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = ensureMeshPeers(spec, vtep, pod, own, false, inventory); err != nil {
+		t.Fatal(err)
+	}
+	if dumps != 4 {
+		t.Fatalf("notification loss did not rebuild both inventories: %d dumps", dumps)
+	}
+}
+
+func flushTestMeshNeighbors(t *testing.T, vtep netlink.Link) {
+	t.Helper()
+	for _, family := range []int{unix.AF_INET, unix.AF_BRIDGE} {
+		entries, listErr := netlink.NeighList(vtep.Attrs().Index, family)
+		if listErr != nil {
+			t.Fatal(listErr)
+		}
+		for _, entry := range entries {
+			if deleteErr := netlink.NeighDel(&entry); deleteErr != nil {
+				t.Fatal(deleteErr)
+			}
+		}
+	}
 }
 
 const interpositionNetlinkChild = "C9S_INTERPOSITION_NETLINK_TEST_CHILD"
@@ -299,7 +394,8 @@ func testEnsureInterpositionConverges(t *testing.T) {
 
 	// The device interface name equals the original CNI name, exactly like real kinds: the
 	// rename must free the name before the synthetic pair claims it.
-	operations := netlinkOperations{}
+	operations := netlinkOperations{neighbors: newMeshNeighborInventory()}
+	defer operations.Close() //nolint:errcheck // isolated test namespace teardown.
 
 	if err = operations.EnsureInterposition(spec); err != nil {
 		t.Fatalf("EnsureInterposition() cold pass: %v", err)
@@ -624,8 +720,9 @@ func testEnsureInterpositionConverges(t *testing.T) {
 			}
 		}
 
-		// The peer given to EnsureInterposition is installed through the same path the tick
-		// uses: one neighbor entry and one forwarding entry, nothing flooded.
+		// The first packet resolves only its directory-listed peer, without flooding or
+		// prepopulating an all-to-all neighbor table during startup.
+		requestTestMeshPeer(t, "172.80.80.21")
 		assertStringMap(t, step+" forwarding", listMeshForwardingEntries(t, vtepLink),
 			map[string]string{"06:c9:ac:50:50:15": "10.244.1.21"})
 		assertStringMap(t, step+" neighbors", listMeshNeighbors(t, vtepLink, netlink.FAMILY_V4),

@@ -108,7 +108,7 @@ func RunLaunchWithOperations(
 		}
 	}
 
-	realizeOwnedHostsAtLaunch(normalized, operations)
+	refreshApplicationHosts(normalized, operations)
 
 	entrypoint := slices.Clone(target.Entrypoint)
 	if len(entrypoint) == 0 {
@@ -139,10 +139,10 @@ func RunLaunchWithOperations(
 	return nil
 }
 
-// realizeOwnedHostsAtLaunch reads the mounted peer directory and realizes the owned hosts
-// entries before the device process starts. The directory is an optional projection; a bad
-// shard costs its names, never the boot.
-func realizeOwnedHostsAtLaunch(
+// refreshApplicationHosts reads the mounted peer directory and realizes the owned hosts
+// entries in the application mount namespace at launch and on subsequent readiness probes.
+// The directory is an optional projection; a bad shard costs its names, never the boot.
+func refreshApplicationHosts(
 	plan clabernetesinternaldeviceplan.Plan,
 	operations LaunchOperations,
 ) {

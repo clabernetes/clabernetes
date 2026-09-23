@@ -1,0 +1,1411 @@
+# 200 lightweight nodes, each with two data interfaces, connected in a ring.
+# Link i uses 10.200.i.0/31: node i eth1 -> node (i + 1) eth2.
+name: planner-pool-ring
+topology:
+  defaults:
+    kind: linux
+    image: docker.io/library/busybox:1.37.0-musl
+    entrypoint: sleep
+    cmd: "2147483647"
+  nodes:
+    bb-000:
+      exec:
+        - ip address add 10.200.0.0/31 dev eth1
+        - ip address add 10.200.199.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-001:
+      exec:
+        - ip address add 10.200.1.0/31 dev eth1
+        - ip address add 10.200.0.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-002:
+      exec:
+        - ip address add 10.200.2.0/31 dev eth1
+        - ip address add 10.200.1.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-003:
+      exec:
+        - ip address add 10.200.3.0/31 dev eth1
+        - ip address add 10.200.2.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-004:
+      exec:
+        - ip address add 10.200.4.0/31 dev eth1
+        - ip address add 10.200.3.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-005:
+      exec:
+        - ip address add 10.200.5.0/31 dev eth1
+        - ip address add 10.200.4.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-006:
+      exec:
+        - ip address add 10.200.6.0/31 dev eth1
+        - ip address add 10.200.5.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-007:
+      exec:
+        - ip address add 10.200.7.0/31 dev eth1
+        - ip address add 10.200.6.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-008:
+      exec:
+        - ip address add 10.200.8.0/31 dev eth1
+        - ip address add 10.200.7.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-009:
+      exec:
+        - ip address add 10.200.9.0/31 dev eth1
+        - ip address add 10.200.8.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-010:
+      exec:
+        - ip address add 10.200.10.0/31 dev eth1
+        - ip address add 10.200.9.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-011:
+      exec:
+        - ip address add 10.200.11.0/31 dev eth1
+        - ip address add 10.200.10.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-012:
+      exec:
+        - ip address add 10.200.12.0/31 dev eth1
+        - ip address add 10.200.11.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-013:
+      exec:
+        - ip address add 10.200.13.0/31 dev eth1
+        - ip address add 10.200.12.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-014:
+      exec:
+        - ip address add 10.200.14.0/31 dev eth1
+        - ip address add 10.200.13.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-015:
+      exec:
+        - ip address add 10.200.15.0/31 dev eth1
+        - ip address add 10.200.14.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-016:
+      exec:
+        - ip address add 10.200.16.0/31 dev eth1
+        - ip address add 10.200.15.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-017:
+      exec:
+        - ip address add 10.200.17.0/31 dev eth1
+        - ip address add 10.200.16.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-018:
+      exec:
+        - ip address add 10.200.18.0/31 dev eth1
+        - ip address add 10.200.17.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-019:
+      exec:
+        - ip address add 10.200.19.0/31 dev eth1
+        - ip address add 10.200.18.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-020:
+      exec:
+        - ip address add 10.200.20.0/31 dev eth1
+        - ip address add 10.200.19.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-021:
+      exec:
+        - ip address add 10.200.21.0/31 dev eth1
+        - ip address add 10.200.20.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-022:
+      exec:
+        - ip address add 10.200.22.0/31 dev eth1
+        - ip address add 10.200.21.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-023:
+      exec:
+        - ip address add 10.200.23.0/31 dev eth1
+        - ip address add 10.200.22.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-024:
+      exec:
+        - ip address add 10.200.24.0/31 dev eth1
+        - ip address add 10.200.23.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-025:
+      exec:
+        - ip address add 10.200.25.0/31 dev eth1
+        - ip address add 10.200.24.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-026:
+      exec:
+        - ip address add 10.200.26.0/31 dev eth1
+        - ip address add 10.200.25.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-027:
+      exec:
+        - ip address add 10.200.27.0/31 dev eth1
+        - ip address add 10.200.26.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-028:
+      exec:
+        - ip address add 10.200.28.0/31 dev eth1
+        - ip address add 10.200.27.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-029:
+      exec:
+        - ip address add 10.200.29.0/31 dev eth1
+        - ip address add 10.200.28.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-030:
+      exec:
+        - ip address add 10.200.30.0/31 dev eth1
+        - ip address add 10.200.29.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-031:
+      exec:
+        - ip address add 10.200.31.0/31 dev eth1
+        - ip address add 10.200.30.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-032:
+      exec:
+        - ip address add 10.200.32.0/31 dev eth1
+        - ip address add 10.200.31.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-033:
+      exec:
+        - ip address add 10.200.33.0/31 dev eth1
+        - ip address add 10.200.32.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-034:
+      exec:
+        - ip address add 10.200.34.0/31 dev eth1
+        - ip address add 10.200.33.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-035:
+      exec:
+        - ip address add 10.200.35.0/31 dev eth1
+        - ip address add 10.200.34.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-036:
+      exec:
+        - ip address add 10.200.36.0/31 dev eth1
+        - ip address add 10.200.35.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-037:
+      exec:
+        - ip address add 10.200.37.0/31 dev eth1
+        - ip address add 10.200.36.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-038:
+      exec:
+        - ip address add 10.200.38.0/31 dev eth1
+        - ip address add 10.200.37.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-039:
+      exec:
+        - ip address add 10.200.39.0/31 dev eth1
+        - ip address add 10.200.38.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-040:
+      exec:
+        - ip address add 10.200.40.0/31 dev eth1
+        - ip address add 10.200.39.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-041:
+      exec:
+        - ip address add 10.200.41.0/31 dev eth1
+        - ip address add 10.200.40.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-042:
+      exec:
+        - ip address add 10.200.42.0/31 dev eth1
+        - ip address add 10.200.41.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-043:
+      exec:
+        - ip address add 10.200.43.0/31 dev eth1
+        - ip address add 10.200.42.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-044:
+      exec:
+        - ip address add 10.200.44.0/31 dev eth1
+        - ip address add 10.200.43.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-045:
+      exec:
+        - ip address add 10.200.45.0/31 dev eth1
+        - ip address add 10.200.44.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-046:
+      exec:
+        - ip address add 10.200.46.0/31 dev eth1
+        - ip address add 10.200.45.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-047:
+      exec:
+        - ip address add 10.200.47.0/31 dev eth1
+        - ip address add 10.200.46.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-048:
+      exec:
+        - ip address add 10.200.48.0/31 dev eth1
+        - ip address add 10.200.47.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-049:
+      exec:
+        - ip address add 10.200.49.0/31 dev eth1
+        - ip address add 10.200.48.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-050:
+      exec:
+        - ip address add 10.200.50.0/31 dev eth1
+        - ip address add 10.200.49.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-051:
+      exec:
+        - ip address add 10.200.51.0/31 dev eth1
+        - ip address add 10.200.50.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-052:
+      exec:
+        - ip address add 10.200.52.0/31 dev eth1
+        - ip address add 10.200.51.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-053:
+      exec:
+        - ip address add 10.200.53.0/31 dev eth1
+        - ip address add 10.200.52.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-054:
+      exec:
+        - ip address add 10.200.54.0/31 dev eth1
+        - ip address add 10.200.53.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-055:
+      exec:
+        - ip address add 10.200.55.0/31 dev eth1
+        - ip address add 10.200.54.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-056:
+      exec:
+        - ip address add 10.200.56.0/31 dev eth1
+        - ip address add 10.200.55.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-057:
+      exec:
+        - ip address add 10.200.57.0/31 dev eth1
+        - ip address add 10.200.56.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-058:
+      exec:
+        - ip address add 10.200.58.0/31 dev eth1
+        - ip address add 10.200.57.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-059:
+      exec:
+        - ip address add 10.200.59.0/31 dev eth1
+        - ip address add 10.200.58.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-060:
+      exec:
+        - ip address add 10.200.60.0/31 dev eth1
+        - ip address add 10.200.59.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-061:
+      exec:
+        - ip address add 10.200.61.0/31 dev eth1
+        - ip address add 10.200.60.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-062:
+      exec:
+        - ip address add 10.200.62.0/31 dev eth1
+        - ip address add 10.200.61.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-063:
+      exec:
+        - ip address add 10.200.63.0/31 dev eth1
+        - ip address add 10.200.62.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-064:
+      exec:
+        - ip address add 10.200.64.0/31 dev eth1
+        - ip address add 10.200.63.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-065:
+      exec:
+        - ip address add 10.200.65.0/31 dev eth1
+        - ip address add 10.200.64.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-066:
+      exec:
+        - ip address add 10.200.66.0/31 dev eth1
+        - ip address add 10.200.65.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-067:
+      exec:
+        - ip address add 10.200.67.0/31 dev eth1
+        - ip address add 10.200.66.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-068:
+      exec:
+        - ip address add 10.200.68.0/31 dev eth1
+        - ip address add 10.200.67.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-069:
+      exec:
+        - ip address add 10.200.69.0/31 dev eth1
+        - ip address add 10.200.68.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-070:
+      exec:
+        - ip address add 10.200.70.0/31 dev eth1
+        - ip address add 10.200.69.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-071:
+      exec:
+        - ip address add 10.200.71.0/31 dev eth1
+        - ip address add 10.200.70.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-072:
+      exec:
+        - ip address add 10.200.72.0/31 dev eth1
+        - ip address add 10.200.71.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-073:
+      exec:
+        - ip address add 10.200.73.0/31 dev eth1
+        - ip address add 10.200.72.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-074:
+      exec:
+        - ip address add 10.200.74.0/31 dev eth1
+        - ip address add 10.200.73.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-075:
+      exec:
+        - ip address add 10.200.75.0/31 dev eth1
+        - ip address add 10.200.74.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-076:
+      exec:
+        - ip address add 10.200.76.0/31 dev eth1
+        - ip address add 10.200.75.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-077:
+      exec:
+        - ip address add 10.200.77.0/31 dev eth1
+        - ip address add 10.200.76.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-078:
+      exec:
+        - ip address add 10.200.78.0/31 dev eth1
+        - ip address add 10.200.77.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-079:
+      exec:
+        - ip address add 10.200.79.0/31 dev eth1
+        - ip address add 10.200.78.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-080:
+      exec:
+        - ip address add 10.200.80.0/31 dev eth1
+        - ip address add 10.200.79.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-081:
+      exec:
+        - ip address add 10.200.81.0/31 dev eth1
+        - ip address add 10.200.80.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-082:
+      exec:
+        - ip address add 10.200.82.0/31 dev eth1
+        - ip address add 10.200.81.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-083:
+      exec:
+        - ip address add 10.200.83.0/31 dev eth1
+        - ip address add 10.200.82.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-084:
+      exec:
+        - ip address add 10.200.84.0/31 dev eth1
+        - ip address add 10.200.83.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-085:
+      exec:
+        - ip address add 10.200.85.0/31 dev eth1
+        - ip address add 10.200.84.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-086:
+      exec:
+        - ip address add 10.200.86.0/31 dev eth1
+        - ip address add 10.200.85.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-087:
+      exec:
+        - ip address add 10.200.87.0/31 dev eth1
+        - ip address add 10.200.86.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-088:
+      exec:
+        - ip address add 10.200.88.0/31 dev eth1
+        - ip address add 10.200.87.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-089:
+      exec:
+        - ip address add 10.200.89.0/31 dev eth1
+        - ip address add 10.200.88.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-090:
+      exec:
+        - ip address add 10.200.90.0/31 dev eth1
+        - ip address add 10.200.89.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-091:
+      exec:
+        - ip address add 10.200.91.0/31 dev eth1
+        - ip address add 10.200.90.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-092:
+      exec:
+        - ip address add 10.200.92.0/31 dev eth1
+        - ip address add 10.200.91.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-093:
+      exec:
+        - ip address add 10.200.93.0/31 dev eth1
+        - ip address add 10.200.92.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-094:
+      exec:
+        - ip address add 10.200.94.0/31 dev eth1
+        - ip address add 10.200.93.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-095:
+      exec:
+        - ip address add 10.200.95.0/31 dev eth1
+        - ip address add 10.200.94.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-096:
+      exec:
+        - ip address add 10.200.96.0/31 dev eth1
+        - ip address add 10.200.95.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-097:
+      exec:
+        - ip address add 10.200.97.0/31 dev eth1
+        - ip address add 10.200.96.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-098:
+      exec:
+        - ip address add 10.200.98.0/31 dev eth1
+        - ip address add 10.200.97.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-099:
+      exec:
+        - ip address add 10.200.99.0/31 dev eth1
+        - ip address add 10.200.98.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-100:
+      exec:
+        - ip address add 10.200.100.0/31 dev eth1
+        - ip address add 10.200.99.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-101:
+      exec:
+        - ip address add 10.200.101.0/31 dev eth1
+        - ip address add 10.200.100.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-102:
+      exec:
+        - ip address add 10.200.102.0/31 dev eth1
+        - ip address add 10.200.101.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-103:
+      exec:
+        - ip address add 10.200.103.0/31 dev eth1
+        - ip address add 10.200.102.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-104:
+      exec:
+        - ip address add 10.200.104.0/31 dev eth1
+        - ip address add 10.200.103.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-105:
+      exec:
+        - ip address add 10.200.105.0/31 dev eth1
+        - ip address add 10.200.104.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-106:
+      exec:
+        - ip address add 10.200.106.0/31 dev eth1
+        - ip address add 10.200.105.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-107:
+      exec:
+        - ip address add 10.200.107.0/31 dev eth1
+        - ip address add 10.200.106.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-108:
+      exec:
+        - ip address add 10.200.108.0/31 dev eth1
+        - ip address add 10.200.107.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-109:
+      exec:
+        - ip address add 10.200.109.0/31 dev eth1
+        - ip address add 10.200.108.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-110:
+      exec:
+        - ip address add 10.200.110.0/31 dev eth1
+        - ip address add 10.200.109.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-111:
+      exec:
+        - ip address add 10.200.111.0/31 dev eth1
+        - ip address add 10.200.110.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-112:
+      exec:
+        - ip address add 10.200.112.0/31 dev eth1
+        - ip address add 10.200.111.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-113:
+      exec:
+        - ip address add 10.200.113.0/31 dev eth1
+        - ip address add 10.200.112.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-114:
+      exec:
+        - ip address add 10.200.114.0/31 dev eth1
+        - ip address add 10.200.113.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-115:
+      exec:
+        - ip address add 10.200.115.0/31 dev eth1
+        - ip address add 10.200.114.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-116:
+      exec:
+        - ip address add 10.200.116.0/31 dev eth1
+        - ip address add 10.200.115.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-117:
+      exec:
+        - ip address add 10.200.117.0/31 dev eth1
+        - ip address add 10.200.116.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-118:
+      exec:
+        - ip address add 10.200.118.0/31 dev eth1
+        - ip address add 10.200.117.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-119:
+      exec:
+        - ip address add 10.200.119.0/31 dev eth1
+        - ip address add 10.200.118.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-120:
+      exec:
+        - ip address add 10.200.120.0/31 dev eth1
+        - ip address add 10.200.119.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-121:
+      exec:
+        - ip address add 10.200.121.0/31 dev eth1
+        - ip address add 10.200.120.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-122:
+      exec:
+        - ip address add 10.200.122.0/31 dev eth1
+        - ip address add 10.200.121.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-123:
+      exec:
+        - ip address add 10.200.123.0/31 dev eth1
+        - ip address add 10.200.122.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-124:
+      exec:
+        - ip address add 10.200.124.0/31 dev eth1
+        - ip address add 10.200.123.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-125:
+      exec:
+        - ip address add 10.200.125.0/31 dev eth1
+        - ip address add 10.200.124.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-126:
+      exec:
+        - ip address add 10.200.126.0/31 dev eth1
+        - ip address add 10.200.125.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-127:
+      exec:
+        - ip address add 10.200.127.0/31 dev eth1
+        - ip address add 10.200.126.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-128:
+      exec:
+        - ip address add 10.200.128.0/31 dev eth1
+        - ip address add 10.200.127.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-129:
+      exec:
+        - ip address add 10.200.129.0/31 dev eth1
+        - ip address add 10.200.128.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-130:
+      exec:
+        - ip address add 10.200.130.0/31 dev eth1
+        - ip address add 10.200.129.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-131:
+      exec:
+        - ip address add 10.200.131.0/31 dev eth1
+        - ip address add 10.200.130.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-132:
+      exec:
+        - ip address add 10.200.132.0/31 dev eth1
+        - ip address add 10.200.131.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-133:
+      exec:
+        - ip address add 10.200.133.0/31 dev eth1
+        - ip address add 10.200.132.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-134:
+      exec:
+        - ip address add 10.200.134.0/31 dev eth1
+        - ip address add 10.200.133.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-135:
+      exec:
+        - ip address add 10.200.135.0/31 dev eth1
+        - ip address add 10.200.134.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-136:
+      exec:
+        - ip address add 10.200.136.0/31 dev eth1
+        - ip address add 10.200.135.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-137:
+      exec:
+        - ip address add 10.200.137.0/31 dev eth1
+        - ip address add 10.200.136.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-138:
+      exec:
+        - ip address add 10.200.138.0/31 dev eth1
+        - ip address add 10.200.137.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-139:
+      exec:
+        - ip address add 10.200.139.0/31 dev eth1
+        - ip address add 10.200.138.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-140:
+      exec:
+        - ip address add 10.200.140.0/31 dev eth1
+        - ip address add 10.200.139.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-141:
+      exec:
+        - ip address add 10.200.141.0/31 dev eth1
+        - ip address add 10.200.140.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-142:
+      exec:
+        - ip address add 10.200.142.0/31 dev eth1
+        - ip address add 10.200.141.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-143:
+      exec:
+        - ip address add 10.200.143.0/31 dev eth1
+        - ip address add 10.200.142.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-144:
+      exec:
+        - ip address add 10.200.144.0/31 dev eth1
+        - ip address add 10.200.143.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-145:
+      exec:
+        - ip address add 10.200.145.0/31 dev eth1
+        - ip address add 10.200.144.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-146:
+      exec:
+        - ip address add 10.200.146.0/31 dev eth1
+        - ip address add 10.200.145.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-147:
+      exec:
+        - ip address add 10.200.147.0/31 dev eth1
+        - ip address add 10.200.146.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-148:
+      exec:
+        - ip address add 10.200.148.0/31 dev eth1
+        - ip address add 10.200.147.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-149:
+      exec:
+        - ip address add 10.200.149.0/31 dev eth1
+        - ip address add 10.200.148.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-150:
+      exec:
+        - ip address add 10.200.150.0/31 dev eth1
+        - ip address add 10.200.149.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-151:
+      exec:
+        - ip address add 10.200.151.0/31 dev eth1
+        - ip address add 10.200.150.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-152:
+      exec:
+        - ip address add 10.200.152.0/31 dev eth1
+        - ip address add 10.200.151.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-153:
+      exec:
+        - ip address add 10.200.153.0/31 dev eth1
+        - ip address add 10.200.152.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-154:
+      exec:
+        - ip address add 10.200.154.0/31 dev eth1
+        - ip address add 10.200.153.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-155:
+      exec:
+        - ip address add 10.200.155.0/31 dev eth1
+        - ip address add 10.200.154.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-156:
+      exec:
+        - ip address add 10.200.156.0/31 dev eth1
+        - ip address add 10.200.155.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-157:
+      exec:
+        - ip address add 10.200.157.0/31 dev eth1
+        - ip address add 10.200.156.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-158:
+      exec:
+        - ip address add 10.200.158.0/31 dev eth1
+        - ip address add 10.200.157.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-159:
+      exec:
+        - ip address add 10.200.159.0/31 dev eth1
+        - ip address add 10.200.158.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-160:
+      exec:
+        - ip address add 10.200.160.0/31 dev eth1
+        - ip address add 10.200.159.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-161:
+      exec:
+        - ip address add 10.200.161.0/31 dev eth1
+        - ip address add 10.200.160.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-162:
+      exec:
+        - ip address add 10.200.162.0/31 dev eth1
+        - ip address add 10.200.161.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-163:
+      exec:
+        - ip address add 10.200.163.0/31 dev eth1
+        - ip address add 10.200.162.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-164:
+      exec:
+        - ip address add 10.200.164.0/31 dev eth1
+        - ip address add 10.200.163.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-165:
+      exec:
+        - ip address add 10.200.165.0/31 dev eth1
+        - ip address add 10.200.164.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-166:
+      exec:
+        - ip address add 10.200.166.0/31 dev eth1
+        - ip address add 10.200.165.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-167:
+      exec:
+        - ip address add 10.200.167.0/31 dev eth1
+        - ip address add 10.200.166.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-168:
+      exec:
+        - ip address add 10.200.168.0/31 dev eth1
+        - ip address add 10.200.167.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-169:
+      exec:
+        - ip address add 10.200.169.0/31 dev eth1
+        - ip address add 10.200.168.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-170:
+      exec:
+        - ip address add 10.200.170.0/31 dev eth1
+        - ip address add 10.200.169.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-171:
+      exec:
+        - ip address add 10.200.171.0/31 dev eth1
+        - ip address add 10.200.170.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-172:
+      exec:
+        - ip address add 10.200.172.0/31 dev eth1
+        - ip address add 10.200.171.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-173:
+      exec:
+        - ip address add 10.200.173.0/31 dev eth1
+        - ip address add 10.200.172.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-174:
+      exec:
+        - ip address add 10.200.174.0/31 dev eth1
+        - ip address add 10.200.173.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-175:
+      exec:
+        - ip address add 10.200.175.0/31 dev eth1
+        - ip address add 10.200.174.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-176:
+      exec:
+        - ip address add 10.200.176.0/31 dev eth1
+        - ip address add 10.200.175.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-177:
+      exec:
+        - ip address add 10.200.177.0/31 dev eth1
+        - ip address add 10.200.176.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-178:
+      exec:
+        - ip address add 10.200.178.0/31 dev eth1
+        - ip address add 10.200.177.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-179:
+      exec:
+        - ip address add 10.200.179.0/31 dev eth1
+        - ip address add 10.200.178.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-180:
+      exec:
+        - ip address add 10.200.180.0/31 dev eth1
+        - ip address add 10.200.179.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-181:
+      exec:
+        - ip address add 10.200.181.0/31 dev eth1
+        - ip address add 10.200.180.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-182:
+      exec:
+        - ip address add 10.200.182.0/31 dev eth1
+        - ip address add 10.200.181.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-183:
+      exec:
+        - ip address add 10.200.183.0/31 dev eth1
+        - ip address add 10.200.182.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-184:
+      exec:
+        - ip address add 10.200.184.0/31 dev eth1
+        - ip address add 10.200.183.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-185:
+      exec:
+        - ip address add 10.200.185.0/31 dev eth1
+        - ip address add 10.200.184.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-186:
+      exec:
+        - ip address add 10.200.186.0/31 dev eth1
+        - ip address add 10.200.185.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-187:
+      exec:
+        - ip address add 10.200.187.0/31 dev eth1
+        - ip address add 10.200.186.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-188:
+      exec:
+        - ip address add 10.200.188.0/31 dev eth1
+        - ip address add 10.200.187.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-189:
+      exec:
+        - ip address add 10.200.189.0/31 dev eth1
+        - ip address add 10.200.188.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-190:
+      exec:
+        - ip address add 10.200.190.0/31 dev eth1
+        - ip address add 10.200.189.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-191:
+      exec:
+        - ip address add 10.200.191.0/31 dev eth1
+        - ip address add 10.200.190.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-192:
+      exec:
+        - ip address add 10.200.192.0/31 dev eth1
+        - ip address add 10.200.191.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-193:
+      exec:
+        - ip address add 10.200.193.0/31 dev eth1
+        - ip address add 10.200.192.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-194:
+      exec:
+        - ip address add 10.200.194.0/31 dev eth1
+        - ip address add 10.200.193.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-195:
+      exec:
+        - ip address add 10.200.195.0/31 dev eth1
+        - ip address add 10.200.194.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-196:
+      exec:
+        - ip address add 10.200.196.0/31 dev eth1
+        - ip address add 10.200.195.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-197:
+      exec:
+        - ip address add 10.200.197.0/31 dev eth1
+        - ip address add 10.200.196.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-198:
+      exec:
+        - ip address add 10.200.198.0/31 dev eth1
+        - ip address add 10.200.197.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+    bb-199:
+      exec:
+        - ip address add 10.200.199.0/31 dev eth1
+        - ip address add 10.200.198.1/31 dev eth2
+        - ip link set dev eth1 up
+        - ip link set dev eth2 up
+  links:
+    - endpoints: ["bb-000:eth1", "bb-001:eth2"]
+    - endpoints: ["bb-001:eth1", "bb-002:eth2"]
+    - endpoints: ["bb-002:eth1", "bb-003:eth2"]
+    - endpoints: ["bb-003:eth1", "bb-004:eth2"]
+    - endpoints: ["bb-004:eth1", "bb-005:eth2"]
+    - endpoints: ["bb-005:eth1", "bb-006:eth2"]
+    - endpoints: ["bb-006:eth1", "bb-007:eth2"]
+    - endpoints: ["bb-007:eth1", "bb-008:eth2"]
+    - endpoints: ["bb-008:eth1", "bb-009:eth2"]
+    - endpoints: ["bb-009:eth1", "bb-010:eth2"]
+    - endpoints: ["bb-010:eth1", "bb-011:eth2"]
+    - endpoints: ["bb-011:eth1", "bb-012:eth2"]
+    - endpoints: ["bb-012:eth1", "bb-013:eth2"]
+    - endpoints: ["bb-013:eth1", "bb-014:eth2"]
+    - endpoints: ["bb-014:eth1", "bb-015:eth2"]
+    - endpoints: ["bb-015:eth1", "bb-016:eth2"]
+    - endpoints: ["bb-016:eth1", "bb-017:eth2"]
+    - endpoints: ["bb-017:eth1", "bb-018:eth2"]
+    - endpoints: ["bb-018:eth1", "bb-019:eth2"]
+    - endpoints: ["bb-019:eth1", "bb-020:eth2"]
+    - endpoints: ["bb-020:eth1", "bb-021:eth2"]
+    - endpoints: ["bb-021:eth1", "bb-022:eth2"]
+    - endpoints: ["bb-022:eth1", "bb-023:eth2"]
+    - endpoints: ["bb-023:eth1", "bb-024:eth2"]
+    - endpoints: ["bb-024:eth1", "bb-025:eth2"]
+    - endpoints: ["bb-025:eth1", "bb-026:eth2"]
+    - endpoints: ["bb-026:eth1", "bb-027:eth2"]
+    - endpoints: ["bb-027:eth1", "bb-028:eth2"]
+    - endpoints: ["bb-028:eth1", "bb-029:eth2"]
+    - endpoints: ["bb-029:eth1", "bb-030:eth2"]
+    - endpoints: ["bb-030:eth1", "bb-031:eth2"]
+    - endpoints: ["bb-031:eth1", "bb-032:eth2"]
+    - endpoints: ["bb-032:eth1", "bb-033:eth2"]
+    - endpoints: ["bb-033:eth1", "bb-034:eth2"]
+    - endpoints: ["bb-034:eth1", "bb-035:eth2"]
+    - endpoints: ["bb-035:eth1", "bb-036:eth2"]
+    - endpoints: ["bb-036:eth1", "bb-037:eth2"]
+    - endpoints: ["bb-037:eth1", "bb-038:eth2"]
+    - endpoints: ["bb-038:eth1", "bb-039:eth2"]
+    - endpoints: ["bb-039:eth1", "bb-040:eth2"]
+    - endpoints: ["bb-040:eth1", "bb-041:eth2"]
+    - endpoints: ["bb-041:eth1", "bb-042:eth2"]
+    - endpoints: ["bb-042:eth1", "bb-043:eth2"]
+    - endpoints: ["bb-043:eth1", "bb-044:eth2"]
+    - endpoints: ["bb-044:eth1", "bb-045:eth2"]
+    - endpoints: ["bb-045:eth1", "bb-046:eth2"]
+    - endpoints: ["bb-046:eth1", "bb-047:eth2"]
+    - endpoints: ["bb-047:eth1", "bb-048:eth2"]
+    - endpoints: ["bb-048:eth1", "bb-049:eth2"]
+    - endpoints: ["bb-049:eth1", "bb-050:eth2"]
+    - endpoints: ["bb-050:eth1", "bb-051:eth2"]
+    - endpoints: ["bb-051:eth1", "bb-052:eth2"]
+    - endpoints: ["bb-052:eth1", "bb-053:eth2"]
+    - endpoints: ["bb-053:eth1", "bb-054:eth2"]
+    - endpoints: ["bb-054:eth1", "bb-055:eth2"]
+    - endpoints: ["bb-055:eth1", "bb-056:eth2"]
+    - endpoints: ["bb-056:eth1", "bb-057:eth2"]
+    - endpoints: ["bb-057:eth1", "bb-058:eth2"]
+    - endpoints: ["bb-058:eth1", "bb-059:eth2"]
+    - endpoints: ["bb-059:eth1", "bb-060:eth2"]
+    - endpoints: ["bb-060:eth1", "bb-061:eth2"]
+    - endpoints: ["bb-061:eth1", "bb-062:eth2"]
+    - endpoints: ["bb-062:eth1", "bb-063:eth2"]
+    - endpoints: ["bb-063:eth1", "bb-064:eth2"]
+    - endpoints: ["bb-064:eth1", "bb-065:eth2"]
+    - endpoints: ["bb-065:eth1", "bb-066:eth2"]
+    - endpoints: ["bb-066:eth1", "bb-067:eth2"]
+    - endpoints: ["bb-067:eth1", "bb-068:eth2"]
+    - endpoints: ["bb-068:eth1", "bb-069:eth2"]
+    - endpoints: ["bb-069:eth1", "bb-070:eth2"]
+    - endpoints: ["bb-070:eth1", "bb-071:eth2"]
+    - endpoints: ["bb-071:eth1", "bb-072:eth2"]
+    - endpoints: ["bb-072:eth1", "bb-073:eth2"]
+    - endpoints: ["bb-073:eth1", "bb-074:eth2"]
+    - endpoints: ["bb-074:eth1", "bb-075:eth2"]
+    - endpoints: ["bb-075:eth1", "bb-076:eth2"]
+    - endpoints: ["bb-076:eth1", "bb-077:eth2"]
+    - endpoints: ["bb-077:eth1", "bb-078:eth2"]
+    - endpoints: ["bb-078:eth1", "bb-079:eth2"]
+    - endpoints: ["bb-079:eth1", "bb-080:eth2"]
+    - endpoints: ["bb-080:eth1", "bb-081:eth2"]
+    - endpoints: ["bb-081:eth1", "bb-082:eth2"]
+    - endpoints: ["bb-082:eth1", "bb-083:eth2"]
+    - endpoints: ["bb-083:eth1", "bb-084:eth2"]
+    - endpoints: ["bb-084:eth1", "bb-085:eth2"]
+    - endpoints: ["bb-085:eth1", "bb-086:eth2"]
+    - endpoints: ["bb-086:eth1", "bb-087:eth2"]
+    - endpoints: ["bb-087:eth1", "bb-088:eth2"]
+    - endpoints: ["bb-088:eth1", "bb-089:eth2"]
+    - endpoints: ["bb-089:eth1", "bb-090:eth2"]
+    - endpoints: ["bb-090:eth1", "bb-091:eth2"]
+    - endpoints: ["bb-091:eth1", "bb-092:eth2"]
+    - endpoints: ["bb-092:eth1", "bb-093:eth2"]
+    - endpoints: ["bb-093:eth1", "bb-094:eth2"]
+    - endpoints: ["bb-094:eth1", "bb-095:eth2"]
+    - endpoints: ["bb-095:eth1", "bb-096:eth2"]
+    - endpoints: ["bb-096:eth1", "bb-097:eth2"]
+    - endpoints: ["bb-097:eth1", "bb-098:eth2"]
+    - endpoints: ["bb-098:eth1", "bb-099:eth2"]
+    - endpoints: ["bb-099:eth1", "bb-100:eth2"]
+    - endpoints: ["bb-100:eth1", "bb-101:eth2"]
+    - endpoints: ["bb-101:eth1", "bb-102:eth2"]
+    - endpoints: ["bb-102:eth1", "bb-103:eth2"]
+    - endpoints: ["bb-103:eth1", "bb-104:eth2"]
+    - endpoints: ["bb-104:eth1", "bb-105:eth2"]
+    - endpoints: ["bb-105:eth1", "bb-106:eth2"]
+    - endpoints: ["bb-106:eth1", "bb-107:eth2"]
+    - endpoints: ["bb-107:eth1", "bb-108:eth2"]
+    - endpoints: ["bb-108:eth1", "bb-109:eth2"]
+    - endpoints: ["bb-109:eth1", "bb-110:eth2"]
+    - endpoints: ["bb-110:eth1", "bb-111:eth2"]
+    - endpoints: ["bb-111:eth1", "bb-112:eth2"]
+    - endpoints: ["bb-112:eth1", "bb-113:eth2"]
+    - endpoints: ["bb-113:eth1", "bb-114:eth2"]
+    - endpoints: ["bb-114:eth1", "bb-115:eth2"]
+    - endpoints: ["bb-115:eth1", "bb-116:eth2"]
+    - endpoints: ["bb-116:eth1", "bb-117:eth2"]
+    - endpoints: ["bb-117:eth1", "bb-118:eth2"]
+    - endpoints: ["bb-118:eth1", "bb-119:eth2"]
+    - endpoints: ["bb-119:eth1", "bb-120:eth2"]
+    - endpoints: ["bb-120:eth1", "bb-121:eth2"]
+    - endpoints: ["bb-121:eth1", "bb-122:eth2"]
+    - endpoints: ["bb-122:eth1", "bb-123:eth2"]
+    - endpoints: ["bb-123:eth1", "bb-124:eth2"]
+    - endpoints: ["bb-124:eth1", "bb-125:eth2"]
+    - endpoints: ["bb-125:eth1", "bb-126:eth2"]
+    - endpoints: ["bb-126:eth1", "bb-127:eth2"]
+    - endpoints: ["bb-127:eth1", "bb-128:eth2"]
+    - endpoints: ["bb-128:eth1", "bb-129:eth2"]
+    - endpoints: ["bb-129:eth1", "bb-130:eth2"]
+    - endpoints: ["bb-130:eth1", "bb-131:eth2"]
+    - endpoints: ["bb-131:eth1", "bb-132:eth2"]
+    - endpoints: ["bb-132:eth1", "bb-133:eth2"]
+    - endpoints: ["bb-133:eth1", "bb-134:eth2"]
+    - endpoints: ["bb-134:eth1", "bb-135:eth2"]
+    - endpoints: ["bb-135:eth1", "bb-136:eth2"]
+    - endpoints: ["bb-136:eth1", "bb-137:eth2"]
+    - endpoints: ["bb-137:eth1", "bb-138:eth2"]
+    - endpoints: ["bb-138:eth1", "bb-139:eth2"]
+    - endpoints: ["bb-139:eth1", "bb-140:eth2"]
+    - endpoints: ["bb-140:eth1", "bb-141:eth2"]
+    - endpoints: ["bb-141:eth1", "bb-142:eth2"]
+    - endpoints: ["bb-142:eth1", "bb-143:eth2"]
+    - endpoints: ["bb-143:eth1", "bb-144:eth2"]
+    - endpoints: ["bb-144:eth1", "bb-145:eth2"]
+    - endpoints: ["bb-145:eth1", "bb-146:eth2"]
+    - endpoints: ["bb-146:eth1", "bb-147:eth2"]
+    - endpoints: ["bb-147:eth1", "bb-148:eth2"]
+    - endpoints: ["bb-148:eth1", "bb-149:eth2"]
+    - endpoints: ["bb-149:eth1", "bb-150:eth2"]
+    - endpoints: ["bb-150:eth1", "bb-151:eth2"]
+    - endpoints: ["bb-151:eth1", "bb-152:eth2"]
+    - endpoints: ["bb-152:eth1", "bb-153:eth2"]
+    - endpoints: ["bb-153:eth1", "bb-154:eth2"]
+    - endpoints: ["bb-154:eth1", "bb-155:eth2"]
+    - endpoints: ["bb-155:eth1", "bb-156:eth2"]
+    - endpoints: ["bb-156:eth1", "bb-157:eth2"]
+    - endpoints: ["bb-157:eth1", "bb-158:eth2"]
+    - endpoints: ["bb-158:eth1", "bb-159:eth2"]
+    - endpoints: ["bb-159:eth1", "bb-160:eth2"]
+    - endpoints: ["bb-160:eth1", "bb-161:eth2"]
+    - endpoints: ["bb-161:eth1", "bb-162:eth2"]
+    - endpoints: ["bb-162:eth1", "bb-163:eth2"]
+    - endpoints: ["bb-163:eth1", "bb-164:eth2"]
+    - endpoints: ["bb-164:eth1", "bb-165:eth2"]
+    - endpoints: ["bb-165:eth1", "bb-166:eth2"]
+    - endpoints: ["bb-166:eth1", "bb-167:eth2"]
+    - endpoints: ["bb-167:eth1", "bb-168:eth2"]
+    - endpoints: ["bb-168:eth1", "bb-169:eth2"]
+    - endpoints: ["bb-169:eth1", "bb-170:eth2"]
+    - endpoints: ["bb-170:eth1", "bb-171:eth2"]
+    - endpoints: ["bb-171:eth1", "bb-172:eth2"]
+    - endpoints: ["bb-172:eth1", "bb-173:eth2"]
+    - endpoints: ["bb-173:eth1", "bb-174:eth2"]
+    - endpoints: ["bb-174:eth1", "bb-175:eth2"]
+    - endpoints: ["bb-175:eth1", "bb-176:eth2"]
+    - endpoints: ["bb-176:eth1", "bb-177:eth2"]
+    - endpoints: ["bb-177:eth1", "bb-178:eth2"]
+    - endpoints: ["bb-178:eth1", "bb-179:eth2"]
+    - endpoints: ["bb-179:eth1", "bb-180:eth2"]
+    - endpoints: ["bb-180:eth1", "bb-181:eth2"]
+    - endpoints: ["bb-181:eth1", "bb-182:eth2"]
+    - endpoints: ["bb-182:eth1", "bb-183:eth2"]
+    - endpoints: ["bb-183:eth1", "bb-184:eth2"]
+    - endpoints: ["bb-184:eth1", "bb-185:eth2"]
+    - endpoints: ["bb-185:eth1", "bb-186:eth2"]
+    - endpoints: ["bb-186:eth1", "bb-187:eth2"]
+    - endpoints: ["bb-187:eth1", "bb-188:eth2"]
+    - endpoints: ["bb-188:eth1", "bb-189:eth2"]
+    - endpoints: ["bb-189:eth1", "bb-190:eth2"]
+    - endpoints: ["bb-190:eth1", "bb-191:eth2"]
+    - endpoints: ["bb-191:eth1", "bb-192:eth2"]
+    - endpoints: ["bb-192:eth1", "bb-193:eth2"]
+    - endpoints: ["bb-193:eth1", "bb-194:eth2"]
+    - endpoints: ["bb-194:eth1", "bb-195:eth2"]
+    - endpoints: ["bb-195:eth1", "bb-196:eth2"]
+    - endpoints: ["bb-196:eth1", "bb-197:eth2"]
+    - endpoints: ["bb-197:eth1", "bb-198:eth2"]
+    - endpoints: ["bb-198:eth1", "bb-199:eth2"]
+    - endpoints: ["bb-199:eth1", "bb-000:eth2"]

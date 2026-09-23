@@ -2,13 +2,18 @@ package topology
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
+	"slices"
+	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
+	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	clientretry "k8s.io/client-go/util/retry"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -66,7 +71,7 @@ func (r *Reconciler) reconcileStatusWithError(
 			len(compiled.Nodes) > 0 &&
 			readyNodeCount == len(compiled.Nodes),
 		Error:      topologyError,
-		Conditions: topology.Status.Conditions,
+		Conditions: slices.Clone(topology.Status.Conditions),
 	}
 
 	desiredStatus.TopologyState = resolveTopologyState(topology, &desiredStatus)
@@ -105,9 +110,20 @@ func (r *Reconciler) updateTopologyStatus(
 	desiredStatus *clabernetesapisv1alpha1.TopologyStatus,
 ) error {
 	if reflect.DeepEqual(topology.Status, *desiredStatus) {
+		r.setStatusProgressPending(topology, false)
+
 		return nil
 	}
 
+	// Progress counts can change hundreds of times during a large startup. Lifecycle,
+	// error, and generation transitions bypass the short coalescing window.
+	previous := topology.Status
+	previous.ReadyNodeCount = desiredStatus.ReadyNodeCount
+	if reflect.DeepEqual(previous, *desiredStatus) && r.statusProgressDelay(topology) > 0 {
+		r.setStatusProgressPending(topology, true)
+
+		return nil
+	}
 	key := ctrlruntimeclient.ObjectKeyFromObject(topology)
 	reader := r.apiReader
 
@@ -116,26 +132,36 @@ func (r *Reconciler) updateTopologyStatus(
 	}
 
 	var updated *clabernetesapisv1alpha1.Topology
+	current := topology.DeepCopy()
+	refresh := current.ResourceVersion == ""
 
 	err := clientretry.RetryOnConflict(clientretry.DefaultRetry, func() error {
-		current := &clabernetesapisv1alpha1.Topology{}
-
-		err := reader.Get(ctx, key, current)
-		if err != nil {
-			return err
+		if refresh {
+			current = &clabernetesapisv1alpha1.Topology{}
+			if err := reader.Get(ctx, key, current); err != nil {
+				return err
+			}
 		}
+		refresh = true
 
+		if current.GetUID() != topology.GetUID() ||
+			current.GetGeneration() != topology.GetGeneration() {
+			return nil
+		}
 		if reflect.DeepEqual(current.Status, *desiredStatus) {
 			updated = current
 
 			return nil
 		}
 
+		// Typed zero values are not proof that status exists on the server. Include all
+		// required fields, including false/zero, while retaining optimistic concurrency.
+		patch, patchErr := topologyStatusPatch(current, desiredStatus)
+		if patchErr != nil {
+			return patchErr
+		}
 		current.Status = *desiredStatus
-
-		// The Topology CRD serves status as a subresource, so this write can never touch the
-		// spec -- api-server defaulted spec fields stay exactly as stored.
-		updateErr := r.Client.Status().Update(ctx, current)
+		updateErr := r.Client.Status().Patch(ctx, current, patch)
 		if updateErr == nil {
 			updated = current
 		}
@@ -145,6 +171,7 @@ func (r *Reconciler) updateTopologyStatus(
 	if err == nil && updated != nil {
 		topology.Status = updated.Status
 		topology.SetResourceVersion(updated.GetResourceVersion())
+		r.recordStatusWrite(topology)
 	}
 
 	return err
@@ -170,4 +197,99 @@ func resolveTopologyState(
 	}
 
 	return clabernetesapisv1alpha1.TopologyStateDeploying
+}
+
+const topologyProgressInterval = 2 * time.Second
+
+type statusWrite struct {
+	uid     string
+	at      time.Time
+	pending bool
+}
+
+func (r *Reconciler) statusProgressDelay(topology *clabernetesapisv1alpha1.Topology) time.Duration {
+	r.statusLock.Lock()
+	defer r.statusLock.Unlock()
+	last := r.statusWritten[ctrlruntimeclient.ObjectKeyFromObject(topology)]
+	if last.uid != string(topology.UID) {
+		return 0
+	}
+
+	return max(0, time.Until(last.at.Add(topologyProgressInterval)))
+}
+
+func (r *Reconciler) recordStatusWrite(topology *clabernetesapisv1alpha1.Topology) {
+	r.statusLock.Lock()
+	defer r.statusLock.Unlock()
+	if r.statusWritten == nil {
+		r.statusWritten = map[ctrlruntimeclient.ObjectKey]statusWrite{}
+	}
+	r.statusWritten[ctrlruntimeclient.ObjectKeyFromObject(topology)] = statusWrite{
+		uid: string(topology.UID),
+		at:  time.Now(),
+	}
+}
+
+func (r *Reconciler) forgetStatusWrite(key ctrlruntimeclient.ObjectKey) {
+	r.statusLock.Lock()
+	defer r.statusLock.Unlock()
+	delete(r.statusWritten, key)
+}
+
+func (r *Reconciler) setStatusProgressPending(
+	topology *clabernetesapisv1alpha1.Topology,
+	pending bool,
+) {
+	r.statusLock.Lock()
+	defer r.statusLock.Unlock()
+	key := ctrlruntimeclient.ObjectKeyFromObject(topology)
+	last, exists := r.statusWritten[key]
+	if !exists {
+		return
+	}
+	last.pending = pending
+	r.statusWritten[key] = last
+}
+
+func (r *Reconciler) pendingStatusDelay(topology *clabernetesapisv1alpha1.Topology) time.Duration {
+	r.statusLock.Lock()
+	defer r.statusLock.Unlock()
+	last := r.statusWritten[ctrlruntimeclient.ObjectKeyFromObject(topology)]
+	if !last.pending || last.uid != string(topology.UID) {
+		return 0
+	}
+
+	return max(time.Millisecond, time.Until(last.at.Add(topologyProgressInterval)))
+}
+
+// Send only metadata and the complete small status, never the embedded definition.
+// Explicit nulls clear optional fields omitted from the new status (for example Error).
+func topologyStatusPatch(
+	current *clabernetesapisv1alpha1.Topology,
+	desired *clabernetesapisv1alpha1.TopologyStatus,
+) (ctrlruntimeclient.Patch, error) {
+	status, err := apimachineryruntime.DefaultUnstructuredConverter.ToUnstructured(desired)
+	if err != nil {
+		return nil, err
+	}
+	previous, err := apimachineryruntime.DefaultUnstructuredConverter.ToUnstructured(
+		&current.Status,
+	)
+	if err != nil {
+		return nil, err
+	}
+	for key := range previous {
+		if _, present := status[key]; !present {
+			status[key] = nil
+		}
+	}
+	data, err := json.Marshal(map[string]any{
+		"metadata": map[string]string{"resourceVersion": current.ResourceVersion},
+		"status":   status,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return ctrlruntimeclient.RawPatch(apimachinerytypes.MergePatchType, data), nil
 }

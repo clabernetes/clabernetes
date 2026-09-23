@@ -33,15 +33,12 @@ import (
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const maxDirectImageDiscoveryRounds = 8
-
 func (r *Reconciler) initializeDirectDependencies() {
 	cache, err := clabernetesinternalocimetadata.NewCache(
 		clabernetesinternalocimetadata.Resolver{},
 		clabernetesinternalocimetadata.CacheOptions{},
 	)
 	r.directInitializationError = err
-	r.ImageDiscoveryReconciler = &ImageDiscoveryReconciler{Client: r.Client}
 	r.ImageMetadataResolver = &ImageMetadataResolver{
 		Client:   r.apiReader,
 		Resolver: cache,
@@ -73,8 +70,8 @@ func (r *Reconciler) reconcileDirect(
 	if strings.TrimSpace(r.DirectRuntimeImage) == "" {
 		return r.directUnavailable(node, "NODE_RUNTIME_IMAGE is empty")
 	}
-	if r.directInitializationError != nil || r.ImageDiscoveryReconciler == nil ||
-		r.ImageMetadataResolver == nil || r.PlannerReconciler == nil ||
+	if r.directInitializationError != nil || r.ImageMetadataResolver == nil ||
+		r.PlannerReconciler == nil ||
 		r.CertificateReconciler == nil ||
 		r.EntropyReconciler == nil ||
 		r.PlanConfigMapReconciler == nil ||
@@ -169,16 +166,14 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	podAddresses, err := r.directPodAddressesByNodeUID(ctx, node.GetNamespace())
-	if err != nil {
-		return err
-	}
-	if err = r.reconcileDirectPeerDirectory(
-		ctx,
-		node.GetNamespace(),
-		compileNamespaceManagementIdentities(nodesByName, profile.Mgmt, podAddresses),
-	); err != nil {
-		return err
+	if !r.peerDirectoryAsync {
+		if err = r.refreshDirectPeerDirectory(
+			ctx,
+			node.GetNamespace(),
+			profile.Mgmt,
+		); err != nil {
+			return err
+		}
 	}
 	baseRequest := PlanInputCompileRequest{
 		Primary: node, GroupMembers: groupMembers, NodesByName: nodesByName,
@@ -189,7 +184,7 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	// Definitions never change across discovery rounds, so the declared text that screens the
+	// Definitions never change during one planner session, so the declared text that screens the
 	// sensitive-value set is fixed for the whole reconcile.
 	declaredText := declaredNodeText(declaredInput)
 	metadataResolver := *r.ImageMetadataResolver
@@ -225,150 +220,22 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	resolvedImages, err := r.resolveImagesForDiscovery(
-		ctx,
-		node,
-		baseRequest,
-		declaredMetadata.Images,
-	)
-	if err != nil {
-		return err
-	}
 	sensitiveValues := screenSensitiveValues(
 		declaredText,
 		declaredMetadata.SensitiveValues,
 		entropyResolution.SensitiveValues,
 	)
 	imagePullSecrets := declaredMetadata.PullSecrets
-	planInput := clabernetesinternaldeviceplan.Input{}
-	var convergedDiscovery *clabernetesinternaldeviceplan.ImageDiscovery
-	imageDiscoveryConverged := false
-	// keepWorkerArtifacts names the converged worker attempt and any in-flight worker Pods;
-	// superseded discovery rounds and completed non-current attempts are eligible for GC.
 	keepWorkerArtifacts := map[string]bool{}
-	for range maxDirectImageDiscoveryRounds {
-		baseRequest.Images = resolvedImages
-		discoveryInput, compileErr := CompilePlanInput(baseRequest)
-		if compileErr != nil {
-			return compileErr
-		}
-		discoveryResult, reconcileErr := r.ImageDiscoveryReconciler.Reconcile(
-			ctx,
-			ImageDiscoveryAttempt{
-				Node: node, Input: discoveryInput, Image: r.DirectRuntimeImage,
-				PlannerRevision: clabernetesconstants.Version,
-				SensitiveValues: sensitiveValues, ImagePullSecrets: imagePullSecrets,
-				EntropySecretName: entropyResolution.SecretName,
-			},
-		)
-		if reconcileErr != nil {
-			return reconcileErr
-		}
-		if discoveryResult.State != PlannerStateSucceeded {
-			keepPendingWorkerAttempt(
-				keepWorkerArtifacts,
-				discoveryResult.PodName,
-				discoveryResult.InputConfigMapName,
-			)
-
-			return nil
-		}
-		if discoveryResult.Discovery == nil {
-			return planInputError(
-				clabernetesinternaldeviceplan.ErrorInvariant,
-				"imageDiscovery",
-				"successful image-discovery worker returned no result",
-			)
-		}
-		discoveredMetadata, resolveErr := metadataResolver.Resolve(
-			ctx,
-			node.GetNamespace(),
-			*discoveryResult.Discovery,
-			profile.PullSecrets,
-		)
-		if resolveErr != nil {
-			return resolveErr
-		}
-		nextImages, mergeErr := mergeResolvedImageInputs(
-			resolvedImages,
-			discoveredMetadata.Images,
-		)
-		if mergeErr != nil {
-			return mergeErr
-		}
-		baseRequest.Images = nextImages
-		nextInput, compileErr := CompilePlanInput(baseRequest)
-		if compileErr != nil {
-			return compileErr
-		}
-		sensitiveValues = screenSensitiveValues(
-			declaredText,
-			discoveredMetadata.SensitiveValues,
-			entropyResolution.SensitiveValues,
-		)
-		imagePullSecrets = discoveredMetadata.PullSecrets
-		if reflect.DeepEqual(discoveryInput.Images, nextInput.Images) {
-			planInput = nextInput
-			convergedDiscovery = discoveryResult.Discovery
-			imageDiscoveryConverged = true
-			keepConvergedWorkerAttempt(
-				keepWorkerArtifacts,
-				discoveryResult.PodName,
-				discoveryResult.InputConfigMapName,
-			)
-
-			break
-		}
-		// A non-final round is still part of the converging chain: when the next reconcile
-		// starts from the same seed it must find this attempt's cached output instead of
-		// re-running the worker, so its artifacts survive the sweep alongside the final
-		// attempt's.
-		keepConvergedWorkerAttempt(
-			keepWorkerArtifacts,
-			discoveryResult.PodName,
-			discoveryResult.InputConfigMapName,
-		)
-		resolvedImages = nextInput.Images
-	}
-	if !imageDiscoveryConverged {
-		return planInputError(
-			clabernetesinternaldeviceplan.ErrorUnsupported,
-			"images",
-			"imported image requirements did not converge within the bounded discovery rounds",
-		)
-	}
-	if convergedDiscovery == nil {
-		return planInputError(
-			clabernetesinternaldeviceplan.ErrorInvariant,
-			"imageDiscovery",
-			"converged image discovery result is unavailable",
-		)
-	}
-	certificateResolution, err := r.CertificateReconciler.Resolve(
-		ctx,
-		node,
-		planInput.TopologyName,
-		convergedDiscovery.Certificates,
-	)
+	baseRequest.Images = seedImageInputs(declaredMetadata.Images)
+	planInput, err := CompilePlanInput(baseRequest)
 	if err != nil {
 		return err
 	}
-	baseRequest.Images = planInput.Images
-	baseRequest.Certificates = certificateResolution.Inputs
-	planInput, err = CompilePlanInput(baseRequest)
-	if err != nil {
-		return err
-	}
-	sensitiveValues = screenSensitiveValues(
-		declaredText,
-		sensitiveValues,
-		certificateResolution.SensitiveValues,
-	)
 	planningResult, err := r.PlannerReconciler.Reconcile(ctx, PlannerAttempt{
 		Node: node, Input: planInput, SensitiveValues: sensitiveValues,
 		Image: r.DirectRuntimeImage, PlannerRevision: clabernetesconstants.Version,
-		ImagePullSecrets: imagePullSecrets, CertificateSecretName: certificateResolution.SecretName,
-		EntropySecretName: entropyResolution.SecretName,
+		ImagePullSecrets: imagePullSecrets, EntropySecretName: entropyResolution.SecretName,
 	})
 	if err != nil {
 		return err
@@ -387,13 +254,69 @@ func (r *Reconciler) reconcileDirect(
 		planningResult.PodName,
 		planningResult.InputConfigMapName,
 	)
-	if planningResult.Plan == nil {
+	if planningResult.Plan == nil || planningResult.Input == nil {
 		return planInputError(
 			clabernetesinternaldeviceplan.ErrorInvariant,
 			"nodePlan",
-			"successful planning worker returned no plan",
+			"successful planning worker returned no finalized input and plan",
 		)
 	}
+	initialPlanInput := planInput
+	planInput = *planningResult.Input
+	sessionImagesCurrent, err := revalidateSessionImages(
+		ctx,
+		node.GetNamespace(),
+		initialPlanInput,
+		planInput,
+		metadataResolver,
+		profile.PullSecrets,
+		clabernetesconstants.Version,
+	)
+	if err != nil {
+		return err
+	}
+	if !sessionImagesCurrent {
+		if err = deletePlannerSessionOutput(
+			ctx,
+			r.Client,
+			node.GetNamespace(),
+			planningResult.PodName,
+		); err != nil {
+			return err
+		}
+
+		return nil
+	}
+	certificateResolution, err := r.CertificateReconciler.Resolve(
+		ctx,
+		node,
+		planInput.TopologyName,
+		planningResult.Certificates,
+	)
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(planInput.Certificates, certificateResolution.Inputs) ||
+		planningResult.CertificateSecret != certificateResolution.SecretName {
+		if err = deletePlannerSessionOutput(
+			ctx,
+			r.Client,
+			node.GetNamespace(),
+			planningResult.PodName,
+		); err != nil {
+			return err
+		}
+
+		// Certificate material is intentionally outside the initial cache identity. If its
+		// immutable Secret was deleted and reissued, discard the stale result and let the next
+		// reconcile conduct one new session with the replacement digests.
+		return nil
+	}
+	sensitiveValues = screenSensitiveValues(
+		declaredText,
+		sensitiveValues,
+		certificateResolution.SensitiveValues,
+	)
 	if err = clabernetesinternaldirectpod.ValidatePlan(*planningResult.Plan); err != nil {
 		return err
 	}
@@ -484,6 +407,10 @@ func (r *Reconciler) reconcileDirect(
 		EnableContainerStopSignals: r.configManagerGetter().GetContainerStopSignals(),
 	}
 	existingDeployment, err := r.currentOwnedDirectDeployment(ctx, node)
+	if err != nil {
+		return err
+	}
+	renderOptions.StartupGate, err = r.startupHostGate(ctx, node, existingDeployment)
 	if err != nil {
 		return err
 	}
@@ -664,7 +591,21 @@ func (r *Reconciler) reconcileDirect(
 		return err
 	}
 
-	return r.garbageCollectWorkerArtifacts(ctx, node, keepWorkerArtifacts)
+	if err = r.garbageCollectWorkerArtifacts(ctx, node, keepWorkerArtifacts); err != nil {
+		return err
+	}
+	captureDirectObservation(
+		ctx,
+		node,
+		statusPlan,
+		currentDeployment,
+		groupMembers,
+		nodesByName,
+		directExposedPorts,
+		profile,
+		linkLifecycleMode,
+	)
+	return nil
 }
 
 func (r *Reconciler) reconcileDirectSecondary(
@@ -686,41 +627,83 @@ func seedImageInputs(
 ) []clabernetesinternaldeviceplan.ImageInput {
 	result := slices.Clone(values)
 	for index := range result {
-		// The seed role is c9s-owned sequencing metadata, not package behavior. Clearing it keeps
-		// the final plan identity wholly package-owned while retaining the explicit OCI config.
+		// The declared role only identifies controller-side resolution. The attached planner
+		// associates every imported role for this same source with these metadata in memory.
 		result[index].Role = ""
 	}
 
 	return result
 }
 
-func mergeResolvedImageInputs(
-	declared,
-	imported []clabernetesinternaldeviceplan.ImageInput,
-) ([]clabernetesinternaldeviceplan.ImageInput, error) {
-	result := slices.Clone(imported)
-	for _, seed := range seedImageInputs(declared) {
-		represented := false
-		for _, discovered := range imported {
-			if seed.NodeID != discovered.NodeID ||
-				seed.SourceReference != discovered.SourceReference {
-				continue
+func revalidateSessionImages(
+	ctx context.Context,
+	namespace string,
+	initial, final clabernetesinternaldeviceplan.Input,
+	resolver ImageMetadataResolver,
+	pullSecrets []string,
+	plannerRevision string,
+) (bool, error) {
+	added := []clabernetesinternaldeviceplan.ImageInput{}
+	requirements := []clabernetesinternaldeviceplan.ImageRequirement{}
+	for _, image := range final.Images {
+		known := false
+		for _, seed := range initial.Images {
+			if seed.NodeID == image.NodeID &&
+				(seed.SourceReference == image.SourceReference ||
+					seed.DigestReference == image.SourceReference) {
+				known = true
+
+				break
 			}
-			if seed.DigestReference != discovered.DigestReference {
-				return nil, planInputError(
-					clabernetesinternaldeviceplan.ErrorInvariant,
-					"images",
-					"declared image digest changed during imported image discovery",
-				)
-			}
-			represented = true
 		}
-		if !represented {
-			result = append(result, seed)
+		if known {
+			continue
 		}
+		added = append(added, image)
+		requirements = append(requirements, clabernetesinternaldeviceplan.ImageRequirement{
+			NodeID: image.NodeID, Role: image.Role, SourceReference: image.SourceReference,
+		})
+	}
+	if len(requirements) == 0 {
+		return true, nil
+	}
+	inputDigest, err := initial.Digest()
+	if err != nil {
+		return false, err
+	}
+	resolution, err := resolver.Resolve(ctx, namespace,
+		clabernetesinternaldeviceplan.ImageDiscovery{
+			SchemaVersion: initial.SchemaVersion, Compatibility: initial.Compatibility,
+			InputDigest: inputDigest,
+			Planner: clabernetesinternaldeviceplan.PlannerIdentity{
+				Name: "clabernetes-session-cache", Revision: plannerRevision,
+			},
+			Images: requirements,
+		},
+		pullSecrets,
+	)
+	if err != nil {
+		return false, err
 	}
 
-	return result, nil
+	return reflect.DeepEqual(added, resolution.Images), nil
+}
+
+func deletePlannerSessionOutput(
+	ctx context.Context,
+	client ctrlruntimeclient.Client,
+	namespace,
+	name string,
+) error {
+	staleOutput := &k8scorev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Namespace: namespace, Name: name,
+	}}
+	if err := client.Delete(ctx, staleOutput); err != nil &&
+		!apimachineryerrors.IsNotFound(err) {
+		return fmt.Errorf("invalidating stale planner session result: %w", err)
+	}
+
+	return nil
 }
 
 func compileDirectExposedPorts(
@@ -1362,6 +1345,19 @@ func compileDirectManagement(
 	mgmt *clabernetesapisv1alpha1.ManagementPolicy,
 	inboundPorts []clabernetesinternaldeviceplan.Port,
 ) ([]clabernetesinternaldeviceplan.ManagementInput, error) {
+	if mgmt != nil && mgmt.Disabled {
+		for _, name := range groupMembers {
+			if node := nodesByName[name]; node != nil &&
+				(node.Spec.MgmtIPv4 != "" || node.Spec.MgmtIPv6 != "") {
+				return nil, directNodeManagementError(
+					node,
+					"management",
+					"explicit management addresses conflict with disabled management",
+				)
+			}
+		}
+		return nil, nil
+	}
 	if err := validateUniqueExplicitManagementAddresses(nodesByName); err != nil {
 		return nil, directManagementError("addresses", err.Error())
 	}
@@ -1544,6 +1540,10 @@ func (r *Reconciler) directMetadata(
 		annotations = map[string]string{}
 	}
 	maps.Copy(annotations, globalAnnotations)
+	// Admission is controller state, not workload metadata. Enabling the global limit
+	// must not change existing Pod templates and restart adopted workloads.
+	delete(annotations, clabernetesconstants.AnnotationStartupAdmitted)
+	delete(annotations, clabernetesconstants.AnnotationStartupHold)
 
 	return labels, annotations
 }

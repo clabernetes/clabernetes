@@ -459,7 +459,8 @@ func TestRenderNodeProfiles(t *testing.T) {
 		t.Fatalf("expected direct pull policy compiled into profile, got %+v", main.Spec.ImagePull)
 	}
 
-	if main.Spec.Mgmt == nil || main.Spec.Mgmt.IPv4Subnet != "172.20.20.0/24" {
+	if main.Spec.Mgmt == nil ||
+		main.Spec.Mgmt.IPv4Subnet != "172.20.20.0/24" {
 		t.Fatalf("expected mgmt settings compiled into profile, got %+v", main.Spec.Mgmt)
 	}
 
@@ -501,6 +502,32 @@ func TestRenderNodeProfilesPreservesNoneExposeType(t *testing.T) {
 		}
 		if strings.Contains(string(content), "disableExpose") {
 			t.Fatalf("profile %q retained disableExpose: %s", profile.GetName(), content)
+		}
+	}
+}
+
+func TestRenderNodeProfilesManagementDefaultAndOptOut(t *testing.T) {
+	t.Parallel()
+	for _, disabled := range []bool{false, true} {
+		topology, compiled := renderTestTopology(t)
+		topology.Spec.DisableManagement = disabled
+		profiles := clabernetescompiler.RenderNodeProfiles(
+			topology,
+			compiled,
+			clabernetesconfig.GetFakeManager,
+		)
+		for _, profile := range profiles {
+			if profile.Spec.Mgmt == nil || profile.Spec.Mgmt.Disabled != disabled {
+				t.Fatalf(
+					"management policy for %s = %+v, want disabled=%t",
+					profile.Name,
+					profile.Spec.Mgmt,
+					disabled,
+				)
+			}
+			if disabled && profile.Spec.Mgmt.IPv4Subnet != "" {
+				t.Fatalf("disabled profile retained management allocation: %+v", profile.Spec.Mgmt)
+			}
 		}
 	}
 }

@@ -3,6 +3,7 @@ package node //nolint:testpackage // Tests intentionally exercise unexported eve
 import (
 	"context"
 	"reflect"
+	"slices"
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -12,8 +13,10 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
+	clientgoworkqueue "k8s.io/client-go/util/workqueue"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimereconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -64,6 +67,7 @@ func TestNodeProfileEventEnqueuesOnlyReferencingGroups(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(primary, secondary, unrelated).
 		WithIndex(
 			&clabernetesapisv1alpha1.Node{},
@@ -110,6 +114,7 @@ func TestNodeGroupMoveResolvesFormerAndNewPrimaryWorkloads(t *testing.T) {
 	}
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(firstPrimary, secondPrimary, current).
 		Build()
 	controller := &Controller{BaseController: &clabernetescontrollers.BaseController{
@@ -149,6 +154,7 @@ func TestLinkUpdateEnqueuesOldAndNewEndpointPrimaries(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(nodes...).
 		Build()
 	controller := &Controller{
@@ -160,11 +166,11 @@ func TestLinkUpdateEnqueuesOldAndNewEndpointPrimaries(t *testing.T) {
 
 	oldLink := controllerTestLink(namespace, "r1", "r2")
 	newLink := controllerTestLink(namespace, "r3", "r4")
-	requests := controller.enqueuePrimariesForLinkObjects(
-		context.Background(),
-		oldLink,
-		newLink,
-	)
+	queue := controllerTestQueue(t)
+	controller.linkEnqueueHandler().Update(context.Background(), ctrlruntimeevent.UpdateEvent{
+		ObjectOld: oldLink, ObjectNew: newLink,
+	}, queue)
+	requests := drainControllerTestQueue(queue)
 
 	if got := requestNames(requests); !reflect.DeepEqual(got, []string{"r1", "r2", "r3", "r4"}) {
 		t.Fatalf("expected former and new endpoint primaries, got %v", got)
@@ -188,6 +194,7 @@ func TestLinkSpecUpdateEnqueuesTerminatingPrimaries(t *testing.T) {
 	}
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(r1, r2).
 		Build()
 	controller := &Controller{
@@ -201,11 +208,11 @@ func TestLinkSpecUpdateEnqueuesTerminatingPrimaries(t *testing.T) {
 	newLink := oldLink.DeepCopy()
 	newLink.Spec.MTU = 9000
 
-	requests := controller.enqueuePrimariesForLinkObjects(
-		context.Background(),
-		oldLink,
-		newLink,
-	)
+	queue := controllerTestQueue(t)
+	controller.linkEnqueueHandler().Update(context.Background(), ctrlruntimeevent.UpdateEvent{
+		ObjectOld: oldLink, ObjectNew: newLink,
+	}, queue)
+	requests := drainControllerTestQueue(queue)
 	if got := requestNames(requests); !reflect.DeepEqual(got, []string{"r1", "r2"}) {
 		t.Fatalf("expected both terminating primaries for MTU change, got %v", got)
 	}
@@ -258,6 +265,7 @@ func TestPayloadObjectEventEnqueuesReferencingPodGroups(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithObjects(primary, secondary, standalone, unrelated).
 		Build()
 	controller := &Controller{
@@ -321,6 +329,7 @@ func TestPayloadObjectEventInvalidatesReadyGroupStatuses(t *testing.T) {
 	scheme := nodeReconcileTestScheme(t)
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
+		WithIndex(&clabernetesapisv1alpha1.Node{}, payloadReferenceField, payloadReferenceIndex).
 		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
 		WithObjects(primary, secondary).
 		Build()
@@ -332,12 +341,16 @@ func TestPayloadObjectEventInvalidatesReadyGroupStatuses(t *testing.T) {
 		reconciler: &Reconciler{Client: client, apiReader: client},
 	}
 
-	requests := controller.enqueuePrimariesForPayloadObjectAndInvalidate(
-		context.Background(),
-		&k8scorev1.Secret{ObjectMeta: metav1.ObjectMeta{
-			Name: "device-license", Namespace: primary.GetNamespace(),
-		}},
+	queue := controllerTestQueue(t)
+	controller.externalEnqueueHandler(controller.enqueuePrimariesForPayloadObject).Create(
+		context.Background(), ctrlruntimeevent.CreateEvent{Object: &k8scorev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "device-license",
+				Namespace: primary.GetNamespace(),
+			},
+		}}, queue,
 	)
+	requests := drainControllerTestQueue(queue)
 	if got := requestNames(requests); !reflect.DeepEqual(got, []string{primary.GetName()}) {
 		t.Fatalf("Secret event primary requests = %v", got)
 	}
@@ -386,4 +399,39 @@ func requestNames(requests []ctrlruntimereconcile.Request) []string {
 	}
 
 	return names
+}
+
+func controllerTestQueue(
+	t *testing.T,
+) clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request] {
+	t.Helper()
+	queue := clientgoworkqueue.NewTypedRateLimitingQueue(
+		clientgoworkqueue.DefaultTypedControllerRateLimiter[ctrlruntimereconcile.Request](),
+	)
+	t.Cleanup(queue.ShutDown)
+
+	return queue
+}
+
+func drainControllerTestQueue(
+	queue clientgoworkqueue.TypedRateLimitingInterface[ctrlruntimereconcile.Request],
+) []ctrlruntimereconcile.Request {
+	var requests []ctrlruntimereconcile.Request
+	for queue.Len() > 0 {
+		request, _ := queue.Get()
+		requests = append(requests, request)
+		queue.Done(request)
+	}
+	slices.SortFunc(requests, func(a, b ctrlruntimereconcile.Request) int {
+		if a.Name < b.Name {
+			return -1
+		}
+		if a.Name > b.Name {
+			return 1
+		}
+
+		return 0
+	})
+
+	return requests
 }

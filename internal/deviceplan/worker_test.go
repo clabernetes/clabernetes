@@ -70,44 +70,6 @@ func TestDecodeWorkerOutputIgnoresHookLogsAndRejectsUnframedJSON(t *testing.T) {
 	}
 }
 
-func TestImageWorkerDiscoversImportedRolesBeforeMetadataResolution(t *testing.T) {
-	t.Parallel()
-
-	input := singleNodeInput(syntheticKind, "example/future:1")
-	input.Images = nil
-
-	raw, err := input.CanonicalJSON()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var output bytes.Buffer
-
-	err = (clabernetesinternaldeviceplan.ImageWorker{
-		Adapter: clabernetesinternaldeviceplan.Adapter{
-			Registry: newSyntheticRegistry(t), Revision: "images-v1",
-		},
-		Input: bytes.NewReader(raw), Output: &output,
-	}).Run(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	discovery, err := clabernetesinternaldeviceplan.DecodeImageWorkerOutput(output.Bytes(), 1<<20)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(discovery.Images) != 1 || discovery.Images[0].Role != "image" ||
-		discovery.Images[0].SourceReference != "example/future:1" {
-		t.Fatalf("image discovery = %#v", discovery)
-	}
-
-	if discovery.InputDigest == "" || discovery.Planner.Revision != "images-v1" {
-		t.Fatalf("image discovery identity = %#v", discovery)
-	}
-}
-
 func TestWorkerRejectsOversizeInputWithOnlyStructuredDiagnostic(t *testing.T) {
 	t.Parallel()
 

@@ -140,6 +140,11 @@ spec:
                 description: Mgmt holds shared direct management-overlay allocation
                   policy.
                 properties:
+                  disabled:
+                    description: |-
+                      Disabled disables management allocation and the c9s management overlay. Kubernetes Pod
+                      networking and declared links remain active; explicit management addresses must be omitted.
+                    type: boolean
                   ipv4-gw:
                     description: IPv4Gw is the IPv4 management gateway.
                     type: string

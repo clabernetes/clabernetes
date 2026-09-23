@@ -139,7 +139,7 @@ func (a Adapter) DiscoverImages(ctx context.Context, input Input) (*ImageDiscove
 		}
 	}
 
-	scratchRoot, err := os.MkdirTemp("", "clabernetes-device-images-")
+	scratchRoot, err := os.MkdirTemp("", "clabernetes-device-discovery-")
 	if err != nil {
 		return nil, planningError(
 			ErrorSideEffect,

@@ -310,6 +310,9 @@ func renderTopologyNodeProfile(
 			IPv6Range:  compiled.Mgmt.IPv6Range,
 		}
 	}
+	if topology.Spec.DisableManagement {
+		spec.Mgmt = &clabernetesapisv1alpha1.ManagementPolicy{Disabled: true}
+	}
 
 	profile := &clabernetesapisv1alpha1.NodeProfile{
 		ObjectMeta: topologyOwnedObjectMetadata(

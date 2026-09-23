@@ -55,6 +55,7 @@ const (
 	hostNetworkNamespaceSourcePath   = "/proc/1/ns"
 	hostNetworkNamespaceMountPath    = "/var/run/clabernetes/host-network-namespaces"
 	lifecycleVolumeName              = "node-lifecycle-manager"
+	lifecycleCacheVolumeName         = "worker-runtime-binary-cache"
 	lifecycleBinaryRoot              = "/var/lib/clabernetes/lifecycle-bin"
 	lifecycleBinaryPath              = lifecycleBinaryRoot + "/manager"
 	runtimeBinaryPath                = "/clabernetes/manager"
@@ -111,6 +112,8 @@ const (
 
 // Options supplies c9s/Kubernetes realization policy that does not belong to kind planning.
 type Options struct {
+	// StartupGate holds device boot until the per-host admission controller grants this Pod.
+	StartupGate                       bool
 	Name                              string
 	Namespace                         string
 	PlanConfigMapName                 string
@@ -625,11 +628,18 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 	}
 
 	if hasLifecycle {
+		cacheType := k8scorev1.HostPathDirectoryOrCreate
 		volumes = append(volumes, k8scorev1.Volume{
 			Name: lifecycleVolumeName,
 			VolumeSource: k8scorev1.VolumeSource{
 				EmptyDir: &k8scorev1.EmptyDirVolumeSource{},
 			},
+		}, k8scorev1.Volume{
+			Name: lifecycleCacheVolumeName,
+			VolumeSource: k8scorev1.VolumeSource{HostPath: &k8scorev1.HostPathVolumeSource{
+				Path: clabernetesinternaldirectruntime.LifecycleBinaryCachePath,
+				Type: &cacheType,
+			}},
 		})
 	}
 
@@ -705,6 +715,12 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 		return nil, err
 	}
 
+	if options.StartupGate {
+		gate, volume := startupGate(options.PreparationImage)
+		initContainers = append([]k8scorev1.Container{gate}, initContainers...)
+		volumes = append(volumes, volume)
+	}
+
 	one := int32(1)
 	zero := int32(0)
 	falseValue := false
@@ -736,14 +752,26 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 					NodeSelector:       maps.Clone(options.NodeSelector),
 					Tolerations:        slices.Clone(options.Tolerations),
 					Affinity:           options.Affinity.DeepCopy(),
-					RestartPolicy:      k8scorev1.RestartPolicyAlways,
-					Hostname:           options.Name,
-					DNSPolicy:          dns.policy,
-					DNSConfig:          dns.config,
-					HostAliases:        renderHostAliases(normalized, options.Name),
-					InitContainers:     initContainers,
-					Containers:         containers,
-					Volumes:            volumes,
+					// Each device has its own single-replica Deployment, so the scheduler's
+					// default spreading cannot balance a lab. Count all direct workloads in
+					// this namespace to avoid concentrating startup work on one kubelet.
+					TopologySpreadConstraints: []k8scorev1.TopologySpreadConstraint{{
+						MaxSkew: 1, TopologyKey: k8scorev1.LabelHostname,
+						WhenUnsatisfiable: k8scorev1.ScheduleAnyway,
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{{
+								Key: directWorkloadLabel, Operator: metav1.LabelSelectorOpExists,
+							}},
+						},
+					}},
+					RestartPolicy:  k8scorev1.RestartPolicyAlways,
+					Hostname:       options.Name,
+					DNSPolicy:      dns.policy,
+					DNSConfig:      dns.config,
+					HostAliases:    renderHostAliases(normalized, options.Name),
+					InitContainers: initContainers,
+					Containers:     containers,
+					Volumes:        volumes,
 				},
 			},
 		},
@@ -2427,11 +2455,16 @@ func renderHelpers(
 	if hasLifecycle {
 		preparationMounts = append(preparationMounts, k8scorev1.VolumeMount{
 			Name: lifecycleVolumeName, MountPath: lifecycleBinaryRoot,
+		}, k8scorev1.VolumeMount{
+			Name:      lifecycleCacheVolumeName,
+			MountPath: clabernetesinternaldirectruntime.LifecycleBinaryCachePath,
 		})
 		preparationArgs = append(
 			preparationArgs,
 			"--lifecycleBinary",
 			lifecycleBinaryPath,
+			"--lifecycleBinaryCache",
+			clabernetesinternaldirectruntime.LifecycleBinaryCachePath,
 		)
 	}
 
@@ -2508,6 +2541,10 @@ func renderHelpers(
 	}
 	// The sidecar answers its probes over HTTP on the Pod address: an exec probe would start the
 	// runtime binary every second in every Pod, which is what bounded Pod density on a worker.
+	connectivityStartupHandler := k8scorev1.ProbeHandler{HTTPGet: &k8scorev1.HTTPGetAction{
+		Path: clabernetesinternaldirectruntime.ConnectivityStartupPath,
+		Port: intstr.FromInt32(clabernetesconstants.ConnectivityReadinessPort),
+	}}
 	connectivityReadyHandler := k8scorev1.ProbeHandler{HTTPGet: &k8scorev1.HTTPGetAction{
 		Path: clabernetesinternaldirectruntime.ConnectivityReadinessPath,
 		Port: intstr.FromInt32(clabernetesconstants.ConnectivityReadinessPort),
@@ -2660,7 +2697,7 @@ func renderHelpers(
 				Privileged: &trueValue, RunAsUser: &rootUser,
 			},
 			StartupProbe: &k8scorev1.Probe{
-				ProbeHandler:  connectivityReadyHandler,
+				ProbeHandler:  connectivityStartupHandler,
 				PeriodSeconds: 1, TimeoutSeconds: 1,
 				SuccessThreshold: 1, FailureThreshold: 300,
 			},

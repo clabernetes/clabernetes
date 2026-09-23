@@ -25,6 +25,24 @@ const (
 	workerCommandAnnotation         = clabernetesconstants.LabelPrefix + "/workerCommand"
 )
 
+func keepPendingWorkerAttempt(
+	keepWorkerArtifacts map[string]bool,
+	podName,
+	inputConfigMapName string,
+) {
+	keepWorkerArtifacts[podName] = true
+	keepWorkerArtifacts[inputConfigMapName] = true
+}
+
+func keepConvergedWorkerAttempt(
+	keepWorkerArtifacts map[string]bool,
+	podName,
+	inputConfigMapName string,
+) {
+	keepWorkerArtifacts[podName] = true
+	keepWorkerArtifacts[inputConfigMapName] = true
+}
+
 // ErrWorkerOutputConflict classifies an object at the content-addressed output name whose
 // content differs from the accepted worker record.
 var ErrWorkerOutputConflict = errors.New(

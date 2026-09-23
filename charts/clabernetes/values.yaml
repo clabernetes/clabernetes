@@ -41,6 +41,9 @@ manager:
   clientOperationTimeoutMultiplier: 1
   managerLogLevel: info
   controllerLogLevel: info
+  # Loopback-only metrics (9090) and pprof (6060), accessed with kubectl port-forward.
+  # Enables sampled block/mutex profiling; leave disabled outside investigations.
+  diagnostics: false
 
   # pod affinity settings, directly inserted into manager deployment spec; if not provided basic
   # common-sense anti-affinity is applied.
@@ -53,6 +56,20 @@ manager:
   restrictedRBAC:
     enabled: false
     targetNamespaces: []
+
+# Reusable, network-isolated workers. Each request runs in a fresh process and private scratch.
+# Disable to use the disposable per-node planner Pods during rollout or troubleshooting.
+plannerPool:
+  enabled: true
+  replicas: 4
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
 #
 # global config
 #
@@ -77,6 +94,11 @@ globalConfig:
   # replaces the existing CR entirely.
   #
   mergeMode: merge
+
+  # Optional installation-wide startup limit for standalone Nodes and Topology output.
+  # Set batchSize to a positive number to enable; explicit zero disables the limit.
+  # maxConcurrentPerHost caps device boots per Kubernetes host; zero disables it.
+  rollout: {}
 
   imagePull:
     # policy is the Kubernetes imagePullPolicy default for direct application containers whose

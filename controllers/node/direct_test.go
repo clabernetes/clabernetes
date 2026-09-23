@@ -79,7 +79,6 @@ func TestDirectReconcileStagesPackageDrivenPlanBeforeCreatingWorkload(t *testing
 			},
 		},
 	}
-	reconciler.ImageDiscoveryReconciler.ReadLogs = directTestWorkerLogs(t, client)
 	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogs(t, client)
 
 	for attempt := range 8 {
@@ -224,7 +223,6 @@ func TestDirectReconcileCarriesRemotePeerDiscoveryIntoBothPodPlans(t *testing.T)
 				strings.Repeat("a", 64),
 		},
 	}
-	reconciler.ImageDiscoveryReconciler.ReadLogs = directTestWorkerLogs(t, client)
 	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogs(t, client)
 
 	deployments := map[string]*k8sappsv1.Deployment{
@@ -302,7 +300,7 @@ func TestDirectReconcileCarriesRemotePeerDiscoveryIntoBothPodPlans(t *testing.T)
 	}
 }
 
-func TestDirectImageDiscoveryIsQuiescentAfterConvergenceWithCertificates(t *testing.T) {
+func TestDirectPlannerSessionCacheIsQuiescentWithCertificates(t *testing.T) {
 	ctx := context.Background()
 	node := planInputTestNode(
 		"future-a",
@@ -336,7 +334,6 @@ func TestDirectImageDiscoveryIsQuiescentAfterConvergenceWithCertificates(t *test
 			DigestReference: "registry.example/device@sha256:" + strings.Repeat("a", 64),
 		},
 	}
-	reconciler.ImageDiscoveryReconciler.ReadLogs = directTestWorkerLogsWithCertificates(t, client)
 	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogsWithCertificates(t, client)
 
 	deployment := reconcileDirectTestDeployment(ctx, t, reconciler, client, node)
@@ -377,7 +374,7 @@ func TestDirectImageDiscoveryIsQuiescentAfterConvergenceWithCertificates(t *test
 		result := map[string]apimachinerytypes.UID{}
 
 		for index := range pods.Items {
-			if strings.Contains(pods.Items[index].GetName(), "-images-") {
+			if pods.Items[index].GetLabels()[plannerLabel] != "" {
 				result[pods.Items[index].GetName()] = pods.Items[index].GetUID()
 			}
 		}
@@ -385,17 +382,15 @@ func TestDirectImageDiscoveryIsQuiescentAfterConvergenceWithCertificates(t *test
 		return result
 	}
 
-	// A converged workload must not re-run image discovery on later reconciles: the cold
-	// input reconstruction includes the discovery-derived certificate section, so the cached
-	// attempt satisfies every steady-state pass. A regressed comparison creates a fresh
-	// worker Pod each reconcile, which stays pending here and fails the emptiness check.
+	// A converged workload reuses the session result, including its certificate requirements and
+	// finalized input. A regression creates a fresh worker Pod on each steady-state reconcile.
 	for range 3 {
 		if err := reconciler.Reconcile(ctx, node); err != nil {
 			t.Fatal(err)
 		}
 
 		if now := workerPods(); len(now) != 0 {
-			t.Fatalf("steady-state reconcile spawned image-discovery workers: %#v", now)
+			t.Fatalf("steady-state reconcile spawned planner workers: %#v", now)
 		}
 	}
 }
@@ -434,7 +429,6 @@ func TestDirectLiveLinkChangeUpdatesRevisionWithoutPodTemplateRollout(t *testing
 			DigestReference: "registry.example/device@sha256:" + strings.Repeat("a", 64),
 		},
 	}
-	reconciler.ImageDiscoveryReconciler.ReadLogs = directTestWorkerLogs(t, client)
 	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogs(t, client)
 
 	initial := reconcileDirectTestDeployment(ctx, t, reconciler, client, node).DeepCopy()
@@ -610,7 +604,6 @@ func TestDirectNonLiveLinkChangeRecreatesDeployment(t *testing.T) {
 				},
 			}
 			workerLogs := directTestWorkerLogsWithMode(t, client, mode)
-			reconciler.ImageDiscoveryReconciler.ReadLogs = workerLogs
 			reconciler.PlannerReconciler.ReadLogs = workerLogs
 
 			initial := reconcileDirectTestDeployment(ctx, t, reconciler, client, node).DeepCopy()
@@ -765,8 +758,6 @@ func TestDirectPlanningFailureDoesNotMutateLastAppliedWorkload(t *testing.T) {
 	failureLogs := func(context.Context, string, string, string) ([]byte, error) {
 		return failureFrame, nil
 	}
-	reconciler.ImageDiscoveryReconciler.ReadLogs = failureLogs
-
 	reconciler.PlannerReconciler.ReadLogs = failureLogs
 	if err := reconciler.Reconcile(ctx, node); err != nil {
 		t.Fatal(err)
@@ -1073,6 +1064,26 @@ func TestCompileDirectManagementDefaultsToContainerlabSubnet(t *testing.T) {
 
 	if len(explicit) != 1 || explicit[0].IPv4Gateway != "192.0.2.6" {
 		t.Fatalf("explicit gateway was not preserved: %#v", explicit)
+	}
+}
+
+func TestCompileDirectManagementDisabled(t *testing.T) {
+	t.Parallel()
+	node := planInputTestNode("primary", "uid-primary", "linux", "busybox:latest")
+	nodes := map[string]*clabernetesapisv1alpha1.Node{node.Name: node}
+	policy := &clabernetesapisv1alpha1.ManagementPolicy{Disabled: true}
+	management, err := compileDirectManagement([]string{node.Name}, nodes, policy, nil)
+	if err != nil || len(management) != 0 {
+		t.Fatalf("disabled management allocated an identity: %+v, %v", management, err)
+	}
+	if peers := compileNamespaceManagementIdentities(nodes, policy, map[string]string{"uid-primary": "10.244.0.2"}); len(
+		peers,
+	) != 0 {
+		t.Fatalf("disabled management emitted mesh peers: %+v", peers)
+	}
+	node.Spec.MgmtIPv4 = "172.20.20.2"
+	if _, err = compileDirectManagement([]string{node.Name}, nodes, policy, nil); err == nil {
+		t.Fatal("disabled management silently discarded an explicit address")
 	}
 }
 
@@ -1622,37 +1633,6 @@ func TestDirectMetadataPreservesUserAndGlobalPolicyWithoutSelectorOverride(t *te
 	}
 }
 
-func TestMergeResolvedImageInputsPreservesPackageRolesAndDetectsTagDrift(t *testing.T) {
-	nodeID := "node-a"
-	digest := "example/device@sha256:" + strings.Repeat("a", 64)
-	declared := []clabernetesinternaldeviceplan.ImageInput{{
-		NodeID: nodeID, Role: "declared-node-image", SourceReference: "example/device:1",
-		DigestReference: digest,
-	}}
-	imported := []clabernetesinternaldeviceplan.ImageInput{{
-		NodeID: nodeID, Role: "package-primary", SourceReference: "example/device:1",
-		DigestReference: digest,
-	}}
-
-	merged, err := mergeResolvedImageInputs(declared, imported)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(merged) != 1 || merged[0].Role != "package-primary" {
-		t.Fatalf("merged image inputs = %#v", merged)
-	}
-
-	imported[0].DigestReference = "example/device@sha256:" + strings.Repeat("b", 64)
-	_, err = mergeResolvedImageInputs(declared, imported)
-
-	var planningErr *clabernetesinternaldeviceplan.Error
-	if !errors.As(err, &planningErr) ||
-		planningErr.Code != clabernetesinternaldeviceplan.ErrorInvariant {
-		t.Fatalf("mergeResolvedImageInputs() drift error = %#v", err)
-	}
-}
-
 func TestCompileDirectExposedPortsKeepsAutoExposeParity(t *testing.T) {
 	node := planInputTestNode("future-a", "uid-future-a", "opaque-package-kind", "example/device:1")
 	plan := clabernetesinternaldeviceplan.Plan{
@@ -1961,40 +1941,36 @@ func directTestWorkerLogsFull(
 			return nil, err
 		}
 
-		if strings.Contains(podName, "-images-") {
-			if len(input.Images) != 1 || input.Images[0].SourceReference == "" ||
-				!strings.HasPrefix(
-					input.Images[0].DigestReference,
-					"registry.example/device@sha256:",
-				) {
-				t.Fatalf(
-					"image discovery input lacks declared OCI seed metadata: %#v",
-					input.Images,
-				)
+		var certificateRequirements []clabernetesinternaldeviceplan.CertificateRequirement
+		certificateSecret := ""
+		if withCertificates {
+			certificateRequirements = []clabernetesinternaldeviceplan.CertificateRequirement{{
+				NodeID: input.Nodes[0].ID, StorageName: "package-storage-name",
+				CommonName: input.Nodes[0].Name + ".lab.example", KeySize: 2048,
+			}}
+			owner := &clabernetesapisv1alpha1.Node{}
+			if err = client.Get(ctx, plannerObjectKey(
+				namespace,
+				pod.OwnerReferences[0].Name,
+			), owner); err != nil {
+				return nil, err
 			}
-
-			discovery := clabernetesinternaldeviceplan.ImageDiscovery{
-				SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
-				Compatibility: input.Compatibility,
-				InputDigest:   inputDigest,
-				Planner: clabernetesinternaldeviceplan.PlannerIdentity{
-					Name: "clabernetes", Revision: clabernetesconstants.Version,
-				},
-				Images: []clabernetesinternaldeviceplan.ImageRequirement{{
-					NodeID: input.Nodes[0].ID, Role: "package-owned-primary",
-					SourceReference: "registry.example/device:1",
-				}},
+			certificates, resolveErr := (&CertificateReconciler{
+				Client: client, Reader: client,
+			}).Resolve(ctx, owner, input.TopologyName, certificateRequirements)
+			if resolveErr != nil {
+				return nil, resolveErr
 			}
-			if withCertificates {
-				discovery.Certificates = []clabernetesinternaldeviceplan.CertificateRequirement{{
-					NodeID:      input.Nodes[0].ID,
-					StorageName: "package-storage-name",
-					CommonName:  input.Nodes[0].Name + ".lab.example",
-					KeySize:     2048,
-				}}
+			input.Certificates = certificates.Inputs
+			certificateSecret = certificates.SecretName
+			input, err = clabernetesinternaldeviceplan.NormalizeInput(input)
+			if err != nil {
+				return nil, err
 			}
-
-			return clabernetesinternaldeviceplan.EncodeImageWorkerOutput(discovery)
+			inputDigest, err = input.Digest()
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		containerID := input.Nodes[0].ID + "/primary"
@@ -2056,7 +2032,7 @@ func directTestWorkerLogsFull(
 			})
 		}
 
-		return clabernetesinternaldeviceplan.EncodeWorkerOutput(clabernetesinternaldeviceplan.Plan{
+		plan := clabernetesinternaldeviceplan.Plan{
 			SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 			Compatibility: input.Compatibility,
 			InputDigest:   inputDigest,
@@ -2085,7 +2061,36 @@ func directTestWorkerLogsFull(
 			Management: management,
 			Interfaces: interfaces,
 			Actions:    actions,
-		})
+		}
+		output := &bytes.Buffer{}
+		sessionFrame := clabernetesinternaldeviceplan.SessionFrame{
+			Version:       clabernetesinternaldeviceplan.SessionProtocolVersion,
+			Type:          clabernetesinternaldeviceplan.SessionFrameResult,
+			SessionDigest: pod.GetAnnotations()[plannerInputDigest],
+			Sequence:      1,
+			Result: &clabernetesinternaldeviceplan.SessionResult{
+				Input: input, Plan: plan, Certificates: certificateRequirements,
+				CertificateSecret: certificateSecret,
+			},
+		}
+		resultDigest, digestErr := clabernetesinternaldeviceplan.SessionTerminalDigest(sessionFrame)
+		if digestErr != nil {
+			return nil, digestErr
+		}
+		before := pod.DeepCopy()
+		if pod.Annotations == nil {
+			pod.Annotations = map[string]string{}
+		}
+		pod.Annotations[plannerSessionResult] = resultDigest
+		if err = client.Patch(ctx, pod, ctrlruntimeclient.MergeFrom(before)); err != nil {
+			return nil, err
+		}
+		err = clabernetesinternaldeviceplan.WriteSessionFrame(
+			output,
+			sessionFrame,
+		)
+
+		return output.Bytes(), err
 	}
 }
 
@@ -2258,7 +2263,6 @@ func newDirectProbeTestHarness(
 			DigestReference: "registry.example/device@sha256:" + strings.Repeat("a", 64),
 		},
 	}
-	reconciler.ImageDiscoveryReconciler.ReadLogs = directTestWorkerLogs(t, client)
 	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogs(t, client)
 
 	return client, reconciler

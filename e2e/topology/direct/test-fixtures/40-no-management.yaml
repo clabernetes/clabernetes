@@ -1,0 +1,26 @@
+---
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: no-management
+spec:
+  disableManagement: true
+  expose:
+    exposeType: None
+    disableAutoExpose: true
+  definition:
+    containerlab: |
+      name: no-management
+      topology:
+        defaults:
+          kind: linux
+          image: ghcr.io/srl-labs/network-multitool
+        nodes:
+          lin1:
+            exec:
+              - ip address add 192.168.1.0/31 dev eth1
+          lin2:
+            exec:
+              - ip address add 192.168.1.1/31 dev eth1
+        links:
+          - endpoints: ["lin1:eth1", "lin2:eth1"]

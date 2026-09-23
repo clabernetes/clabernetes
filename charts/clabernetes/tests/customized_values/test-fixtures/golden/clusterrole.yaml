@@ -95,6 +95,7 @@ rules:
   - apiGroups:
       - ""
     resources:
+      - pods/attach
       - pods/exec
     verbs:
       - create

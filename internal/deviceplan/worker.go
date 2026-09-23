@@ -13,7 +13,6 @@ import (
 const (
 	defaultMaxWorkerInputBytes int64 = 1 << 20
 	workerOutputPrefix               = "C9S_DEVICE_PLAN_V1:"
-	imageWorkerOutputPrefix          = "C9S_DEVICE_IMAGES_V1:"
 	workerErrorPrefix                = "C9S_DEVICE_ERROR_V1:"
 )
 
@@ -65,62 +64,6 @@ func (w Worker) Run(ctx context.Context) (runErr error) {
 
 	if _, err = w.Output.Write(framed); err != nil {
 		return planningError(ErrorSerialization, "worker.output", "cannot write device plan", err)
-	}
-
-	return nil
-}
-
-// ImageWorker is the strict stream boundary for imported image-role discovery.
-type ImageWorker struct {
-	Adapter       Adapter
-	Input         io.Reader
-	Output        io.Writer
-	MaxInputBytes int64
-}
-
-// Run discovers package-owned image roles without running deployment or lifecycle hooks.
-func (w ImageWorker) Run(ctx context.Context) (runErr error) {
-	defer func() {
-		if runErr != nil {
-			_ = writeWorkerError(w.Output, runErr)
-		}
-	}()
-
-	if ctx == nil {
-		return planningError(ErrorInvalidInput, "context", "context is nil", nil)
-	}
-
-	if w.Input == nil || w.Output == nil {
-		return planningError(
-			ErrorMissingInput,
-			"worker.stream",
-			"input and output streams are required",
-			nil,
-		)
-	}
-
-	input, err := decodeWorkerInput(w.Input, w.MaxInputBytes)
-	if err != nil {
-		return err
-	}
-
-	discovery, err := w.Adapter.DiscoverImages(ctx, input)
-	if err != nil {
-		return err
-	}
-
-	framed, err := EncodeImageWorkerOutput(*discovery)
-	if err != nil {
-		return err
-	}
-
-	if _, err = w.Output.Write(framed); err != nil {
-		return planningError(
-			ErrorSerialization,
-			"worker.output",
-			"cannot write image discovery",
-			err,
-		)
 	}
 
 	return nil
@@ -179,18 +122,6 @@ func EncodeWorkerOutput(plan Plan) ([]byte, error) {
 	return []byte("\n" + workerOutputPrefix + encoded + "\n"), nil
 }
 
-// EncodeImageWorkerOutput returns the canonical framed image-discovery record.
-func EncodeImageWorkerOutput(discovery ImageDiscovery) ([]byte, error) {
-	canonical, err := discovery.CanonicalJSON()
-	if err != nil {
-		return nil, err
-	}
-
-	encoded := base64.RawStdEncoding.EncodeToString(canonical)
-
-	return []byte("\n" + imageWorkerOutputPrefix + encoded + "\n"), nil
-}
-
 // WorkerFrameKind identifies which framed record type a worker emitted.
 type WorkerFrameKind string
 
@@ -198,6 +129,7 @@ type WorkerFrameKind string
 const (
 	WorkerFramePlan    WorkerFrameKind = "plan"
 	WorkerFrameImages  WorkerFrameKind = "images"
+	WorkerFrameSession WorkerFrameKind = "session"
 	WorkerFrameError   WorkerFrameKind = "error"
 	WorkerFrameUnknown WorkerFrameKind = ""
 )
@@ -210,8 +142,10 @@ func FrameKind(raw []byte) WorkerFrameKind {
 		switch {
 		case strings.HasPrefix(line, workerOutputPrefix):
 			kind = WorkerFramePlan
-		case strings.HasPrefix(line, imageWorkerOutputPrefix):
-			kind = WorkerFrameImages
+		case strings.HasPrefix(line, sessionFramePrefix):
+			kind = WorkerFrameSession
+		case strings.HasPrefix(line, sessionCachePrefix):
+			kind = WorkerFrameSession
 		case strings.HasPrefix(line, workerErrorPrefix):
 			kind = WorkerFrameError
 		}
@@ -228,7 +162,7 @@ func ExtractWorkerFrame(raw []byte) ([]byte, bool) {
 
 	for line := range strings.SplitSeq(string(raw), "\n") {
 		for _, prefix := range []string{
-			workerOutputPrefix, imageWorkerOutputPrefix, workerErrorPrefix,
+			workerOutputPrefix, sessionFramePrefix, sessionCachePrefix, workerErrorPrefix,
 		} {
 			if strings.HasPrefix(line, prefix) {
 				frame = line
@@ -250,7 +184,7 @@ func DecodeWorkerFramePayload(raw []byte) ([]byte, bool) {
 
 	for line := range strings.SplitSeq(string(raw), "\n") {
 		for _, prefix := range []string{
-			workerOutputPrefix, imageWorkerOutputPrefix, workerErrorPrefix,
+			workerOutputPrefix, sessionFramePrefix, sessionCachePrefix, workerErrorPrefix,
 		} {
 			if value, found := strings.CutPrefix(line, prefix); found {
 				encoded = value
@@ -356,21 +290,6 @@ func DecodeWorkerOutput(raw []byte, maxPlanBytes int) (Plan, error) {
 	}
 
 	return DecodePlan(decoded)
-}
-
-// DecodeImageWorkerOutput extracts and validates framed image discovery from noisy logs.
-func DecodeImageWorkerOutput(raw []byte, maxBytes int) (ImageDiscovery, error) {
-	decoded, err := decodeFramedWorkerOutput(
-		raw,
-		imageWorkerOutputPrefix,
-		maxBytes,
-		"image discovery",
-	)
-	if err != nil {
-		return ImageDiscovery{}, err
-	}
-
-	return DecodeImageDiscovery(decoded)
 }
 
 func decodeFramedWorkerOutput(

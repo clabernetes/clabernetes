@@ -20,21 +20,31 @@ import (
 )
 
 const (
-	plannerInputName       = "planner-input"
-	plannerInputKey        = "input.json"
-	plannerInputMountPath  = "/var/run/clabernetes/planner/input"
-	plannerScratchPath     = "/var/run/clabernetes/planner/scratch"
-	plannerContainerName   = "planner"
-	plannerLabel           = "c9s.run/planner"
-	plannerInputDigest     = "c9s.run/node-plan-input-digest"
-	plannerWorkerPlan      = "node-plan"
-	plannerWorkerImages    = "node-images"
-	plannerURLFetcherName  = "fetch-url-payloads"
-	plannerURLPayloadName  = "planner-url-payloads"
-	plannerCertificateName = "planner-certificates"
-	plannerCertificateRoot = "/var/run/clabernetes/planner/certificates"
-	plannerEntropyName     = "planner-entropy"
-	plannerEntropyRoot     = "/var/run/clabernetes/planner/entropy"
+	plannerManagerBinary    = "/clabernetes/manager"
+	plannerRevisionArgument = "--revision"
+	plannerInputName        = "planner-input"
+	plannerInputKey         = "input.json"
+	plannerInputMountPath   = "/var/run/clabernetes/planner/input"
+	plannerScratchPath      = "/var/run/clabernetes/planner/scratch"
+	plannerContainerName    = "planner"
+	plannerLabel            = "c9s.run/planner"
+	plannerInputDigest      = "c9s.run/node-plan-input-digest"
+	plannerInputConfigMap   = "c9s.run/node-plan-input-configmap"
+	plannerRevision         = "c9s.run/node-plan-revision"
+	plannerSessionLabel     = "c9s.run/planner-session"
+	plannerSessionDeadline  = "c9s.run/planner-session-deadline-seconds"
+	plannerSessionResult    = "c9s.run/planner-session-result-digest"
+	plannerSessionValue     = "true"
+	plannerWorkerPlan       = "node-plan"
+	plannerInputArgument    = "--input"
+	plannerMaxInputArgument = "--maxInputBytes"
+	plannerQueueDeadline    = 24 * 60 * 60
+	plannerURLFetcherName   = "fetch-url-payloads"
+	plannerURLPayloadName   = "planner-url-payloads"
+	plannerCertificateName  = "planner-certificates"
+	plannerCertificateRoot  = "/var/run/clabernetes/planner/certificates"
+	plannerEntropyName      = "planner-entropy"
+	plannerEntropyRoot      = "/var/run/clabernetes/planner/entropy"
 )
 
 // PlannerPodInput is the complete Kubernetes policy needed to run one content-addressed planning
@@ -54,6 +64,7 @@ type PlannerPodInput struct {
 	Payloads              []clabernetesinternaldeviceplan.PayloadInput
 	CertificateSecretName string
 	EntropySecretName     string
+	Session               bool
 }
 
 // RenderPlannerNetworkPolicy denies all planner ingress and egress, including DNS. Planning inputs
@@ -116,7 +127,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 		workerCommand = plannerWorkerPlan
 	}
 
-	if workerCommand != plannerWorkerPlan && workerCommand != plannerWorkerImages {
+	if workerCommand != plannerWorkerPlan {
 		return nil, fmt.Errorf("planner Pod worker command %q is unsupported", workerCommand)
 	}
 
@@ -140,6 +151,9 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 		clabernetesconstants.LabelTopologyNode:   input.Node.GetName(),
 		plannerLabel:                             plannerDigestLabelValue(input.InputDigest),
 	}
+	if input.Session {
+		labels[plannerSessionLabel] = plannerSessionValue
+	}
 	securityContext := &k8scorev1.SecurityContext{
 		AllowPrivilegeEscalation: &falseValue,
 		ReadOnlyRootFilesystem:   &readOnly,
@@ -157,11 +171,11 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 		initContainers = append(initContainers, k8scorev1.Container{
 			Name: plannerURLFetcherName, Image: input.Image,
 			ImagePullPolicy: k8scorev1.PullIfNotPresent,
-			Command:         []string{"/clabernetes/manager"},
+			Command:         []string{plannerManagerBinary},
 			Args: []string{
 				"node-payloads",
-				"--input", plannerInputMountPath + "/" + plannerInputKey,
-				"--maxInputBytes", strconv.FormatInt(input.MaxInputBytes, 10),
+				plannerInputArgument, plannerInputMountPath + "/" + plannerInputKey,
+				plannerMaxInputArgument, strconv.FormatInt(input.MaxInputBytes, 10),
 				"--payloads", plannerPayloadRootPath,
 			},
 			SecurityContext: &k8scorev1.SecurityContext{
@@ -196,9 +210,9 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 
 	workerArgs := []string{
 		workerCommand,
-		"--input", plannerInputMountPath + "/" + plannerInputKey,
-		"--revision", input.PlannerRevision,
-		"--maxInputBytes", strconv.FormatInt(input.MaxInputBytes, 10),
+		plannerInputArgument, plannerInputMountPath + "/" + plannerInputKey,
+		plannerRevisionArgument, input.PlannerRevision,
+		plannerMaxInputArgument, strconv.FormatInt(input.MaxInputBytes, 10),
 	}
 	if len(payloadMounts) != 0 {
 		workerArgs = append(workerArgs, "--payloads", plannerPayloadRootPath)
@@ -207,6 +221,19 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 	workerMounts := []k8scorev1.VolumeMount{
 		{Name: plannerInputName, MountPath: plannerInputMountPath, ReadOnly: true},
 		{Name: "planner-scratch", MountPath: plannerScratchPath},
+	}
+	if input.Session {
+		workerArgs = []string{
+			workerCommand,
+			plannerInputArgument, "-",
+			plannerRevisionArgument, input.PlannerRevision,
+			plannerMaxInputArgument, strconv.FormatInt(input.MaxInputBytes, 10),
+			"--session",
+			"--certificates", path.Join(plannerScratchPath, "certificates"),
+		}
+		if len(payloadMounts) != 0 {
+			workerArgs = append(workerArgs, "--payloads", plannerPayloadRootPath)
+		}
 	}
 
 	workerMounts = append(workerMounts, payloadMounts...)
@@ -271,10 +298,23 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 		})
 	}
 
+	activeDeadline := input.DeadlineSeconds
+	if input.Session {
+		// Session execution has its own timeout beginning when the manager attaches. This
+		// longer Pod lifetime lets bounded controller concurrency queue large topologies without
+		// consuming the evaluation timeout before a stream is available.
+		activeDeadline = plannerQueueDeadline
+	}
+
 	return &k8scorev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: input.Name, Namespace: input.Node.GetNamespace(), Labels: labels,
-			Annotations: map[string]string{plannerInputDigest: input.InputDigest},
+			Annotations: map[string]string{
+				plannerInputDigest:     input.InputDigest,
+				plannerInputConfigMap:  input.InputConfigMapName,
+				plannerRevision:        input.PlannerRevision,
+				plannerSessionDeadline: strconv.FormatInt(input.DeadlineSeconds, 10),
+			},
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: clabernetesapisv1alpha1.SchemeGroupVersion.String(), Kind: nodeCRKind,
 				Name: input.Node.GetName(), UID: input.Node.GetUID(),
@@ -285,7 +325,7 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 			AutomountServiceAccountToken:  &falseValue,
 			EnableServiceLinks:            &falseValue,
 			RestartPolicy:                 k8scorev1.RestartPolicyNever,
-			ActiveDeadlineSeconds:         &input.DeadlineSeconds,
+			ActiveDeadlineSeconds:         &activeDeadline,
 			TerminationGracePeriodSeconds: &gracePeriod,
 			ImagePullSecrets:              input.ImagePullSecrets,
 			SecurityContext: &k8scorev1.PodSecurityContext{
@@ -298,7 +338,9 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 				Name:            plannerContainerName,
 				Image:           input.Image,
 				ImagePullPolicy: k8scorev1.PullIfNotPresent,
-				Command:         []string{"/clabernetes/manager"},
+				Stdin:           input.Session,
+				StdinOnce:       input.Session,
+				Command:         []string{plannerManagerBinary},
 				Args:            workerArgs,
 				Env:             []k8scorev1.EnvVar{{Name: "TMPDIR", Value: plannerScratchPath}},
 				SecurityContext: securityContext,

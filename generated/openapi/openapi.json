@@ -602,6 +602,24 @@
                                     }
                                 },
                                 "type": "object"
+                            },
+                            "rollout": {
+                                "description": "Rollout limits initial device workload startup across all namespaces in this installation.",
+                                "properties": {
+                                    "batchSize": {
+                                        "description": "BatchSize admits at most this many new primary Pod groups before waiting for all\nadmitted sandboxes to be ready. It applies to standalone Nodes and Topology output.\nZero or omission disables this global limit. Existing workloads are not restarted.",
+                                        "format": "int32",
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    },
+                                    "maxConcurrentPerHost": {
+                                        "description": "MaxConcurrentPerHost limits primary workloads booting on each Kubernetes host.\nA slot is released when the primary container passes its startup probe, without\nwaiting for links or BGP. Zero disables this limit. Config and Topology limits\nboth apply. Enabling the gate affects newly created workloads only.",
+                                        "format": "int32",
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    }
+                                },
+                                "type": "object"
                             }
                         },
                         "type": "object"
@@ -989,6 +1007,10 @@
                             "mgmt": {
                                 "description": "Mgmt holds shared direct management-overlay allocation policy.",
                                 "properties": {
+                                    "disabled": {
+                                        "description": "Disabled disables management allocation and the c9s management overlay. Kubernetes Pod\nnetworking and declared links remain active; explicit management addresses must be omitted.",
+                                        "type": "boolean"
+                                    },
                                     "ipv4-gw": {
                                         "description": "IPv4Gw is the IPv4 management gateway.",
                                         "type": "string"
@@ -3931,6 +3953,10 @@
                                 },
                                 "type": "object"
                             },
+                            "disableManagement": {
+                                "description": "DisableManagement disables the c9s management overlay. Explicit node management addresses\nmust be omitted. Kubernetes Pod networking and declared topology links remain active.",
+                                "type": "boolean"
+                            },
                             "expose": {
                                 "description": "Expose holds configurations relevant to how clabernetes exposes a topology.",
                                 "properties": {
@@ -3979,6 +4005,24 @@
                                         },
                                         "type": "array",
                                         "x-kubernetes-list-type": "set"
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "rollout": {
+                                "description": "Rollout optionally limits admission of new device workloads in startup batches.\nExisting workloads are not restarted or paused when this policy changes.",
+                                "properties": {
+                                    "batchSize": {
+                                        "description": "BatchSize is the number of new primary workloads admitted together. Zero disables\nbatching. The next batch starts after all admitted workloads have a network-ready\nPod sandbox; full device/link readiness may depend on later batches.",
+                                        "format": "int32",
+                                        "minimum": 0,
+                                        "type": "integer"
+                                    },
+                                    "maxConcurrentPerHost": {
+                                        "description": "MaxConcurrentPerHost limits primary workloads booting on each Kubernetes host.\nA slot is released when the primary container passes its startup probe, without\nwaiting for links or BGP. Zero disables this limit. Config and Topology limits\nboth apply. Enabling the gate affects newly created workloads only.",
+                                        "format": "int32",
+                                        "minimum": 0,
+                                        "type": "integer"
                                     }
                                 },
                                 "type": "object"

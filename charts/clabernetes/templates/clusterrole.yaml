@@ -108,8 +108,8 @@ rules:
       - watch
     {{- end }}
   {{- if not .Values.manager.restrictedRBAC.enabled }}
-  {{- /* restricted installs grant pods/log, pods/exec, and events per namespace via the
-         namespaced Roles; a cluster-wide exec grant would defeat restricted RBAC. */}}
+  {{- /* restricted installs grant pod logs/streaming and events per namespace via the
+         namespaced Roles; cluster-wide streaming grants would defeat restricted RBAC. */}}
   - apiGroups:
       - ""
     resources:
@@ -119,6 +119,7 @@ rules:
   - apiGroups:
       - ""
     resources:
+      - pods/attach
       - pods/exec
     verbs:
       - create

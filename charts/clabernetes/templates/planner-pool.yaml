@@ -1,0 +1,79 @@
+{{- if .Values.plannerPool.enabled }}
+{{- if lt (int .Values.plannerPool.replicas) 1 }}
+{{- fail "plannerPool.replicas must be positive when the planner pool is enabled" }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.appName }}-planner-pool
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      c9s.run/planner-pool: {{ .Values.appName }}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}-planner-pool
+  namespace: {{ .Release.Namespace }}
+  labels:
+    c9s.run/app: {{ .Values.appName }}
+    c9s.run/component: planner-pool
+spec:
+  replicas: {{ .Values.plannerPool.replicas }}
+  selector:
+    matchLabels:
+      c9s.run/planner-pool: {{ .Values.appName }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        c9s.run/app: {{ .Values.appName }}
+        c9s.run/planner-pool: {{ .Values.appName }}
+        c9s.run/component: planner-pool
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 5
+      {{- if .Values.globalTolerations }}
+      tolerations:
+{{ toYaml .Values.globalTolerations | indent 8 }}
+      {{- end }}
+      containers:
+        - name: planner
+          {{- if .Values.manager.image }}
+          image: {{ .Values.manager.image }}
+          {{- else if eq .Chart.Version "0.0.0" }}
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:dev-latest"
+          {{- else }}
+          image: "ghcr.io/clabernetes/clabernetes/clabernetes-manager:{{ .Chart.Version }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.manager.imagePullPolicy }}
+          command: ["/clabernetes/manager", "node-plan-pool"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 0
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, FOWNER]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+{{ toYaml .Values.plannerPool.resources | indent 12 }}
+          volumeMounts:
+            - name: scratch
+              mountPath: /var/run/clabernetes/planner/scratch
+      volumes:
+        - name: scratch
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+{{- end }}

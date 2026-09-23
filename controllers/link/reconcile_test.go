@@ -460,7 +460,7 @@ func TestReconcilePreservesBindingAcrossEndpointConflict(t *testing.T) {
 func newLifecycleTestController(
 	t *testing.T,
 	objects ...ctrlruntimeclient.Object,
-) (*Controller, ctrlruntimeclient.Client) {
+) (*Controller, ctrlruntimeclient.WithWatch) {
 	t.Helper()
 
 	scheme := apimachineryruntime.NewScheme()

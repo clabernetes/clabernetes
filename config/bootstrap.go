@@ -24,9 +24,11 @@ type bootstrapConfig struct {
 	imagePullSecrets        []string
 	registryMetadataTrust   []clabernetesapisv1alpha1.RegistryMetadataTrustEntry
 	registryMetadataMirrors []clabernetesapisv1alpha1.RegistryMetadataMirrorEntry
+	rollout                 *clabernetesapisv1alpha1.ConfigRollout
 }
 
-func bootstrapFromConfigMap( //nolint:gocyclo
+//nolint:gocognit,gocyclo,funlen // Parse and report all independent bootstrap fields together.
+func bootstrapFromConfigMap(
 	inMap map[string]string,
 ) (*bootstrapConfig, error) {
 	bc := &bootstrapConfig{
@@ -35,6 +37,26 @@ func bootstrapFromConfigMap( //nolint:gocyclo
 	}
 
 	var outErrors []string
+	if value, present := inMap["rolloutBatchSize"]; present {
+		size, err := strconv.ParseInt(value, 10, 32)
+		if err != nil || size < 0 {
+			outErrors = append(outErrors, "rolloutBatchSize must be a nonnegative int32")
+		} else {
+			bc.rollout = &clabernetesapisv1alpha1.ConfigRollout{BatchSize: int32(size)}
+		}
+	}
+
+	if value, present := inMap["rolloutMaxConcurrentPerHost"]; present {
+		size, err := strconv.ParseInt(value, 10, 32)
+		if err != nil || size < 0 {
+			outErrors = append(outErrors, "rolloutMaxConcurrentPerHost must be a nonnegative int32")
+		} else {
+			if bc.rollout == nil {
+				bc.rollout = &clabernetesapisv1alpha1.ConfigRollout{}
+			}
+			bc.rollout.MaxConcurrentPerHost = int32(size)
+		}
+	}
 
 	mergeMode, mergeModeOk := inMap["mergeMode"]
 	if mergeModeOk {
@@ -166,6 +188,9 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 	bootstrap *bootstrapConfig,
 	config *clabernetesapisv1alpha1.Config,
 ) {
+	if config.Spec.Rollout == nil {
+		config.Spec.Rollout = bootstrap.rollout
+	}
 	for k, v := range bootstrap.globalAnnotations {
 		_, exists := config.Spec.Metadata.Annotations[k]
 		if exists {
@@ -262,6 +287,7 @@ func mergeFromBootstrapConfigReplace(
 	config *clabernetesapisv1alpha1.Config,
 ) {
 	config.Spec = clabernetesapisv1alpha1.ConfigSpec{
+		Rollout: bootstrap.rollout,
 		Metadata: clabernetesapisv1alpha1.ConfigMetadata{
 			Annotations: bootstrap.globalAnnotations,
 			Labels:      bootstrap.globalLabels,

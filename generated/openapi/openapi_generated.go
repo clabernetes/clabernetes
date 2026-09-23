@@ -55,6 +55,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigMetadata(
 			ref,
 		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigRollout": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigRollout(
+			ref,
+		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigSpec": schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 			ref,
 		),
@@ -197,6 +200,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 			ref,
 		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyList": schema_clabernetes_clabernetes_apis_v1alpha1_TopologyList(
+			ref,
+		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyRollout": schema_clabernetes_clabernetes_apis_v1alpha1_TopologyRollout(
 			ref,
 		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologySpec": schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
@@ -714,6 +720,35 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigMetadata(
 	}
 }
 
+func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigRollout(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ConfigRollout controls installation-wide admission of new primary device workloads.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"batchSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BatchSize admits at most this many new primary Pod groups before waiting for all admitted sandboxes to be ready. It applies to standalone Nodes and Topology output. Zero or omission disables this global limit. Existing workloads are not restarted.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxConcurrentPerHost": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxConcurrentPerHost limits primary workloads booting on each Kubernetes host. A slot is released when the primary container passes its startup probe, without waiting for links or BGP. Zero disables this limit. Config and Topology limits both apply. Enabling the gate affects newly created workloads only.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
@@ -750,11 +785,19 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigSpec(
 							),
 						},
 					},
+					"rollout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Rollout limits initial device workload startup across all namespaces in this installation.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigRollout",
+							),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDeployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigMetadata", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigRollout"},
 	}
 }
 
@@ -1655,6 +1698,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ManagementPolicy(
 				Description: "ManagementPolicy defines direct management-overlay address allocation. Docker network identity, MTU, and external-access controls are deliberately absent.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"disabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Disabled disables management allocation and the c9s management overlay. Kubernetes Pod networking and declared links remain active; explicit management addresses must be omitted.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"ipv4-subnet": {
 						SchemaProps: spec.SchemaProps{
 							Description: "IPv4Subnet is the IPv4 management subnet.",
@@ -3845,6 +3895,35 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyList(
 	}
 }
 
+func schema_clabernetes_clabernetes_apis_v1alpha1_TopologyRollout(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "TopologyRollout controls startup pressure while retaining the complete Node/Link inventory.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"batchSize": {
+						SchemaProps: spec.SchemaProps{
+							Description: "BatchSize is the number of new primary workloads admitted together. Zero disables batching. The next batch starts after all admitted workloads have a network-ready Pod sandbox; full device/link readiness may depend on later batches.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"maxConcurrentPerHost": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxConcurrentPerHost limits primary workloads booting on each Kubernetes host. A slot is released when the primary container passes its startup probe, without waiting for links or BGP. Zero disables this limit. Config and Topology limits both apply. Enabling the gate affects newly created workloads only.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 	ref common.ReferenceCallback,
 ) common.OpenAPIDefinition {
@@ -3899,12 +3978,27 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_TopologySpec(
 							),
 						},
 					},
+					"disableManagement": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DisableManagement disables the c9s management overlay. Explicit node management addresses must be omitted. Kubernetes Pod networking and declared topology links remain active.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"rollout": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Rollout optionally limits admission of new device workloads in startup batches. Existing workloads are not restarted or paused when this policy changes.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyRollout",
+							),
+						},
+					},
 				},
 				Required: []string{"definition"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition", "github.com/clabernetes/clabernetes/apis/v1alpha1.Deployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.Expose", "github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.Definition", "github.com/clabernetes/clabernetes/apis/v1alpha1.Deployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.Expose", "github.com/clabernetes/clabernetes/apis/v1alpha1.ImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes", "github.com/clabernetes/clabernetes/apis/v1alpha1.TopologyRollout"},
 	}
 }
 

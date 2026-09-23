@@ -1,4 +1,4 @@
-//nolint:err113,gocyclo,noinlineerr,wsl_v5 // Planner reconciliation uses compact fail-closed guards.
+//nolint:err113,funlen,gocognit,gocyclo,nestif,noinlineerr,wsl_v5 // Compact fail-closed guards.
 package node
 
 import (
@@ -68,13 +68,17 @@ type PlannerResult struct {
 	PodName            string
 	InputConfigMapName string
 	InputDigest        string
+	Input              *clabernetesinternaldeviceplan.Input
 	Plan               *clabernetesinternaldeviceplan.Plan
+	Certificates       []clabernetesinternaldeviceplan.CertificateRequirement
+	CertificateSecret  string
 }
 
 // PlannerReconciler owns the isolated worker's input, default-deny policy, and Pod.
 type PlannerReconciler struct {
 	Client   ctrlruntimeclient.Client
 	ReadLogs PlannerLogReader
+	Pool     *PlannerPool
 }
 
 // Reconcile advances one immutable planner attempt. A newly created NetworkPolicy returns Pending
@@ -130,6 +134,7 @@ func (r *PlannerReconciler) Reconcile(
 		Payloads:              attempt.Input.Payloads,
 		CertificateSecretName: attempt.CertificateSecretName,
 		EntropySecretName:     attempt.EntropySecretName,
+		Session:               true,
 	}
 	frame, podName, pending, err := r.executeWorkerAttempt(
 		ctx,
@@ -160,20 +165,60 @@ func (r *PlannerReconciler) Reconcile(
 
 		return nil, errors.Join(ErrPlannerFailed, diagnostic)
 	}
-	plan, decodeErr := clabernetesinternaldeviceplan.DecodeWorkerOutput(frame, maxPlanBytes)
+	session, decodeErr := clabernetesinternaldeviceplan.DecodeCachedSessionResult(
+		frame,
+		maxPlanBytes,
+	)
 	if decodeErr != nil {
 		return nil, decodeErr
 	}
-	if plan.InputDigest != inputDigest ||
-		!reflect.DeepEqual(plan.Compatibility, attempt.Input.Compatibility) ||
-		plan.Planner.Revision != attempt.PlannerRevision {
+	finalInputName := plannerInputConfigMapName(attempt.Node.GetName(), session.InputDigest)
+	finalInputConfigMap := &k8scorev1.ConfigMap{}
+	if err = r.Client.Get(ctx, ctrlruntimeclient.ObjectKey{
+		Namespace: attempt.Node.GetNamespace(), Name: finalInputName,
+	}, finalInputConfigMap); err != nil {
+		return nil, err
+	}
+	if finalInputConfigMap.Immutable == nil || !*finalInputConfigMap.Immutable ||
+		finalInputConfigMap.GetLabels()[planOwnerUIDLabel] != string(attempt.Node.GetUID()) ||
+		finalInputConfigMap.GetAnnotations()[planInputDigestAnnotation] != session.InputDigest ||
+		!metav1.IsControlledBy(finalInputConfigMap, attempt.Node) {
+		return nil, errors.Join(
+			ErrPlannerFailed,
+			errors.New("cached planner input ownership is invalid"),
+		)
+	}
+	finalInput, decodeErr := clabernetesinternaldeviceplan.DecodeInput(
+		[]byte(finalInputConfigMap.Data[plannerInputKey]),
+	)
+	if decodeErr != nil {
+		return nil, decodeErr
+	}
+	finalInputDigest, err := finalInput.Digest()
+	if err != nil || finalInputDigest != session.InputDigest {
+		return nil, errors.Join(ErrPlannerFailed,
+			errors.New("cached planner input differs from its result"))
+	}
+	if session.SessionDigest != inputDigest ||
+		!reflect.DeepEqual(finalInput.Compatibility, attempt.Input.Compatibility) ||
+		session.Plan.Planner.Revision != attempt.PlannerRevision {
 		return nil, fmt.Errorf(
 			"%w: worker output identity differs from its request",
 			ErrPlannerFailed,
 		)
 	}
+	if err = clabernetesinternaldeviceplan.ValidateSessionExtension(
+		attempt.Input,
+		finalInput,
+	); err != nil {
+		return nil, errors.Join(ErrPlannerFailed, err)
+	}
 	result.State = PlannerStateSucceeded
-	result.Plan = &plan
+	result.InputConfigMapName = finalInputName
+	result.Input = &finalInput
+	result.Plan = &session.Plan
+	result.Certificates = session.Certificates
+	result.CertificateSecret = session.CertificateSecret
 
 	return result, nil
 }
@@ -202,6 +247,11 @@ func (r *PlannerReconciler) executeWorkerAttempt(
 	}
 	if found {
 		return frame, podName, false, nil
+	}
+	if r.Pool != nil {
+		frame, err = r.Pool.run(ctx, node, renderInput, inputArtifact)
+
+		return frame, podName, false, err
 	}
 	if _, _, err = (&PlannerInputConfigMapReconciler{
 		Client: r.Client, MaxInputBytes: maxInputBytes,
@@ -258,13 +308,88 @@ func (r *PlannerReconciler) executeWorkerAttempt(
 				podName,
 			)
 		}
+		sensitiveValues := inputArtifact.SensitiveValues
+		if clabernetesinternaldeviceplan.FrameKind(
+			extracted,
+		) == clabernetesinternaldeviceplan.WorkerFrameSession {
+			session, decodeErr := clabernetesinternaldeviceplan.DecodeSessionResult(
+				extracted,
+				maxInputBytes+defaultPlannerMaxPlanBytes,
+			)
+			if decodeErr != nil {
+				return nil, podName, false, decodeErr
+			}
+			acceptedPod := &k8scorev1.Pod{}
+			if decodeErr = r.Client.Get(
+				ctx,
+				ctrlruntimeclient.ObjectKeyFromObject(existingPod),
+				acceptedPod,
+			); decodeErr != nil {
+				return nil, podName, false, decodeErr
+			}
+			if session.TerminalDigest != acceptedPod.GetAnnotations()[plannerSessionResult] {
+				if deleteErr := r.Client.Delete(ctx, acceptedPod); deleteErr != nil &&
+					!apimachineryerrors.IsNotFound(deleteErr) {
+					return nil, podName, false, deleteErr
+				}
+
+				return nil, podName, false, errors.Join(
+					ErrPlannerFailed,
+					errors.New("planner result was not accepted by its attached controller"),
+				)
+			}
+			initialInput, decodeErr := clabernetesinternaldeviceplan.DecodeInput(
+				inputArtifact.CanonicalInput,
+			)
+			if decodeErr != nil {
+				return nil, podName, false, decodeErr
+			}
+			if decodeErr = clabernetesinternaldeviceplan.ValidateSessionExtension(
+				initialInput,
+				session.Input,
+			); decodeErr != nil {
+				return nil, podName, false, errors.Join(ErrPlannerFailed, decodeErr)
+			}
+			finalCanonical, canonicalErr := session.Input.CanonicalJSON()
+			if canonicalErr != nil {
+				return nil, podName, false, canonicalErr
+			}
+			if session.CertificateSecret != "" {
+				certificateSecret := &k8scorev1.Secret{}
+				if err = r.Client.Get(ctx, ctrlruntimeclient.ObjectKey{
+					Namespace: node.GetNamespace(), Name: session.CertificateSecret,
+				}, certificateSecret); err != nil {
+					return nil, podName, false, err
+				}
+				if certificateSecret.GetLabels()[directCertificateLabel] !=
+					directCertificateBundle ||
+					!metav1.IsControlledBy(certificateSecret, node) {
+					return nil, podName, false,
+						errors.New("planner certificate Secret ownership is invalid")
+				}
+				for _, value := range certificateSecret.Data {
+					sensitiveValues = append(sensitiveValues, value)
+				}
+			}
+			if _, _, canonicalErr = (&PlannerInputConfigMapReconciler{
+				Client: r.Client, MaxInputBytes: maxInputBytes,
+			}).Ensure(ctx, node, PlannerInputArtifact{
+				CanonicalInput: finalCanonical, SensitiveValues: sensitiveValues,
+			}); canonicalErr != nil {
+				return nil, podName, false, canonicalErr
+			}
+			extracted, decodeErr = clabernetesinternaldeviceplan.EncodeCachedSessionResult(session)
+			if decodeErr != nil {
+				return nil, podName, false, decodeErr
+			}
+		}
 		if err = store.Persist(
 			ctx,
 			node,
 			podName,
 			renderInput.WorkerCommand,
 			extracted,
-			inputArtifact.SensitiveValues,
+			sensitiveValues,
 		); err != nil {
 			return nil, podName, false, err
 		}
