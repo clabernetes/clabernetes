@@ -136,13 +136,15 @@ func (r *ServiceReconciler) RenderDirectAliasService(
 
 // RenderExposeService renders the expose service for the given node from the *allocations* in
 // exposedPorts (see ResolveExposedPorts) -- allocations are made into the node status first and
-// the service is programmed from them. Returns nil if the node exposes nothing (no ports, or
-// expose disabled/None per the node's resolved profile).
+// the service is programmed from them. management is the node's realized management identity
+// from the applied plan, nil when it has none. Returns nil if the node exposes nothing (no
+// ports, or expose disabled/None per the node's resolved profile).
 func (r *ServiceReconciler) RenderExposeService(
 	node *clabernetesapisv1alpha1.Node,
 	primaryNode string,
 	resolvedProfile *ResolvedProfile,
 	exposedPorts *clabernetesapisv1alpha1.NodeExposedPorts,
+	management *clabernetesapisv1alpha1.NodeDirectManagementStatus,
 ) *k8scorev1.Service {
 	if exposedPorts == nil || len(exposedPorts.Ports) == 0 ||
 		resolvedProfile.ExposeType == exposeTypeNone {
@@ -162,7 +164,7 @@ func (r *ServiceReconciler) RenderExposeService(
 		service.Spec.ClusterIP = k8scorev1.ClusterIPNone
 	}
 
-	r.renderExposeServiceLoadBalancerIP(service, node, resolvedProfile)
+	r.renderExposeServiceLoadBalancerIP(service, node, resolvedProfile, management)
 
 	ports := make([]k8scorev1.ServicePort, len(exposedPorts.Ports))
 
@@ -192,8 +194,15 @@ func (r *ServiceReconciler) RenderDirectExposeService(
 	primaryNode string,
 	resolvedProfile *ResolvedProfile,
 	exposedPorts *clabernetesapisv1alpha1.NodeExposedPorts,
+	management *clabernetesapisv1alpha1.NodeDirectManagementStatus,
 ) *k8scorev1.Service {
-	service := r.RenderExposeService(node, primaryNode, resolvedProfile, exposedPorts)
+	service := r.RenderExposeService(
+		node,
+		primaryNode,
+		resolvedProfile,
+		exposedPorts,
+		management,
+	)
 	if service == nil {
 		return nil
 	}
@@ -400,12 +409,16 @@ func (r *ServiceReconciler) renderServiceBase(
 	}
 }
 
+// renderExposeServiceLoadBalancerIP requests the node's realized management address -- pinned
+// or allocated, exactly as the applied plan configures the device and status.directManagement
+// reports it -- as the Service's LoadBalancer address.
 func (r *ServiceReconciler) renderExposeServiceLoadBalancerIP(
 	service *k8scorev1.Service,
 	node *clabernetesapisv1alpha1.Node,
 	resolvedProfile *ResolvedProfile,
+	management *clabernetesapisv1alpha1.NodeDirectManagementStatus,
 ) {
-	if service.Spec.Type != k8scorev1.ServiceTypeLoadBalancer {
+	if service.Spec.Type != k8scorev1.ServiceTypeLoadBalancer || management == nil {
 		return
 	}
 
@@ -413,16 +426,17 @@ func (r *ServiceReconciler) renderExposeServiceLoadBalancerIP(
 
 	switch {
 	case resolvedProfile.UseNodeMgmtIpv4Address:
-		raw = node.Spec.MgmtIPv4
+		raw = management.IPv4
 	case resolvedProfile.UseNodeMgmtIpv6Address:
-		raw = node.Spec.MgmtIPv6
+		raw = management.IPv6
 	}
 
 	if raw == "" {
 		return
 	}
 
-	ip := net.ParseIP(raw)
+	// The plan carries the address with its management subnet prefix length.
+	ip := net.ParseIP(bareDirectManagementAddress(raw))
 	if ip == nil {
 		r.log.Warnf(
 			"failed to parse mgmt address %q for node %q: invalid IP;"+

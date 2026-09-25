@@ -1670,7 +1670,13 @@ func TestCompileDirectExposedPortsKeepsAutoExposeParity(t *testing.T) {
 	service := NewServiceReconciler(
 		&claberneteslogging.FakeInstance{},
 		clabernetesconfig.GetFakeManager,
-	).RenderDirectExposeService(node, node.GetName(), &ResolvedProfile{}, ports[node.GetName()])
+	).RenderDirectExposeService(
+		node,
+		node.GetName(),
+		&ResolvedProfile{},
+		ports[node.GetName()],
+		nil,
+	)
 	if service == nil || len(service.Spec.Ports) != len(defaultExposePorts()) {
 		t.Fatalf("direct expose Service = %#v", service)
 	}
@@ -1731,6 +1737,7 @@ func TestCompileDirectExposedPortsKeepsAutoExposeParity(t *testing.T) {
 		node.GetName(),
 		&ResolvedProfile{DisableAutoExpose: true, ExposeType: "ClusterIP"},
 		explicitOnly[node.GetName()],
+		nil,
 	)
 	if service == nil || service.Spec.Type != k8scorev1.ServiceTypeClusterIP ||
 		len(service.Spec.Ports) != 1 {

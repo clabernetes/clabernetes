@@ -82,10 +82,6 @@ A pinned address must belong to the management subnet. An address declared by tw
 colliding with the gateway, fails before anything is realized. Unpinned nodes get addresses
 allocated automatically around the pinned ones.
 
-Pinned management addresses can also drive external reachability: with
-`useNodeMgmtIpv4Address`, the node's expose Service requests its `mgmt-ipv4` as the
-LoadBalancer IP. See [Service exposure](expose-configuration.md#using-management-ips).
-
 ## Device-to-device reachability
 
 The management subnet spans the whole namespace, matching containerlab's management network. A
@@ -134,6 +130,10 @@ management address inside the Pod, and the device sees the Pod-local gateway as 
 the same source identity containerlab's Docker port publishing presents. This works the same
 for container network operating systems, for devices that run a virtual machine behind
 vrnetlab's port forwarding (SR OS, IOS XR, NX-OS, IOS XE), and for plain Linux nodes.
+
+Management addresses can also drive external reachability: with `useNodeMgmtIpv4Address`, the
+node's expose Service requests its management address, pinned or allocated, as the LoadBalancer
+IP. See [Service exposure](expose-configuration.md#using-management-ips).
 
 ## Name resolution
 
