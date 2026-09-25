@@ -1054,14 +1054,14 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Expose(
 					},
 					"useNodeMgmtIpv4Address": {
 						SchemaProps: spec.SchemaProps{
-							Description: "UseNodeMgmtIpv4Address, when set to true, the controller will look up each node’s management IPv4 address (from the `mgmt-ipv4` field in your containerlab topology) and assign that address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer Service. - Only applies if `spec.expose.exposeType` is `LoadBalancer`. - If the IP is missing or fails validation, a warning is emitted and Kubernetes\n  will allocate an IP automatically.",
+							Description: "UseNodeMgmtIpv4Address, when set to true, the controller assigns each node's management IPv4 address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer Service. The address is the one the device is configured with and `status.directManagement.ipv4` reports: the node's `mgmt-ipv4` when pinned, otherwise the address c9s allocated from the management subnet. - Only applies if `spec.expose.exposeType` is `LoadBalancer`. - Takes precedence over `useNodeMgmtIpv6Address` when both are set. - If the node has no management IPv4 address, the LoadBalancer provider assigns an IP.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
 					"useNodeMgmtIpv6Address": {
 						SchemaProps: spec.SchemaProps{
-							Description: "UseNodeMgmtIpv6Address, when set to true, the controller will look up each node’s management IPv6 address (from the `mgmt-ipv6` field in your containerlab topology) and assign that address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer Service. - Only applies if `spec.expose.exposeType` is `LoadBalancer`. - If the IP is missing or fails validation, a warning is emitted and Kubernetes will allocate an IP automatically.",
+							Description: "UseNodeMgmtIpv6Address, when set to true, the controller assigns each node's management IPv6 address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer Service. The address is the one the device is configured with and `status.directManagement.ipv6` reports: the node's `mgmt-ipv6` when pinned, otherwise the address c9s allocated from the management subnet. - Only applies if `spec.expose.exposeType` is `LoadBalancer`. - If the node has no management IPv6 address, the LoadBalancer provider assigns an IP.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
@@ -2627,14 +2627,14 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileExpose(
 					},
 					"useNodeMgmtIpv4Address": {
 						SchemaProps: spec.SchemaProps{
-							Description: "UseNodeMgmtIpv4Address assigns a Node's management IPv4 address as its LoadBalancerIP.",
+							Description: "UseNodeMgmtIpv4Address assigns a Node's management IPv4 address, pinned or allocated, as its LoadBalancerIP. It takes precedence over UseNodeMgmtIpv6Address.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
 					"useNodeMgmtIpv6Address": {
 						SchemaProps: spec.SchemaProps{
-							Description: "UseNodeMgmtIpv6Address assigns a Node's management IPv6 address as its LoadBalancerIP.",
+							Description: "UseNodeMgmtIpv6Address assigns a Node's management IPv6 address, pinned or allocated, as its LoadBalancerIP.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},

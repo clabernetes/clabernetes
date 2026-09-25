@@ -362,7 +362,11 @@ spec:
 
 ## Using Management IPs
 
-You can assign specific IPs to LoadBalancer services based on the node's management IP from your containerlab topology.
+With `useNodeMgmtIpv4Address`, each node's LoadBalancer Service requests the node's management
+IPv4 address as its LoadBalancer IP. The address you reach a device at from outside the cluster
+is then the address its management interface is configured with. That is the address reported in
+`status.directManagement.ipv4`: the node's pinned `mgmt-ipv4`, or the address c9s allocated for
+it from the management subnet.
 
 ### IPv4 Management IP
 
@@ -370,24 +374,35 @@ You can assign specific IPs to LoadBalancer services based on the node's managem
 apiVersion: c9s.run/v1alpha1
 kind: Topology
 metadata:
-  name: static-ips
+  name: routed-mgmt
 spec:
   expose:
     exposeType: LoadBalancer
     useNodeMgmtIpv4Address: true
   definition:
     containerlab: |
-      name: static
+      name: routed-mgmt
+      mgmt:
+        ipv4-subnet: 10.100.1.0/24  # must be inside the LoadBalancer address pool
       topology:
         nodes:
           srl1:
             kind: nokia_srlinux
             image: ghcr.io/nokia/srlinux:latest
-            mgmt-ipv4: 10.100.1.10  # This becomes the LoadBalancer IP
+            mgmt-ipv4: 10.100.1.10  # pinned: this becomes the LoadBalancer IP
           srl2:
             kind: nokia_srlinux
-            image: ghcr.io/nokia/srlinux:latest
-            mgmt-ipv4: 10.100.1.11
+            image: ghcr.io/nokia/srlinux:latest  # allocated: its address becomes the LoadBalancer IP
+```
+
+For direct resources, set `spec.expose.useNodeMgmtIpv4Address: true` on the NodeProfile the Nodes
+reference, next to its `spec.mgmt` subnet.
+
+To confirm the provider assigned the requested address, compare the two status fields:
+
+```bash
+kubectl get nodes.c9s.run srl2 \
+  -o jsonpath='{.status.directManagement.ipv4}{"\n"}{.status.exposedPorts.loadBalancerAddress}{"\n"}'
 ```
 
 ### IPv6 Management IP
@@ -399,16 +414,36 @@ spec:
     useNodeMgmtIpv6Address: true
 ```
 
+This requests the node's management IPv6 address (`status.directManagement.ipv6`). IPv6
+management addresses exist only when the management policy declares an `ipv6-subnet`. When both
+options are set, the IPv4 address is requested.
+
 **Requirements:**
 
-- Your cluster must support the specified IP addresses
-- MetalLB or similar must have the IPs in its address pool
-- If the IP is invalid or unavailable, Kubernetes allocates an IP automatically
+- The LoadBalancer provider must honor `Service.spec.loadBalancerIP`. MetalLB, Cilium LB IPAM, and
+  kube-vip do; most cloud providers ignore it. The field is deprecated upstream but still served.
+- The provider's address pool must contain the management addresses. Make the management subnet,
+  or its `ipv4-range`, part of the pool; a requested address outside the pool leaves the Service
+  pending.
+- The management subnet is per namespace, the address pool is cluster-wide. Give every lab
+  namespace that uses this option its own management subnet; the default `172.20.20.0/24` is the
+  same in every namespace.
+- A node without a management address of the selected family, for example with management
+  disabled, gets an IP assigned by the provider.
+
+Allocated addresses survive Pod restarts and rescheduling. A node that is deleted and recreated
+is allocated a new address, and its Service requests the new one. Pin `mgmt-ipv4` where an
+address must survive recreation.
+
+The LoadBalancer IP matching the management address does not change how traffic reaches the
+device: it still arrives through the node's Pod, the device sees the Pod-local gateway as the
+client, and traffic the device starts leaves through the Pod's address. See
+[Reaching a node from the rest of the cluster](management-network.md#reaching-a-node-from-the-rest-of-the-cluster).
 
 **Use cases:**
 
+- Devices reachable at their management address from outside the cluster
 - Consistent IP addressing across topology deployments
-- Integration with external systems expecting specific IPs
 - DNS pre-configuration
 
 ## Examples Comparison

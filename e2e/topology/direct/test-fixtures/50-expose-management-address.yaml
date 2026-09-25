@@ -1,0 +1,22 @@
+---
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: expose-management-address
+spec:
+  expose:
+    exposeType: LoadBalancer
+    useNodeMgmtIpv4Address: true
+  definition:
+    containerlab: |
+      name: expose-management-address
+      mgmt:
+        ipv4-subnet: 198.18.57.0/24
+      topology:
+        defaults:
+          kind: linux
+          image: ghcr.io/srl-labs/network-multitool
+        nodes:
+          pinned:
+            mgmt-ipv4: 198.18.57.10
+          allocated: {}

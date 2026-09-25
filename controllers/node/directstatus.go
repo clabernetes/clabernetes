@@ -341,13 +341,7 @@ func (r *Reconciler) updateDirectStatuses(
 		plansByNodeID[logicalNode.ID] = logicalNode
 	}
 
-	managementByNodeID := make(
-		map[string]clabernetesinternaldeviceplan.ManagementPlan,
-		len(plan.Management),
-	)
-	for _, management := range plan.Management {
-		managementByNodeID[management.NodeID] = management
-	}
+	managementByNodeID := directManagementPlansByNodeID(plan)
 
 	for _, memberName := range groupMembers {
 		member := nodesByName[memberName]
@@ -534,6 +528,20 @@ func setDirectLinkLifecycleActionCondition(
 			planDigest,
 		),
 	)
+}
+
+func directManagementPlansByNodeID(
+	plan clabernetesinternaldeviceplan.Plan,
+) map[string]clabernetesinternaldeviceplan.ManagementPlan {
+	managementByNodeID := make(
+		map[string]clabernetesinternaldeviceplan.ManagementPlan,
+		len(plan.Management),
+	)
+	for _, management := range plan.Management {
+		managementByNodeID[management.NodeID] = management
+	}
+
+	return managementByNodeID
 }
 
 func directManagementStatus(

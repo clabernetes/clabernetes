@@ -348,6 +348,7 @@ func TestRenderDirectExposeServiceTypes(t *testing.T) {
 				node.GetName(),
 				&ResolvedProfile{ExposeType: test.exposeType},
 				exposedPorts,
+				nil,
 			)
 			if test.nilService {
 				if service != nil {
@@ -374,8 +375,179 @@ func TestRenderDirectExposeServiceTypes(t *testing.T) {
 		node.GetName(),
 		&ResolvedProfile{ExposeType: "ClusterIP"},
 		&clabernetesapisv1alpha1.NodeExposedPorts{},
+		nil,
 	); service != nil {
 		t.Fatalf("empty exposed ports rendered service %#v", service)
+	}
+}
+
+func TestRenderExposeServiceRequestsRealizedManagementAddress(t *testing.T) {
+	t.Parallel()
+
+	exposedPorts := &clabernetesapisv1alpha1.NodeExposedPorts{
+		Ports: []clabernetesapisv1alpha1.NodeExposedPort{{
+			DestinationPort: 22,
+			ExposePort:      22,
+			Protocol:        string(k8scorev1.ProtocolTCP),
+		}},
+	}
+	dualStack := &clabernetesapisv1alpha1.NodeDirectManagementStatus{
+		IPv4: "10.20.30.57/24",
+		IPv6: "2001:db8:20::39/64",
+	}
+	reconciler := NewServiceReconciler(
+		&claberneteslogging.FakeInstance{},
+		clabernetesconfig.GetFakeManager,
+	)
+
+	tests := []struct {
+		name       string
+		pinnedIPv4 string
+		profile    ResolvedProfile
+		management *clabernetesapisv1alpha1.NodeDirectManagementStatus
+		want       string
+	}{
+		{
+			name:       "allocated ipv4",
+			profile:    ResolvedProfile{UseNodeMgmtIpv4Address: true},
+			management: dualStack,
+			want:       "10.20.30.57",
+		},
+		{
+			name:       "pinned ipv4",
+			pinnedIPv4: "10.20.30.11",
+			profile:    ResolvedProfile{UseNodeMgmtIpv4Address: true},
+			management: &clabernetesapisv1alpha1.NodeDirectManagementStatus{
+				IPv4: "10.20.30.11/24",
+			},
+			want: "10.20.30.11",
+		},
+		{
+			name:       "allocated ipv6",
+			profile:    ResolvedProfile{UseNodeMgmtIpv6Address: true},
+			management: dualStack,
+			want:       "2001:db8:20::39",
+		},
+		{
+			name: "ipv4 takes precedence",
+			profile: ResolvedProfile{
+				UseNodeMgmtIpv4Address: true,
+				UseNodeMgmtIpv6Address: true,
+			},
+			management: dualStack,
+			want:       "10.20.30.57",
+		},
+		{
+			name:    "selected family has no address",
+			profile: ResolvedProfile{UseNodeMgmtIpv4Address: true},
+			management: &clabernetesapisv1alpha1.NodeDirectManagementStatus{
+				IPv6: "2001:db8:20::39/64",
+			},
+		},
+		{
+			name:    "management disabled",
+			profile: ResolvedProfile{UseNodeMgmtIpv4Address: true},
+		},
+		{
+			name:       "option disabled",
+			management: dualStack,
+		},
+		{
+			name: "cluster ip",
+			profile: ResolvedProfile{
+				ExposeType:             "ClusterIP",
+				UseNodeMgmtIpv4Address: true,
+			},
+			management: dualStack,
+		},
+		{
+			name:    "invalid address",
+			profile: ResolvedProfile{UseNodeMgmtIpv4Address: true},
+			management: &clabernetesapisv1alpha1.NodeDirectManagementStatus{
+				IPv4: "not-an-address/24",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			node := nodeReconcileTestNode()
+			node.Spec.MgmtIPv4 = test.pinnedIPv4
+
+			service := reconciler.RenderDirectExposeService(
+				node,
+				node.GetName(),
+				&test.profile,
+				exposedPorts,
+				test.management,
+			)
+			if service == nil {
+				t.Fatal("expected expose Service")
+			}
+			if service.Spec.LoadBalancerIP != test.want {
+				t.Fatalf("loadBalancerIP = %q, want %q", service.Spec.LoadBalancerIP, test.want)
+			}
+		})
+	}
+}
+
+func TestReconcileExposeServiceFollowsRealizedManagementAddress(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	scheme := nodeReconcileTestScheme(t)
+	node := nodeReconcileTestNode()
+	profile := &ResolvedProfile{UseNodeMgmtIpv4Address: true}
+	exposedPorts := &clabernetesapisv1alpha1.NodeExposedPorts{
+		Ports: []clabernetesapisv1alpha1.NodeExposedPort{{
+			DestinationPort: 22,
+			ExposePort:      22,
+			Protocol:        string(k8scorev1.ProtocolTCP),
+		}},
+	}
+	serviceReconciler := NewServiceReconciler(
+		&claberneteslogging.FakeInstance{},
+		clabernetesconfig.GetFakeManager,
+	)
+	existing := serviceReconciler.RenderExposeService(
+		node,
+		node.GetName(),
+		profile,
+		exposedPorts,
+		&clabernetesapisv1alpha1.NodeDirectManagementStatus{IPv4: "10.20.30.57/24"},
+	)
+	existing.OwnerReferences = []metav1.OwnerReference{{UID: node.GetUID()}}
+
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(node, existing).
+		Build()
+	reconciler := &Reconciler{
+		Log:               &claberneteslogging.FakeInstance{},
+		Client:            client,
+		ServiceReconciler: serviceReconciler,
+	}
+
+	// A recreated Node is allocated a new address; its Service must request that one instead.
+	rendered := serviceReconciler.RenderExposeService(
+		node,
+		node.GetName(),
+		profile,
+		exposedPorts,
+		&clabernetesapisv1alpha1.NodeDirectManagementStatus{IPv4: "10.20.30.91/24"},
+	)
+	if _, err := reconciler.reconcileRenderedExposeService(ctx, node, rendered); err != nil {
+		t.Fatalf("reconciling expose Service: %s", err)
+	}
+
+	actual := &k8scorev1.Service{}
+	if err := client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(existing), actual); err != nil {
+		t.Fatal(err)
+	}
+	if actual.Spec.LoadBalancerIP != "10.20.30.91" {
+		t.Fatalf("reconciled loadBalancerIP = %q, want 10.20.30.91", actual.Spec.LoadBalancerIP)
 	}
 }
 
@@ -405,7 +577,7 @@ func TestRenderExposeServiceResolvesApplicationProtocols(t *testing.T) {
 	service := NewServiceReconciler(
 		&claberneteslogging.FakeInstance{},
 		clabernetesconfig.GetFakeManager,
-	).RenderExposeService(node, node.GetName(), &ResolvedProfile{}, exposedPorts)
+	).RenderExposeService(node, node.GetName(), &ResolvedProfile{}, exposedPorts, nil)
 	if service == nil {
 		t.Fatal("expected expose Service")
 	}
@@ -702,6 +874,7 @@ func TestReconcileExposeServiceUpdatesApplicationProtocolAndPreservesNodePort(t 
 		node.GetName(),
 		&ResolvedProfile{},
 		exposedPorts,
+		nil,
 	)
 	existing.Spec.Ports[0].AppProtocol = nil
 	existing.Spec.Ports[0].NodePort = 30_574
@@ -727,6 +900,7 @@ func TestReconcileExposeServiceUpdatesApplicationProtocolAndPreservesNodePort(t 
 			node.GetName(),
 			&ResolvedProfile{},
 			exposedPorts,
+			nil,
 		)
 		if _, err := reconciler.reconcileRenderedExposeService(ctx, node, rendered); err != nil {
 			t.Fatalf("reconciling expose Service: %s", err)

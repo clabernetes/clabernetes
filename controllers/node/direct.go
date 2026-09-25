@@ -520,6 +520,9 @@ func (r *Reconciler) reconcileDirect(
 		keepPlanConfigMapName = planConfigMap.GetName()
 		keepConnectivityRevisionConfigMapName = connectivityRevisionConfigMap.GetName()
 	}
+	// The expose Service requests the management address the running device realizes, which is
+	// the address its status reports.
+	statusManagement := directManagementPlansByNodeID(statusPlan)
 	for _, memberName := range groupMembers {
 		member := nodesByName[memberName]
 		if member == nil {
@@ -544,6 +547,7 @@ func (r *Reconciler) reconcileDirect(
 			node.GetName(),
 			profile,
 			directExposedPorts[memberName],
+			directManagementStatus(statusManagement[string(member.GetUID())]),
 		)
 		loadBalancerAddress, serviceErr := r.reconcileRenderedExposeService(
 			ctx,
