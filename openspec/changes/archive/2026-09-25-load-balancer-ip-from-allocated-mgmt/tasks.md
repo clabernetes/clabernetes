@@ -25,8 +25,8 @@
 ## 4. Validation
 
 - [x] 4.1 Run `make test` and `make lint`, and inspect any formatter changes.
-- [ ] 4.2 Add a focused direct e2e test asserting that an opted-in Node's expose Service requests
+- [x] 4.2 Add a focused direct e2e test asserting that an opted-in Node's expose Service requests
   its `status.directManagement` address for both an allocated and a pinned Node, and run it with
   `make test-e2e CLUSTER=existing` against the selected context.
-- [ ] 4.3 Verify on a local KinD cluster with a LoadBalancer provider that the assigned address
+- [x] 4.3 Verify on a local KinD cluster with a LoadBalancer provider that the assigned address
   equals the device's management address and reaches the device.
