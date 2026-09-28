@@ -136,21 +136,22 @@ type Expose struct {
 	// +kubebuilder:default=LoadBalancer
 	// +optional
 	ExposeType string `json:"exposeType,omitempty"`
-	// UseNodeMgmtIpv4Address, when set to true, the controller will look up each node’s management
-	// IPv4 address (from the `mgmt-ipv4` field in your containerlab topology) and assign
-	// that address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer
-	// Service.
+	// UseNodeMgmtIpv4Address, when set to true, the controller assigns each node's management
+	// IPv4 address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer Service.
+	// The address is the one the device is configured with and `status.directManagement.ipv4`
+	// reports: the node's `mgmt-ipv4` when pinned, otherwise the address c9s allocated from the
+	// management subnet.
 	// - Only applies if `spec.expose.exposeType` is `LoadBalancer`.
-	// - If the IP is missing or fails validation, a warning is emitted and Kubernetes
-	//   will allocate an IP automatically.
+	// - Takes precedence over `useNodeMgmtIpv6Address` when both are set.
+	// - If the node has no management IPv4 address, the LoadBalancer provider assigns an IP.
 	UseNodeMgmtIpv4Address bool `json:"useNodeMgmtIpv4Address,omitempty"`
-	// UseNodeMgmtIpv6Address, when set to true, the controller will look up each node’s management
-	// IPv6 address (from the `mgmt-ipv6` field in your containerlab topology) and assign
-	// that address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer
-	// Service.
+	// UseNodeMgmtIpv6Address, when set to true, the controller assigns each node's management
+	// IPv6 address to `Service.spec.loadBalancerIP` on the corresponding LoadBalancer Service.
+	// The address is the one the device is configured with and `status.directManagement.ipv6`
+	// reports: the node's `mgmt-ipv6` when pinned, otherwise the address c9s allocated from the
+	// management subnet.
 	// - Only applies if `spec.expose.exposeType` is `LoadBalancer`.
-	// - If the IP is missing or fails validation, a warning is emitted and Kubernetes
-	// will allocate an IP automatically.
+	// - If the node has no management IPv6 address, the LoadBalancer provider assigns an IP.
 	UseNodeMgmtIpv6Address bool `json:"useNodeMgmtIpv6Address,omitempty"`
 }
 

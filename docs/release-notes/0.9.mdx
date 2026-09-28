@@ -93,6 +93,16 @@ Two node-definition fields change meaning:
   `c9s.run/` namespace. The old `clabernetes/...` label keys are no longer written or selected,
   while annotation keys keep their existing names.
 
+`useNodeMgmtIpv4Address` and `useNodeMgmtIpv6Address` now request the node's management address
+as the LoadBalancer IP whether the address is pinned or allocated. In 0.8, containerlab allocated
+unpinned addresses inside the launcher Pod, so these options read only a pinned `mgmt-ipv4` or
+`mgmt-ipv6`, and unpinned nodes got an IP chosen by the LoadBalancer provider. c9s now allocates
+every management address itself, and the Service requests the address reported in
+`Node.status.directManagement`. If you enable either option, pin only some nodes, and your
+address pool covers only the pinned addresses, pin the remaining nodes or set `ipv4-range` so
+allocated addresses fall inside the pool; otherwise their Services stay pending. See
+[Service exposure](/docs/guides/expose-configuration#using-management-ips).
+
 ### Removed node vocabulary
 
 The Node spec carries only the vocabulary the direct runtime can realize. Unknown fields are

@@ -106,12 +106,14 @@ spec:
                     - LoadBalancer
                     type: string
                   useNodeMgmtIpv4Address:
-                    description: UseNodeMgmtIpv4Address assigns a Node's management
-                      IPv4 address as its LoadBalancerIP.
+                    description: |-
+                      UseNodeMgmtIpv4Address assigns a Node's management IPv4 address, pinned or allocated, as
+                      its LoadBalancerIP. It takes precedence over UseNodeMgmtIpv6Address.
                     type: boolean
                   useNodeMgmtIpv6Address:
-                    description: UseNodeMgmtIpv6Address assigns a Node's management
-                      IPv6 address as its LoadBalancerIP.
+                    description: |-
+                      UseNodeMgmtIpv6Address assigns a Node's management IPv6 address, pinned or allocated, as
+                      its LoadBalancerIP.
                     type: boolean
                 type: object
               imagePull:

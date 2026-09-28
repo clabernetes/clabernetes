@@ -57,10 +57,12 @@ type NodeProfileExpose struct {
 	// +kubebuilder:validation:Enum=None;ClusterIP;Headless;LoadBalancer
 	// +optional
 	ExposeType string `json:"exposeType,omitempty"`
-	// UseNodeMgmtIpv4Address assigns a Node's management IPv4 address as its LoadBalancerIP.
+	// UseNodeMgmtIpv4Address assigns a Node's management IPv4 address, pinned or allocated, as
+	// its LoadBalancerIP. It takes precedence over UseNodeMgmtIpv6Address.
 	// +optional
 	UseNodeMgmtIpv4Address *bool `json:"useNodeMgmtIpv4Address,omitempty"`
-	// UseNodeMgmtIpv6Address assigns a Node's management IPv6 address as its LoadBalancerIP.
+	// UseNodeMgmtIpv6Address assigns a Node's management IPv6 address, pinned or allocated, as
+	// its LoadBalancerIP.
 	// +optional
 	UseNodeMgmtIpv6Address *bool `json:"useNodeMgmtIpv6Address,omitempty"`
 }
