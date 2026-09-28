@@ -44,6 +44,8 @@ Update the source API or generator and run `make verify-generated`. Inspect all 
 
 ## Validation
 
+Before finishing any task that changes repository files, run `make lint` locally from the repository root. Install missing lint tools with `make install-lint-tools`, fix any findings, and inspect formatter changes before finishing. If the local environment prevents a complete run, report the blocker and do not claim lint passed.
+
 Start with the narrowest relevant check, then expand in proportion to the change:
 
 | Change | Expected validation |
