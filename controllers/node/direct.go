@@ -520,9 +520,12 @@ func (r *Reconciler) reconcileDirect(
 		keepPlanConfigMapName = planConfigMap.GetName()
 		keepConnectivityRevisionConfigMapName = connectivityRevisionConfigMap.GetName()
 	}
-	// The expose Service requests the management address the running device realizes, which is
-	// the address its status reports.
-	statusManagement := directManagementPlansByNodeID(statusPlan)
+	// The expose Service requests the management address the applied plan configures;
+	// status.directManagement reports the same value after status is written later in this reconcile.
+	var statusManagement map[string]clabernetesinternaldeviceplan.ManagementPlan
+	if profile.UseNodeMgmtIpv4Address || profile.UseNodeMgmtIpv6Address {
+		statusManagement = directManagementPlansByNodeID(statusPlan)
+	}
 	for _, memberName := range groupMembers {
 		member := nodesByName[memberName]
 		if member == nil {
