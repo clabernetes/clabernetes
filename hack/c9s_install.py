@@ -390,20 +390,26 @@ def install(
     else:
         selected_version = resolve_version(tools, selection)
     if selection == "local":
-        run(["make", "--no-print-directory", "c9s-local-tools"], cwd=repo_root)
-        require_executable(tools.kind, "kind")
         candidate_kind = kind_name or (
             cluster.context.removeprefix("kind-")
             if cluster.context.startswith("kind-")
             else ""
         )
         if reuse_local_images == "1":
+            if not candidate_kind:
+                fail("reusing local images requires a KinD cluster")
+            run(["make", "--no-print-directory", "c9s-local-tools"], cwd=repo_root)
+            require_executable(tools.kind, "kind")
             kind_name = kind_cluster(tools, cluster, candidate_kind)
-        else:
+        elif candidate_kind:
+            run(["make", "--no-print-directory", "c9s-local-tools"], cwd=repo_root)
+            require_executable(tools.kind, "kind")
             existing_kinds = run(
                 [str(tools.kind), "get", "clusters"], capture=True
             ).splitlines()
             kind_name = candidate_kind if candidate_kind in existing_kinds else ""
+        else:
+            kind_name = ""
         images = build_local_images(
             tools,
             cluster,

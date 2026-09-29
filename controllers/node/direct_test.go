@@ -1907,6 +1907,7 @@ func directTestWorkerLogsFull(
 	client ctrlruntimeclient.Client,
 	linkApplyMode clabernetesinternaldeviceplan.LinkApplyMode,
 	withCertificates bool,
+	generatedPassword ...string,
 ) PlannerLogReader {
 	t.Helper()
 
@@ -2068,6 +2069,21 @@ func directTestWorkerLogsFull(
 			Management: management,
 			Interfaces: interfaces,
 			Actions:    actions,
+		}
+		if len(generatedPassword) != 0 {
+			plan.Containers[0].Environment = []clabernetesinternaldeviceplan.KeyValue{{
+				Name: "PASSWORD", Value: generatedPassword[0],
+			}}
+			plan.Actions = append(plan.Actions, clabernetesinternaldeviceplan.Action{
+				ID:    "imported-readiness/" + input.Nodes[0].ID,
+				Phase: clabernetesinternaldeviceplan.PhaseReadiness,
+				Target: clabernetesinternaldeviceplan.ActionTarget{
+					NodeID: input.Nodes[0].ID, ContainerID: containerID,
+					NamespaceOwnerID: containerID,
+				},
+				Kind:              clabernetesinternaldeviceplan.ActionImportedReadiness,
+				ImportedReadiness: &clabernetesinternaldeviceplan.ImportedReadinessAction{},
+			})
 		}
 		output := &bytes.Buffer{}
 		sessionFrame := clabernetesinternaldeviceplan.SessionFrame{
@@ -2336,50 +2352,28 @@ func TestDirectPlanAcceptsProbePasswordDeclaredInDefinition(t *testing.T) {
 	}
 }
 
-func TestDirectPlanRejectionForUndeclaredSensitiveValueIsReportedOnNode(t *testing.T) {
+func TestDirectPlanAcceptsCumulusDefaultSSHPassword(t *testing.T) {
 	ctx := context.Background()
 	node := planInputTestNode(
 		"future-a",
 		"uid-future-a",
-		"future-package-kind",
+		"nvidia_cumulusvx",
 		"registry.example/device:1",
 	)
-	// "sha256" appears in every digest-pinned image reference of the planner input but nowhere
-	// in the declared definition, so it keeps its protection: the guard must refuse to publish
-	// and the refusal must be visible on the Node rather than only in the manager log.
+	// The imported Cumulus kind writes its built-in SSH password into the plan's
+	// container environment before c9s resolves the SSH readiness probe.
 	client, reconciler := newDirectProbeTestHarness(
 		t,
 		node,
-		directProbeTestProfile(node.GetNamespace(), "sha256"),
+		directProbeTestProfile(node.GetNamespace(), "Clab123!"),
 	)
-	eventRecorder := clientgoevents.NewFakeRecorder(16)
-	reconciler.EventRecorder = eventRecorder
-
-	var err error
-
-	for range 10 {
-		if err = reconciler.Reconcile(ctx, node); err != nil {
-			break
-		}
-
-		completeDirectTestWorkers(ctx, t, client, node.GetNamespace())
-	}
-
-	if !errors.Is(err, ErrInvalidPlanArtifact) {
-		t.Fatalf("direct reconcile error = %v, want ErrInvalidPlanArtifact", err)
-	}
-
-	deployment := &k8sappsv1.Deployment{}
-	if getErr := client.Get(
-		ctx,
-		ctrlruntimeclient.ObjectKeyFromObject(node),
-		deployment,
-	); !apimachineryerrors.IsNotFound(getErr) {
-		t.Fatalf("rejected plan produced a workload: %v %#v", getErr, deployment)
-	}
+	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogsFull(
+		t, client, clabernetesinternaldeviceplan.LinkApplyLive, false, "Clab123!",
+	)
+	deployment := reconcileDirectTestDeployment(ctx, t, reconciler, client, node)
 
 	plans := &k8scorev1.ConfigMapList{}
-	if err = client.List(
+	if err := client.List(
 		ctx,
 		plans,
 		ctrlruntimeclient.InNamespace(node.GetNamespace()),
@@ -2390,38 +2384,86 @@ func TestDirectPlanRejectionForUndeclaredSensitiveValueIsReportedOnNode(t *testi
 		t.Fatal(err)
 	}
 
-	if len(plans.Items) != 0 {
-		t.Fatalf("rejected plan was persisted: %#v", plans.Items)
+	if len(plans.Items) != 1 || !strings.Contains(plans.Items[0].Data[planDataKey], "Clab123!") {
+		t.Fatalf("Cumulus plan was not persisted: %#v", plans.Items)
 	}
 
 	stored := &clabernetesapisv1alpha1.Node{}
-	if err = client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(node), stored); err != nil {
+	if err := client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(node), stored); err != nil {
 		t.Fatal(err)
 	}
 
+	if !apimachinerymeta.IsStatusConditionTrue(
+		stored.Status.Conditions, clabernetesapisv1alpha1.NodeConditionPlanApplied,
+	) {
+		t.Fatalf("Node conditions = %#v, want PlanApplied=True", stored.Status.Conditions)
+	}
+	if !slices.ContainsFunc(
+		deployment.Spec.Template.Spec.Volumes,
+		func(volume k8scorev1.Volume) bool {
+			return volume.Secret != nil && strings.Contains(volume.Secret.SecretName, "-probes-")
+		},
+	) {
+		t.Fatalf("direct workload does not mount the SSH probe Secret: %#v",
+			deployment.Spec.Template.Spec.Volumes)
+	}
+	if !slices.ContainsFunc(
+		deployment.Spec.Template.Spec.Containers,
+		func(container k8scorev1.Container) bool {
+			return container.ReadinessProbe != nil && container.ReadinessProbe.Exec != nil &&
+				slices.Contains(container.ReadinessProbe.Exec.Command, "--sshPasswordFile")
+		},
+	) {
+		t.Fatalf("direct workload has no SSH readiness probe: %#v",
+			deployment.Spec.Template.Spec.Containers)
+	}
+}
+
+func TestDirectPlanStillRejectsIndependentSecretMatchingProbePassword(t *testing.T) {
+	ctx := context.Background()
+	node := planInputTestNode(
+		"future-a", "uid-future-a", "nvidia_cumulusvx", "registry.example/device:1",
+	)
+	profile := directProbeTestProfile(node.GetNamespace(), "Clab123!")
+	profile.Spec.ImagePull = &clabernetesapisv1alpha1.NodeProfileImagePull{
+		PullSecrets: []string{"registry"},
+	}
+	client, reconciler := newDirectProbeTestHarness(t, node, profile)
+	if err := client.Create(ctx, &k8scorev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "registry", Namespace: node.GetNamespace()},
+		Type:       k8scorev1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			k8scorev1.DockerConfigJsonKey: []byte(`{"auths":{}}`),
+			"credential":                  []byte("Clab123!"),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogsFull(
+		t, client, clabernetesinternaldeviceplan.LinkApplyLive, false, "Clab123!",
+	)
+
+	var err error
+	for range 10 {
+		if err = reconciler.Reconcile(ctx, node); err != nil {
+			break
+		}
+		completeDirectTestWorkers(ctx, t, client, node.GetNamespace())
+	}
+	if !errors.Is(err, ErrWorkerOutputConflict) || strings.Contains(err.Error(), "Clab123!") {
+		t.Fatalf("direct reconcile error = %v, want redacted ErrWorkerOutputConflict", err)
+	}
+
+	stored := &clabernetesapisv1alpha1.Node{}
+	if getErr := client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(node), stored); getErr != nil {
+		t.Fatal(getErr)
+	}
 	condition := apimachinerymeta.FindStatusCondition(
-		stored.Status.Conditions,
-		clabernetesapisv1alpha1.NodeConditionPlanApplied,
+		stored.Status.Conditions, clabernetesapisv1alpha1.NodeConditionPlanApplied,
 	)
 	if condition == nil || condition.Status != metav1.ConditionFalse ||
-		condition.Reason != "PlanRejected" ||
-		!strings.Contains(condition.Message, "sensitive value") ||
-		strings.Contains(condition.Message, "sha256") {
-		t.Fatalf("PlanApplied condition = %#v, want PlanRejected without the value", condition)
-	}
-
-	if stored.Status.Readiness != clabernetesconstants.NodeStatusNotReady {
-		t.Fatalf("readiness = %q, want %q",
-			stored.Status.Readiness,
-			clabernetesconstants.NodeStatusNotReady,
-		)
-	}
-
-	events := drainDirectStatusEvents(eventRecorder)
-	if !slices.ContainsFunc(events, func(event string) bool {
-		return strings.Contains(event, "Warning PlanRejected") &&
-			strings.Contains(event, "sensitive value") && !strings.Contains(event, "sha256")
-	}) {
-		t.Fatalf("direct preflight events = %#v", events)
+		condition.Reason != "PlanArtifactConflict" ||
+		strings.Contains(condition.Message, "Clab123!") {
+		t.Fatalf("PlanApplied condition = %#v, want redacted PlanArtifactConflict", condition)
 	}
 }

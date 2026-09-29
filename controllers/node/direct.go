@@ -320,6 +320,14 @@ func (r *Reconciler) reconcileDirect(
 	if err = clabernetesinternaldirectpod.ValidatePlan(*planningResult.Plan); err != nil {
 		return err
 	}
+	canonicalPlan, err := planningResult.Plan.CanonicalJSON()
+	if err != nil {
+		return err
+	}
+	canonicalInput, err := planInput.CanonicalJSON()
+	if err != nil {
+		return err
+	}
 	probeResolution, err := r.resolveDirectProbePolicies(
 		ctx,
 		node,
@@ -330,11 +338,13 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
-	sensitiveValues = screenSensitiveValues(
-		declaredText,
-		sensitiveValues,
-		probeResolution.SensitiveValues,
-	)
+	// The planner finalized these artifacts before it saw any probe credentials. A password
+	// that also appears in them (for example, Cumulus VX's package default) is not a probe
+	// Secret leak. Keep screening other Secret sources, and any probe password absent from
+	// the already-generated artifacts.
+	publicProbeText := append(slices.Clone(declaredText), canonicalPlan, canonicalInput)
+	sensitiveValues = append(sensitiveValues,
+		screenSensitiveValues(publicProbeText, probeResolution.SensitiveValues)...)
 	persistentVolumeClaims, err := r.reconcileDirectPersistentVolumeClaims(
 		ctx,
 		groupMembers,
@@ -350,14 +360,6 @@ func (r *Reconciler) reconcileDirect(
 		groupMembers,
 		nodesByName,
 	)
-	if err != nil {
-		return err
-	}
-	canonicalPlan, err := planningResult.Plan.CanonicalJSON()
-	if err != nil {
-		return err
-	}
-	canonicalInput, err := planInput.CanonicalJSON()
 	if err != nil {
 		return err
 	}

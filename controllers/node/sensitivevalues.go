@@ -29,18 +29,16 @@ func declaredNodeText(input clabernetesinternaldeviceplan.Input) [][]byte {
 	return result
 }
 
-// screenSensitiveValues merges sensitive value sets, dropping empty values and every value that
-// already appears verbatim in the declared Node text. The artifact guards reject any plan or
-// planner input that contains a sensitive value; a value the user also wrote into a definition
-// (an SSH probe password that doubles as the device username, for example) would otherwise
-// reject every plan for that Node while protecting nothing, because the definition is stored in
-// plain text anyway. Values absent from the declared text keep their full protection.
-func screenSensitiveValues(declared [][]byte, sets ...[][]byte) [][]byte {
+// screenSensitiveValues merges sensitive value sets, dropping empty values and values already
+// present in text known to be public independently of the sensitive source. Callers may use
+// declared Node text, or for probe passwords the planner artifacts finalized before probe
+// resolution. Other Secret sources must still be screened against the artifacts.
+func screenSensitiveValues(publicText [][]byte, sets ...[][]byte) [][]byte {
 	result := [][]byte{}
 
 	for _, set := range sets {
 		for _, value := range set {
-			if len(value) == 0 || declaredTextContains(declared, value) {
+			if len(value) == 0 || publicTextContains(publicText, value) {
 				continue
 			}
 
@@ -51,8 +49,8 @@ func screenSensitiveValues(declared [][]byte, sets ...[][]byte) [][]byte {
 	return result
 }
 
-func declaredTextContains(declared [][]byte, value []byte) bool {
-	for _, text := range declared {
+func publicTextContains(publicText [][]byte, value []byte) bool {
+	for _, text := range publicText {
 		if bytes.Contains(text, value) {
 			return true
 		}
