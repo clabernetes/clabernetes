@@ -57,7 +57,12 @@ The example connects `cumulus:swp1` (`192.0.2.0/31`) to `multitool:eth1`
 (`192.0.2.1/31`). Once the Cumulus node is ready, ping it from multitool with
 `ping 192.0.2.0`. Its default SSH login is `cumulus` / `Clab123!`; port 22 is
 reachable through the Cumulus service in the cluster. The e2e test creates a
-Secret containing only the GHCR entry from the runner's Docker config.
+Secret containing only the GHCR entry from the runner's Docker config. The regular
+e2e suite skips this test. Run it manually from the repository root with:
+
+```bash
+CUMULUS_E2E=1 make test-e2e-local E2E_TEST_PACKAGES=./e2e/topology/cumulus
+```
 
 ### two-nodes-connected.yaml
 

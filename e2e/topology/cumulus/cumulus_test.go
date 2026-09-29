@@ -25,6 +25,10 @@ func TestMain(m *testing.M) {
 }
 
 func TestCumulusExampleBootsAcceptsSSHAndPings(t *testing.T) {
+	if os.Getenv("CUMULUS_E2E") == "" {
+		t.Skip("CUMULUS_E2E is not set")
+	}
+
 	namespace := clabernetestesthelper.NewTestNamespace("topology-cumulus")
 	clabernetestesthelper.KubectlCreateNamespace(t, namespace)
 
