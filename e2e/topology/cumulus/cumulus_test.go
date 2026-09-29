@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	registrySecret = "cumulus-registry" //nolint:gosec // resource name, not a credential.
+	registrySecret = "regcred"
 	deploymentWait = 12 * time.Minute
 	sshWait        = 8 * time.Minute
 	pollPeriod     = 10 * time.Second
