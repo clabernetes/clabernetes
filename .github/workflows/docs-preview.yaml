@@ -84,11 +84,20 @@ jobs:
           echo "alias_url=$alias_url" >> "$GITHUB_OUTPUT"
           echo "short_sha=${HEAD_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
+      - name: find pull request comment
+        id: comment
+        uses: peter-evans/find-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "<!-- docs-preview -->"
+
       - name: update pull request comment
         uses: peter-evans/create-or-update-comment@v5
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body-includes: "<!-- docs-preview -->"
+          comment-id: ${{ steps.comment.outputs.comment-id }}
+          edit-mode: replace
           body: |
             <!-- docs-preview -->
             ## Documentation preview
