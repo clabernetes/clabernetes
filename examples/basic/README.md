@@ -46,16 +46,17 @@ will apply the topology:
 
 ```bash
 kubectl create namespace cumulus-multitool
-kubectl -n cumulus-multitool create secret docker-registry cumulus-registry \
+kubectl -n cumulus-multitool create secret docker-registry regcred \
   --docker-server=ghcr.io \
   --docker-username=your-github-username \
   --docker-password=your-ghcr-token
 kubectl -n cumulus-multitool apply -f cumulus-multitool.yaml
 ```
 
-The example connects `cumulus:swp1` to `multitool:eth1`. Once the Cumulus
-node is ready, its default SSH login is `cumulus` / `Clab123!`. You can reach
-port 22 through the Cumulus service in the cluster. The e2e test creates a
+The example connects `cumulus:swp1` (`192.0.2.0/31`) to `multitool:eth1`
+(`192.0.2.1/31`). Once the Cumulus node is ready, ping it from multitool with
+`ping 192.0.2.0`. Its default SSH login is `cumulus` / `Clab123!`; port 22 is
+reachable through the Cumulus service in the cluster. The e2e test creates a
 Secret containing only the GHCR entry from the runner's Docker config.
 
 ### two-nodes-connected.yaml

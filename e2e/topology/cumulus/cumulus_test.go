@@ -24,7 +24,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestCumulusExampleBootsAndAcceptsSSH(t *testing.T) {
+func TestCumulusExampleBootsAcceptsSSHAndPings(t *testing.T) {
 	namespace := clabernetestesthelper.NewTestNamespace("topology-cumulus")
 	clabernetestesthelper.KubectlCreateNamespace(t, namespace)
 
@@ -65,6 +65,36 @@ func TestCumulusExampleBootsAndAcceptsSSH(t *testing.T) {
 	assertSSHLogin(t, namespace, clientContainer, serviceIP)
 	runKubectl(t, "wait", "--namespace", namespace, "--for=jsonpath={.status.readiness}=ready",
 		"--timeout=2m", "node.c9s.run/cumulus")
+	assertPing(t, namespace, clientContainer)
+}
+
+func assertPing(t *testing.T, namespace, clientContainer string) {
+	t.Helper()
+
+	deadline := time.NewTimer(2 * time.Minute)
+	defer deadline.Stop()
+
+	var lastOutput []byte
+	for {
+		cmd := exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
+			t.Context(), "kubectl", "exec", "--namespace", namespace,
+			"deployment/multitool", "-c", clientContainer, "--",
+			"ping", "-c", "1", "-W", "3", "192.0.2.0")
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			return
+		}
+		lastOutput = output
+
+		select {
+		case <-t.Context().Done():
+			t.Fatalf("Cumulus ping check canceled: %s", strings.TrimSpace(string(lastOutput)))
+		case <-deadline.C:
+			t.Fatalf("timed out pinging Cumulus at 192.0.2.0: %s",
+				strings.TrimSpace(string(lastOutput)))
+		case <-time.After(pollPeriod):
+		}
+	}
 }
 
 func assertSSHLogin(t *testing.T, namespace, clientContainer, serviceIP string) {

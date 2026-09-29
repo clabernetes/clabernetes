@@ -34,7 +34,10 @@ spec:
         nodes:
           cumulus:
             kind: nvidia_cumulusvx
-            image: ghcr.io/hellt/nvidia_cumulus:5.16.1-test
+            image: ghcr.io/clab-labs/nvidia_cumulusvx:5.16.1
+            startup-config: |
+              nv set interface swp1
+              nv set interface swp1 ipv4 address 192.0.2.0/31
 
           multitool:
             kind: linux
