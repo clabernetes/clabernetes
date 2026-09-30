@@ -24,8 +24,8 @@
 .c9s-react-flow-canvas {
   height: 51rem;
   background-image:
-    linear-gradient(to right, color-mix(in oklab, var(--color-fd-foreground) 7%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--color-fd-foreground) 7%, transparent) 1px, transparent 1px);
+    linear-gradient(to right, color-mix(in oklab, var(--color-fd-foreground) 3%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-fd-foreground) 3%, transparent) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 
