@@ -1,0 +1,71 @@
+.release-runtime-diagram {
+  margin-block: 1.5rem;
+  overflow: hidden;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.75rem;
+  background: var(--color-fd-card);
+  color: var(--color-fd-foreground);
+}
+.release-runtime-diagram .runtime-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-fd-border);
+  font-weight: 600;
+}
+.release-runtime-diagram button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding-inline: 0.65rem;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+.release-runtime-diagram button:hover { background: var(--color-fd-muted); }
+.release-runtime-diagram button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.release-runtime-diagram .runtime-scroll { overflow-x: auto; }
+.release-runtime-diagram .runtime-scroll > svg { width: 100%; min-width: 720px; font: 16px sans-serif; }
+.release-runtime-diagram text { fill: currentColor; }
+.release-runtime-diagram .runtime-title { font-weight: 600; }
+.release-runtime-diagram .runtime-muted { fill: var(--color-fd-muted-foreground); font-size: 14px; }
+.release-runtime-diagram .runtime-card { fill: var(--color-fd-background); stroke: var(--color-fd-border); }
+.release-runtime-diagram .runtime-pod { fill: var(--color-fd-muted); stroke: var(--color-fd-border); }
+.release-runtime-diagram .runtime-arrow,
+.release-runtime-diagram .runtime-line { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.release-runtime-diagram .runtime-management { stroke-dasharray: 7 5; }
+.release-runtime-diagram figcaption {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--color-fd-border);
+  color: var(--color-fd-muted-foreground);
+  font-size: 0.875rem;
+}
+.release-runtime-diagram dialog {
+  position: fixed;
+  inset: 0;
+  width: min(1200px, 96vw);
+  max-width: 96vw;
+  max-height: 94dvh;
+  margin: auto;
+  overflow: auto;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 0.75rem;
+  padding: 0;
+  color: var(--color-fd-foreground);
+  background: var(--color-fd-background);
+}
+.release-runtime-diagram dialog::backdrop { background: rgb(0 0 0 / 65%); }
+
+.release-runtime-diagram .runtime-scroll-hint { display: none; }
+@media (max-width: 720px) {
+  .release-runtime-diagram .runtime-scroll-hint {
+    display: block;
+    padding: 0.5rem 1rem 0;
+    color: var(--color-fd-muted-foreground);
+    font-size: 0.8rem;
+  }
+}
