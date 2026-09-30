@@ -1,0 +1,114 @@
+---
+name: e2e suite runner
+
+on:
+  workflow_call:
+    inputs:
+      suite:
+        description: "functional suite name shown in GitHub Actions"
+        type: string
+        required: true
+      package:
+        description: "Go package containing the test"
+        type: string
+        required: true
+      tests:
+        description: "Go test name filter for this suite"
+        type: string
+        required: true
+      srsim-enabled:
+        description: "whether the SR-SIM license is available"
+        type: boolean
+        default: false
+      debug:
+        description: "start tmate before the e2e suite"
+        type: boolean
+        default: false
+    secrets:
+      SRSIM_LICENSE:
+        description: "Nokia SR-SIM license used by the SR-SIM E2E topology"
+        required: false
+
+jobs:
+  suite:
+    # An unavailable licensed suite is visibly skipped, rather than reported as a passing test.
+    if: ${{ inputs.suite != 'SR-SIM' || inputs.srsim-enabled }}
+    runs-on: ubuntu-latest
+    env:
+      E2E_TEST_PACKAGES: ${{ inputs.package }}
+      E2E_TEST_ARGS: -run='${{ inputs.tests }}'
+      E2E_TEST_FORMAT: standard-verbose
+      SRSIM_LICENSE: ${{ secrets.SRSIM_LICENSE }}
+      SRSIM_IMAGE: ghcr.io/clabernetes/nokia_srsim:26.7.R1
+      PLANNER_POOL_E2E: "1"
+      PLANNER_POOL_NAMESPACE: c9s
+      STARTUP_HOST_E2E: "1"
+      STARTUP_HOST_E2E_NODE: c9s-e2e-worker
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: pull git lfs assets
+        run: git lfs pull
+
+      - name: load env vars for workflow run
+        run: cat .github/vars.env >> "$GITHUB_ENV"
+
+      - name: set up go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: download manager image
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-manager-image
+          path: ${{ runner.temp }}/e2e-images
+
+      - name: load manager image
+        run: docker load --input "$RUNNER_TEMP/e2e-images/manager.tar"
+
+      # Each suite owns a separate cluster; the shared Make targets load the image and deploy it.
+      - name: create kind cluster and deploy clabernetes
+        run: C9S_LOCAL_BUILD_ID="local-${GITHUB_SHA::8}" C9S_LOCAL_REUSE_IMAGES=1 make e2e-deploy
+
+      # Reclaim runner disk only after the cluster has its copy of the manager image.
+      - name: docker system prune
+        run: |
+          rm "$RUNNER_TEMP/e2e-images/manager.tar"
+          docker system prune -a -f
+
+      - name: login to GHCR for device images
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: pull and load SR-SIM image
+        if: ${{ inputs.suite == 'SR-SIM' }}
+        run: |
+          docker pull "$SRSIM_IMAGE"
+          PATH="$PWD/build/e2e/bin:$PATH" kind load docker-image "$SRSIM_IMAGE" --name c9s-e2e
+
+      - name: verify existing-cluster make install
+        run: |
+          C9S_LOCAL_BUILD_ID="local-${GITHUB_SHA::8}" \
+          C9S_LOCAL_IMAGE_TAG="local-${GITHUB_SHA::8}" \
+          C9S_LOCAL_REUSE_IMAGES=1 \
+          make install C9S_CONTEXT=kind-c9s-e2e C9S_KIND_CLUSTER=c9s-e2e VERSION=local
+
+      - name: setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ inputs.debug }}
+
+      - name: run ${{ inputs.suite }} tests
+        id: run-the-e2e-suite
+        run: make e2e-test
+
+      - name: dump controller diagnostics for this suite
+        if: ${{ failure() && steps.run-the-e2e-suite.outcome == 'failure' }}
+        run: make e2e-debug-dump

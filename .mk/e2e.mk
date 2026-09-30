@@ -25,8 +25,10 @@ E2E_TEST_TIMEOUT ?= 150m
 else
 E2E_TEST_TIMEOUT ?= 30m
 endif
-# Optional go test selection flags, e.g. -run=TestStartupPerHostAdmission.
+# Optional go test selection flags, e.g. -run='^TestStartupPerHostAdmission$'.
+# Preserve these as literal shell arguments, including regular-expression dollar signs.
 E2E_TEST_ARGS ?=
+E2E_TEST_FORMAT ?= testname
 # Optional package selection for focused runs against an already installed cluster.
 E2E_TEST_PACKAGES ?= ./e2e/...
 E2E_INSTALL_NAMESPACE ?= c9s-e2e
@@ -89,8 +91,13 @@ e2e-cluster: e2e-tools ## Create the local e2e KinD cluster (idempotent)
 
 .PHONY: e2e-images
 e2e-images: e2e-cluster ## Build clabernetes images locally and load them into the e2e cluster
-	@echo "--> E2E: building manager image tagged $(E2E_IMAGE_TAG)"
-	@$(MAKE) --no-print-directory build-manager IMAGE_TAG=$(E2E_IMAGE_TAG) C9S_LOCAL_BUILD_ID=$(C9S_LOCAL_BUILD_ID)
+	@if [ "$(C9S_LOCAL_REUSE_IMAGES)" = 1 ]; then \
+		echo "--> E2E: reusing manager image tagged $(E2E_IMAGE_TAG)"; \
+		docker image inspect "$(MANAGER_IMAGE):$(E2E_IMAGE_TAG)" >/dev/null; \
+	else \
+		echo "--> E2E: building manager image tagged $(E2E_IMAGE_TAG)"; \
+		$(MAKE) --no-print-directory build-manager IMAGE_TAG=$(E2E_IMAGE_TAG) C9S_LOCAL_BUILD_ID=$(C9S_LOCAL_BUILD_ID); \
+	fi
 	@echo "--> E2E: loading images into KinD cluster $(E2E_CLUSTER_NAME)"
 	@$(E2E_KIND) load docker-image "$(MANAGER_IMAGE):$(E2E_IMAGE_TAG)" --name $(E2E_CLUSTER_NAME)
 
@@ -109,7 +116,11 @@ e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally 
 
 .PHONY: e2e-run
 e2e-run: ## Run the e2e Go tests against the caller-selected kube context
-	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -race -count=1 -timeout=$(E2E_TEST_TIMEOUT) -coverprofile=cover.out $(E2E_TEST_ARGS) $(E2E_TEST_PACKAGES)
+	$(C9S_GO_ENV) gotestsum --format $(E2E_TEST_FORMAT) --hide-summary=skipped -- -race -count=1 -timeout=$(E2E_TEST_TIMEOUT) -coverprofile=cover.out $(value E2E_TEST_ARGS) $(E2E_TEST_PACKAGES)
+
+.PHONY: test-e2e-workflow
+test-e2e-workflow: $(E2E_YQ) $(UV) ## Check CI test coverage and image reuse without a cluster
+	"$(UV)" run --script hack/test_e2e_workflow.py "$(abspath $(E2E_YQ))" "$(abspath $(UV))"
 
 .PHONY: e2e-test
 e2e-test: e2e-tools install-test-tools ## Run e2e tests using the existing KinD setup

@@ -37,5 +37,8 @@ jobs:
       - name: run the linters
         run: make lint
 
+      - name: check e2e job coverage and image reuse
+        run: make test-e2e-workflow
+
       - name: verify generated artifacts
         run: make verify-generated
