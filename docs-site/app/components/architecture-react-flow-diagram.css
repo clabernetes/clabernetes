@@ -176,8 +176,7 @@
 
 .c9s-react-flow-canvas .react-flow__edge-textbg {
   fill: var(--color-fd-background);
-  stroke: var(--color-fd-border);
-  stroke-width: 1;
+  stroke: none;
 }
 
 .c9s-react-flow-canvas .react-flow__edge-text {
