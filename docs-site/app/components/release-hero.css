@@ -1,0 +1,325 @@
+/* A single dark launch stage in both site themes: beaker left, release type right, stacked when narrow. */
+.c9s-release-hero {
+  --hero-ink: #0c0913;
+  --hero-ground: #16101f;
+  --hero-line: #2a2036;
+  --hero-pink: #f43f8d;
+  --hero-paper: #f3eef7;
+  --hero-mute: #9d91ad;
+  --hero-display: var(--font-sans);
+  --hero-mono: var(--font-mono);
+
+  position: relative;
+  isolation: isolate;
+  container-type: inline-size;
+  aspect-ratio: 16 / 9;
+  margin: 1.5rem 0 2rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  color: var(--hero-paper);
+  background:
+    radial-gradient(60% 80% at 28% 55%, color-mix(in oklab, var(--c9s-cyan) 14%, transparent), transparent 70%),
+    radial-gradient(50% 70% at 80% 30%, color-mix(in oklab, var(--c9s-magenta) 16%, transparent), transparent 70%),
+    var(--hero-ground);
+  box-shadow:
+    0 0 0 1px var(--hero-line),
+    0 30px 80px -40px color-mix(in oklab, var(--c9s-magenta) 55%, transparent);
+}
+
+.c9s-release-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--hero-line) 80%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--hero-line) 80%, transparent) 1px, transparent 1px);
+  background-size: 4.2cqi 4.2cqi;
+  mask-image: radial-gradient(80% 90% at 40% 50%, black, transparent 85%);
+  animation: c9s-hero-fade 1.2s ease-out both;
+}
+
+.c9s-release-hero-mesh {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+}
+
+.c9s-release-hero-layout {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 42% 1fr;
+  align-items: center;
+  gap: 2cqi;
+  padding-inline: 5cqi;
+}
+
+/* Beaker */
+.c9s-release-hero-beaker {
+  position: relative;
+  justify-self: center;
+  width: 34cqi;
+  aspect-ratio: 1;
+  animation: c9s-hero-rise 1.3s cubic-bezier(0.2, 0.9, 0.25, 1.15) 0.15s both;
+}
+
+.c9s-release-hero-beaker::before {
+  content: '';
+  position: absolute;
+  inset: 22% 18% 4%;
+  z-index: -1;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--c9s-cyan) 55%, transparent), transparent);
+  filter: blur(2.4cqi);
+  animation: c9s-hero-pulse 3.2s ease-in-out 1.3s infinite;
+}
+
+.c9s-release-hero-float {
+  position: absolute;
+  inset: 0;
+  animation: c9s-hero-bob 5s ease-in-out 1.5s infinite;
+}
+
+.c9s-release-hero-float img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  filter: drop-shadow(0 1.4cqi 2cqi rgb(0 0 0 / 0.5));
+}
+
+.c9s-release-hero-shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  background: linear-gradient(105deg, transparent 38%, rgb(255 255 255 / 0.55) 48%, transparent 58%) no-repeat;
+  background-size: 250% 100%;
+  background-position: 130% 0;
+  mix-blend-mode: soft-light;
+  animation: c9s-hero-shine 4.5s ease-in-out 1.6s infinite;
+}
+
+/* A spark on the c9s tag as the new version lands. */
+.c9s-release-hero-glint {
+  position: absolute;
+  top: 30%;
+  left: 70%;
+  width: 3cqi;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(closest-side, #fff, color-mix(in oklab, var(--hero-pink) 70%, transparent) 40%, transparent);
+  animation: c9s-hero-glint 1s ease-out 2.35s both;
+}
+
+/* Type */
+.c9s-release-hero-copy {
+  display: grid;
+  align-content: center;
+  gap: 1.4cqi;
+}
+
+:where(.c9s-release-hero-copy) p {
+  margin: 0;
+}
+
+.c9s-release-hero-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 1.2cqi;
+  color: var(--hero-mute);
+  font: 500 1.35cqi / 1 var(--hero-mono);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  animation: c9s-hero-slide 0.7s ease-out 0.9s both;
+}
+
+.c9s-release-hero-eyebrow::before {
+  content: '';
+  width: 3.5cqi;
+  height: 1px;
+  background: var(--c9s-cyan);
+}
+
+.c9s-release-hero-eyebrow b {
+  color: var(--c9s-cyan);
+  font-weight: 500;
+}
+
+.c9s-release-hero-version {
+  margin-left: -0.05em;
+  font: 700 15cqi / 0.9 var(--hero-display);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  animation: c9s-hero-slide 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 1.05s both;
+}
+
+.c9s-release-hero-glyphs {
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Each glyph shows its own slice of one magenta-to-cyan sweep. */
+.c9s-release-hero-glyphs [style*='--i'] {
+  display: inline-block;
+  color: transparent;
+  background-image: linear-gradient(90deg, var(--c9s-magenta), var(--hero-pink) 45%, var(--c9s-cyan));
+  background-size: calc(var(--n) * 100%) 100%;
+  background-position: calc(var(--i) / (var(--n) - 1) * 100%) 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.c9s-release-hero-swap {
+  display: inline-grid;
+}
+
+.c9s-release-hero-swap > span {
+  grid-area: 1 / 1;
+}
+
+.c9s-release-hero-old {
+  animation: c9s-hero-out 0.55s cubic-bezier(0.6, 0, 0.8, 0.4) 1.75s both;
+}
+
+.c9s-release-hero-new {
+  animation: c9s-hero-in 0.75s cubic-bezier(0.2, 0.9, 0.3, 1.25) 2.05s both;
+}
+
+.c9s-release-hero-tagline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.28em;
+  font: 500 4.1cqi / 1.05 var(--hero-display);
+  letter-spacing: 0.01em;
+}
+
+.c9s-release-hero-tagline span {
+  display: inline-block;
+  animation: c9s-hero-word 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) calc(2.45s + var(--w) * 0.15s) both;
+}
+
+.c9s-release-hero-tagline .c9s-release-hero-accent {
+  color: var(--hero-pink);
+}
+
+.c9s-release-hero-tagline span:last-child {
+  position: relative;
+}
+
+.c9s-release-hero-tagline span:last-child::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -0.12em;
+  left: 0;
+  height: 0.09em;
+  background: linear-gradient(90deg, var(--hero-pink), var(--c9s-cyan));
+  transform-origin: left;
+  animation: c9s-hero-sweep 0.7s ease-out 3.3s both;
+}
+
+.c9s-release-hero-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6cqi 1.8cqi;
+  margin: 1cqi 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--hero-mute);
+  font: 400 1.3cqi / 1.4 var(--hero-mono);
+}
+
+.c9s-release-hero-facts li {
+  display: flex;
+  align-items: center;
+  gap: 0.7cqi;
+  margin: 0;
+  animation: c9s-hero-fade 0.6s ease-out calc(3.5s + var(--f) * 0.15s) both;
+}
+
+.c9s-release-hero-facts li::before {
+  content: '';
+  width: 0.6cqi;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--c9s-cyan);
+  box-shadow: 0 0 0.8cqi var(--c9s-cyan);
+}
+
+@container (max-width: 560px) {
+  .c9s-release-hero-layout {
+    grid-template-columns: 1fr;
+    align-content: center;
+    gap: 1cqi;
+    padding-block: 6cqi;
+  }
+
+  .c9s-release-hero-beaker {
+    width: 44cqi;
+  }
+
+  .c9s-release-hero-copy {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .c9s-release-hero-eyebrow {
+    font-size: 2.6cqi;
+  }
+
+  .c9s-release-hero-eyebrow::before,
+  .c9s-release-hero-facts {
+    display: none;
+  }
+
+  .c9s-release-hero-version {
+    font-size: 22cqi;
+  }
+
+  .c9s-release-hero-tagline {
+    justify-content: center;
+    font-size: 7cqi;
+  }
+}
+
+@media (max-width: 600px) {
+  .c9s-release-hero {
+    aspect-ratio: 4 / 5;
+  }
+}
+
+@keyframes c9s-hero-fade { from { opacity: 0; } }
+@keyframes c9s-hero-slide { from { opacity: 0; transform: translateX(-1.5cqi); } }
+@keyframes c9s-hero-word { from { opacity: 0; transform: translateY(0.5em) rotate(2deg); filter: blur(4px); } }
+@keyframes c9s-hero-rise { from { opacity: 0; transform: translateY(18%) rotate(-7deg) scale(0.9); } }
+@keyframes c9s-hero-bob { 50% { transform: translateY(-2.5%) rotate(1.2deg); } }
+@keyframes c9s-hero-pulse { 50% { opacity: 0.55; transform: scale(0.92); } }
+@keyframes c9s-hero-out { to { opacity: 0; transform: translateY(-0.35em); filter: blur(6px); } }
+@keyframes c9s-hero-in { from { opacity: 0; transform: translateY(0.35em); filter: blur(6px); } }
+@keyframes c9s-hero-sweep { from { transform: scaleX(0); } }
+@keyframes c9s-hero-shine { 0%, 55% { background-position: 130% 0; } 100% { background-position: -30% 0; } }
+@keyframes c9s-hero-glint {
+  0% { opacity: 0; transform: scale(0.2); }
+  30% { opacity: 1; transform: scale(1.6); }
+  100% { opacity: 0; transform: scale(0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c9s-release-hero *,
+  .c9s-release-hero::before,
+  .c9s-release-hero *::before,
+  .c9s-release-hero *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .c9s-release-hero-glint {
+    display: none;
+  }
+}

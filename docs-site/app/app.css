@@ -19,6 +19,47 @@ body {
   scrollbar-width: thin;
 }
 
+button[data-theme-toggle] {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 1.625rem);
+  position: relative;
+}
+
+button[data-theme-toggle]::before {
+  grid-area: 1 / 1;
+  align-self: stretch;
+  justify-self: stretch;
+  border-radius: 9999px;
+  background: var(--color-fd-accent);
+  content: '';
+  pointer-events: none;
+  transition: transform 250ms ease;
+}
+
+.dark button[data-theme-toggle]::before {
+  transform: translateX(100%);
+}
+
+button[data-theme-toggle] > svg {
+  position: relative;
+  z-index: 1;
+  color: var(--color-fd-muted-foreground);
+  transition: color 250ms ease;
+}
+
+button[data-theme-toggle] > svg:first-of-type {
+  grid-area: 1 / 1;
+}
+
+button[data-theme-toggle] > svg:last-of-type {
+  grid-area: 1 / 2;
+}
+
+html:not(.dark) button[data-theme-toggle] > svg:first-of-type,
+html.dark button[data-theme-toggle] > svg:last-of-type {
+  color: var(--color-fd-accent-foreground);
+}
+
 .c9s-development-banner {
   position: relative;
   z-index: 50;
@@ -64,42 +105,9 @@ body {
   bottom: 0;
 }
 
-.c9s-home {
-  background:
-    radial-gradient(circle at top,
-      color-mix(in oklab, var(--color-fd-primary) 8%, transparent),
-      transparent 32rem),
-    var(--color-fd-background);
-}
-
 :root {
   --c9s-cyan: #20d9e7;
   --c9s-magenta: #d21b71;
-}
-
-.c9s-home::before,
-.c9s-home::after {
-  position: absolute;
-  z-index: -10;
-  width: 28rem;
-  height: 28rem;
-  border-radius: 9999px;
-  content: '';
-  filter: blur(100px);
-  opacity: 0.12;
-  pointer-events: none;
-}
-
-.c9s-home::before {
-  top: 8rem;
-  left: -16rem;
-  background: var(--c9s-magenta);
-}
-
-.c9s-home::after {
-  top: 34rem;
-  right: -16rem;
-  background: var(--c9s-cyan);
 }
 
 .c9s-grid {
@@ -126,23 +134,11 @@ body {
   background-size: 18px 18px;
 }
 
-.c9s-fabric-stage::after {
-  position: absolute;
-  inset: 0;
-  border: 1px solid color-mix(in oklab, var(--c9s-cyan) 22%, transparent);
-  border-radius: inherit;
-  content: '';
-  pointer-events: none;
-}
-
-.c9s-fabric-stage::before {
-  position: absolute;
-  inset: 15% 10% 5%;
-  border-radius: 9999px;
-  background: color-mix(in oklab, var(--c9s-cyan) 10%, transparent);
-  content: '';
-  filter: blur(48px);
-  pointer-events: none;
+.c9s-fabric-stage {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-fd-border) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-fd-border) 45%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
 .c9s-fabric-node {
@@ -157,12 +153,11 @@ body {
 }
 
 .c9s-fabric-link {
-  stroke: color-mix(in oklab, var(--c9s-cyan) 72%, var(--c9s-magenta));
-  stroke-width: 1.4;
+  stroke: var(--color-fd-muted-foreground);
+  stroke-width: 1.5;
   stroke-linecap: round;
-  stroke-dasharray: 0.055 0.025;
   vector-effect: non-scaling-stroke;
-  opacity: 0.68;
+  opacity: 0.55;
 }
 
 .c9s-try-c9s-link {
@@ -174,7 +169,134 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  button[data-theme-toggle]::before,
+  button[data-theme-toggle] > svg {
+    transition: none;
+  }
+
   .c9s-fabric-node {
     transition: none;
   }
+}
+
+.lab-yaml-layout {
+  --lab-yaml-gap: 4rem;
+  --lab-yaml-code-padding: 1.25rem;
+  /* Grid gap + editor padding + editor border + half the highlight border. */
+  --lab-yaml-anchor-offset: calc(var(--lab-yaml-gap) + var(--lab-yaml-code-padding) + 1.5px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: var(--lab-yaml-gap);
+}
+
+.lab-yaml-editor {
+  min-width: 0;
+  border: 1px solid #26394a;
+  border-radius: 1rem;
+  background: #0c1723;
+  color: #cad5e2;
+  box-shadow: 0 20px 45px -24px rgb(0 0 0 / 45%);
+}
+
+.lab-yaml-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #26394a;
+  color: #9badc2;
+  font: 0.75rem ui-monospace, monospace;
+}
+
+.lab-yaml-file-icon { color: #67e8f9; }
+.lab-yaml-key { color: #8cdaff; }
+.lab-yaml-value { color: #c6e6a3; }
+
+.lab-yaml-editor pre {
+  margin: 0;
+  padding: var(--lab-yaml-code-padding);
+  overflow-x: auto;
+  font: 0.8rem / 1.25rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  tab-size: 2;
+}
+
+.lab-yaml-region {
+  display: block;
+  min-width: max-content;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid;
+  border-radius: 0.75rem;
+}
+
+.lab-yaml-nodes { border-color: #22d3ee; background: rgb(34 211 238 / 6%); }
+.lab-yaml-links { border-color: #f472b6; background: rgb(244 114 182 / 6%); }
+
+.lab-yaml-callouts {
+  display: grid;
+  grid-template-rows: 10rem auto;
+  align-content: start;
+  padding-top: 17.75rem;
+}
+
+.lab-yaml-callout {
+  --callout-color: #0891b2;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.lab-yaml-link-callout { --callout-color: #d21b71; }
+.dark .lab-yaml-node-callout { --callout-color: #67e8f9; }
+.dark .lab-yaml-link-callout { --callout-color: #f472b6; }
+
+.lab-yaml-callout::before {
+  position: absolute;
+  top: 1rem;
+  right: calc(100% + 0.75rem);
+  width: calc(var(--lab-yaml-anchor-offset) - 0.75rem);
+  border-top: 1px solid var(--callout-color);
+  content: '';
+}
+
+.lab-yaml-callout::after {
+  position: absolute;
+  top: calc(1rem - 3px);
+  right: calc(100% + var(--lab-yaml-anchor-offset));
+  transform: translateX(50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--callout-color);
+  content: '';
+}
+
+.lab-yaml-number {
+  display: grid;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--callout-color) 45%, transparent);
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--callout-color) 8%, transparent);
+  color: var(--callout-color);
+  font: 600 0.7rem ui-monospace, monospace;
+}
+
+.lab-yaml-callout h3 { font-weight: 650; font-size: 1.1rem; }
+.lab-yaml-callout p { margin-top: 0.65rem; color: var(--color-fd-muted-foreground); font-size: 0.875rem; line-height: 1.75; }
+.lab-yaml-callout code { color: var(--color-fd-foreground); font-size: 0.8rem; }
+.lab-yaml-tag { display: inline-block; margin-top: 1rem; color: var(--callout-color); font-size: 0.75rem; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .lab-yaml-layout { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  .lab-yaml-callouts { grid-template-rows: auto; padding: 0; gap: 1.75rem; }
+  .lab-yaml-callout::before, .lab-yaml-callout::after { display: none; }
+}
+
+@media (max-width: 480px) {
+  .lab-yaml-editor pre { padding: 0.75rem; font-size: 0.65rem; line-height: 1rem; }
+  .lab-yaml-region { padding: 0.4rem; }
+  .lab-yaml-toolbar { padding: 0.85rem; }
 }

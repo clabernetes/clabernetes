@@ -7,11 +7,6 @@ on:
       - opened
       - synchronize
       - reopened
-    paths:
-      - docs/**
-      - docs-site/**
-      - wrangler.toml
-      - .github/workflows/docs-preview.yaml
 
 permissions:
   contents: read
@@ -22,8 +17,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  file-changes:
+    uses: ./.github/workflows/file-changes.yaml
+
   preview:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    needs: file-changes
+    if: needs.file-changes.outputs.docs == 'true' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     steps:
       - name: checkout

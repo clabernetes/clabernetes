@@ -20,7 +20,6 @@ device lifecycle, logs, resources, and status. Kind behavior (defaults, generate
 lifecycle commands, readiness) comes exclusively from an unmodified, pinned containerlab Go
 module, so a containerlab module bump admits new kinds without any clabernetes kind code.
 
-The model in one picture:
 
 <ArchitectureReactFlowDiagram />
 
@@ -250,27 +249,3 @@ container startup/readiness behavior; profile `statusProbes` add TCP/SSH checks.
 surface as bounded Node conditions and Kubernetes Events naming the logical Node, plan digest,
 and failing typed action.
 
-### Clabverter
-
-While the goal of clabernetes is to take a containerlab topology and "directly" translate it
-into a running clabernetes topology in your cluster, there are a few things that cannot be
-translated directly. Chief among those is startup configurations or any other type of file
-that you would like to mount to some path on one of your nodes. Containerlab solves this
-problem by letting you run binaries on your local machine and then mounting/copying files
-relative to where you ran the command into their appropriate location(s).
-
-As clabernetes is not running on your machine, and you only interact with it via the
-kubernetes api, we don't have any way to automagically copy or mount any files from your
-machine.
-
-To work around this, the "clabverter" tool was created. This is a very simple cli tool that
-can be pointed at a containerlab topology (either locally or at a URL). This tool determines
-if any files would be mounted when using this topology file, and if so renders kubernetes
-configmaps containing the file contents and a Topology that appropriately mounts them into
-the pods.
-
-clabverter can also skip the Topology object entirely: `--emitCRs` renders the primitive
-NodeProfile/Link/Node manifests directly, using the same compile and render pipeline as the
-in-cluster compiler (without Topology owner references). This is the preferred path when the
-aggregate source Topology would be too large to persist. Both paths validate identically and
-fail with the same sorted diagnostics before anything reaches the cluster.

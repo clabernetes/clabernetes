@@ -1,0 +1,32 @@
+---
+name: file changes
+
+on:
+  workflow_call:
+    outputs:
+      code:
+        description: Changes requiring Go, image, and e2e jobs
+        value: ${{ jobs.filter.outputs.code }}
+      docs:
+        description: Changes requiring documentation checks and preview
+        value: ${{ jobs.filter.outputs.docs }}
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  filter:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          # PRs use the complete PR diff; pushes compare with the previous branch tip.
+          base: ${{ github.ref }}
+          predicate-quantifier: some-with-excludes
+          filters: .github/filters.yaml

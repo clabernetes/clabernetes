@@ -54,8 +54,8 @@ const nodeCRKind = "Node"
 type Controller struct {
 	*clabernetescontrollers.BaseController
 
-	reconciler *Reconciler
-	session    *PlannerSessionReconciler
+	reconciler        *Reconciler
+	session           *PlannerSessionReconciler
 	dependencyRetryMu sync.Mutex
 	dependencyRetries map[apimachinerytypes.NamespacedName]dependencyRetry
 

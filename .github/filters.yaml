@@ -1,0 +1,24 @@
+---
+# Unknown paths run code CI conservatively. Only known documentation inputs are excluded.
+# Use some-with-excludes so each exclusion applies to the entire code filter.
+code:
+  - '**'
+  - '!docs/**'
+  - '!docs-site/**'
+  - '!README.md'
+  - '!wrangler.toml'
+  - '!.github/workflows/docs-*.yaml'
+
+docs:
+  - 'docs/**'
+  - 'docs-site/**'
+  - 'README.md'
+  - 'wrangler.toml'
+  - 'assets/crd/**'
+  - 'Makefile'
+  - '.mk/**'
+  - '.gitattributes'
+  - '.github/filters.yaml'
+  - '.github/workflows/file-changes.yaml'
+  - '.github/workflows/cicd.yaml'
+  - '.github/workflows/docs-*.yaml'

@@ -5,21 +5,22 @@ on:
   push:
     branches:
       - main
-    paths:
-      - docs/**
-      - docs-site/**
-      - wrangler.toml
-      - .github/workflows/docs-main-preview.yaml
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: docs-main-preview
   cancel-in-progress: true
 
 jobs:
+  file-changes:
+    uses: ./.github/workflows/file-changes.yaml
+
   preview:
+    needs: file-changes
+    if: needs.file-changes.outputs.docs == 'true'
     runs-on: ubuntu-24.04
     steps:
       - name: checkout

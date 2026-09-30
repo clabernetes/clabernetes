@@ -5,7 +5,7 @@ import {
   MarkerType,
   Position,
   ReactFlow,
-  type Edge,
+  type BuiltInEdge,
   type Node,
   type NodeProps,
 } from '@xyflow/react';
@@ -18,7 +18,6 @@ import {
   ScrollText,
   Server,
   Settings,
-  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -30,13 +29,15 @@ type ArchitectureFlowNodeData = {
   detail: string;
   icon: LucideIcon;
   title: string;
-  tone: 'cyan' | 'emerald' | 'gray' | 'indigo' | 'magenta';
   chips?: string[];
 };
 
 type HandlePosition = 'bottom' | 'left' | 'right' | 'top';
 
 const SHOW_NODE_CONNECTORS = false;
+const CARD_STYLE = { width: 280, height: 152 };
+// Keep connector lead-ins shorter than half the narrowest row gap.
+const EDGE_PATH_OPTIONS = { offset: 12 };
 
 const reactFlowPositions: Record<HandlePosition, Position> = {
   bottom: Position.Bottom,
@@ -55,125 +56,116 @@ const flowNodeHandles: Record<
   links: { source: [], target: ['top', 'bottom'] },
   'node-controller': { source: ['top', 'bottom'], target: [] },
   'link-controller': { source: ['top', 'bottom'], target: ['top'] },
-  'planning-pods': { source: ['bottom'], target: ['top'] },
-  'device-pods': { source: [], target: ['top'] },
+  'planning-pods': { source: ['right'], target: ['top'] },
+  'device-pods': { source: [], target: ['top', 'left'] },
 };
 
 const flowNodes: Node<ArchitectureFlowNodeData>[] = [
   {
     id: 'topology',
     type: 'architecture',
-    position: { x: 210, y: 24 },
-    style: { width: 520 },
+    position: { x: 344, y: 24 },
+    style: CARD_STYLE,
     data: {
       badge: 'auxiliary · compiler layer',
       detail: 'containerlab + existing knobs → primitives · owns, corrects drift, prunes',
       icon: Boxes,
       title: 'Topology CR',
-      tone: 'magenta',
     },
   },
   {
     id: 'node-profile',
     type: 'architecture',
     position: { x: 24, y: 220 },
-    style: { width: 250 },
+    style: CARD_STYLE,
     data: {
       badge: 'policy',
       detail: 'reusable workload policy',
       icon: ScrollText,
       title: 'NodeProfile',
-      tone: 'gray',
     },
   },
   {
     id: 'nodes',
     type: 'architecture',
-    position: { x: 345, y: 220 },
-    style: { width: 250 },
+    position: { x: 344, y: 220 },
+    style: CARD_STYLE,
     data: {
       badge: 'per node',
       detail: 'explicit reference + payload',
       icon: Box,
       title: 'Node CRs',
-      tone: 'cyan',
     },
   },
   {
     id: 'links',
     type: 'architecture',
-    position: { x: 666, y: 220 },
-    style: { width: 250 },
+    position: { x: 664, y: 220 },
+    style: CARD_STYLE,
     data: {
       badge: 'per wire',
       detail: 'one wire per resource',
       icon: Cable,
       title: 'Link CRs',
-      tone: 'indigo',
     },
   },
   {
     id: 'node-controller',
     type: 'architecture',
-    position: { x: 195, y: 438 },
-    style: { width: 300 },
+    position: { x: 140, y: 416 },
+    style: CARD_STYLE,
     data: {
       badge: 'reconcile',
       detail: 'image metadata · one Deployment per Node/group · status',
       icon: Box,
       title: 'Node controller',
-      tone: 'cyan',
       chips: ['fabric <name>-vx', 'expose svc', 'alias svc'],
     },
   },
   {
     id: 'link-controller',
     type: 'architecture',
-    position: { x: 550, y: 438 },
-    style: { width: 300 },
+    position: { x: 548, y: 416 },
+    style: CARD_STYLE,
     data: {
       badge: 'reconcile',
       detail: 'validates links · allocates cluster-wide tunnel ids',
       icon: Cable,
       title: 'Link controller',
-      tone: 'indigo',
     },
   },
   {
     id: 'planning-pods',
     type: 'architecture',
-    position: { x: 24, y: 660 },
-    style: { width: 270 },
+    position: { x: 140, y: 720 },
+    style: CARD_STYLE,
     data: {
       badge: 'short-lived · locked down',
       detail: 'containerlab module records a device plan → immutable ConfigMap',
       icon: Settings,
       title: 'Planning Pods',
-      tone: 'gray',
     },
   },
   {
     id: 'device-pods',
     type: 'architecture',
-    position: { x: 150, y: 905 },
-    style: { width: 700 },
+    position: { x: 548, y: 720 },
+    style: CARD_STYLE,
     data: {
       badge: 'one per Node / group',
-      detail:
-        'kubelet runs the real device image · chassis cards are extra containers of the same Pod',
+      detail: 'kubelet runs each device image · chassis cards share the Pod',
       icon: Server,
       title: 'Device Pods',
-      tone: 'emerald',
       chips: [
         'preparation init',
-        'connectivity sidecar · in-Pod VXLAN',
+        'VXLAN sidecar',
         'device container(s)',
       ],
     },
   },
 ];
 
-const flowEdges: Edge[] = [
+const flowEdges: BuiltInEdge[] = [
   {
     id: 'topology-node-profile',
     source: 'topology',
@@ -181,6 +173,7 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
+    pathOptions: EDGE_PATH_OPTIONS,
     label: 'emits',
   },
   {
@@ -190,6 +183,7 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
+    pathOptions: EDGE_PATH_OPTIONS,
   },
   {
     id: 'topology-links',
@@ -198,6 +192,7 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
+    pathOptions: EDGE_PATH_OPTIONS,
   },
   {
     id: 'node-controller-nodes',
@@ -206,6 +201,7 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-top',
     targetHandle: 'target-bottom',
     type: 'smoothstep',
+    pathOptions: EDGE_PATH_OPTIONS,
     label: 'reconciles',
   },
   {
@@ -215,6 +211,7 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-top',
     targetHandle: 'target-bottom',
     type: 'smoothstep',
+    pathOptions: EDGE_PATH_OPTIONS,
   },
   {
     id: 'node-profile-nodes',
@@ -223,6 +220,7 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-right',
     targetHandle: 'target-left',
     type: 'smoothstep',
+    pathOptions: EDGE_PATH_OPTIONS,
     label: 'ref',
   },
   {
@@ -232,6 +230,7 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
+    pathOptions: EDGE_PATH_OPTIONS,
     label: 'plans',
   },
   {
@@ -241,16 +240,18 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
+    pathOptions: { ...EDGE_PATH_OPTIONS, stepPosition: 0.25 },
     label: 'creates',
   },
   {
     id: 'planning-pods-device-pods',
     source: 'planning-pods',
     target: 'device-pods',
-    sourceHandle: 'source-bottom',
-    targetHandle: 'target-top',
+    sourceHandle: 'source-right',
+    targetHandle: 'target-left',
     type: 'smoothstep',
-    label: 'plan ConfigMap',
+    pathOptions: EDGE_PATH_OPTIONS,
+    label: 'plan',
   },
   {
     id: 'link-controller-device-pods',
@@ -259,6 +260,7 @@ const flowEdges: Edge[] = [
     sourceHandle: 'source-bottom',
     targetHandle: 'target-top',
     type: 'smoothstep',
+    pathOptions: EDGE_PATH_OPTIONS,
     label: 'tunnel ids',
   },
 ];
@@ -269,7 +271,7 @@ function ArchitectureFlowNode({ data, id }: NodeProps) {
   const handles = flowNodeHandles[id] ?? { source: [], target: [] };
 
   return (
-    <div className="c9s-react-flow-node" data-tone={flowData.tone}>
+    <div className="c9s-react-flow-node">
       {handles?.target.map((position) => (
         <Handle
           className="c9s-react-flow-handle"
@@ -344,13 +346,6 @@ export function ArchitectureReactFlowDiagram() {
       role={isFullscreen ? 'dialog' : undefined}
     >
       <div className="c9s-react-flow-heading">
-        {/* <div>
-          <p className="c9s-react-flow-kicker">
-            <Sparkles aria-hidden="true" className="size-3" />
-            comparison
-          </p>
-          <p className="c9s-react-flow-title-large">React Flow · smoothstep edges</p>
-        </div> */}
         {isFullscreen ? (
           <span className="c9s-react-flow-status">press esc to exit</span>
         ) : null}
@@ -366,7 +361,7 @@ export function ArchitectureReactFlowDiagram() {
           defaultEdgeOptions={{
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              // color: '#20d9e7',
+              color: 'var(--color-fd-muted-foreground)',
             },
           }}
           edges={flowEdges}

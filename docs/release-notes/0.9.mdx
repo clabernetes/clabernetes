@@ -2,70 +2,186 @@
 title: "0.9"
 ---
 
-Unreleased · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.8.0...main)
+import { ReleaseRuntimeDiagram } from '@/components/release-runtime-diagram';
+
+2026-09-30 · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.8.0...main)
+
+<ReleaseHero
+  from="0.8.0"
+  version="0.9.0"
+  tagline="a new c9s era"
+  highlight="c9s"
+  facts={['direct device runtime', 'routed management mesh', 'carrier-aware links']}
+/>
 
 <Callout type='warn'>
 
 This release replaces the nested launcher runtime with the direct device runtime and removes
-launcher-era API fields. Upgrading is destructive: back up your resources and plan a full
-uninstall and reinstall, see [Upgrading from 0.8](#upgrading-from-08) below. There is no
-in-place `helm upgrade` path and no nested-runtime fallback in this release.
+launcher-era API fields.
+
+**Due to the massive refactoring that has happened, upgrading from older release is not planned. You will have to uninstall the old version and start afresh.**
+
+Contact the project maintainers in [Discord](https://discord.gg/3v7J6k2) or GitHub Discussions.
 
 </Callout>
 
+C9s v0.9.0 changes how labs run, connect, and recover. Devices have become native
+Kubernetes containers, management networking has gained configurable addressing and a routed
+mesh, and links propagate carrier loss across workers. Saved device configuration can survive
+Pod replacement, while reusable planners and startup admission controls support larger labs.
+
 ## The direct device runtime
+
+This is the crux of the major refactoring.
 
 Every network device now runs as a regular application container in a c9s-managed Pod. The
 launcher image, the Docker daemon inside the Pod, the containerlab executable, image import,
-and nested container discovery are gone. What this changes in practice:
+and nested container discovery **are all gone**. What this changes in practice:
 
 - `kubectl logs`, `kubectl exec`, resource limits, and Pod status address the actual device
   container. Chassis cards and grouped nodes are visible application containers of one Pod.
 - The kubelet performs the only image pull, with native `imagePullPolicy` and
   `imagePullSecrets`. c9s resolves only registry metadata (manifests and config blobs) and
-  fails readiness if the running image diverges from the planned digest.
-- Kind behavior comes exclusively from the pinned containerlab 0.78.0 Go module, executed in
-  short-lived locked-down planning Pods that record a deterministic device plan. A containerlab
-  module bump admits newly registered kinds without c9s code changes.
+  fails readiness if the running image diverges from the planned digest. No more pull through pains and/or docker daemon configuration juggling.
+- C9s still leverages Containerlab's knowledge of NOS kind behavior. This knowledge comes from the pinned containerlab 0.79.0 Go module. Four reusable planner worker pods contain the containerlab executable and "ask Containerlab" how to run and configure each network device. See
+  [Planning and startup at scale](#planning-and-startup-at-scale).
 - Each device Pod boots through a preparation init container that stages and digest-verifies
   every generated and payload artifact, and a restartable privileged connectivity init-sidecar
   that gates device start on the accepted cold-start interface set and applies live Link
   changes.
 
-## Connectivity realization
+<ReleaseRuntimeDiagram kind="startup" />
 
-Each device Pod's privileged connectivity sidecar realizes its own links; no node-resident
-agent is installed. Cross-Pod frames ride the fabric wire, a sidecar-to-sidecar UDP transport
-keyed by the Link's namespace-unique wire id, while same-Pod, loopback, and local veth state
-stays inside the Pod sandbox. The device always sees a plain veth interface. Wire semantics
-(L2 point-to-point, MTU intent, carrier propagation, live rewires, cleanup, rescheduling) are
-preserved. The `connectivity` field is removed from Topology and Link specs: there is exactly
-one realization, and the experimental slurpeeth transport is retired.
+## Links, carrier loss, and recovery
 
-## The management network is one L2 domain
+Like before, the point-to-point links between the nodes are laid out. However, in this release the transport of these p2p links has been changed from the VXLAN to the UDP-based tunnels. The network device always sees a plain veth interface and has not recollection of the tunnel semantics. The wiring mechanics
+(L2 point-to-point, MTU intent, carrier propagation, live rewires, cleanup, rescheduling) are handled by the c9s controller.
 
-The management subnet spans the namespace as a single broadcast domain, matching containerlab's
-management network. Devices reach each other's management addresses device-to-device, so
-hardcoded telemetry targets, syslog collectors, and plain ping across Pods all work, while the
-management gateway stays strictly Pod-local. Nodes joining or leaving the namespace are picked
-up automatically without restarting other Pods. See the
-[management network guide](/docs/guides/management-network).
+### Link loss detection
+
+Shutting down or removing an interface at one end makes the peer see loss of carrier
+(`NO-CARRIER` / `LOWERLAYERDOWN`), while its interface stays administratively up. Protocols
+can react to the cable failure instead of waiting for their hold timers. If a Pod dies,
+heartbeats take its peer links carrier-down within a few seconds; carrier returns when the
+replacement endpoint converges. Carrier messages, heartbeats, and frames use the same UDP
+socket and network path.
+
+### Fragmentation and MTU
+
+To allow the default 9500-byte link MTU cross a typical 1500-byte cluster pod networks without
+lowering the lab's link MTUs we fragment the jumbo frames to fit the Pod network and either reassemble the complete frame or drop it. VLAN tags are preserved; full-size QinQ payloads need four extra
+bytes of link MTU. Losing any fragment loses the frame, so large frames amplify underlay loss.
+
+### Changing links in a running lab
+
+Kinds whose plans support `Live` link changes receive connectivity updates in place. For
+non-live `Restart` and `Recreate` changes, c9s replaces the Pod directly, avoiding devices such
+as cEOS getting stuck after a stop signal. Every device sharing that Pod restarts with it.
+
+See [Link wire semantics](/docs/guides/link-wire) for carrier, loss, MTU, and timing limits.
+
+## Controllable management networking and a routed mesh
+
+c9s now allocates management addresses before devices start. Choose IPv4 and IPv6 subnets,
+gateways, and automatic allocation ranges through the containerlab `mgmt:` block in a Topology,
+or [`spec.mgmt`](/docs/crd/node-profile#spec-mgmt) on a NodeProfile. Pin individual nodes with [`mgmt-ipv4`](/docs/crd/node#spec-mgmt-ipv4) / [`mgmt-ipv6`](/docs/crd/node#spec-mgmt-ipv6); automatic
+allocation works around pinned addresses and rejects duplicates or gateway collisions.
+Without an override, IPv4 uses `172.20.20.0/24`; IPv6 allocation requires an IPv6 subnet.
+
+For example, this block inside a containerlab definition selects a subnet and limits automatic
+allocation to part of it:
+
+```yaml
+mgmt:
+  ipv4-subnet: 10.20.30.0/24
+  ipv4-gw: 10.20.30.1
+  ipv4-range: 10.20.30.128/25
+```
+
+Devices in the namespace reach each other's management addresses across Pods and workers,
+with peer source addresses preserved. Node names, aliases, and chassis component names resolve
+to management addresses inside devices, so telemetry collectors, syslog targets, and tools can
+use the same names and addresses as a local containerlab lab. Membership and Pod-address changes
+propagate through a shared peer directory without restarting the other devices.
+
+The mesh routes traffic over a dedicated management tunnel. Proxy ARP and IPv6 neighbor
+discovery provide peer reachability without flooding traffic or using DNS for discovery.
+
+<ReleaseRuntimeDiagram kind="networks" />
+
+See the [management network guide](/docs/guides/management-network) and
+[management opt-out](/docs/concepts/containerlab-differences) for details.
+
+## Planning and startup at scale
+
+The Helm chart starts four reusable planner workers by default.
+> Recall, that planners are the pods that contain the "containerlab's knowledge" about the network kinds.
+
+The four planner pods will be enough for most labs, where each planner pod can handle multiple device plans concurrently.
+
+With `plannerPool.replicas` Helm variable you control how much planners you need; `plannerPool.enabled: false` selects disposable planning Pods.
+
+Two optional controls pace large deployments through [`Config.spec.rollout`](/docs/crd/config#spec-rollout) installation-wide
+and [`Topology.spec.rollout`](/docs/crd/topology#spec-rollout) per lab:
+
+| Setting | What it limits | When the next work starts |
+| --- | --- | --- |
+| [`batchSize`](/docs/crd/config#spec-rollout-batchsize) | How many pods are admitted together | After the admitted Pods have network-ready sandboxes |
+| [`maxConcurrentPerHost`](/docs/crd/config#spec-rollout-maxconcurrentperhost) | Device boots on each Kubernetes worker | After a primary device container passes its startup probe |
+
+See [Measuring large topology startup](/docs/guides/scaling-performance) for conditions and
+limits.
+
+## Registry access
+
+The controller can resolve image metadata through registry mirrors, including Harbor proxy
+projects with path rewriting, using [`Config.spec.imagePull.registryMetadataMirrors`](/docs/crd/config#spec-imagepull-registrymetadatamirrors).
+[`registryMetadataTrust`](/docs/crd/config#spec-imagepull-registrymetadatatrust) configures private CAs or HTTP for those metadata connections. Image
+references retain their original identity; worker container-runtime mirror and trust settings
+still control kubelet pulls. A failed configured mirror fails planning without falling back to
+the public registry.
+
+Missing or unreadable pull Secrets now produce explicit Node conditions,
+and planning recovers when the Secret becomes readable. See [Image pulling](/docs/guides/image-pull) for more details.
+
+## Service exposure
+
+LoadBalancer Services can request either pinned or automatically allocated management addresses,
+so devices can be exposed at their management IP without pinning every node. This changes the
+behavior of [`useNodeMgmtIpv4Address`](/docs/crd/node-profile#spec-expose-usenodemgmtipv4address) / [`useNodeMgmtIpv6Address`](/docs/crd/node-profile#spec-expose-usenodemgmtipv6address).
 
 ## Expanded node vocabulary
 
 The Node spec and Topology compiler accept more of the native containerlab vocabulary:
-`startup-delay`, `restart-policy` (`always`/`unless-stopped`), `image-pull-policy`, `cpu` and
-`memory` (device-container limits), `healthcheck` (merged over the image OCI healthcheck),
-`aliases` (extra same-namespace Service names for the node's Pod), `link-apply-mode`, `group`,
-and `topology.groups` inheritance. Compilation is fail-closed: vocabulary the direct runtime
-deliberately rejects fails with a diagnostic stating why, and only cosmetic Docker-only
-constructs are accepted with warnings. See
-[Differences from containerlab](/docs/concepts/containerlab-differences).
+[`startup-delay`](/docs/crd/node#spec-startup-delay), [`restart-policy`](/docs/crd/node#spec-restart-policy) (`always`/`unless-stopped`), [`image-pull-policy`](/docs/crd/node#spec-image-pull-policy), [`cpu`](/docs/crd/node#spec-cpu) and
+[`memory`](/docs/crd/node#spec-memory) (device-container limits), [`healthcheck`](/docs/crd/node#spec-healthcheck) (merged over the image OCI healthcheck),
+[`aliases`](/docs/crd/node#spec-aliases) (extra same-namespace Service names for the node's Pod), [`link-apply-mode`](/docs/crd/node#spec-link-apply-mode), [`group`](/docs/crd/node#spec-group),
+and `topology.groups` inheritance.
+
+See [Differences from containerlab](/docs/concepts/containerlab-differences).
+
+## Compatibility and clearer failure reporting
+
+- Topology compilation sanitizes names Kubernetes cannot carry, such as uppercase node names,
+  while rejecting collisions. Conflicting child resource names are detected before creation,
+  and reserved container mount paths fail with a diagnostic naming the path.
+- Failed topology [`exec`](/docs/crd/node#spec-exec) commands are logged without putting an otherwise running device into
+  a crash loop. Grouped nodes can share identical payloads and image-derived ports; explicit
+  port collisions still fail planning.
+- Topology status uses a status subresource, so reporting progress no longer overwrites spec
+  defaults. [`status.observedGeneration`](/docs/crd/topology) lets clients distinguish readiness for the current
+  definition, and Node readiness is invalidated when relevant inputs change.
+- Deployment apply failures, rejected plans, and artifact-name conflicts are visible on the
+  Node instead of only in manager logs. SSH probe passwords that coincide with declared or
+  generated device defaults no longer cause false plan rejection; other Secret values remain
+  screened from plan artifacts.
+- A new [Cumulus VX example](https://github.com/clabernetes/clabernetes/blob/main/examples/basic/cumulus-multitool.yaml)
+  and opt-in e2e suite cover deployment and connectivity with a Linux peer.
 
 ## Breaking API changes
 
-The `LauncherProfile` CRD is renamed to `NodeProfile` (`Node.spec.profileRef`,
-`Node.status.appliedProfile`); its spec is unchanged and carries reusable direct-workload
+The `LauncherProfile` CRD is renamed to `NodeProfile` ([`Node.spec.profileRef`](/docs/crd/node#spec-profileref),
+[`Node.status.appliedProfile`](/docs/crd/node#status-appliedprofile)); it carries reusable direct-workload
 policy (expose, scheduling, resources, persistence, probes, image pull). Device privilege and
 kind-owned container requirements come from the imported package plan.
 
@@ -73,95 +189,58 @@ Launcher-era fields are removed from `Config`, `NodeProfile`, and `Topology`: la
 image/log/env settings, `privilegedLauncher`, containerlab debug/timeout/version, Docker
 config and daemon config, insecure registries, pull-through, CRI overrides, by-kind resource
 defaults, and Docker management-network fields. `Link.status.error` is replaced by the
-`Accepted` condition, and `Node.status.probeStatuses` is removed.
+[`Accepted`](/docs/crd/link#status-conditions) condition, `Link.status.tunnelID` becomes [`Link.status.wireID`](/docs/crd/link#status-wireid), and
+`Node.status.probeStatuses` is removed. Per-node wire discovery Services use `<node>-wire`
+instead of `<node>-vx`.
+
+`disableExpose` is removed from Topology and NodeProfile. Replace `disableExpose: true` with
+[`spec.expose.exposeType: None`](/docs/crd/node-profile#spec-expose-exposetype); wire and alias Services are unaffected. See
+[#333](https://github.com/clabernetes/clabernetes/pull/333).
 
 Two global settings that no longer controlled anything are also gone: the Topology and Config
 `naming` fields and the Config `inClusterDNSSuffix` field, together with the
 `globalConfig.naming` and `globalConfig.inClusterDNSSuffix` Helm values. Generated resources
 are named after the containerlab node inside the Topology namespace, and services resolve
 without a configurable suffix. Drop the fields from manifests and values files before
-installing; a manifest that still sets them is rejected by the new schemas.
+installing; a manifest that still sets them is rejected by the new schemas. See
+[#335](https://github.com/clabernetes/clabernetes/pull/335).
 
 Two node-definition fields change meaning:
 
-- `ports` entries are destination ports only (`22/tcp`). The Docker-style `host:container`
-  form is rejected on Nodes, and two-sided entries inside a Topology `definition:` are
+- [`ports`](/docs/crd/node#spec-ports) entries are destination ports only (`22/tcp`). The Docker-style `host:container`
+  form is rejected on Nodes, and two-sided entries inside a Topology [`definition:`](/docs/crd/topology#spec-definition) are
   normalized to their destination port. c9s allocates the service side and records both halves
-  in `Node.status.exposedPorts`.
-- `labels` in a Topology `definition:` become Kubernetes labels on the emitted Node, its
+  in [`Node.status.exposedPorts`](/docs/crd/node#status-exposedports).
+- `labels` in a Topology [`definition:`](/docs/crd/topology#spec-definition) become Kubernetes labels on the emitted Node, its
   Deployment, and Pods; there is no `Node.spec.labels`. c9s-owned labels move to the qualified
   `c9s.run/` namespace. The old `clabernetes/...` label keys are no longer written or selected,
   while annotation keys keep their existing names.
 
-`useNodeMgmtIpv4Address` and `useNodeMgmtIpv6Address` now request the node's management address
+[`useNodeMgmtIpv4Address`](/docs/crd/node-profile#spec-expose-usenodemgmtipv4address) and [`useNodeMgmtIpv6Address`](/docs/crd/node-profile#spec-expose-usenodemgmtipv6address) now request the node's management address
 as the LoadBalancer IP whether the address is pinned or allocated. In 0.8, containerlab allocated
-unpinned addresses inside the launcher Pod, so these options read only a pinned `mgmt-ipv4` or
-`mgmt-ipv6`, and unpinned nodes got an IP chosen by the LoadBalancer provider. c9s now allocates
+unpinned addresses inside the launcher Pod, so these options read only a pinned [`mgmt-ipv4`](/docs/crd/node#spec-mgmt-ipv4) or
+[`mgmt-ipv6`](/docs/crd/node#spec-mgmt-ipv6), and unpinned nodes got an IP chosen by the LoadBalancer provider. c9s now allocates
 every management address itself, and the Service requests the address reported in
-`Node.status.directManagement`. If you enable either option, pin only some nodes, and your
-address pool covers only the pinned addresses, pin the remaining nodes or set `ipv4-range` so
+[`Node.status.directManagement`](/docs/crd/node#status-directmanagement). If you enable either option, pin only some nodes, and your
+address pool covers only the pinned addresses, pin the remaining nodes or set [`ipv4-range`](/docs/crd/node-profile#spec-mgmt-ipv4-range) so
 allocated addresses fall inside the pool; otherwise their Services stay pending. See
 [Service exposure](/docs/guides/expose-configuration#using-management-ips).
 
 ### Removed node vocabulary
 
 The Node spec carries only the vocabulary the direct runtime can realize. Unknown fields are
-rejected at apply time, and a Topology `definition:` fails compilation with a diagnostic naming
+rejected at apply time, and a Topology [`definition:`](/docs/crd/topology#spec-definition) fails compilation with a diagnostic naming
 each unsupported field and its location.
 
 | Removed | Use instead |
 | --------- | ------------- |
-| `publish`, `sandbox`, `kernel`, `wait-for`, top-level `SANs` | Nothing, containerlab itself removed these. `SANs` moved to `certificate.sans` |
+| `publish`, `sandbox`, `kernel`, `wait-for`, top-level `SANs` | Nothing, containerlab itself removed these. `SANs` moved to [`certificate.sans`](/docs/crd/node#spec-certificate-sans) |
 | `runtime` | Nothing, devices run as regular Kubernetes containers |
 | `auto-remove` | Nothing, Kubernetes owns container lifecycle |
 | `pid-mode`, `cgroupns-mode` | Nothing, these Docker namespace-sharing modes have no Pod mapping |
-| `cpu-set` | Use `cpu`/`memory` limits; CPU pinning has no portable Pod mapping |
+| `cpu-set` | Use [`cpu`](/docs/crd/node#spec-cpu)/[`memory`](/docs/crd/node#spec-memory) limits; CPU pinning has no portable Pod mapping |
 | `credentials` | Referenced Secrets; imported kind default credentials still apply |
 | `stages` | Nothing, stage ordering assumes the whole lab on one host |
-| `labels` | `metadata.labels` on the Node, automatic in a Topology `definition:` |
+| `labels` | `metadata.labels` on the Node, automatic in a Topology [`definition:`](/docs/crd/topology#spec-definition) |
 | `position` | Nothing, it feeds containerlab graphs, which c9s does not produce |
 | `extras.mysocket-proxy` | Nothing, mysocketctl is gone along with the `publish` field that fed it |
-
-## Upgrading from 0.8
-
-All c9s custom resources now use `apiVersion: c9s.run/v1alpha1` instead of
-`clabernetes.containerlab.dev/v1alpha1`. There is no automatic migration of existing custom
-resource instances; treat this as a clean cutover. Uninstalling c9s deletes all Topology, Node,
-Link, NodeProfile, and Config resources when the CRDs are removed.
-
-1. Export your manifests before uninstalling:
-
-   ```bash
-   kubectl get topologies,nodes,links,launcherprofiles,configs -A -o yaml > backup.yaml
-   ```
-
-2. Uninstall the existing c9s install and remove its CRDs:
-
-   ```bash
-   make uninstall
-   ```
-
-   Or manually uninstall the Helm release, delete all `*.c9s.run` and
-   `*.clabernetes.containerlab.dev` CRDs, then delete the `c9s` namespace.
-
-3. Update every manifest to the new API group (`apiVersion: c9s.run/v1alpha1`), rename
-   `kind: LauncherProfile` to `kind: NodeProfile` and `Node.spec.launcherProfileRef` to
-   `Node.spec.profileRef`, and remove any field listed above.
-
-4. Install the new c9s release (Helm install).
-
-5. Re-apply your updated manifests.
-
-The repository `make install` target performs the API-group check before Helm. It allows
-same-group version changes, but refuses a legacy/new group crossing and prints the destructive
-cleanup command. With `kubectl`, the fully qualified resource names change accordingly, for
-example `kubectl get nodes.clabernetes.containerlab.dev` becomes `kubectl get nodes.c9s.run`.
-
-Rolling back after the CRD replacement means reinstalling the prior release with its matching
-CRDs and restoring the backed-up resources.
-
-## Compatibility
-
-Supported kinds come from the imported containerlab 0.78.0 registry. c9s maintains no kind
-catalog of its own, and a containerlab module bump admits newly registered kinds without c9s
-changes.
