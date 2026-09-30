@@ -1,0 +1,49 @@
+# NVIDIA Cumulus VX connected to a network multitool host.
+# Create a kubernetes.io/dockerconfigjson Secret named regcred in the
+# same namespace before applying this Topology; the Cumulus image is restricted.
+# NS=<namespace>
+# kubectl create namespace $NS && \
+# kubectl -n $NS create secret docker-registry regcred --docker-server=ghcr.io --docker-username="$(gh api user --jq .login)" --docker-password="$(gh auth token --hostname github.com)"
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: cumulus-multitool
+spec:
+  statusProbes:
+    enabled: true
+    nodeProbeConfigurations:
+      cumulus:
+        startupSeconds: 1200
+        sshProbeConfiguration:
+          username: cumulus
+          password: Clab123!
+          port: 22
+      multitool:
+        startupSeconds: 120
+        sshProbeConfiguration:
+          username: admin
+          password: multit00l
+          port: 22
+  imagePull:
+    pullSecrets:
+      - regcred
+  definition:
+    containerlab: |
+      name: cumulus-multitool
+      topology:
+        nodes:
+          cumulus:
+            kind: nvidia_cumulusvx
+            image: ghcr.io/clab-labs/nvidia_cumulusvx:5.16.1
+            startup-config: |
+              nv set interface swp1
+              nv set interface swp1 ipv4 address 192.0.2.0/31
+
+          multitool:
+            kind: linux
+            image: ghcr.io/srl-labs/network-multitool:latest
+            exec:
+              - ip addr add 192.0.2.1/31 dev eth1
+
+        links:
+          - endpoints: ["cumulus:swp1", "multitool:eth1"]

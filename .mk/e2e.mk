@@ -27,6 +27,8 @@ E2E_TEST_TIMEOUT ?= 30m
 endif
 # Optional go test selection flags, e.g. -run=TestStartupPerHostAdmission.
 E2E_TEST_ARGS ?=
+# Optional package selection for focused runs against an already installed cluster.
+E2E_TEST_PACKAGES ?= ./e2e/...
 E2E_INSTALL_NAMESPACE ?= c9s-e2e
 E2E_INSTALL_RELEASE ?= c9s-e2e
 CLUSTER ?= kind
@@ -65,11 +67,13 @@ e2e-tools: | $(E2E_KIND) $(E2E_KUBECTL) $(E2E_HELM) $(E2E_YQ) ## Download pinned
 	@ln -sf "kubectl-$(KUBECTL_VERSION)" "$(E2E_TOOLS_DIR)/kubectl"
 	@ln -sf "helm-$(HELM_VERSION)" "$(E2E_TOOLS_DIR)/helm"
 	@ln -sf "yq-$(YQ_VERSION)" "$(E2E_TOOLS_DIR)/yq"
-	@if ! command -v docker >/dev/null 2>&1; then \
-		echo "--> E2E: missing required tool: docker"; \
-		exit 1; \
+	@if [ "$(CLUSTER)" = kind ]; then \
+		if ! command -v docker >/dev/null 2>&1; then \
+			echo "--> E2E: missing required tool: docker"; \
+			exit 1; \
+		fi; \
+		docker info >/dev/null 2>&1 || { echo "--> E2E: docker is not reachable"; exit 1; }; \
 	fi
-	@docker info >/dev/null 2>&1 || { echo "--> E2E: docker is not reachable"; exit 1; }
 	@echo "--> E2E: tools are available in $(E2E_TOOLS_DIR)"
 
 .PHONY: e2e-cluster
@@ -105,7 +109,7 @@ e2e-deploy: e2e-images ## Install the local clabernetes chart using the locally 
 
 .PHONY: e2e-run
 e2e-run: ## Run the e2e Go tests against the caller-selected kube context
-	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -race -count=1 -timeout=$(E2E_TEST_TIMEOUT) -coverprofile=cover.out $(E2E_TEST_ARGS) ./e2e/...
+	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -race -count=1 -timeout=$(E2E_TEST_TIMEOUT) -coverprofile=cover.out $(E2E_TEST_ARGS) $(E2E_TEST_PACKAGES)
 
 .PHONY: e2e-test
 e2e-test: e2e-tools install-test-tools ## Run e2e tests using the existing KinD setup

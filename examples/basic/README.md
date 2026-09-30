@@ -38,6 +38,32 @@ This creates:
 - IPv4 addressing: `192.0.2.0/31` on srl1 and `192.0.2.1/31` on multitool
 - An SR Linux SSH readiness probe, with the multitool host excluded from probing
 
+### cumulus-multitool.yaml
+
+An NVIDIA Cumulus VX node connected to a network multitool host. The Cumulus
+image requires GHCR access. Create the pull Secret in the namespace where you
+will apply the topology:
+
+```bash
+kubectl create namespace cumulus-multitool
+kubectl -n cumulus-multitool create secret docker-registry regcred \
+  --docker-server=ghcr.io \
+  --docker-username=your-github-username \
+  --docker-password=your-ghcr-token
+kubectl -n cumulus-multitool apply -f cumulus-multitool.yaml
+```
+
+The example connects `cumulus:swp1` (`192.0.2.0/31`) to `multitool:eth1`
+(`192.0.2.1/31`). Once the Cumulus node is ready, ping it from multitool with
+`ping 192.0.2.0`. Its default SSH login is `cumulus` / `Clab123!`; port 22 is
+reachable through the Cumulus service in the cluster. The e2e test creates a
+Secret containing only the GHCR entry from the runner's Docker config. The regular
+e2e suite skips this test. Run it manually from the repository root with:
+
+```bash
+CUMULUS_E2E=1 make test-e2e-local E2E_TEST_PACKAGES=./e2e/topology/cumulus
+```
+
 ### two-nodes-connected.yaml
 
 Two SR Linux nodes connected via a point-to-point link with pre-configured IP addressing.
