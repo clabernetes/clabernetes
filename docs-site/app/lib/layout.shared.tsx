@@ -2,6 +2,7 @@ import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 import type { ThemeSwitchProps } from 'fumadocs-ui/layouts/shared/slots/theme-switch';
 import { useTheme } from 'fumadocs-ui/provider/base';
 import { Moon, Sun } from 'lucide-react';
+import c9sLogo from '@/assets/c9s-logo-clean.png';
 
 function SlidingThemeSwitch({ className }: ThemeSwitchProps) {
   const { resolvedTheme, setTheme } = useTheme();
@@ -45,7 +46,12 @@ export function baseOptions(): BaseLayoutProps {
   return {
     slots: { themeSwitch: SlidingThemeSwitch },
     nav: {
-      title: <span className="c9s-gradient-text">c9s</span>,
+      title: (
+        <span className="inline-flex items-center gap-2">
+          <img src={c9sLogo} alt="" className="size-7 object-contain" width={28} height={28} />
+          <span className="c9s-gradient-text">c9s</span>
+        </span>
+      ),
       url: '/',
     },
     links: [
