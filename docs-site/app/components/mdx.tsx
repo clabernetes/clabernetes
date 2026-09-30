@@ -1,6 +1,7 @@
 import defaultMdxComponents from 'fumadocs-ui/mdx';
 import { Home, Rocket, Download } from 'lucide-react';
 import { CrdViewer } from '@/components/crd-viewer';
+import { ReleaseHero } from '@/components/release-hero';
 import {
   IntroFabricDiagram,
   TryC9sDiagram,
@@ -24,6 +25,7 @@ export function getMDXComponents(components?: MDXComponents) {
   return {
     ...defaultMdxComponents,
     CrdViewer,
+    ReleaseHero,
     Home,
     Rocket,
     Download,
