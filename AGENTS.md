@@ -30,6 +30,8 @@ Clabernetes (c9s) is a Go Kubernetes controller that runs containerlab topologie
 - Fix the root cause at the shared boundary when practical. Check sibling callers so a narrow fix does not leave the same defect elsewhere.
 - Preserve validation, security, accessibility, API compatibility, and data-loss protections. Document any deliberate limitation with its ceiling and likely upgrade path.
 - Add or update the smallest test that would fail without a non-trivial behavior change.
+- Use the matching router and switch icons from the [clab design catalog](https://github.com/clab-labs/branding/tree/main/icons) in network topology diagrams. Use its container or VM icon for endpoints, matching the actual workload.
+- Use headless Playwright for browser interaction and verification by default. Use a visible browser only when the required behavior cannot be checked headlessly.
 
 ## Generated files
 

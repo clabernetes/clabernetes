@@ -67,7 +67,7 @@ export default function Home() {
         content="Run containerlab network topologies across a Kubernetes cluster."
       />
 
-      <div className="c9s-home relative isolate overflow-hidden">
+      <div className="relative isolate overflow-hidden">
         <div
           aria-hidden="true"
           className="c9s-grid pointer-events-none absolute inset-0 -z-20"

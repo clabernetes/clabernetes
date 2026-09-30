@@ -19,6 +19,47 @@ body {
   scrollbar-width: thin;
 }
 
+button[data-theme-toggle] {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 1.625rem);
+  position: relative;
+}
+
+button[data-theme-toggle]::before {
+  grid-area: 1 / 1;
+  align-self: stretch;
+  justify-self: stretch;
+  border-radius: 9999px;
+  background: var(--color-fd-accent);
+  content: '';
+  pointer-events: none;
+  transition: transform 250ms ease;
+}
+
+.dark button[data-theme-toggle]::before {
+  transform: translateX(100%);
+}
+
+button[data-theme-toggle] > svg {
+  position: relative;
+  z-index: 1;
+  color: var(--color-fd-muted-foreground);
+  transition: color 250ms ease;
+}
+
+button[data-theme-toggle] > svg:first-of-type {
+  grid-area: 1 / 1;
+}
+
+button[data-theme-toggle] > svg:last-of-type {
+  grid-area: 1 / 2;
+}
+
+html:not(.dark) button[data-theme-toggle] > svg:first-of-type,
+html.dark button[data-theme-toggle] > svg:last-of-type {
+  color: var(--color-fd-accent-foreground);
+}
+
 .c9s-development-banner {
   position: relative;
   z-index: 50;
@@ -64,42 +105,9 @@ body {
   bottom: 0;
 }
 
-.c9s-home {
-  background:
-    radial-gradient(circle at top,
-      color-mix(in oklab, var(--color-fd-primary) 8%, transparent),
-      transparent 32rem),
-    var(--color-fd-background);
-}
-
 :root {
   --c9s-cyan: #20d9e7;
   --c9s-magenta: #d21b71;
-}
-
-.c9s-home::before,
-.c9s-home::after {
-  position: absolute;
-  z-index: -10;
-  width: 28rem;
-  height: 28rem;
-  border-radius: 9999px;
-  content: '';
-  filter: blur(100px);
-  opacity: 0.12;
-  pointer-events: none;
-}
-
-.c9s-home::before {
-  top: 8rem;
-  left: -16rem;
-  background: var(--c9s-magenta);
-}
-
-.c9s-home::after {
-  top: 34rem;
-  right: -16rem;
-  background: var(--c9s-cyan);
 }
 
 .c9s-grid {
@@ -126,23 +134,11 @@ body {
   background-size: 18px 18px;
 }
 
-.c9s-fabric-stage::after {
-  position: absolute;
-  inset: 0;
-  border: 1px solid color-mix(in oklab, var(--c9s-cyan) 22%, transparent);
-  border-radius: inherit;
-  content: '';
-  pointer-events: none;
-}
-
-.c9s-fabric-stage::before {
-  position: absolute;
-  inset: 15% 10% 5%;
-  border-radius: 9999px;
-  background: color-mix(in oklab, var(--c9s-cyan) 10%, transparent);
-  content: '';
-  filter: blur(48px);
-  pointer-events: none;
+.c9s-fabric-stage {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-fd-border) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-fd-border) 45%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
 .c9s-fabric-node {
@@ -157,12 +153,11 @@ body {
 }
 
 .c9s-fabric-link {
-  stroke: color-mix(in oklab, var(--c9s-cyan) 72%, var(--c9s-magenta));
-  stroke-width: 1.4;
+  stroke: var(--color-fd-muted-foreground);
+  stroke-width: 1.5;
   stroke-linecap: round;
-  stroke-dasharray: 0.055 0.025;
   vector-effect: non-scaling-stroke;
-  opacity: 0.68;
+  opacity: 0.55;
 }
 
 .c9s-try-c9s-link {
@@ -174,6 +169,11 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  button[data-theme-toggle]::before,
+  button[data-theme-toggle] > svg {
+    transition: none;
+  }
+
   .c9s-fabric-node {
     transition: none;
   }

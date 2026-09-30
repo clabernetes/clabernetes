@@ -1,4 +1,34 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
+import type { ThemeSwitchProps } from 'fumadocs-ui/layouts/shared/slots/theme-switch';
+import { useTheme } from 'fumadocs-ui/provider/base';
+import { Moon, Sun } from 'lucide-react';
+
+function SlidingThemeSwitch({ className }: ThemeSwitchProps) {
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
+  return (
+    <button
+      aria-label="Toggle theme"
+      aria-pressed={resolvedTheme ? isDark : undefined}
+      className={`inline-grid items-center overflow-hidden rounded-full border p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fd-primary ${className ?? ''}`}
+      data-theme-toggle=""
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      type="button"
+    >
+      <Sun
+        aria-hidden="true"
+        className="size-6.5 p-1.5"
+        fill="currentColor"
+      />
+      <Moon
+        aria-hidden="true"
+        className="size-6.5 p-1.5"
+        fill="currentColor"
+      />
+    </button>
+  );
+}
 
 function DiscordIcon() {
   return (
@@ -13,6 +43,7 @@ function DiscordIcon() {
 
 export function baseOptions(): BaseLayoutProps {
   return {
+    slots: { themeSwitch: SlidingThemeSwitch },
     nav: {
       title: <span className="c9s-gradient-text">c9s</span>,
       url: '/',

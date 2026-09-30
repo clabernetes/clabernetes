@@ -27,7 +27,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body className="flex min-h-screen flex-col">
-        <RootProvider search={{ SearchDialog: StaticSearchDialog }}>
+        <RootProvider
+          search={{ SearchDialog: StaticSearchDialog }}
+          theme={{ disableTransitionOnChange: false }}
+        >
           {children}
         </RootProvider>
         <ScrollRestoration />
