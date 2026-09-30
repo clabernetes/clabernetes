@@ -24,14 +24,6 @@ const (
 )
 
 const (
-	// GitHubTokenEnv is the env var that holds (optionally of course) a GitHub token -- this is
-	// useful for the clabverter tool where we *may* need to use the GitHub api to list contents
-	// of a directory (this is specifically for dealing with large files that don't fit in
-	// configmaps).
-	GitHubTokenEnv = "GITHUB_TOKEN" //nolint:gosec
-)
-
-const (
 	// ClickerLoggerLevelEnv is the environment variable name that can be used to set the
 	// cl(abernetes t)ick(l)er logger level.
 	ClickerLoggerLevelEnv = "CLICKER_LOGGER_LEVEL"

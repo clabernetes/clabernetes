@@ -83,7 +83,7 @@ The full conformance suite SHALL exercise cross-worker traffic, all Link flavors
 
 ### Requirement: User workflows are behaviorally equivalent
 
-Direct Node and Link manifests, Topology compilation, and clabverter output SHALL produce equivalent device plans and running labs for the same representable topology. Startup configuration, licenses, persistence, management reachability, DNS, Services, probes, exec, logs, save, events, and packet capture SHALL have direct-runtime conformance coverage. Persistence conformance SHALL cover saved-configuration survival across Pod restart, Pod replacement, and declared spec change, for both CLI-format and full-file startup configurations, plus the enforce-startup-config and reset opt-outs.
+Direct Node and Link manifests and Topology compilation SHALL produce equivalent device plans and running labs for the same representable topology. Startup configuration, licenses, persistence, management reachability, DNS, Services, probes, exec, logs, save, events, and packet capture SHALL have direct-runtime conformance coverage. Persistence conformance SHALL cover saved-configuration survival across Pod restart, Pod replacement, and declared spec change, for both CLI-format and full-file startup configurations, plus the enforce-startup-config and reset opt-outs.
 
 #### Scenario: Compare entry paths
 

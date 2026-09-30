@@ -5,7 +5,7 @@ This directory contains minimal examples to get started with Clabernetes.
 These examples use the backward-compatible auxiliary `Topology` resource for convenience. The
 controller compiles each file into explicitly referenced NodeProfile, Link, and Node
 resources. For direct primitive manifests (and large labs that should avoid persisting one
-aggregate source object), use `clabverter --emit-crs`.
+aggregate source object), see [individual-resources/srl-multitool](individual-resources/srl-multitool).
 
 ## Examples
 
@@ -98,9 +98,8 @@ startup-config: |
   set / network-instance default interface ethernet-1/1.0
 ```
 
-**Clabverter support:** When converting containerlab topologies with inline startup-config,
-clabverter automatically detects the embedded content and creates ConfigMaps without
-attempting to read from the filesystem. Both file path references and inline configs are supported.
+Inline startup configuration is embedded directly in the device plan and needs no ConfigMap.
+File path references require an explicitly configured file payload.
 
 ## Accessing Nodes
 

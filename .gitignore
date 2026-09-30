@@ -48,11 +48,7 @@ cover.out
 # direnv file
 .envrc
 
-# goreleaser dist dir for testing builds and such locally
-.dist/
-
 # build files
-cmd/clabverter/build/
 # ignore generated try-c9s state (tools + per-cluster rendered manifests),
 # but keep the manifest templates committed at build/try-c9s/*.yaml
 build/try-c9s/*/
@@ -72,10 +68,6 @@ venv
 # build cache
 go-build*/
 build/**/*.lock
-
-# clabverter e2e regenerates these at runtime
-e2e/clabverter/test-fixtures/10-apply.yaml
-e2e/clabverter/test-fixtures/_clabverter-basic-ns.yaml
 
 # ignore private files
 *.private.*

@@ -64,7 +64,7 @@ topology:
 
 The value is a comma-separated list using the same destination-port grammar as `Node.spec.ports`.
 Each entry is a destination port with an optional `tcp` or `udp` protocol. The c9s topology
-compiler and `clabverter --emitCRs` consume all entries into `Node.spec.ports`; the label is not
+compiler consumes all entries into `Node.spec.ports`; the label is not
 copied to Kubernetes labels. Invalid entries fail compilation. Local containerlab keeps the value
 as an inert container label and does not publish either port on the host.
 
@@ -268,8 +268,8 @@ label precedence. A more specific directive replaces the entire inherited value.
 `srl2` suppresses the gNMI hint and retains the built-in `https` hint on 443; it does not inherit the
 other entries from the defaults label.
 
-The topology compiler and `clabverter --emitCRs` consume this label into `Node.spec.appProtocols`
-and remove it from emitted metadata. It adds no `spec.ports` entries and does not override
+The topology compiler consumes this label into `Node.spec.appProtocols`
+and removes it from emitted metadata. It adds no `spec.ports` entries and does not override
 `disableAutoExpose` or `exposeType`. Local Containerlab treats it as an inert label.
 
 ### Protocol names and TLS

@@ -36,9 +36,6 @@ jobs:
           - name: clabernetes-manager
             file: build/manager.Dockerfile
             context: "."
-          - name: clabverter
-            file: build/clabverter.Dockerfile
-            context: "."
         platform:
           - arch: amd64
             target: linux/amd64
@@ -107,7 +104,6 @@ jobs:
       matrix:
         image:
           - clabernetes-manager
-          - clabverter
     steps:
       - name: download digests
         uses: actions/download-artifact@v8
