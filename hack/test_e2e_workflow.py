@@ -53,6 +53,7 @@ class E2EWorkflowTests(unittest.TestCase):
                                 for package, name in expected), f"empty suite: {entry['suite']}")
 
         runner = workflow("e2e-suite.yaml")["jobs"]["suite"]
+        self.assertEqual(runner["name"], "${{ inputs.suite }}")
         self.assertEqual(runner["env"]["E2E_TEST_PACKAGES"], "${{ inputs.package }}")
         self.assertEqual(runner["env"]["E2E_TEST_ARGS"], "-run='${{ inputs.tests }}'")
         run = next(step for step in runner["steps"] if step.get("id") == "run-the-e2e-suite")
