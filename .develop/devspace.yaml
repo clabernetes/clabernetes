@@ -35,7 +35,6 @@ vars:
   IMAGE_BASE: ${REGISTRY}/${CLABERNETES}
   MANAGER_IMAGE: ${REGISTRY}/${CLABERNETES}-manager
   MANAGER_DEV_IMAGE: ${MANAGER_IMAGE}-dev
-  CLABVERTER_IMAGE: ${REGISTRY}/clabverter
   DEV_IMAGE_TAG: dev-latest
   # DevSpace strips tags from devImage when it matches images.*.image; keep the tag on the
   # image name itself so the dev pod pulls an image that actually exists.
@@ -110,22 +109,6 @@ images:
     tags:
       - ${COMMIT_HASH}
       - dev-latest
-
-  clabverter:
-    createPullSecret: false
-    image: ${CLABVERTER_IMAGE}
-    context: ../
-    dockerfile: ../build/clabverter.Dockerfile
-    rebuildStrategy: ignoreContextChanges
-    buildArgs:
-      VERSION: ${VERSION}-${COMMIT_HASH}
-    buildKit:
-      command: ["docker", "buildx"]
-      args:
-        - "--platform=${TARGET_PLATFORM}"
-    tags:
-      - dev-latest
-      - ${COMMIT_HASH}
 
 deployments:
   clabernetes:
@@ -262,16 +245,6 @@ profiles:
         path: images.clabernetes.buildArgs.VERSION
         value: ${RELEASE_VERSION}
 
-      - op: replace
-        path: images.clabverter.tags
-        value:
-          - latest
-          - ${RELEASE_VERSION}
-          - ${COMMIT_HASH}
-      - op: replace
-        path: images.clabverter.buildArgs.VERSION
-        value: ${RELEASE_VERSION}
-
   # custom-release is used for "one off" releases where we want to build and push images with some
   # tag that is not one of the normal tags -- something like "0.0.0-customFixTest1"
   - name: custom-release
@@ -284,30 +257,21 @@ profiles:
         path: images.clabernetes.buildArgs.VERSION
         value: ${RELEASE_VERSION}
 
-      - op: replace
-        path: images.clabverter.tags
-        value:
-          - ${RELEASE_VERSION}
-      - op: replace
-        path: images.clabverter.buildArgs.VERSION
-        value: ${RELEASE_VERSION}
-
 pipelines:
   build:
     # override the default build pipeline so we don't bother building dev image in ci
     run: |
-      build_images clabernetes clabverter
+      build_images clabernetes
 
   dev:
-    # override the default dev pipeline to not bother building clabverter while doing dev things
+    # Build the manager and its development image.
     run: |
       build_images clabernetes-dev clabernetes
       create_deployments --all
       start_dev --all
 
   deploy:
-    # override the default dev pipeline to not bother building clabverter or dev image while doing
-    # deploy pipeline
+    # Build only the manager image for deployments.
     run: |
       run_dependencies --all
       build_images clabernetes

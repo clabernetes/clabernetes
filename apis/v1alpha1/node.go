@@ -60,8 +60,8 @@ type Node struct {
 // NodeSpec is the spec for a Node resource. It is a *flat containerlab node definition* --
 // containerlab vocabulary, no wrapper -- plus clabernetes-side per-node payload fields and an
 // optional NodeProfile reference. The definition must be self-contained: expanding topology
-// defaults/kinds into the node is the emitter's job (the Topology compiler and clabverter do
-// this for you). Anything that is deployment *policy* rather than node payload -- expose
+// defaults/kinds into the node is the emitter's job (the Topology compiler does this for you).
+// Anything that is deployment *policy* rather than node payload -- expose
 // behavior, image pull defaults, generic resources, scheduling, and probes -- lives on
 // NodeProfile objects explicitly referenced by Nodes. The containerlab vocabulary here is a
 // curated subset (see NodeDefinition): fields the direct runtime cannot realize are absent, and

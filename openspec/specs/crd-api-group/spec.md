@@ -75,7 +75,7 @@ The release SHALL require a full uninstall and reinstall. The manager SHALL NOT 
 
 ### Requirement: Documentation and examples reference the new group
 
-Repository documentation, examples, clabverter output, and e2e fixtures SHALL use `apiVersion: c9s.run/v1alpha1` for all c9s custom resources.
+Repository documentation, examples, and e2e fixtures SHALL use `apiVersion: c9s.run/v1alpha1` for all c9s custom resources.
 
 #### Scenario: User follows quickstart
 

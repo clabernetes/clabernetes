@@ -251,9 +251,6 @@ Destination paths the Pod owns are rejected before anything is created: `/etc/ho
 `/etc/hostname`, `/etc/resolv.conf`, `/dev/termination-log`, and everything under
 `/var/lib/clabernetes` and `/var/run/clabernetes`.
 
-[clabverter](/docs/guides/clabverter) produces these payloads automatically from a containerlab
-topology directory.
-
 ## Common Use Cases
 
 ### License Files
@@ -319,9 +316,9 @@ spec:
           configMapPath: srl2.json
 ```
 
-### Inline Startup Configurations (Clabverter)
+### Inline Startup Configurations
 
-When using clabverter to convert containerlab topologies, startup-config can be specified in two ways:
+In a Topology definition, startup-config can be specified in two ways:
 
 **File path reference** (points to external file):
 
@@ -344,7 +341,9 @@ nodes:
       set / network-instance default interface ethernet-1/1.0
 ```
 
-Clabverter automatically detects inline configurations (by checking for newlines in the value) and creates ConfigMaps without attempting to read from the filesystem. Both styles are converted to the same Kubernetes ConfigMap format.
+Inline configurations containing newlines are embedded in the device plan and need no payload.
+For a file path reference, provide a ConfigMap, Secret, or URL payload whose `filePath` matches
+the startup-config path; the controller cannot read files from your local filesystem.
 
 ### TLS Certificates
 

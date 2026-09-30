@@ -7,9 +7,6 @@ const (
 	// Clabernetes is the name... clabernetes.
 	Clabernetes = "clabernetes"
 
-	// Clabverter is a constant for the lovely name "clabverter".
-	Clabverter = "clabverter"
-
 	// True is a constant representing the string "true".
 	True = "true"
 

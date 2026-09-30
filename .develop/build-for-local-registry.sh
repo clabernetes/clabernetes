@@ -73,7 +73,7 @@ done
 
 # Mirror the VERSION build-arg used by the standard DevSpace image definitions.
 case "$(basename "${dockerfile}")" in
-    manager.Dockerfile|clabverter.Dockerfile)
+    manager.Dockerfile)
         commit_hash=$(git -C "${repo_root}" describe --always --abbrev=8 2>/dev/null || true)
         if [[ -n "${commit_hash}" ]]; then
             build_args+=(--build-arg "VERSION=0.0.0-${commit_hash}")

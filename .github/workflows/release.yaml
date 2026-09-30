@@ -77,32 +77,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # note: we run goreleaser before any helm packaging since helm updates the chart.yaml files
-      # w/ the release tag/version which upsets goreleaser (and we dont want to .gitignore the chart
-      # manifest obviously)
-      - name: run goreleaser to build clabverter/checksums
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: ${{ env.GORELEASER_VERSION }}
-          args: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_VERSION: ${{ needs.prep.outputs.version }}
-
-      # simply use gh cli to upload since we dont actually want an action that makes the release
-      # for us, just wanna upload assets
-      - name: upload clabverter binaries (and checksums) to the release
-        run: |
-          cd .dist
-          gh release upload ${{ github.ref_name }} checksums.txt
-          for filename in *.tar.gz; do
-            [ -e "$filename" ] || continue
-            gh release upload ${{ github.ref_name }} "$filename"
-          done
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-
       - name: package and push charts
         run: |
           helm registry login -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }} ghcr.io

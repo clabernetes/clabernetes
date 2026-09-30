@@ -155,7 +155,7 @@ The repository SHALL document how maintainers configure Cloudflare and GitHub se
 
 The user documentation SHALL explain that Topology compilation warns for lossy fields, fails for
 structurally unrealizable resources, supports explicit `veth` links with brief or structured
-node/interface endpoints, and does not expose strict compilation as a clabverter CLI flag. It SHALL
+node/interface endpoints. It SHALL
 also explain that enabled grouped-node readiness is atomic across nested members, component-based
 Nodes are evaluated across all expanded containers, application probes use the sole component that
 owns the shared network namespace, Docker image healthchecks are honored, process-level readiness

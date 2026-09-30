@@ -134,12 +134,7 @@ owned by the same Topology are compatible and do not trigger this error.
 ## When to use direct resources
 
 A Topology still embeds the entire source lab in one Kubernetes object. For large or generated labs,
-prefer direct resources or use:
-
-```bash
-clabverter --emitCRs <topology-file>
-```
-
-This emits NodeProfile, Node, and Link manifests without persisting an aggregate Topology.
+create NodeProfile, Node, and Link manifests directly without persisting an aggregate Topology.
+See [Nodes and Links](/docs/concepts/nodes-and-links#complete-example) for an example.
 
 See the [Topology reference](/docs/crd/topology) for all fields.

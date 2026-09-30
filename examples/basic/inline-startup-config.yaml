@@ -1,12 +1,5 @@
 # Topology with inline startup configurations
-# Demonstrates how clabverter handles inline configs embedded directly in YAML
-#
-# When using clabverter with a containerlab topology that has inline startup-config
-# (using YAML multiline |), it automatically detects the inline content and creates
-# ConfigMaps without attempting to read from the filesystem.
-#
-# Usage with clabverter:
-#   clabverter --topology clab.yaml --output ./manifests
+# Inline content is embedded in the device plan without a separate ConfigMap.
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Topology

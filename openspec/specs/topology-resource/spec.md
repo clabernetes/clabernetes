@@ -340,9 +340,3 @@ without placing it on Nodes or Links.
 
 - **WHEN** a generated NodeProfile's affinity differs from the Topology's declared affinity
 - **THEN** the Topology controller restores the generated profile to the declared affinity
-
-#### Scenario: Emit equivalent direct manifests
-
-- **WHEN** `clabverter --emit-crs` processes a Topology definition with device Pod affinity
-- **THEN** the emitted NodeProfile manifest contains the same affinity structure as in-cluster
-  Topology compilation

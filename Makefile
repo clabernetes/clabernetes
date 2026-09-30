@@ -16,7 +16,6 @@ C9S_IMAGE_INPUT_PATHS := \
 	apis \
 	assets \
 	cmd \
-	clabverter \
 	clicker \
 	config \
 	constants \
@@ -27,8 +26,7 @@ C9S_IMAGE_INPUT_PATHS := \
 	logging \
 	manager \
 	util \
-	build/manager.Dockerfile \
-	build/clabverter.Dockerfile
+	build/manager.Dockerfile
 C9S_IMAGE_INPUT_STATUS := $(shell for path in $(C9S_IMAGE_INPUT_PATHS); do git status --porcelain -- "$$path"; done)
 C9S_WORKTREE_HASH := $(shell { for path in $(C9S_IMAGE_INPUT_PATHS); do git ls-files --cached --others --exclude-standard -- "$$path"; done | sort -u | while IFS= read -r file; do if [ ! -e "$$file" ]; then continue; fi; printf '%s\t' "$$file"; git hash-object "$$file"; done; } | sha256sum | cut -c1-12)
 C9S_DIRTY_SUFFIX := $(if $(C9S_IMAGE_INPUT_STATUS),-dirty-$(C9S_WORKTREE_HASH),)
@@ -61,7 +59,6 @@ include .mk/e2e.mk
 IMAGE_TAG ?= latest
 IMAGE_BASE ?= ghcr.io/clabernetes/clabernetes
 MANAGER_IMAGE ?= $(IMAGE_BASE)/clabernetes-manager
-CLABVERTER_IMAGE ?= $(IMAGE_BASE)/clabverter
 TARGET_PLATFORM ?= linux/$(ARCH)
 
 DEV_TOOLS_DIR := build/dev/bin
@@ -266,9 +263,6 @@ delete-generated: ## Deletes all zz_*.go (generated) files, and crds
 
 build-manager: ## Builds the clabernetes manager container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
 	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(MANAGER_IMAGE):$(IMAGE_TAG) -f ./build/manager.Dockerfile .
-
-build-clabverter: ## Builds the clabverter container; typically built via devspace, but this is a handy shortcut for one offs. Override the tag with IMAGE_TAG.
-	docker buildx build --load --platform="$(TARGET_PLATFORM)" --build-arg VERSION=$(C9S_LOCAL_BUILD_ID) -t $(CLABVERTER_IMAGE):$(IMAGE_TAG) -f ./build/clabverter.Dockerfile .
 
 set-chart-versions: ## Sets the helm chart versions to the given value.
 	./hack/set-chart-versions.sh $(BUMP_CHART_VERSION_ARGS)

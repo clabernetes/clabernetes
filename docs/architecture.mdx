@@ -48,7 +48,7 @@ container requirements are *not* profile policy: they come from the imported pac
 `Topology` remains a supported, backward-compatible auxiliary resource. Its existing
 `connectivity`, `expose`, `deployment`, `imagePull`, and `statusProbes` fields are accepted and
 compiled into primitive resources. Because a Topology still embeds the whole source definition,
-large labs should use clabverter's direct primitive output instead of persisting a Topology.
+large labs should define NodeProfile, Node, and Link resources directly instead of persisting a Topology.
 
 ## Components
 

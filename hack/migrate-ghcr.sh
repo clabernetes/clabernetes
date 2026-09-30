@@ -9,7 +9,6 @@ DRY_RUN="${DRY_RUN:-true}"
 
 packages=(
   clabernetes-manager
-  clabverter
   clabernetes
   clicker
 )

@@ -5,7 +5,6 @@ pages:
   - expose-configuration
   - management-network
   - file-mounting
-  - clabverter
   - image-pull
   - mtu
   - link-wire

@@ -87,8 +87,7 @@ allocated wire id.
 ## Why direct resources?
 
 Each Node grows only with its own configuration and each Link remains one wire. This removes the
-single aggregate-object size limit of a source Topology and allows tooling such as `clabverter
---emitCRs` to produce independently reconciled resources.
+single aggregate-object size limit of a source Topology and lets each resource reconcile independently.
 
 Direct resources do not promise unlimited scale: Kubernetes API capacity, controller throughput,
 and the total object count still matter.
