@@ -10,16 +10,52 @@ on:
 permissions:
   contents: read
   packages: write
+  pull-requests: read
 
 jobs:
+  file-changes:
+    uses: ./.github/workflows/file-changes.yaml
+
+  docs:
+    needs: file-changes
+    if: needs.file-changes.outputs.docs == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.17.0
+
+      - name: setup node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
+
+      - name: validate documentation
+        run: make check-docs
+
   lint:
+    needs: file-changes
+    if: needs.file-changes.outputs.code == 'true'
     uses: ./.github/workflows/lint.yaml
 
   unit:
+    needs: file-changes
+    if: needs.file-changes.outputs.code == 'true'
     uses: ./.github/workflows/unit.yaml
 
   e2e:
-    needs: unit
+    needs:
+      - file-changes
+      - unit
+    if: needs.file-changes.outputs.code == 'true'
     uses: ./.github/workflows/e2e.yaml
     secrets: inherit
 
