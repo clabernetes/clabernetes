@@ -99,7 +99,7 @@ export function IntroFabricDiagram() {
             </div>
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold sm:text-sm">
-                Distributed declarativa labs
+                Distributed declarative labs
               </p>
               <p className="truncate text-[9px] text-fd-muted-foreground sm:text-[10px]">
                 Declaratively defined · distributed by K8s

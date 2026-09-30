@@ -178,3 +178,125 @@ html.dark button[data-theme-toggle] > svg:last-of-type {
     transition: none;
   }
 }
+
+.lab-yaml-layout {
+  --lab-yaml-gap: 4rem;
+  --lab-yaml-code-padding: 1.25rem;
+  /* Grid gap + editor padding + editor border + half the highlight border. */
+  --lab-yaml-anchor-offset: calc(var(--lab-yaml-gap) + var(--lab-yaml-code-padding) + 1.5px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: var(--lab-yaml-gap);
+}
+
+.lab-yaml-editor {
+  min-width: 0;
+  border: 1px solid #26394a;
+  border-radius: 1rem;
+  background: #0c1723;
+  color: #cad5e2;
+  box-shadow: 0 20px 45px -24px rgb(0 0 0 / 45%);
+}
+
+.lab-yaml-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #26394a;
+  color: #9badc2;
+  font: 0.75rem ui-monospace, monospace;
+}
+
+.lab-yaml-file-icon { color: #67e8f9; }
+.lab-yaml-key { color: #8cdaff; }
+.lab-yaml-value { color: #c6e6a3; }
+
+.lab-yaml-editor pre {
+  margin: 0;
+  padding: var(--lab-yaml-code-padding);
+  overflow-x: auto;
+  font: 0.8rem / 1.25rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  tab-size: 2;
+}
+
+.lab-yaml-region {
+  display: block;
+  min-width: max-content;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid;
+  border-radius: 0.75rem;
+}
+
+.lab-yaml-nodes { border-color: #22d3ee; background: rgb(34 211 238 / 6%); }
+.lab-yaml-links { border-color: #f472b6; background: rgb(244 114 182 / 6%); }
+
+.lab-yaml-callouts {
+  display: grid;
+  grid-template-rows: 10rem auto;
+  align-content: start;
+  padding-top: 17.75rem;
+}
+
+.lab-yaml-callout {
+  --callout-color: #0891b2;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.lab-yaml-link-callout { --callout-color: #d21b71; }
+.dark .lab-yaml-node-callout { --callout-color: #67e8f9; }
+.dark .lab-yaml-link-callout { --callout-color: #f472b6; }
+
+.lab-yaml-callout::before {
+  position: absolute;
+  top: 1rem;
+  right: calc(100% + 0.75rem);
+  width: calc(var(--lab-yaml-anchor-offset) - 0.75rem);
+  border-top: 1px solid var(--callout-color);
+  content: '';
+}
+
+.lab-yaml-callout::after {
+  position: absolute;
+  top: calc(1rem - 3px);
+  right: calc(100% + var(--lab-yaml-anchor-offset));
+  transform: translateX(50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--callout-color);
+  content: '';
+}
+
+.lab-yaml-number {
+  display: grid;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--callout-color) 45%, transparent);
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--callout-color) 8%, transparent);
+  color: var(--callout-color);
+  font: 600 0.7rem ui-monospace, monospace;
+}
+
+.lab-yaml-callout h3 { font-weight: 650; font-size: 1.1rem; }
+.lab-yaml-callout p { margin-top: 0.65rem; color: var(--color-fd-muted-foreground); font-size: 0.875rem; line-height: 1.75; }
+.lab-yaml-callout code { color: var(--color-fd-foreground); font-size: 0.8rem; }
+.lab-yaml-tag { display: inline-block; margin-top: 1rem; color: var(--callout-color); font-size: 0.75rem; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .lab-yaml-layout { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  .lab-yaml-callouts { grid-template-rows: auto; padding: 0; gap: 1.75rem; }
+  .lab-yaml-callout::before, .lab-yaml-callout::after { display: none; }
+}
+
+@media (max-width: 480px) {
+  .lab-yaml-editor pre { padding: 0.75rem; font-size: 0.65rem; line-height: 1rem; }
+  .lab-yaml-region { padding: 0.4rem; }
+  .lab-yaml-toolbar { padding: 0.85rem; }
+}

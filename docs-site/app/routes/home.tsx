@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Link } from 'react-router';
+import { LabYaml } from '@/components/lab-yaml';
 import { IntroFabricDiagram } from '@/components/fabric-diagram';
 import { baseOptions } from '@/lib/layout.shared';
 
@@ -73,7 +74,7 @@ export default function Home() {
           className="c9s-grid pointer-events-none absolute inset-0 -z-20"
         />
 
-        <section className="relative mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-7xl items-center gap-12 px-6 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-24">
+        <section className="relative mx-auto grid w-full max-w-7xl items-center gap-12 px-6 pt-20 pb-12 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:pt-24 lg:pb-48">
           <div className="relative z-10">
             <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-fd-primary/20 bg-fd-primary/5 px-3 py-1.5 text-xs font-semibold tracking-wide text-fd-primary uppercase backdrop-blur">
               <Sparkles className="size-3.5" />
@@ -133,29 +134,26 @@ export default function Home() {
           <IntroFabricDiagram />
         </section>
 
-        <section className="mx-auto w-full max-w-7xl px-6 pb-24 lg:px-8">
-          <div className="grid overflow-hidden rounded-2xl border bg-fd-card/55 shadow-sm backdrop-blur md:grid-cols-3">
-            {[
-              ['One resource', 'per network node'],
-              ['One resource', 'per point-to-point wire'],
-              ['One cluster', 'for distributed labs'],
-            ].map(([value, label], index) => (
-              <div
-                className={`px-6 py-6 text-center ${index > 0 ? 'border-t md:border-t-0 md:border-l' : ''
-                  }`}
-                key={label}
-              >
-                <p className="text-xl font-bold tracking-tight">{value}</p>
-                <p className="mt-1 text-sm text-fd-muted-foreground">{label}</p>
-              </div>
-            ))}
+        <section aria-labelledby="lab-yaml-title" className="lab-yaml mx-auto w-full max-w-7xl px-6 lg:px-8">
+          <div className="mb-10 max-w-2xl">
+            <p className="text-sm font-semibold tracking-wide text-fd-primary uppercase">
+              Familiar containerlab syntax, Kubernetes native
+            </p>
+            <h2 id="lab-yaml-title" className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+              Topology Custom Resource.
+            </h2>
+            <p className="mt-4 text-lg leading-8 text-fd-muted-foreground">
+              Declare a c9s Topology resource embedding the familiar containerlab definition. Its controller compiles your lab
+              into Node and Link resources, then runs it across Kubernetes.
+            </p>
           </div>
+          <LabYaml />
         </section>
 
         <section className="mx-auto w-full max-w-7xl px-6 py-20 lg:px-8">
           <div className="max-w-2xl">
             <p className="text-sm font-semibold tracking-wide text-fd-primary uppercase">
-              Designed for real labs
+              Designed for small and huge labs
             </p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
               A Kubernetes API for network infrastructure.

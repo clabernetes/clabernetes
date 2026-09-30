@@ -25,7 +25,10 @@ func TestExposeRequestsManagementAddress(t *testing.T) {
 		}
 	}()
 	clabernetestesthelper.KubectlFileOp(
-		t, clabernetestesthelper.Apply, namespace, "test-fixtures/50-expose-management-address.yaml",
+		t,
+		clabernetestesthelper.Apply,
+		namespace,
+		"test-fixtures/50-expose-management-address.yaml",
 	)
 
 	for name, pinned := range map[string]string{"pinned": "198.18.57.10", "allocated": ""} {
