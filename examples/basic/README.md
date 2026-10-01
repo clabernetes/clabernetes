@@ -64,6 +64,65 @@ e2e suite skips this test. Run it manually from the repository root with:
 CUMULUS_E2E=1 make test-e2e-local E2E_TEST_PACKAGES=./e2e/topology/cumulus
 ```
 
+### vjunos-router-multitool.yaml
+
+A Boxen-packaged Juniper vJunos-router connected to a network multitool host.
+The example uses a development image with the AMD SVM packaging workaround;
+replace its image reference with your own Boxen image if needed. The workers
+need nested KVM, four CPU cores, and at least 6 GiB of available memory.
+Create a GHCR pull Secret before applying the topology:
+
+```bash
+kubectl create namespace vjunos-router-multitool
+kubectl -n vjunos-router-multitool create secret docker-registry regcred \
+  --docker-server=ghcr.io \
+  --docker-username=your-github-username \
+  --docker-password=your-ghcr-token
+kubectl -n vjunos-router-multitool apply -f vjunos-router-multitool.yaml
+kubectl -n vjunos-router-multitool wait --for=jsonpath='{.status.readiness}'=ready \
+  --timeout=30m node.c9s.run/juniper node.c9s.run/multitool
+```
+
+The data link connects Junos `ge-0/0/0.0` (`192.0.2.1/30`) to multitool
+`eth1` (`192.0.2.2/30`). Verify it from multitool, using its device container:
+
+```bash
+kubectl -n vjunos-router-multitool exec deployment/multitool -- \
+  ping -I eth1 -c 3 192.0.2.1
+```
+
+Log into Junos from multitool with `admin` / `admin@123`:
+
+```bash
+JUNIPER_MGMT=$(kubectl -n vjunos-router-multitool get node.c9s.run/juniper \
+  -o jsonpath='{.status.directManagement.ipv4}')
+kubectl -n vjunos-router-multitool exec -it deployment/multitool -- \
+  ssh admin@"${JUNIPER_MGMT%/*}"
+```
+
+At the Junos CLI, check the reverse direction:
+
+```text
+ping 192.0.2.2 source 192.0.2.1 count 3 rapid
+```
+
+These commands send traffic over data ports, independently of management.
+The Juniper e2e tests require `VJUNOS_ROUTER_E2E=1`, like the Cumulus manual
+opt-in; setting an image alone does not enable them. The default e2e suite
+skips them, and the GitHub Actions default matrix excludes this package.
+Run them manually from the repository root, with the existing-cluster
+prerequisites described in `AGENTS.md`:
+
+```bash
+VJUNOS_ROUTER_E2E=1 make test-e2e CLUSTER=existing \
+  E2E_INSTALL_NAMESPACE=c9s E2E_INSTALL_RELEASE=clabernetes \
+  E2E_TEST_PACKAGES=./e2e/topology/vjunosrouter E2E_TEST_TIMEOUT=90m
+```
+
+Set `VJUNOS_ROUTER_IMAGE` to override the Boxen image used by both tests. Use
+`E2E_TEST_ARGS='-run=^TestVJunosRouterMultitoolExample$'` to run only the
+example's configuration and bidirectional data-port ping checks.
+
 ### two-nodes-connected.yaml
 
 Two SR Linux nodes connected via a point-to-point link with pre-configured IP addressing.

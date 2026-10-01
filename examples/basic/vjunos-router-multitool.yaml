@@ -1,0 +1,62 @@
+# Boxen-packaged Juniper vJunos-router connected to a network multitool host.
+# This development image includes the AMD SVM packaging workaround. Replace
+# it with your own Boxen-packaged image when needed; a vrnetlab image does not
+# provide Boxen's live-link and transparent-management behavior.
+# Create a GHCR pull Secret named regcred in the same namespace before applying.
+apiVersion: c9s.run/v1alpha1
+kind: Topology
+metadata:
+  name: vjunos-router-multitool
+spec:
+  deployment:
+    resources:
+      juniper:
+        requests:
+          cpu: "4"
+          memory: 6Gi
+        limits:
+          memory: 6Gi
+  statusProbes:
+    enabled: true
+    nodeProbeConfigurations:
+      juniper:
+        startupSeconds: 1800
+        sshProbeConfiguration:
+          username: admin
+          password: admin@123
+      multitool:
+        startupSeconds: 120
+        sshProbeConfiguration:
+          username: admin
+          password: multit00l
+  imagePull:
+    pullSecrets:
+      - regcred
+  definition:
+    containerlab: |
+      name: vjunos-router-multitool
+      topology:
+        nodes:
+          juniper:
+            kind: juniper_vjunosrouter
+            image: ghcr.io/clab-labs/juniper_vjunos-router:boxen-25.2R1.9
+            startup-config: |
+              interfaces {
+                  ge-0/0/0 {
+                      unit 0 {
+                          family inet {
+                              address 192.0.2.1/30;
+                          }
+                      }
+                  }
+              }
+
+          multitool:
+            kind: linux
+            image: ghcr.io/srl-labs/network-multitool:latest
+            exec:
+              - ip link set eth1 up
+              - ip address replace 192.0.2.2/30 dev eth1
+
+        links:
+          - endpoints: ["juniper:ge-0/0/0", "multitool:eth1"]
