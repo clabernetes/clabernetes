@@ -179,11 +179,6 @@ func appendEvaluatedNode(
 			return err
 		}
 	}
-	// Imported lifecycle hooks execute against the runtime identity the package itself declares
-	// through GetContainerName (a component kind routes execs to a specific member container),
-	// so their actions must run inside the container carrying that identity: an
-	// application-local exec from the wrong sibling cannot reach the declared target's
-	// processes.
 	// Every imported lifecycle is rehydrated with a package LabDir, even when the package emitted
 	// no preparation artifact. Keep that runtime-owned directory generic and plan-scoped rather
 	// than making its existence depend on kind-specific file generation.
