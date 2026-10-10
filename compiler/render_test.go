@@ -84,7 +84,7 @@ func renderTestTopology(t *testing.T) (
 func TestRenderNodes(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	nodes := clabernetescompiler.RenderNodes(
+	nodes, _, _ := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -195,17 +195,7 @@ topology:
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes := clabernetescompiler.RenderNodes(
-		topology,
-		compiled,
-		clabernetesconfig.GetFakeManager,
-	)
-	links := clabernetescompiler.RenderLinks(
-		topology,
-		compiled,
-		clabernetesconfig.GetFakeManager,
-	)
-	profiles := clabernetescompiler.RenderNodeProfiles(
+	nodes, links, profiles := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -284,7 +274,7 @@ topology:
 		t.Fatalf("unexpected error compiling topology: %s", err)
 	}
 
-	nodes := clabernetescompiler.RenderNodes(
+	nodes, _, _ := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -327,7 +317,7 @@ topology:
 		t.Fatalf("unexpected error compiling topology: %s", err)
 	}
 
-	nodes := clabernetescompiler.RenderNodes(
+	nodes, _, _ := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -357,7 +347,7 @@ topology:
 func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	nodes := clabernetescompiler.RenderNodes(
+	nodes, _, _ := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -396,7 +386,7 @@ func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
 func TestRenderLinks(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	links := clabernetescompiler.RenderLinks(
+	_, links, _ := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -425,7 +415,7 @@ func TestRenderLinks(t *testing.T) {
 func TestRenderNodeProfiles(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	profiles := clabernetescompiler.RenderNodeProfiles(
+	_, _, profiles := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -482,7 +472,7 @@ func TestRenderNodeProfilesPreservesNoneExposeType(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 	topology.Spec.Expose.ExposeType = "None"
 
-	profiles := clabernetescompiler.RenderNodeProfiles(
+	_, _, profiles := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -511,7 +501,7 @@ func TestRenderNodeProfilesManagementDefaultAndOptOut(t *testing.T) {
 	for _, disabled := range []bool{false, true} {
 		topology, compiled := renderTestTopology(t)
 		topology.Spec.DisableManagement = disabled
-		profiles := clabernetescompiler.RenderNodeProfiles(
+		_, _, profiles := clabernetescompiler.RenderAll(
 			topology,
 			compiled,
 			clabernetesconfig.GetFakeManager,
@@ -549,7 +539,7 @@ func TestRenderNodeProfilesPreservesAffinity(t *testing.T) {
 	}
 	topology.Spec.Deployment.Scheduling.Affinity = affinity
 
-	profiles := clabernetescompiler.RenderNodeProfiles(
+	_, _, profiles := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
@@ -588,7 +578,7 @@ func TestRenderNodeProfilesOmitsUnusedSharedProfile(t *testing.T) {
 		},
 	}
 
-	profiles := clabernetescompiler.RenderNodeProfiles(
+	_, _, profiles := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,

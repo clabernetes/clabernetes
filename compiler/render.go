@@ -14,90 +14,70 @@ import (
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 )
 
-// kindSpecificWrapperKey is the yaml key c9s' Node vocabulary uses to carry merged kind-specific
-// config. A definition may write it explicitly; the compiler unwraps it so the same key never
-// appears as kind-owned config.
-const kindSpecificWrapperKey = "kind-specific-config"
-
 // kindSpecificComponentsKey is the one kind-specific config key c9s carries as a typed field
 // instead of the generic passthrough: the component inventory drives c9s' own device rendering
 // (chassis component DNS aliases), and the Node CRD exposes it as a validated, typed vocabulary.
 const kindSpecificComponentsKey = "components"
 
-// RenderNodes renders the Node objects for the compiled topology, sorted by name. The emitted
-// node names are the containerlab node names, sanitized only where Kubernetes cannot carry them
-// -- the namespace is the topology boundary. Node-keyed policy on the Topology is written against
-// the definition's names, so it is looked up by the node's source name.
+// RenderAll renders the Node, Link, and NodeProfile objects for the compiled topology through
+// the engine once and decodes every manifest into the typed clabernetes objects. Each list is
+// sorted by name. The rendered node names are the containerlab node names, sanitized only where
+// Kubernetes cannot carry them -- the namespace is the topology boundary. Node-keyed policy on
+// the Topology is written against the definition's names, so it is looked up by the node's
+// source name.
 //
-// The rendering itself lives in containerlab's compile engine; this function renders through the
-// engine and decodes the unstructured manifests into the clabernetes types.
-func RenderNodes(
+// The single engine pass is deliberate: every primitive list a reconcile enforces comes from one
+// render, and the render is not free (management networks, expose services, profiles).
+//
+// A failure means the engine produced something the c9s vocabulary cannot carry, which is a
+// contract violation rather than a user error, so it panics instead of silently dropping an
+// object -- the same contract decodeManifestOrPanic carries.
+func RenderAll(
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) []*clabernetesapisv1alpha1.Node {
-	nodes, _, _, err := renderAll(topology, compiled, configManagerGetter)
+) (
+	nodes []*clabernetesapisv1alpha1.Node,
+	links []*clabernetesapisv1alpha1.Link,
+	profiles []*clabernetesapisv1alpha1.NodeProfile,
+) {
+	unstructuredNodes, unstructuredLinks, unstructuredProfiles, err := renderAll(
+		topology,
+		compiled,
+		configManagerGetter,
+	)
 	if err != nil {
 		panic(manifestContractError(err))
 	}
 
-	typedNodes := make([]*clabernetesapisv1alpha1.Node, 0, len(nodes))
+	nodes = make([]*clabernetesapisv1alpha1.Node, 0, len(unstructuredNodes))
 
-	for i := range nodes {
+	for i := range unstructuredNodes {
 		node := &clabernetesapisv1alpha1.Node{}
-		decodeManifestOrPanic(nodes[i].Object, node)
+		decodeManifestOrPanic(unstructuredNodes[i].Object, node)
 
-		typedNodes = append(typedNodes, node)
+		nodes = append(nodes, node)
 	}
 
-	return typedNodes
-}
+	links = make([]*clabernetesapisv1alpha1.Link, 0, len(unstructuredLinks))
 
-// RenderLinks renders the Link objects for the compiled topology, sorted by name.
-func RenderLinks(
-	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
-	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) []*clabernetesapisv1alpha1.Link {
-	_, links, _, err := renderAll(topology, compiled, configManagerGetter)
-	if err != nil {
-		panic(manifestContractError(err))
-	}
-
-	typedLinks := make([]*clabernetesapisv1alpha1.Link, 0, len(links))
-
-	for i := range links {
+	for i := range unstructuredLinks {
 		link := &clabernetesapisv1alpha1.Link{}
-		decodeManifestOrPanic(links[i].Object, link)
+		decodeManifestOrPanic(unstructuredLinks[i].Object, link)
 
-		typedLinks = append(typedLinks, link)
+		links = append(links, link)
 	}
 
-	return typedLinks
-}
+	profiles = make([]*clabernetesapisv1alpha1.NodeProfile, 0, len(unstructuredProfiles))
 
-// RenderNodeProfiles renders one shared topology NodeProfile plus a complete dedicated
-// profile for each compiled Node with distinct profile policy.
-func RenderNodeProfiles(
-	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
-	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) []*clabernetesapisv1alpha1.NodeProfile {
-	_, _, profiles, err := renderAll(topology, compiled, configManagerGetter)
-	if err != nil {
-		panic(manifestContractError(err))
-	}
-
-	typedProfiles := make([]*clabernetesapisv1alpha1.NodeProfile, 0, len(profiles))
-
-	for i := range profiles {
+	for i := range unstructuredProfiles {
 		profile := &clabernetesapisv1alpha1.NodeProfile{}
-		decodeManifestOrPanic(profiles[i].Object, profile)
+		decodeManifestOrPanic(unstructuredProfiles[i].Object, profile)
 
-		typedProfiles = append(typedProfiles, profile)
+		profiles = append(profiles, profile)
 	}
 
-	return typedProfiles
+	return nodes, links, profiles
 }
 
 // manifestContractError marks an engine render failure as a contract violation: the engine
@@ -123,12 +103,20 @@ func renderAll(
 		input.Labels = globalLabels
 	}
 
-	return clabcompile.CompileTopology(input, engineCompiledTopology(compiled))
+	engineCompiled, err := engineCompiledTopology(compiled)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return clabcompile.CompileTopology(input, engineCompiled)
 }
 
 // engineCompiledTopology maps the clabernetes compiled topology back onto the engine's shape so
-// the engine's renderers can run against it.
-func engineCompiledTopology(compiled *CompiledTopology) *clabcompile.CompiledTopology {
+// the engine's renderers can run against it. A failure is a vocabulary round-trip contract
+// violation; renderAll's callers report it through the same contract path as manifest decoding.
+func engineCompiledTopology(
+	compiled *CompiledTopology,
+) (*clabcompile.CompiledTopology, error) {
 	out := &clabcompile.CompiledTopology{
 		Kind: compiled.Kind,
 		Nodes: make(
@@ -142,7 +130,12 @@ func engineCompiledTopology(compiled *CompiledTopology) *clabcompile.CompiledTop
 	}
 
 	for nodeName, nodeDefinition := range compiled.Nodes {
-		out.Nodes[nodeName] = exportNodeDefinition(nodeDefinition)
+		exported, err := exportNodeDefinition(nodeDefinition)
+		if err != nil {
+			return nil, fmt.Errorf("node %q: %w", nodeName, err)
+		}
+
+		out.Nodes[nodeName] = exported
 	}
 
 	for nodeName, appProtocols := range compiled.AppProtocols {
@@ -171,7 +164,7 @@ func engineCompiledTopology(compiled *CompiledTopology) *clabcompile.CompiledTop
 		})
 	}
 
-	return out
+	return out, nil
 }
 
 // exportNodeDefinition encodes one clabernetes node definition back into containerlab vocabulary
@@ -180,21 +173,25 @@ func engineCompiledTopology(compiled *CompiledTopology) *clabcompile.CompiledTop
 // wrapper is unwrapped here.
 func exportNodeDefinition(
 	nodeDefinition *clabernetesutilcontainerlab.NodeDefinition,
-) *clabtypes.NodeDefinition {
-	exported := &clabtypes.NodeDefinition{}
-
+) (*clabtypes.NodeDefinition, error) {
 	raw, err := yaml.Marshal(nodeDefinition)
 	if err != nil {
-		return exported
+		return nil, fmt.Errorf("exporting node definition: %w", err)
 	}
 
-	if err := yaml.Unmarshal(raw, exported); err != nil {
-		return exported
+	exported := &clabtypes.NodeDefinition{}
+
+	err = yaml.Unmarshal(raw, exported)
+	if err != nil {
+		return nil, fmt.Errorf("importing exported node definition: %w", err)
 	}
 
-	if wrapper, wrapped := exported.KindSpecificConfig[kindSpecificWrapperKey]; wrapped {
-		if entries := kindSpecificWrapperEntries(wrapper); entries != nil {
-			delete(exported.KindSpecificConfig, kindSpecificWrapperKey)
+	wrapperKey := clabernetesutilcontainerlab.KindSpecificConfigWrapperKey
+
+	if wrapper, wrapped := exported.KindSpecificConfig[wrapperKey]; wrapped {
+		entries := clabernetesutilcontainerlab.KindSpecificConfigWrapperEntries(wrapper)
+		if entries != nil {
+			delete(exported.KindSpecificConfig, wrapperKey)
 			maps.Copy(exported.KindSpecificConfig, entries)
 		}
 	}
@@ -212,31 +209,7 @@ func exportNodeDefinition(
 		}
 	}
 
-	return exported
-}
-
-// kindSpecificWrapperEntries flattens a kind-specific config wrapper mapping into per-key
-// entries. The wrapper value arrives through either yaml unmarshaler, so both mapping shapes are
-// accepted.
-func kindSpecificWrapperEntries(value any) map[string]any {
-	switch wrapper := value.(type) {
-	case map[string]any:
-		return wrapper
-	case map[any]any:
-		entries := make(map[string]any, len(wrapper))
-		for key, entryValue := range wrapper {
-			keyText, ok := key.(string)
-			if !ok {
-				return nil
-			}
-
-			entries[keyText] = entryValue
-		}
-
-		return entries
-	default:
-		return nil
-	}
+	return exported, nil
 }
 
 // decodeManifestOrPanic decodes an engine manifest into a typed clabernetes object. A failure

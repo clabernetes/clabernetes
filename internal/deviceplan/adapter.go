@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	clabcert "github.com/srl-labs/containerlab/cert"
 	clabconstants "github.com/srl-labs/containerlab/constants"
 	clablinks "github.com/srl-labs/containerlab/links"
@@ -1110,36 +1111,6 @@ func rewriteWorkspacePaths(config *clabtypes.NodeConfig, scratchRoot, stableRoot
 	config.Cmd = rewrite(config.Cmd)
 }
 
-// c9sKindSpecificConfigKey is the vocabulary field c9s uses to carry merged kind-specific config
-// keys on the Node definition. The imported containerlab definition unmarshaler absorbs unknown
-// keys inline, so this wrapper arrives inside the absorbed kind-specific config and is unwrapped
-// into per-key entries here.
-const c9sKindSpecificConfigKey = "kind-specific-config"
-
-// kindSpecificWrapperEntries flattens the c9s vocabulary wrapper mapping into per-key entries.
-// The wrapper arrives through the imported definition decode, whose yaml mapping values carry
-// generic map keys, so both mapping shapes are accepted.
-func kindSpecificWrapperEntries(value any) map[string]any {
-	switch wrapper := value.(type) {
-	case map[string]any:
-		return wrapper
-	case map[any]any:
-		entries := make(map[string]any, len(wrapper))
-		for key, entryValue := range wrapper {
-			keyText, ok := key.(string)
-			if !ok {
-				return nil
-			}
-
-			entries[keyText] = entryValue
-		}
-
-		return entries
-	default:
-		return nil
-	}
-}
-
 // importedKindSpecificConfig decodes the node's kind-specific config keys into the typed config
 // the imported kind registered with the module's registry. Every key must belong to the kind and
 // every value must match its type: this is exactly the strict decoding containerlab deploys with,
@@ -1155,8 +1126,8 @@ func importedKindSpecificConfig(
 
 	entries := make([]clabtypes.KindSpecificConfigEntry, 0, len(definition.KindSpecificConfig))
 	for key, value := range definition.KindSpecificConfig {
-		if key == c9sKindSpecificConfigKey {
-			wrapper := kindSpecificWrapperEntries(value)
+		if key == clabernetesutilcontainerlab.KindSpecificConfigWrapperKey {
+			wrapper := clabernetesutilcontainerlab.KindSpecificConfigWrapperEntries(value)
 			if wrapper == nil {
 				return nil, definitionError(
 					nodeInput,
