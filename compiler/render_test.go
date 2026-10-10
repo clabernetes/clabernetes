@@ -13,6 +13,7 @@ import (
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	k8scorev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -84,11 +85,14 @@ func renderTestTopology(t *testing.T) (
 func TestRenderNodes(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	nodes, _, _ := clabernetescompiler.RenderAll(
+	nodes, _, _, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 
 	if len(nodes) != 2 {
 		t.Fatalf("expected 2 rendered nodes, got %d", len(nodes))
@@ -195,11 +199,14 @@ topology:
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, links, profiles := clabernetescompiler.RenderAll(
+	nodes, links, profiles, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 
 	if len(nodes) != 2 || len(links) != 1 || len(profiles) != 1 {
 		t.Fatalf(
@@ -274,11 +281,14 @@ topology:
 		t.Fatalf("unexpected error compiling topology: %s", err)
 	}
 
-	nodes, _, _ := clabernetescompiler.RenderAll(
+	nodes, _, _, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 	if len(nodes) != 1 {
 		t.Fatalf("expected one rendered node, got %d", len(nodes))
 	}
@@ -317,11 +327,14 @@ topology:
 		t.Fatalf("unexpected error compiling topology: %s", err)
 	}
 
-	nodes, _, _ := clabernetescompiler.RenderAll(
+	nodes, _, _, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 	if len(nodes) != 1 {
 		t.Fatalf("expected one rendered node, got %d", len(nodes))
 	}
@@ -347,11 +360,14 @@ topology:
 func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	nodes, _, _ := clabernetescompiler.RenderAll(
+	nodes, _, _, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 
 	for _, node := range nodes {
 		if node.Labels["tier"] != "lab" {
@@ -386,11 +402,14 @@ func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
 func TestRenderLinks(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	_, links, _ := clabernetescompiler.RenderAll(
+	_, links, _, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 
 	if len(links) != 2 {
 		t.Fatalf("expected 2 rendered links, got %d", len(links))
@@ -412,14 +431,18 @@ func TestRenderLinks(t *testing.T) {
 	}
 }
 
+//nolint:gocyclo,wsl_v5 // The profile contract test asserts shared and dedicated policy field by field.
 func TestRenderNodeProfiles(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
-	_, _, profiles := clabernetescompiler.RenderAll(
+	_, _, profiles, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 
 	if len(profiles) != 2 {
 		t.Fatalf("expected shared + one dedicated NodeProfile, got %d", len(profiles))
@@ -472,11 +495,14 @@ func TestRenderNodeProfilesPreservesNoneExposeType(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 	topology.Spec.Expose.ExposeType = "None"
 
-	_, _, profiles := clabernetescompiler.RenderAll(
+	_, _, profiles, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 	for _, profile := range profiles {
 		if profile.Spec.Expose == nil || profile.Spec.Expose.ExposeType != "None" {
 			t.Fatalf(
@@ -501,11 +527,14 @@ func TestRenderNodeProfilesManagementDefaultAndOptOut(t *testing.T) {
 	for _, disabled := range []bool{false, true} {
 		topology, compiled := renderTestTopology(t)
 		topology.Spec.DisableManagement = disabled
-		_, _, profiles := clabernetescompiler.RenderAll(
+		_, _, profiles, err := clabernetescompiler.RenderAll(
 			topology,
 			compiled,
 			clabernetesconfig.GetFakeManager,
 		)
+		if err != nil {
+			t.Fatalf("unexpected error rendering topology: %s", err)
+		}
 		for _, profile := range profiles {
 			if profile.Spec.Mgmt == nil || profile.Spec.Mgmt.Disabled != disabled {
 				t.Fatalf(
@@ -539,11 +568,14 @@ func TestRenderNodeProfilesPreservesAffinity(t *testing.T) {
 	}
 	topology.Spec.Deployment.Scheduling.Affinity = affinity
 
-	_, _, profiles := clabernetescompiler.RenderAll(
+	_, _, profiles, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 
 	if len(profiles) != 2 {
 		t.Fatalf("expected shared + dedicated profiles, got %d", len(profiles))
@@ -578,11 +610,14 @@ func TestRenderNodeProfilesOmitsUnusedSharedProfile(t *testing.T) {
 		},
 	}
 
-	_, _, profiles := clabernetescompiler.RenderAll(
+	_, _, profiles, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
 	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 
 	if len(profiles) != 2 {
 		t.Fatalf("expected only two referenced dedicated profiles, got %d", len(profiles))
@@ -636,5 +671,40 @@ func assertPerNodeNodeProfile(
 			"expected dedicated profile to retain topology mgmt compatibility, got %+v",
 			perNode.Spec.Mgmt,
 		)
+	}
+}
+
+// TestRenderAllSurfacesContractViolations pins the render failure contract: when the vocabulary
+// round trip through the engine cannot carry a compiled node (here, a kind-specific config value
+// that is not valid JSON), RenderAll must return an error that names the node and carries the
+// contract-violation marker, with no rendered primitives -- rather than panicking or silently
+// rendering the node with an empty containerlab definition.
+func TestRenderAllSurfacesContractViolations(t *testing.T) {
+	topology, compiled := renderTestTopology(t)
+
+	compiled.Nodes["srl1"].KindSpecificConfig = clabernetesapisv1alpha1.KindSpecificConfig{
+		"broken": apiextensionsv1.JSON{Raw: []byte("{invalid")},
+	}
+
+	nodes, links, profiles, err := clabernetescompiler.RenderAll(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+
+	if err == nil {
+		t.Fatal("expected the broken vocabulary round trip to fail the render")
+	}
+
+	if !strings.Contains(err.Error(), "clabernetes compiler:") {
+		t.Fatalf("expected the contract-violation marker on the error, got %q", err.Error())
+	}
+
+	if !strings.Contains(err.Error(), "srl1") {
+		t.Fatalf("expected the failing node named on the error, got %q", err.Error())
+	}
+
+	if nodes != nil || links != nil || profiles != nil {
+		t.Fatal("expected no rendered primitives from a failed render")
 	}
 }

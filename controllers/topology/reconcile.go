@@ -131,11 +131,16 @@ func (r *Reconciler) Reconcile(
 		return ctrlruntime.Result{}, err
 	}
 
-	nodes, links, nodeProfiles := clabernetescompiler.RenderAll(
+	nodes, links, nodeProfiles, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		r.configManagerGetter,
 	)
+	if err != nil {
+		r.Log.Criticalf("failed rendering compiled topology, err: %s", err)
+
+		return ctrlruntime.Result{}, err
+	}
 
 	rendered := renderedChildren{
 		nodeProfiles: nodeProfiles,

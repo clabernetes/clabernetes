@@ -30,8 +30,9 @@ const kindSpecificComponentsKey = "components"
 // render, and the render is not free (management networks, expose services, profiles).
 //
 // A failure means the engine produced something the c9s vocabulary cannot carry, which is a
-// contract violation rather than a user error, so it panics instead of silently dropping an
-// object -- the same contract decodeManifestOrPanic carries.
+// contract violation rather than a user error; RenderAll returns it marked by
+// manifestContractError so the caller surfaces it instead of silently dropping an object -- the
+// same contract decodeManifest carries.
 func RenderAll(
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
@@ -40,21 +41,25 @@ func RenderAll(
 	nodes []*clabernetesapisv1alpha1.Node,
 	links []*clabernetesapisv1alpha1.Link,
 	profiles []*clabernetesapisv1alpha1.NodeProfile,
+	err error,
 ) {
-	unstructuredNodes, unstructuredLinks, unstructuredProfiles, err := renderAll(
+	unstructuredNodes, unstructuredLinks, unstructuredProfiles, renderErr := renderAll(
 		topology,
 		compiled,
 		configManagerGetter,
 	)
-	if err != nil {
-		panic(manifestContractError(err))
+	if renderErr != nil {
+		return nil, nil, nil, manifestContractError(renderErr)
 	}
 
 	nodes = make([]*clabernetesapisv1alpha1.Node, 0, len(unstructuredNodes))
 
 	for i := range unstructuredNodes {
 		node := &clabernetesapisv1alpha1.Node{}
-		decodeManifestOrPanic(unstructuredNodes[i].Object, node)
+
+		if decodeErr := decodeManifest(unstructuredNodes[i].Object, node); decodeErr != nil {
+			return nil, nil, nil, manifestContractError(decodeErr)
+		}
 
 		nodes = append(nodes, node)
 	}
@@ -63,7 +68,10 @@ func RenderAll(
 
 	for i := range unstructuredLinks {
 		link := &clabernetesapisv1alpha1.Link{}
-		decodeManifestOrPanic(unstructuredLinks[i].Object, link)
+
+		if decodeErr := decodeManifest(unstructuredLinks[i].Object, link); decodeErr != nil {
+			return nil, nil, nil, manifestContractError(decodeErr)
+		}
 
 		links = append(links, link)
 	}
@@ -72,19 +80,23 @@ func RenderAll(
 
 	for i := range unstructuredProfiles {
 		profile := &clabernetesapisv1alpha1.NodeProfile{}
-		decodeManifestOrPanic(unstructuredProfiles[i].Object, profile)
+
+		if decodeErr := decodeManifest(unstructuredProfiles[i].Object, profile); decodeErr != nil {
+			return nil, nil, nil, manifestContractError(decodeErr)
+		}
 
 		profiles = append(profiles, profile)
 	}
 
-	return nodes, links, profiles
+	return nodes, links, profiles, nil
 }
 
 // manifestContractError marks an engine render failure as a contract violation: the engine
 // produced something the c9s vocabulary cannot carry, which is a programming error rather than
-// a user error.
-func manifestContractError(err error) string {
-	return fmt.Sprintf("clabernetes compiler: %v", err)
+// a user error. The error is returned rather than panicked so the reconcile path reports it
+// through the same structured failure handling as compile failures.
+func manifestContractError(err error) error {
+	return fmt.Errorf("clabernetes compiler: %w", err)
 }
 
 // renderAll renders the compiled topology through the engine once and returns every primitive
@@ -212,12 +224,15 @@ func exportNodeDefinition(
 	return exported, nil
 }
 
-// decodeManifestOrPanic decodes an engine manifest into a typed clabernetes object. A failure
-// means the engine produced a manifest the c9s vocabulary cannot carry, which is a contract
-// violation rather than a user error, so it panics instead of silently dropping an object.
-func decodeManifestOrPanic(object map[string]any, typed any) {
+// decodeManifest decodes an engine manifest into a typed clabernetes object. A failure means
+// the engine produced a manifest the c9s vocabulary cannot carry, which is a contract violation
+// rather than a user error; the error is returned so the caller surfaces it instead of silently
+// dropping an object.
+func decodeManifest(object map[string]any, typed any) error {
 	err := apimachineryruntime.DefaultUnstructuredConverter.FromUnstructured(object, typed)
 	if err != nil {
-		panic(manifestContractError(fmt.Errorf("decoding compiled manifest: %w", err)))
+		return fmt.Errorf("decoding compiled manifest: %w", err)
 	}
+
+	return nil
 }
