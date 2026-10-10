@@ -43,7 +43,7 @@ topology:
     n1:
       kind: linux
       image: alpine
-      unsupported-setting: true
+      cpu-set: 0-1
 `
 	controller := true
 	legacy := &k8sappsv1.Deployment{ObjectMeta: metav1.ObjectMeta{

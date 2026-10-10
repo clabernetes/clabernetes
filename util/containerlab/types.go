@@ -1,6 +1,7 @@
 package containerlab
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -52,11 +53,85 @@ type Config struct {
 	// Lab prefix
 	Prefix *string `yaml:"prefix,omitempty"`
 	// Management network configuration
-	Mgmt *MgmtNet `yaml:"mgmt,omitempty"`
+	Mgmt MgmtNetworks `yaml:"mgmt,omitempty"`
 	// Topology definition
 	Topology *Topology `yaml:"topology,omitempty"`
 	// Debug mode flag
 	Debug bool `yaml:"debug"`
+}
+
+// MgmtNetworks holds the management network declarations of a topology. It accepts containerlab's
+// single mapping form and its sequence form. c9s realizes one cluster-agnostic management network
+// per namespace, so a single network is carried as-is and more than one declaration is a parse
+// error; multiple management networks need a different management plan and are planned for a
+// later release.
+type MgmtNetworks []*MgmtNet
+
+// errMultipleManagementNetworks rejects a topology declaring more than one management network:
+// c9s realizes one cluster-agnostic management network per namespace, and a per-network
+// management plan is planned for a later release.
+var errMultipleManagementNetworks = errors.New(
+	"mgmt: c9s supports a single management network; multiple management networks are " +
+		"planned for a later c9s release",
+)
+
+// errInvalidManagementForm marks a management block that is neither a mapping nor a sequence.
+var errInvalidManagementForm = errors.New(
+	"mgmt: expected a management network mapping or a list of networks",
+)
+
+// UnmarshalYAML decodes either a single management network mapping or a sequence of them. The
+// kind of the decoded value selects the form, and the strict decoder state is preserved by
+// re-decoding through the supplied function.
+func (m *MgmtNetworks) UnmarshalYAML(unmarshal func(any) error) error {
+	var raw any
+
+	err := unmarshal(&raw)
+	if err != nil {
+		return err
+	}
+
+	switch value := raw.(type) {
+	case nil:
+		return nil
+	case []any:
+		if len(value) > 1 {
+			return fmt.Errorf("%w: %d were declared", errMultipleManagementNetworks, len(value))
+		}
+
+		networks := []*MgmtNet(nil)
+
+		err = unmarshal(&networks)
+		if err != nil {
+			return err
+		}
+
+		*m = networks
+
+		return nil
+	case map[string]any:
+		single := new(MgmtNet)
+
+		err = unmarshal(single)
+		if err != nil {
+			return err
+		}
+
+		*m = MgmtNetworks{single}
+
+		return nil
+	default:
+		return errInvalidManagementForm
+	}
+}
+
+// First returns the declared management network, or nil when none was declared.
+func (m MgmtNetworks) First() *MgmtNet {
+	if len(m) == 0 {
+		return nil
+	}
+
+	return m[0]
 }
 
 // Topology represents a lab topology.

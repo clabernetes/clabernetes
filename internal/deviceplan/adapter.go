@@ -1110,6 +1110,116 @@ func rewriteWorkspacePaths(config *clabtypes.NodeConfig, scratchRoot, stableRoot
 	config.Cmd = rewrite(config.Cmd)
 }
 
+// c9sKindSpecificConfigKey is the vocabulary field c9s uses to carry merged kind-specific config
+// keys on the Node definition. The imported containerlab definition unmarshaler absorbs unknown
+// keys inline, so this wrapper arrives inside the absorbed kind-specific config and is unwrapped
+// into per-key entries here.
+const c9sKindSpecificConfigKey = "kind-specific-config"
+
+// kindSpecificWrapperEntries flattens the c9s vocabulary wrapper mapping into per-key entries.
+// The wrapper arrives through the imported definition decode, whose yaml mapping values carry
+// generic map keys, so both mapping shapes are accepted.
+func kindSpecificWrapperEntries(value any) map[string]any {
+	switch wrapper := value.(type) {
+	case map[string]any:
+		return wrapper
+	case map[any]any:
+		entries := make(map[string]any, len(wrapper))
+		for key, entryValue := range wrapper {
+			keyText, ok := key.(string)
+			if !ok {
+				return nil
+			}
+
+			entries[keyText] = entryValue
+		}
+
+		return entries
+	default:
+		return nil
+	}
+}
+
+// importedKindSpecificConfig decodes the node's kind-specific config keys into the typed config
+// the imported kind registered with the module's registry. Every key must belong to the kind and
+// every value must match its type: this is exactly the strict decoding containerlab deploys with,
+// and it is what turns kind config keys like `port-count` into the kind's own settings.
+func importedKindSpecificConfig(
+	nodeInput NodeInput,
+	definition *clabtypes.NodeDefinition,
+	entry *clabnodes.NodeRegistryEntry,
+) (any, error) {
+	if len(definition.KindSpecificConfig) == 0 {
+		return nil, nil //nolint:nilnil // an absent kind-specific config is a valid result.
+	}
+
+	entries := make([]clabtypes.KindSpecificConfigEntry, 0, len(definition.KindSpecificConfig))
+	for key, value := range definition.KindSpecificConfig {
+		if key == c9sKindSpecificConfigKey {
+			wrapper := kindSpecificWrapperEntries(value)
+			if wrapper == nil {
+				return nil, definitionError(
+					nodeInput,
+					"definition.kind-specific-config",
+					"kind-specific config must be a mapping of kind config keys",
+					nil,
+				)
+			}
+
+			for wrapperKey, wrapperValue := range wrapper {
+				entries = append(entries, clabtypes.KindSpecificConfigEntry{
+					Key:   wrapperKey,
+					Value: wrapperValue,
+					From:  "nodes." + nodeInput.Name,
+				})
+			}
+
+			continue
+		}
+
+		entries = append(entries, clabtypes.KindSpecificConfigEntry{
+			Key:   key,
+			Value: value,
+			From:  "nodes." + nodeInput.Name,
+		})
+	}
+
+	slices.SortFunc(entries, func(left, right clabtypes.KindSpecificConfigEntry) int {
+		return strings.Compare(left.Key, right.Key)
+	})
+
+	kindSpecificConfig, err := clabnodes.DecodeKindSpecificConfig(
+		entry,
+		nodeInput.Name,
+		nodeInput.Kind,
+		entries,
+	)
+	if err != nil {
+		// The imported message names the node, the kind, the offending key, and the topology
+		// block that set it, and carries no secret bytes -- it is the message containerlab
+		// deploys with, so it belongs in the bounded diagnostic too.
+		return nil, definitionError(
+			nodeInput,
+			"definition.kind-specific-config",
+			err.Error(),
+			err,
+		)
+	}
+
+	return kindSpecificConfig, nil
+}
+
+func definitionError(nodeInput NodeInput, field, message string, cause error) error {
+	return &Error{
+		Code:     ErrorInvalidInput,
+		NodeID:   nodeInput.ID,
+		Field:    field,
+		Behavior: "containerlab-vocabulary",
+		Message:  message,
+		cause:    cause,
+	}
+}
+
 func decodeNodeDefinition(input NodeInput) (*clabtypes.NodeDefinition, error) {
 	definition := &clabtypes.NodeDefinition{}
 	if err := yaml.UnmarshalStrict(input.Definition, definition); err != nil {
@@ -1450,7 +1560,6 @@ func nodeConfigFromDefinition(
 		Healthcheck:     definition.HealthCheck,
 		Credentials:     definition.Credentials,
 		Aliases:         slices.Clone(definition.Aliases),
-		Components:      slices.Clone(definition.Components),
 	}
 	if definition.EnforceStartupConfig != nil {
 		config.EnforceStartupConfig = *definition.EnforceStartupConfig
@@ -1461,6 +1570,11 @@ func nodeConfigFromDefinition(
 	if definition.AutoRemove != nil {
 		config.AutoRemove = *definition.AutoRemove
 	}
+	kindSpecificConfig, err := importedKindSpecificConfig(input, definition, entry)
+	if err != nil {
+		return nil, err
+	}
+	config.KindSpecificConfig = kindSpecificConfig
 	if config.Env == nil {
 		config.Env = map[string]string{}
 	}

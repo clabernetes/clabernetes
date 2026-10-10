@@ -622,7 +622,7 @@ func validPlan(inputDigest string) clabernetesinternaldeviceplan.Plan {
 func testCompatibility() clabernetesinternaldeviceplan.Compatibility {
 	return clabernetesinternaldeviceplan.Compatibility{
 		ContainerlabModule:  "github.com/srl-labs/containerlab",
-		ContainerlabVersion: "v0.78.0",
+		ContainerlabVersion: "v0.80.0",
 		RegistryDigest:      "sha256:0320f230b9e54f6b5e3a0aaa8b6ee0ffe51bf834bffb7ba5d2200669ed9d7b7e",
 		PlanSchemaVersion:   clabernetesinternaldeviceplan.SchemaVersion,
 	}

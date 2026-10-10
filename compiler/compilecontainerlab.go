@@ -1,13 +1,16 @@
 package compiler
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	clabernetesapis "github.com/clabernetes/clabernetes/apis"
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
@@ -18,6 +21,7 @@ import (
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	clabtypes "github.com/srl-labs/containerlab/types"
 	"gopkg.in/yaml.v3"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -48,6 +52,17 @@ func compileContainerlabDefinition(
 		diagnostics.add(diagnosticFromUnknownField(unknownField))
 	}
 
+	nodeFieldLines, err := definitionFieldLines(definition)
+	if err != nil {
+		return nil, err
+	}
+
+	validateAbsorbedNodeVocabulary(
+		containerlabConfig,
+		nodeFieldLines,
+		diagnostics,
+	)
+
 	importedTopology, err := loadImportedNodeTopology(definition)
 	if err != nil {
 		return nil, err
@@ -70,7 +85,7 @@ func compileContainerlabDefinition(
 			map[string][]clabernetesapisv1alpha1.NodeAppProtocol,
 			len(containerlabConfig.Topology.Nodes),
 		),
-		Mgmt: containerlabConfig.Mgmt,
+		Mgmt: containerlabConfig.Mgmt.First(),
 	}
 
 	nodeNames := make([]string, 0, len(containerlabConfig.Topology.Nodes))
@@ -86,6 +101,16 @@ func compileContainerlabDefinition(
 			nodeName,
 		)
 		if err != nil {
+			return nil, err
+		}
+
+		if err = collectKindSpecificConfig(
+			importedTopology,
+			nodeName,
+			compiled.Nodes[nodeName],
+			nodeFieldLines,
+			diagnostics,
+		); err != nil {
 			return nil, err
 		}
 
@@ -166,6 +191,42 @@ func validateManagementPolicy(
 			path:    "mgmt.driver-opts",
 			message: "container runtime network driver options are accepted and ignored",
 		},
+		{
+			name: "driver",
+			path: "mgmt.driver",
+			message: "management network drivers are a container runtime concept; " +
+				"the c9s management mesh has no driver",
+		},
+		{
+			name: "ipam",
+			path: "mgmt.ipam",
+			message: "container runtime IPAM providers are accepted and ignored; " +
+				"c9s allocates management addresses itself",
+		},
+		{
+			name: "macvlan-parent",
+			path: "mgmt.macvlan-parent",
+			message: "macvlan management networks are a container runtime concept and are " +
+				"accepted and ignored",
+		},
+		{
+			name: "macvlan-mode",
+			path: "mgmt.macvlan-mode",
+			message: "macvlan management networks are a container runtime concept and are " +
+				"accepted and ignored",
+		},
+		{
+			name: "macvlan-aux",
+			path: "mgmt.macvlan-aux",
+			message: "macvlan management networks are a container runtime concept and are " +
+				"accepted and ignored",
+		},
+		{
+			name: "tailscale",
+			path: "mgmt.tailscale",
+			message: "management network tailscale integration is a container runtime " +
+				"capability and is accepted and ignored",
+		},
 	}
 	for _, field := range fields {
 		line, present := fieldLines[field.name]
@@ -198,7 +259,18 @@ func topLevelMappingFieldLines(definition, fieldName string) (map[string]int, er
 	root := document.Content[0]
 	for index := 0; index+1 < len(root.Content); index += 2 {
 		key, value := root.Content[index], root.Content[index+1]
-		if key.Value != fieldName || value.Kind != yaml.MappingNode {
+		if key.Value != fieldName {
+			continue
+		}
+
+		// The management block may be a single mapping or a sequence of networks; the compiler
+		// accepts one network, so its element holds the same fields.
+		if value.Kind == yaml.SequenceNode && len(value.Content) == 1 &&
+			value.Content[0].Kind == yaml.MappingNode {
+			value = value.Content[0]
+		}
+
+		if value.Kind != yaml.MappingNode {
 			continue
 		}
 
@@ -1081,6 +1153,319 @@ func importedNodePorts(topology *clabtypes.Topology, nodeName string) []string {
 	}
 
 	return nil
+}
+
+// kindSpecificComponentsKey is the one kind-specific config key c9s carries as a typed field
+// instead of the generic passthrough: the component inventory drives c9s' own device rendering
+// (chassis component DNS aliases), and the Node CRD exposes it as a validated, typed vocabulary.
+const kindSpecificComponentsKey = "components"
+
+// collectKindSpecificConfig carries the node's merged kind-specific config keys onto the
+// flattened definition, mirroring containerlab's kind-specific config model: keys are merged over
+// the regular inheritance order by the imported topology, and the imported kind validates them
+// strictly when the node is planned. The `components` key is carried by the typed Components
+// field and is never duplicated into the passthrough, and the `mgmt-net` key is accepted with a
+// diagnostic because c9s realizes a single management network per namespace.
+func collectKindSpecificConfig(
+	topology *clabtypes.Topology,
+	nodeName string,
+	flattened *clabernetesutilcontainerlab.NodeDefinition,
+	fieldLines map[string]map[string]int,
+	diagnostics *compileDiagnostics,
+) error {
+	if mgmtNet := topology.GetNodeMgmtNet(nodeName); mgmtNet != "" {
+		flattened.MgmtNet = mgmtNet
+
+		diagnostics.add(Diagnostic{
+			Code: "ignored-node-field",
+			Path: "topology.nodes." + nodeName + ".mgmt-net",
+			Line: fieldLines["nodes."+nodeName]["mgmt-net"],
+			Message: fmt.Sprintf(
+				"node %q mgmt-net %q is accepted and ignored; c9s realizes a single management "+
+					"network per namespace",
+				nodeName,
+				mgmtNet,
+			),
+			Warning: true,
+		})
+	}
+
+	entries := topology.GetNodeKindSpecificConfig(nodeName)
+	if len(entries) == 0 {
+		return nil
+	}
+
+	if flattened.KindSpecificConfig == nil {
+		flattened.KindSpecificConfig = make(map[string]apiextensionsv1.JSON, len(entries))
+	}
+
+	for _, entry := range entries {
+		if entry.Key == kindSpecificComponentsKey {
+			continue
+		}
+
+		value, err := normalizeImportedKindSpecificValue(entry.Value)
+		if err != nil {
+			return err
+		}
+
+		flattened.KindSpecificConfig[entry.Key] = value
+	}
+
+	return nil
+}
+
+// absorbedGenericFieldDiagnostic reports a node key that containerlab's generic node definition
+// declares but c9s cannot carry, mirroring the strict parser's unknown-field diagnostics.
+func absorbedGenericFieldDiagnostic(
+	key string,
+	line int,
+) Diagnostic {
+	diagnostic := Diagnostic{Code: "unsupported-field", Message: fmt.Sprintf(
+		"field %s is not supported by clabernetes",
+		key,
+	)}
+
+	diagnostic.Path = key
+	diagnostic.Line = line
+
+	if reason, rejected := rejectedContainerlabFieldReason(key); rejected {
+		diagnostic.Message = fmt.Sprintf(
+			"field %q is rejected: %s",
+			key,
+			reason,
+		)
+	}
+
+	return diagnostic
+}
+
+// validateAbsorbedNodeVocabulary rejects node keys that the c9s vocabulary does not declare but
+// containerlab's generic node definition does: since the kind-specific config mechanism absorbs
+// unknown keys, a generic field like `stages` would otherwise ride into the imported kind as
+// kind-owned config instead of failing the compile with the structured rejection it documents.
+func validateAbsorbedNodeVocabulary(
+	config *clabernetesutilcontainerlab.Config,
+	fieldLines map[string]map[string]int,
+	diagnostics *compileDiagnostics,
+) {
+	if config.Topology == nil {
+		return
+	}
+
+	vocabulary := importedNodeVocabulary()
+
+	blocks := []struct {
+		from        string
+		definitions []*clabernetesutilcontainerlab.NodeDefinition
+	}{
+		{from: "defaults", definitions: singleDefinition(config.Topology.Defaults)},
+	}
+
+	for _, kindName := range sortedVocabularyBlockNames(config.Topology.Kinds) {
+		blocks = append(
+			blocks,
+			struct {
+				from        string
+				definitions []*clabernetesutilcontainerlab.NodeDefinition
+			}{
+				from:        "kinds." + kindName,
+				definitions: singleDefinition(config.Topology.Kinds[kindName]),
+			},
+		)
+	}
+
+	for _, groupName := range sortedVocabularyBlockNames(config.Topology.Groups) {
+		blocks = append(
+			blocks,
+			struct {
+				from        string
+				definitions []*clabernetesutilcontainerlab.NodeDefinition
+			}{
+				from:        "groups." + groupName,
+				definitions: singleDefinition(config.Topology.Groups[groupName]),
+			},
+		)
+	}
+
+	for _, nodeName := range sortedVocabularyBlockNames(config.Topology.Nodes) {
+		blocks = append(
+			blocks,
+			struct {
+				from        string
+				definitions []*clabernetesutilcontainerlab.NodeDefinition
+			}{
+				from:        "nodes." + nodeName,
+				definitions: singleDefinition(config.Topology.Nodes[nodeName]),
+			},
+		)
+	}
+
+	for _, block := range blocks {
+		for _, definition := range block.definitions {
+			for _, key := range sortedVocabularyBlockNames(definition.KindSpecificConfig) {
+				if !vocabulary[key] {
+					continue
+				}
+
+				diagnostics.add(absorbedGenericFieldDiagnostic(
+					key,
+					fieldLines[block.from][key],
+				))
+			}
+		}
+	}
+}
+
+func singleDefinition(
+	definition *clabernetesutilcontainerlab.NodeDefinition,
+) []*clabernetesutilcontainerlab.NodeDefinition {
+	if definition == nil {
+		return nil
+	}
+
+	return []*clabernetesutilcontainerlab.NodeDefinition{definition}
+}
+
+func sortedVocabularyBlockNames[V any](values map[string]V) []string {
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+
+	return names
+}
+
+// normalizeImportedKindSpecificValue renders a raw imported kind-specific config value as the
+// canonical JSON form the Node vocabulary carries: the imported yaml unmarshaler produces
+// yaml.v2 shapes (mapping keys of type any) that JSON cannot represent directly.
+func normalizeImportedKindSpecificValue(value any) (apiextensionsv1.JSON, error) {
+	var normalized any
+
+	err := transcodeImportedField(value, &normalized)
+	if err != nil {
+		return apiextensionsv1.JSON{}, err
+	}
+
+	raw, err := json.Marshal(normalized)
+	if err != nil {
+		return apiextensionsv1.JSON{}, err
+	}
+
+	return apiextensionsv1.JSON{Raw: raw}, nil
+}
+
+// importedNodeVocabulary is the yaml vocabulary containerlab's generic node definition declares.
+// Keys absorbed by the inline kind-specific config mapping that collide with it are generic
+// fields, not kind-owned keys, and get the compiler's unsupported-field diagnostics.
+//
+//nolint:gochecknoglobals // the vocabulary is an immutable, decode-once cache.
+var importedNodeVocabulary = sync.OnceValue(
+	func() map[string]bool {
+		vocabulary := map[string]bool{}
+
+		collectImportedNodeVocabularyKeys(reflect.TypeFor[clabtypes.NodeDefinition](), vocabulary)
+
+		return vocabulary
+	},
+)
+
+func collectImportedNodeVocabularyKeys(walk reflect.Type, into map[string]bool) {
+	for walk.Kind() == reflect.Pointer || walk.Kind() == reflect.Slice ||
+		walk.Kind() == reflect.Array || walk.Kind() == reflect.Map {
+		walk = walk.Elem()
+	}
+
+	if walk.Kind() != reflect.Struct {
+		return
+	}
+
+	for field := range walk.Fields() {
+		tag, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
+		if tag == "" || tag == "-" {
+			continue
+		}
+
+		into[tag] = true
+	}
+}
+
+// definitionFieldLines records the source line of every field of every topology block that can
+// hold node definitions, keyed by the block identity the imported topology reports for merged
+// kind-specific config entries: nodes.<name>, groups.<name>, kinds.<name>, or defaults.
+func definitionFieldLines(definition string) (map[string]map[string]int, error) {
+	document := &yaml.Node{}
+
+	err := yaml.Unmarshal([]byte(definition), document)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(document.Content) == 0 || document.Content[0].Kind != yaml.MappingNode {
+		return map[string]map[string]int{}, nil
+	}
+
+	root := document.Content[0]
+
+	for index := 0; index+1 < len(root.Content); index += 2 {
+		if root.Content[index].Value != "topology" {
+			continue
+		}
+
+		topology := root.Content[index+1]
+		if topology.Kind != yaml.MappingNode {
+			break
+		}
+
+		return mappingFieldLines(topology)
+	}
+
+	return map[string]map[string]int{}, nil
+}
+
+// mappingFieldLines walks one topology mapping and records the field lines of its defaults,
+// kinds, groups, and nodes blocks.
+func mappingFieldLines(topology *yaml.Node) (map[string]map[string]int, error) {
+	lines := map[string]map[string]int{}
+
+	for index := 0; index+1 < len(topology.Content); index += 2 {
+		key, value := topology.Content[index], topology.Content[index+1]
+
+		switch key.Value {
+		case "defaults":
+			if value.Kind == yaml.MappingNode {
+				lines["defaults"] = childFieldLines(value)
+			}
+		case "kinds", "groups", "nodes":
+			if value.Kind != yaml.MappingNode {
+				continue
+			}
+
+			prefix := key.Value
+			for nameIndex := 0; nameIndex+1 < len(value.Content); nameIndex += 2 {
+				name, definition := value.Content[nameIndex], value.Content[nameIndex+1]
+				if definition.Kind != yaml.MappingNode {
+					continue
+				}
+
+				lines[prefix+"."+name.Value] = childFieldLines(definition)
+			}
+		}
+	}
+
+	return lines, nil
+}
+
+func childFieldLines(mapping *yaml.Node) map[string]int {
+	lines := make(map[string]int, len(mapping.Content)/yamlMappingPairSize)
+	for index := 0; index+1 < len(mapping.Content); index += yamlMappingPairSize {
+		childKey := mapping.Content[index]
+		lines[childKey.Value] = childKey.Line
+	}
+
+	return lines
 }
 
 func transcodeImportedField(source, destination any) error {

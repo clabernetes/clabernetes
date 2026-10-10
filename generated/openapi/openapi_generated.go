@@ -79,6 +79,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.Extras": schema_clabernetes_clabernetes_apis_v1alpha1_Extras(
 			ref,
 		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.FRRExtras": schema_clabernetes_clabernetes_apis_v1alpha1_FRRExtras(
+			ref,
+		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap": schema_clabernetes_clabernetes_apis_v1alpha1_FileFromConfigMap(
 			ref,
 		),
@@ -318,7 +321,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Component(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "Component holds a hardware component configuration (i.e. an SR-OS card or mda).",
+				Description: "Component holds a hardware component configuration (i.e. an SR-OS card or mda). It is the typed projection of containerlab's kind-specific `components` key: the nokia_srsim kind accepts per-component env entries, and the nokia_sros kind sets per-component VM resources with the typed cpu, ram, and max-nics keys. The imported kind validates the shape strictly when the node is planned.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"slot": {
@@ -337,7 +340,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Component(
 					},
 					"env": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Env holds environment variables for the component.",
+							Description: "Env holds environment variables for the component (nokia_srsim).",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
@@ -350,11 +353,25 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Component(
 							},
 						},
 					},
-					"sfm": {
+					"cpu": {
 						SchemaProps: spec.SchemaProps{
-							Description: "SFM is the SFM (switch fabric module) of the component.",
-							Type:        []string{"string"},
-							Format:      "",
+							Description: "CPU is the vcpu count the component's VM gets (nokia_sros).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"ram": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RAM is the memory, in MB, the component's VM gets (nokia_sros).",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+					"max-nics": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MaxNics limits the interface count the component's VM gets (nokia_sros).",
+							Type:        []string{"integer"},
+							Format:      "int32",
 						},
 					},
 					"xiom": {
@@ -1108,6 +1125,50 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Extras(
 						},
 						SchemaProps: spec.SchemaProps{
 							Description: "CeosCopyToFlash is a list of paths to files which are to be copied to the ceos flash dir.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Type:   []string{"string"},
+										Format: "",
+									},
+								},
+							},
+						},
+					},
+					"frr": {
+						SchemaProps: spec.SchemaProps{
+							Description: "FRR holds FRRouting kind specific options.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.FRRExtras",
+							),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.FRRExtras"},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_FRRExtras(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "FRRExtras holds the FRRouting kind specific extra options.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"daemons": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-type": "atomic",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Daemons is the list of FRR routing daemons to enable. When empty, every daemon known to the kind is enabled; the always-on daemons (zebra, staticd, mgmtd, watchfrr) need not be listed.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -2245,7 +2306,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Components holds the hardware component (i.e. SR-OS card/mda) configuration for the node.",
+							Description: "Components holds the hardware component (i.e. SR-OS card/mda) configuration for the node. It is the typed projection of containerlab's kind-specific `components` key; the imported kind validates it strictly when the node is planned.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -2258,11 +2319,34 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeDefinition(
 							},
 						},
 					},
+					"mgmt-net": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MgmtNet names the container-runtime management network the node attaches to (containerlab's kind-agnostic `mgmt-net` node key). c9s realizes a single cluster-agnostic management network per namespace, so the network name is accepted and ignored.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind-specific-config": {
+						SchemaProps: spec.SchemaProps{
+							Description: "KindSpecificConfig carries kind-owned node keys, exactly the containerlab kind-specific config keys that sit on the node definition itself -- e.g. `port-count` and `breakouts` for nvidia_cumulusvx, or `config-mode` for the Nokia kinds. The keys arrive inline on the node definition, are merged over the regular node > group > kinds.<kind> > defaults order by the topology compiler, and are validated strictly by the imported kind when the node is planned: unknown keys and mistyped values fail with the same error containerlab deploys with. The `components` key is deliberately carried by the typed Components field instead.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(
+											"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1.JSON",
+										),
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Component", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher", "github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Extras", "github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Component", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher", "github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Extras", "github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig", "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1.JSON"},
 	}
 }
 
@@ -3229,13 +3313,36 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Components holds the hardware component (i.e. SR-OS card/mda) configuration for the node.",
+							Description: "Components holds the hardware component (i.e. SR-OS card/mda) configuration for the node. It is the typed projection of containerlab's kind-specific `components` key; the imported kind validates it strictly when the node is planned.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
 										Ref: ref(
 											"github.com/clabernetes/clabernetes/apis/v1alpha1.Component",
+										),
+									},
+								},
+							},
+						},
+					},
+					"mgmt-net": {
+						SchemaProps: spec.SchemaProps{
+							Description: "MgmtNet names the container-runtime management network the node attaches to (containerlab's kind-agnostic `mgmt-net` node key). c9s realizes a single cluster-agnostic management network per namespace, so the network name is accepted and ignored.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"kind-specific-config": {
+						SchemaProps: spec.SchemaProps{
+							Description: "KindSpecificConfig carries kind-owned node keys, exactly the containerlab kind-specific config keys that sit on the node definition itself -- e.g. `port-count` and `breakouts` for nvidia_cumulusvx, or `config-mode` for the Nokia kinds. The keys arrive inline on the node definition, are merged over the regular node > group > kinds.<kind> > defaults order by the topology compiler, and are validated strictly by the imported kind when the node is planned: unknown keys and mistyped values fail with the same error containerlab deploys with. The `components` key is deliberately carried by the typed Components field instead.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(
+											"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1.JSON",
 										),
 									},
 								},
@@ -3335,7 +3442,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Component", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher", "github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Extras", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromSecret", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL", "github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeAppProtocol", "k8s.io/api/core/v1.LocalObjectReference"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.CertificateConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Component", "github.com/clabernetes/clabernetes/apis/v1alpha1.ConfigDispatcher", "github.com/clabernetes/clabernetes/apis/v1alpha1.DNSConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.Extras", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromSecret", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL", "github.com/clabernetes/clabernetes/apis/v1alpha1.HealthcheckConfig", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeAppProtocol", "k8s.io/api/core/v1.LocalObjectReference", "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1.JSON"},
 	}
 }
 

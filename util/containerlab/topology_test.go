@@ -1,7 +1,6 @@
 package containerlab_test
 
 import (
-	"slices"
 	"strings"
 	"testing"
 
@@ -243,11 +242,14 @@ func TestLoadContainerlabConfigFromConfigObjects(t *testing.T) {
 	}
 }
 
-// TestLoadContainerlabConfigReportsUnknownFields proves the parse layer returns every unsupported
-// location so compiler callers can reject the complete set rather than losing source vocabulary.
-func TestLoadContainerlabConfigReportsUnknownFields(t *testing.T) {
+// TestLoadContainerlabConfigAbsorbsUnknownNodeFields proves the parse layer carries every
+// unknown node key as kind-specific config instead of failing: containerlab's kind-specific
+// config model owns node keys, so the loader keeps them and the compiler partitions them into
+// rejected generic fields and kind-owned config.
+func TestLoadContainerlabConfigAbsorbsUnknownNodeFields(t *testing.T) {
 	// publish and stages are real containerlab vocabulary clabernetes does not implement,
-	// tooootally-not-a-field stands in for a typo or a newer containerlab
+	// tooootally-not-a-field stands in for a typo or a newer containerlab, and port-count is
+	// kind-specific config the plan-time decoder validates.
 	config, unknownFields, err := clabernetesutilcontainerlab.LoadContainerlabConfig(`
 name: topo01
 topology:
@@ -262,6 +264,7 @@ topology:
         create:
           wait-for:
             - node: srl2
+      port-count: 64
     srl2:
       kind: srl
   links:
@@ -284,16 +287,19 @@ topology:
 		t.Errorf("expected srl1 image to survive, got %q", config.Topology.Nodes["srl1"].Image)
 	}
 
-	for _, field := range []string{"publish", "tooootally-not-a-field", "stages"} {
-		if !slices.ContainsFunc(unknownFields, func(diagnostic string) bool {
-			return strings.Contains(diagnostic, field)
-		}) {
-			t.Errorf("expected a diagnostic naming %q, got %q", field, unknownFields)
+	if len(unknownFields) != 0 {
+		t.Errorf("node keys are absorbed, not reported: %q", unknownFields)
+	}
+
+	absorbed := config.Topology.Nodes["srl1"].KindSpecificConfig
+	for _, field := range []string{"publish", "tooootally-not-a-field", "stages", "port-count"} {
+		if _, ok := absorbed[field]; !ok {
+			t.Errorf("expected %q to be absorbed as kind-specific config, got %q", field, absorbed)
 		}
 	}
 
-	if len(unknownFields) != 3 {
-		t.Errorf("expected exactly 3 diagnostics, got %q", unknownFields)
+	if len(absorbed) != 4 {
+		t.Errorf("expected exactly 4 absorbed keys, got %q", absorbed)
 	}
 }
 

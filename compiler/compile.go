@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -22,6 +23,20 @@ type Diagnostic struct {
 	// of failing the compile: the source stays valid, and the diagnostic tells the author what
 	// changed. Only constructs whose loss cannot silently change lab behavior may be warnings.
 	Warning bool
+}
+
+// UnsupportedFieldPolicy is retained for callers that explicitly requested strict compilation.
+// Error is the only supported policy; Topology compilation no longer has a warning mode.
+type UnsupportedFieldPolicy string
+
+const (
+	// UnsupportedFieldPolicyError rejects every source field c9s cannot preserve.
+	UnsupportedFieldPolicyError UnsupportedFieldPolicy = "error"
+)
+
+// CompileOptions is retained for strict external compiler callers.
+type CompileOptions struct {
+	UnsupportedFieldPolicy UnsupportedFieldPolicy
 }
 
 // UnsupportedFeaturesError reports all unsupported source constructs found in one compile pass.
@@ -175,6 +190,30 @@ func CompileTopology(
 		newCompileDiagnostics(),
 	)
 }
+
+// CompileTopologyWithOptions is the entry point for external compiler callers, such as the
+// containerlab c9s runtime. An omitted policy and Error both select the same fail-closed
+// compiler.
+func CompileTopologyWithOptions(
+	logger claberneteslogging.Instance,
+	topology *clabernetesapisv1alpha1.Topology,
+	options CompileOptions,
+) (*CompiledTopology, error) {
+	if options.UnsupportedFieldPolicy != "" &&
+		options.UnsupportedFieldPolicy != UnsupportedFieldPolicyError {
+		return nil, fmt.Errorf(
+			"%w %q; only %q is supported",
+			errUnsupportedFieldPolicy,
+			options.UnsupportedFieldPolicy,
+			UnsupportedFieldPolicyError,
+		)
+	}
+
+	return CompileTopology(logger, topology)
+}
+
+// errUnsupportedFieldPolicy marks a strict compiler caller requesting an unknown field policy.
+var errUnsupportedFieldPolicy = errors.New("unsupported topology compiler field policy")
 
 // GetTopologyKind returns the "kind" of topology this CR represents.
 func GetTopologyKind(_ *clabernetesapisv1alpha1.Topology) string {

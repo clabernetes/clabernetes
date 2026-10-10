@@ -197,9 +197,124 @@ type NodeDefinition struct {
 	// +optional
 	Extras *Extras `json:"extras,omitempty" yaml:"extras,omitempty"`
 	// Components holds the hardware component (i.e. SR-OS card/mda) configuration for the node.
+	// It is the typed projection of containerlab's kind-specific `components` key; the imported
+	// kind validates it strictly when the node is planned.
 	// +listType=atomic
 	// +optional
 	Components []*Component `json:"components,omitempty" yaml:"components,omitempty"`
+	// MgmtNet names the container-runtime management network the node attaches to
+	// (containerlab's kind-agnostic `mgmt-net` node key). c9s realizes a single cluster-agnostic
+	// management network per namespace, so the network name is accepted and ignored.
+	// +optional
+	MgmtNet string `json:"mgmt-net,omitempty" yaml:"mgmt-net,omitempty"`
+	// KindSpecificConfig carries kind-owned node keys, exactly the containerlab kind-specific
+	// config keys that sit on the node definition itself -- e.g. `port-count` and `breakouts`
+	// for nvidia_cumulusvx, or `config-mode` for the Nokia kinds. The keys arrive inline on the
+	// node definition, are merged over the regular node > group > kinds.<kind> > defaults order
+	// by the topology compiler, and are validated strictly by the imported kind when the node is
+	// planned: unknown keys and mistyped values fail with the same error containerlab deploys
+	// with. The `components` key is deliberately carried by the typed Components field instead.
+	// +optional
+	KindSpecificConfig KindSpecificConfig `json:"kind-specific-config,omitempty" yaml:"-"`
+}
+
+// UnmarshalYAML implements yaml unmarshalling that carries keys the c9s vocabulary does not
+// declare into KindSpecificConfig, mirroring containerlab's own node-definition decoding: the
+// compiler partitions those keys into rejected generic fields and kind-owned config before any
+// Node is emitted.
+func (n *NodeDefinition) UnmarshalYAML(unmarshal func(any) error) error {
+	type nodeDefinitionAlias NodeDefinition
+
+	wrapped := struct {
+		nodeDefinitionAlias `yaml:",inline"`
+
+		// the inline map must sit on this wrapper; yaml.v3 ignores inline maps inside an
+		// inlined alias.
+		KindSpecificConfig KindSpecificConfig `yaml:"kind-specific-config,omitempty"`
+		Unknown            map[string]any     `yaml:",inline"`
+	}{}
+
+	if err := unmarshal(&wrapped); err != nil {
+		return err
+	}
+
+	*n = NodeDefinition(wrapped.nodeDefinitionAlias)
+	n.KindSpecificConfig = wrapped.KindSpecificConfig
+
+	for key, value := range wrapped.Unknown {
+		raw, marshalErr := json.Marshal(value)
+		if marshalErr != nil {
+			return marshalErr
+		}
+
+		if n.KindSpecificConfig == nil {
+			n.KindSpecificConfig = make(KindSpecificConfig, len(wrapped.Unknown))
+		}
+
+		n.KindSpecificConfig[key] = apiextensionsv1.JSON{Raw: raw}
+	}
+
+	return nil
+}
+
+// MarshalYAML renders KindSpecificConfig under its own key, mirroring UnmarshalYAML.
+func (n *NodeDefinition) MarshalYAML() (any, error) {
+	type nodeDefinitionAlias NodeDefinition
+
+	return struct {
+		nodeDefinitionAlias `yaml:",inline"`
+
+		KindSpecificConfig KindSpecificConfig `yaml:"kind-specific-config,omitempty"`
+	}{nodeDefinitionAlias(*n), n.KindSpecificConfig}, nil
+}
+
+// KindSpecificConfig is a mapping of kind-specific config key to its (arbitrary, so
+// json.RawMessage style) value.
+type KindSpecificConfig map[string]apiextensionsv1.JSON
+
+// MarshalYAML implements yaml marshalling for KindSpecificConfig -- the raw json values are
+// unpacked so the rendered (containerlab) yaml holds the plain values rather than the k8s JSON
+// wrapper type.
+func (k KindSpecificConfig) MarshalYAML() (any, error) {
+	out := make(map[string]any, len(k))
+
+	for key := range k {
+		var value any
+
+		err := json.Unmarshal(k[key].Raw, &value)
+		if err != nil {
+			return nil, err
+		}
+
+		out[key] = value
+	}
+
+	return out, nil
+}
+
+// UnmarshalYAML implements yaml unmarshalling for KindSpecificConfig -- see also MarshalYAML.
+func (k *KindSpecificConfig) UnmarshalYAML(unmarshal func(any) error) error {
+	values := map[string]any{}
+
+	err := unmarshal(&values)
+	if err != nil {
+		return err
+	}
+
+	out := make(KindSpecificConfig, len(values))
+
+	for key := range values {
+		raw, marshalErr := json.Marshal(values[key])
+		if marshalErr != nil {
+			return marshalErr
+		}
+
+		out[key] = apiextensionsv1.JSON{Raw: raw}
+	}
+
+	*k = out
+
+	return nil
 }
 
 // Vars is a mapping of containerlab config engine variable name to (arbitrary, so json.RawMessage
@@ -269,6 +384,19 @@ type Extras struct {
 	// +listType=atomic
 	// +optional
 	CeosCopyToFlash []string `json:"ceos-copy-to-flash,omitempty" yaml:"ceos-copy-to-flash,omitempty"`
+	// FRR holds FRRouting kind specific options.
+	// +optional
+	FRR *FRRExtras `json:"frr,omitempty" yaml:"frr,omitempty"`
+}
+
+// FRRExtras holds the FRRouting kind specific extra options.
+type FRRExtras struct {
+	// Daemons is the list of FRR routing daemons to enable. When empty, every daemon known to
+	// the kind is enabled; the always-on daemons (zebra, staticd, mgmtd, watchfrr) need not be
+	// listed.
+	// +listType=atomic
+	// +optional
+	Daemons []string `json:"daemons,omitempty" yaml:"daemons,omitempty"`
 }
 
 // DNSConfig represents DNS configuration options a node has.
@@ -333,7 +461,11 @@ type CertificateConfig struct {
 	SANs []string `json:"sans,omitempty" yaml:"sans,omitempty"`
 }
 
-// Component holds a hardware component configuration (i.e. an SR-OS card or mda).
+// Component holds a hardware component configuration (i.e. an SR-OS card or mda). It is the typed
+// projection of containerlab's kind-specific `components` key: the nokia_srsim kind accepts
+// per-component env entries, and the nokia_sros kind sets per-component VM resources with the
+// typed cpu, ram, and max-nics keys. The imported kind validates the shape strictly when the node
+// is planned.
 type Component struct {
 	// Slot is the slot identifier of the component.
 	// +optional
@@ -341,12 +473,21 @@ type Component struct {
 	// Type is the type of the component.
 	// +optional
 	Type string `json:"type,omitempty" yaml:"type,omitempty"`
-	// Env holds environment variables for the component.
+	// Env holds environment variables for the component (nokia_srsim).
 	// +optional
 	Env map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
-	// SFM is the SFM (switch fabric module) of the component.
+	// CPU is the vcpu count the component's VM gets (nokia_sros).
+	// +kubebuilder:validation:Minimum=0
 	// +optional
-	SFM string `json:"sfm,omitempty" yaml:"sfm,omitempty"`
+	CPU int `json:"cpu,omitempty" yaml:"cpu,omitempty"`
+	// RAM is the memory, in MB, the component's VM gets (nokia_sros).
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	RAM int `json:"ram,omitempty" yaml:"ram,omitempty"`
+	// MaxNics limits the interface count the component's VM gets (nokia_sros).
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxNics int `json:"max-nics,omitempty" yaml:"max-nics,omitempty"`
 	// XIOM holds the xiom configuration of the component.
 	// +optional
 	XIOM XIOMS `json:"xiom,omitempty" yaml:"xiom,omitempty"`
