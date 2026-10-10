@@ -11,7 +11,7 @@ import (
 
 // pinnedContainerlabVersion is the containerlab release the vocabulary below was taken from. It
 // must track the github.com/srl-labs/containerlab module version pinned in go.mod.
-const pinnedContainerlabVersion = "v0.80.1-0.20261010165050-65f5eac62991"
+const pinnedContainerlabVersion = "v0.80.1-0.20261010211535-6919339453c7"
 
 // pinnedContainerlabVocabulary is the yaml vocabulary of the pinned containerlab's node
 // definition and its sub objects, keyed by the type name clabernetes uses for the same object.
