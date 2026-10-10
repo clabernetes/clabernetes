@@ -24,7 +24,7 @@ require (
 	github.com/google/go-containerregistry v0.21.9
 	github.com/google/nftables v0.3.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
-	github.com/srl-labs/containerlab v0.80.1-0.20261010163038-ec91c31f7b19
+	github.com/srl-labs/containerlab v0.80.1-0.20261010165050-65f5eac62991
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
 	golang.org/x/crypto v0.55.0

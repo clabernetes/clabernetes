@@ -577,6 +577,8 @@ github.com/srl-labs/containerlab v0.80.1-0.20261010161415-14dbf31d7d68 h1:0Bkg5x
 github.com/srl-labs/containerlab v0.80.1-0.20261010161415-14dbf31d7d68/go.mod h1:XNpFU6hQQFYaE29DQizDZnHhNsCsZjcT/x96tmAYWTM=
 github.com/srl-labs/containerlab v0.80.1-0.20261010163038-ec91c31f7b19 h1:pswpCpqDlTHAU8zh66R5uA3k9OaZ+dI1Z5RGoedKE5U=
 github.com/srl-labs/containerlab v0.80.1-0.20261010163038-ec91c31f7b19/go.mod h1:XNpFU6hQQFYaE29DQizDZnHhNsCsZjcT/x96tmAYWTM=
+github.com/srl-labs/containerlab v0.80.1-0.20261010165050-65f5eac62991 h1:ieiwIAGYTcomS0GowPHxiEezEBGErQgPn+rsr4iV8eA=
+github.com/srl-labs/containerlab v0.80.1-0.20261010165050-65f5eac62991/go.mod h1:XNpFU6hQQFYaE29DQizDZnHhNsCsZjcT/x96tmAYWTM=
 github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6 h1:pnnLyeX7o/5aX8qUQ69P/mLojDqwda8hFOCBTmP/6hw=
 github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6/go.mod h1:39R/xuhNgVhi+K0/zst4TLrJrVmbm6LVgl4A0+ZFS5M=
 github.com/steiler/acls v0.1.6 h1:E7D3Z38OnpE9zTlsqbyxfwrVy2dOyqV8cvtC2sG2mls=
