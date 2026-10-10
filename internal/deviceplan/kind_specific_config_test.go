@@ -108,3 +108,41 @@ func TestKindSpecificConfigInvalidValueIsRejected(t *testing.T) {
 		t.Fatalf("mistyped value error = %s", err)
 	}
 }
+
+func TestKindSpecificConfigReachesNokiaSrsimKind(t *testing.T) {
+	t.Parallel()
+
+	const image = "nokia_srsim:25.10.R1"
+
+	input := singleNodeInput("nokia_srsim", image)
+	input.Nodes[0].Type = "sr-1-92s"
+	input.Nodes[0].Definition = []byte(`{` +
+		`"kind":"nokia_srsim","type":"sr-1-92s","image":"` + image + `",` +
+		`"kind-specific-config":{"config-mode":"classic","gen-component-config":false}` +
+		`}`)
+
+	plan, err := (clabernetesinternaldeviceplan.Adapter{
+		Registry: clabernetesinternaldeviceplan.NewContainerlabRegistry(),
+		Revision: "kind-specific-config-v1",
+	}).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(plan.Nodes) != 1 {
+		t.Fatalf("planned nodes = %d, want 1", len(plan.Nodes))
+	}
+
+	// The sros kind translates config-mode into its generated configuration template, not into
+	// a container environment variable: the classic template is what the plan must carry.
+	found := false
+	for _, file := range plan.Files {
+		if file.SourceKind == clabernetesinternaldeviceplan.FileSourceGenerator {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf("the srsim kind generated no configuration artifacts; files = %#v", plan.Files)
+	}
+}
