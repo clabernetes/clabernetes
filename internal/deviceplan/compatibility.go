@@ -13,6 +13,13 @@ import (
 // ContainerlabModulePath is the dependency that exclusively owns device-kind behavior.
 const ContainerlabModulePath = "github.com/srl-labs/containerlab"
 
+// linkedContainerlabVersionOverride is set at test time through -ldflags: Go test binaries built
+// with Go 1.26 and earlier omit the module graph from their build information (golang/go#76926,
+// fixed in Go 1.27), so the linked containerlab version cannot be discovered at runtime there.
+// The test targets inject the version the module graph declares, which keeps the compatibility
+// invariant meaningful in exactly the build the tests run.
+var linkedContainerlabVersionOverride = "" //nolint:gochecknoglobals // ldflags injection point.
+
 // LiveCompatibility derives plan compatibility from the linked module and live imported registry.
 // No committed or hand-maintained kind inventory participates in this identity.
 func LiveCompatibility(registry *clabnodes.NodeRegistry) (Compatibility, error) {
@@ -86,6 +93,10 @@ func CompatibilityForRegistry(
 }
 
 func linkedContainerlabVersion() (string, error) {
+	if linkedContainerlabVersionOverride != "" {
+		return linkedContainerlabVersionOverride, nil
+	}
+
 	build, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "", planningError(

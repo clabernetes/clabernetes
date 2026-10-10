@@ -110,6 +110,25 @@ func appendEvaluatedNode(
 	if err != nil {
 		return err
 	}
+	// Imported lifecycle hooks execute against the runtime identity the package itself declares
+	// through GetContainerName (a component kind routes execs to a specific member container),
+	// so their actions must run inside the container carrying that identity: an
+	// application-local exec from the wrong sibling cannot reach the declared target's
+	// processes. The declared identity is also the Pod's primary application container: kinds
+	// like nokia_srsim create an internal netns-owning container before their component
+	// containers, and that internal container must not absorb profile resource policy or the
+	// node's declared identity.
+	primaryContainerID := nodeContainerIDs[0]
+	if named, ok := node.implementation.(interface{ GetContainerName() string }); ok {
+		declaredRuntimeID := named.GetContainerName()
+		for index, recorded := range node.Containers {
+			if declaredRuntimeID != "" && recorded.RuntimeID == declaredRuntimeID {
+				primaryContainerID = nodeContainerIDs[index]
+
+				break
+			}
+		}
+	}
 	plan.Nodes = append(plan.Nodes, NodePlan{
 		ID:                    node.Input.ID,
 		Name:                  node.Input.Name,
@@ -119,6 +138,7 @@ func appendEvaluatedNode(
 		Aliases:               slices.Clone(node.Config.Aliases),
 		ContainerIDs:          slices.Clone(nodeContainerIDs),
 		ReadinessContainerIDs: readinessContainerIDs,
+		PrimaryContainerID:    primaryContainerID,
 		EnforceStartupConfig:  node.Config.EnforceStartupConfig,
 	})
 	for index, recorded := range node.Containers {
@@ -157,22 +177,6 @@ func appendEvaluatedNode(
 		if err = appendStoragePlans(plan, node, recorded.Config,
 			containerID, index == 0, input.Payloads); err != nil {
 			return err
-		}
-	}
-	// Imported lifecycle hooks execute against the runtime identity the package itself declares
-	// through GetContainerName (a component kind routes execs to a specific member container),
-	// so their actions must run inside the container carrying that identity: an
-	// application-local exec from the wrong sibling cannot reach the declared target's
-	// processes.
-	primaryContainerID := nodeContainerIDs[0]
-	if named, ok := node.implementation.(interface{ GetContainerName() string }); ok {
-		declaredRuntimeID := named.GetContainerName()
-		for index, recorded := range node.Containers {
-			if declaredRuntimeID != "" && recorded.RuntimeID == declaredRuntimeID {
-				primaryContainerID = nodeContainerIDs[index]
-
-				break
-			}
 		}
 	}
 	// Every imported lifecycle is rehydrated with a package LabDir, even when the package emitted

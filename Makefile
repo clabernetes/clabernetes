@@ -159,11 +159,17 @@ lint: fmt ## Run linters
 	helm lint --quiet charts/clabernetes
 	helm lint --quiet charts/clicker
 
+# C9S_TEST_LDFLAGS injects the linked containerlab version into the test binaries: Go test
+# binaries built with Go 1.26 and earlier omit the module graph from their build information
+# (golang/go#76926, fixed in Go 1.27), so the deviceplan compatibility invariant cannot discover
+# the linked version at runtime in a test run.
+C9S_TEST_LDFLAGS := -ldflags "-X github.com/clabernetes/clabernetes/internal/deviceplan.linkedContainerlabVersionOverride=$$(go list -m -f '{{.Version}}' github.com/srl-labs/containerlab)"
+
 test: ## Run unit tests
-	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -coverprofile=cover.out `$(C9S_GO_ENV) go list ./... | grep -v e2e`
+	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- $(C9S_TEST_LDFLAGS) -coverprofile=cover.out `$(C9S_GO_ENV) go list ./... | grep -v e2e`
 
 test-race: ## Run unit tests with race flag
-	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- -race -coverprofile=cover.out `$(C9S_GO_ENV) go list ./... | grep -v e2e`
+	$(C9S_GO_ENV) gotestsum --format testname --hide-summary=skipped -- $(C9S_TEST_LDFLAGS) -race -coverprofile=cover.out `$(C9S_GO_ENV) go list ./... | grep -v e2e`
 
 C9S_NAMESPACE ?= $(NS)
 C9S_HELM_RELEASE ?= clabernetes

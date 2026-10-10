@@ -177,17 +177,33 @@ spec:
                 description: Cmd overrides the container command.
                 type: string
               components:
-                description: Components holds the hardware component (i.e. SR-OS card/mda)
-                  configuration for the node.
+                description: |-
+                  Components holds the hardware component (i.e. SR-OS card/mda) configuration for the node.
+                  It is the typed projection of containerlab's kind-specific `components` key; the imported
+                  kind validates it strictly when the node is planned.
                 items:
-                  description: Component holds a hardware component configuration
-                    (i.e. an SR-OS card or mda).
+                  description: |-
+                    Component holds a hardware component configuration (i.e. an SR-OS card or mda). It is the typed
+                    projection of containerlab's kind-specific `components` key: the nokia_srsim kind accepts
+                    per-component env entries, and the nokia_sros kind sets per-component VM resources with the
+                    typed cpu, ram, and max-nics keys. The imported kind validates the shape strictly when the node
+                    is planned.
                   properties:
+                    cpu:
+                      description: CPU is the vcpu count the component's VM gets (nokia_sros).
+                      minimum: 0
+                      type: integer
                     env:
                       additionalProperties:
                         type: string
-                      description: Env holds environment variables for the component.
+                      description: Env holds environment variables for the component
+                        (nokia_srsim).
                       type: object
+                    max-nics:
+                      description: MaxNics limits the interface count the component's
+                        VM gets (nokia_sros).
+                      minimum: 0
+                      type: integer
                     mda:
                       description: MDA holds the mda configuration of the component.
                       items:
@@ -202,9 +218,11 @@ spec:
                             type: string
                         type: object
                       type: array
-                    sfm:
-                      description: SFM is the SFM (switch fabric module) of the component.
-                      type: string
+                    ram:
+                      description: RAM is the memory, in MB, the component's VM gets
+                        (nokia_sros).
+                      minimum: 0
+                      type: integer
                     slot:
                       description: Slot is the slot identifier of the component.
                       type: string
@@ -314,24 +332,6 @@ spec:
                   type: string
                 type: array
                 x-kubernetes-list-type: atomic
-              extras:
-                description: Extras holds extra, possibly kind specific, node parameters.
-                properties:
-                  ceos-copy-to-flash:
-                    description: CeosCopyToFlash is a list of paths to files which
-                      are to be copied to the ceos flash dir.
-                    items:
-                      type: string
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  srl-agents:
-                    description: SRLAgents is a list of Nokia SR Linux agents (spec
-                      files) to install on the node.
-                    items:
-                      type: string
-                    type: array
-                    x-kubernetes-list-type: atomic
-                type: object
               filesFromConfigMap:
                 description: FilesFromConfigMap holds files staged from ConfigMaps
                   for this Node's application containers.
@@ -490,6 +490,19 @@ spec:
               kind:
                 description: Kind is the containerlab kind of the node -- i.e. nokia_srlinux.
                 type: string
+              kind-specific-config:
+                additionalProperties:
+                  x-kubernetes-preserve-unknown-fields: true
+                description: |-
+                  KindSpecificConfig carries kind-owned node keys, exactly the containerlab kind-specific
+                  config keys that sit on the node definition itself -- e.g. `port-count` and `breakouts`
+                  for nvidia_cumulusvx, `daemons` for the frr/frrouting kinds, `copy-to-flash` for
+                  arista_ceos, or `config-mode` for the Nokia kinds. The keys arrive inline on the
+                  node definition, are merged over the regular node > group > kinds.<kind> > defaults order
+                  by the topology compiler, and are validated strictly by the imported kind when the node is
+                  planned: unknown keys and mistyped values fail with the same error containerlab deploys
+                  with. The `components` key is deliberately carried by the typed Components field instead.
+                type: object
               license:
                 description: License is the path to the license file for the node.
                 type: string
@@ -514,6 +527,12 @@ spec:
               mgmt-ipv6:
                 description: MgmtIPv6 is the user-defined IPv6 address of the node
                   in the management network.
+                type: string
+              mgmt-net:
+                description: |-
+                  MgmtNet names the container-runtime management network the node attaches to
+                  (containerlab's kind-agnostic `mgmt-net` node key). c9s realizes a single cluster-agnostic
+                  management network per namespace, so the network name is accepted and ignored.
                 type: string
               network-mode:
                 description: |-

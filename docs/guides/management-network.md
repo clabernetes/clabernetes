@@ -61,10 +61,13 @@ spec:
 Both forms accept the containerlab address-policy fields: `ipv4-subnet`, `ipv4-gw`,
 `ipv4-range`, and their IPv6 counterparts. An omitted gateway defaults to the subnet's first
 usable address. A `range` restricts automatic allocation to a slice of the subnet; pinned
-addresses and the gateway only need to be inside the subnet. Docker-only `mgmt` fields
-(`network`, `bridge`, `mtu`, `external-access`, `skip-when-unused`, `driver-opts`) describe the
-local Docker host and are accepted with a warning, see
-[Differences from containerlab](/docs/concepts/containerlab-differences).
+addresses and the gateway only need to be inside the subnet. The block may also be written as a
+one-element list, exactly as containerlab 0.80 permits; more than one management network fails
+compilation until a per-network management plan exists, and node `mgmt-net` selections are
+accepted and ignored. Docker-only `mgmt` fields (`network`, `bridge`, `mtu`,
+`external-access`, `skip-when-unused`, `driver-opts`, `driver`, `ipam`, `macvlan-parent`,
+`macvlan-mode`, `macvlan-aux`, `tailscale`) describe the local Docker host and are accepted with
+a warning, see [Differences from containerlab](/docs/concepts/containerlab-differences).
 
 ## Pinning per-node addresses
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -198,11 +199,33 @@ func (r *importedApplicationRuntime) WithKeepMgmtNet() {
 	r.runtimeConfig.KeepMgmtNet = true
 }
 
-func (r *importedApplicationRuntime) CreateNet(context.Context) error {
+func (r *importedApplicationRuntime) CreateNet(
+	context.Context,
+	...clabruntime.NetworkCreateOptions,
+) error {
 	return r.unsupportedCapability(
 		"runtime.CreateNet",
 		"runtime.network",
 		"direct application lifecycle cannot create a container-runtime network",
+	)
+}
+
+func (r *importedApplicationRuntime) NetworkAddresses(
+	context.Context,
+	[]netip.Prefix,
+) ([]clabruntime.NetworkAddress, error) {
+	return nil, r.unsupportedCapability(
+		"runtime.NetworkAddresses",
+		"runtime.network",
+		"direct application lifecycle cannot inspect container-runtime networks",
+	)
+}
+
+func (r *importedApplicationRuntime) SyncMgmtHostRoutes(context.Context) error {
+	return r.unsupportedCapability(
+		"runtime.SyncMgmtHostRoutes",
+		"runtime.network",
+		"direct application lifecycle cannot reconcile host routes",
 	)
 }
 

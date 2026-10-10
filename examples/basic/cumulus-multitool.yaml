@@ -1,4 +1,7 @@
-# NVIDIA Cumulus VX connected to a network multitool host.
+# NVIDIA Cumulus VX with containerlab breakout ports, connected to two network multitool hosts.
+# The kind-specific `port-count` and `breakouts` config generates /config/ports.conf, which the
+# vrnetlab image uses to split port 1 into the four lanes swp1s0..swp1s3; the links use two of
+# those lanes, and the hosts reach each other through the guest's own forwarding.
 # Create a kubernetes.io/dockerconfigjson Secret named regcred in the
 # same namespace before applying this Topology; the Cumulus image is restricted.
 # NS=<namespace>
@@ -18,12 +21,6 @@ spec:
           username: cumulus
           password: Clab123!
           port: 22
-      multitool:
-        startupSeconds: 120
-        sshProbeConfiguration:
-          username: admin
-          password: multit00l
-          port: 22
   imagePull:
     pullSecrets:
       - regcred
@@ -34,16 +31,33 @@ spec:
         nodes:
           cumulus:
             kind: nvidia_cumulusvx
-            image: ghcr.io/clab-labs/nvidia_cumulusvx:5.16.1
+            image: ghcr.io/clab-labs/nvidia_cumulus:5.16.5-boxen
+            port-count: 2
+            breakouts:
+              - port: 1
+                channels: 4
             startup-config: |
-              nv set interface swp1
-              nv set interface swp1 ipv4 address 192.0.2.0/31
+              nv set interface swp1s0
+              nv set interface swp1s0 ipv4 address 192.0.2.0/31
+              nv set interface swp1s1
+              nv set interface swp1s1 ipv4 address 192.0.2.2/31
 
           multitool:
             kind: linux
             image: ghcr.io/srl-labs/network-multitool:latest
             exec:
               - ip addr add 192.0.2.1/31 dev eth1
+              - ip link set eth1 up
+              - ip route add 192.0.2.2/31 via 192.0.2.0
+
+          client:
+            kind: linux
+            image: ghcr.io/srl-labs/network-multitool:latest
+            exec:
+              - ip addr add 192.0.2.3/31 dev eth1
+              - ip link set eth1 up
+              - ip route add 192.0.2.0/31 via 192.0.2.2
 
         links:
-          - endpoints: ["cumulus:swp1", "multitool:eth1"]
+          - endpoints: ["cumulus:swp1s0", "multitool:eth1"]
+          - endpoints: ["cumulus:swp1s1", "client:eth1"]
