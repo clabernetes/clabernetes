@@ -1553,7 +1553,6 @@ func nodeConfigFromDefinition(
 		CPUSet:          definition.CPUSet,
 		Memory:          definition.Memory,
 		Sysctls:         maps.Clone(definition.Sysctls),
-		Extras:          definition.Extras,
 		Stages:          definition.Stages,
 		DNS:             definition.DNS,
 		Certificate:     definition.Certificate,

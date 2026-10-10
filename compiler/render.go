@@ -1,166 +1,56 @@
 package compiler
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"maps"
-	"regexp"
-	"slices"
-	"sort"
-	"strings"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
-	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
-	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
-	k8scorev1 "k8s.io/api/core/v1"
-	apimachineryequality "k8s.io/apimachinery/pkg/api/equality"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
+	clabcompile "github.com/srl-labs/containerlab/labruntime/clabernetes/compile"
+	clabtypes "github.com/srl-labs/containerlab/types"
+	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
 )
 
-var linkNameInvalidChars = regexp.MustCompile(`[^a-z0-9-]`)
+// kindSpecificWrapperKey is the yaml key c9s' Node vocabulary uses to carry merged kind-specific
+// config. A definition may write it explicitly; the compiler unwraps it so the same key never
+// appears as kind-owned config.
+const kindSpecificWrapperKey = "kind-specific-config"
 
-// sanitizeLinkNamePart makes an interface name safe for use inside a kubernetes object name.
-// Any lossy normalization includes a hash of the raw value so distinct interfaces remain
-// distinct.
-func sanitizeLinkNamePart(part string) string {
-	rawPart := part
-	part = linkNameInvalidChars.ReplaceAllString(strings.ToLower(rawPart), "-")
-
-	part = strings.Trim(part, "-")
-
-	if part == "" {
-		part = "x"
-	}
-
-	if part != rawPart {
-		digest := sha256.Sum256([]byte(rawPart))
-		part = fmt.Sprintf("%s-%x", part, digest[:4])
-	}
-
-	return part
-}
-
-// LinkResourceName returns the (deterministic) name of the Link object for the given wire.
-func LinkResourceName(endpointA, endpointB clabernetesapisv1alpha1.LinkEndpointSpec) string {
-	return clabernetesutilkubernetes.SafeConcatNameKubernetes(
-		endpointA.NodeName,
-		sanitizeLinkNamePart(endpointA.InterfaceName),
-		endpointB.NodeName,
-		sanitizeLinkNamePart(endpointB.InterfaceName),
-	)
-}
-
-// topologyOwnedObjectMetadata returns the base metadata for objects the compiler emits for the
-// given topology.
-func topologyOwnedObjectMetadata(
-	topology *clabernetesapisv1alpha1.Topology,
-	name string,
-	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) metav1.ObjectMeta {
-	annotations, globalLabels := configManagerGetter().GetAllMetadata()
-
-	labels := map[string]string{
-		clabernetesconstants.LabelApp:           clabernetesconstants.Clabernetes,
-		clabernetesconstants.LabelName:          name,
-		clabernetesconstants.LabelTopologyOwner: topology.GetName(),
-		clabernetesconstants.LabelTopologyKind:  GetTopologyKind(topology),
-	}
-
-	maps.Copy(labels, globalLabels)
-
-	return metav1.ObjectMeta{
-		Name:        name,
-		Namespace:   topology.GetNamespace(),
-		Annotations: annotations,
-		Labels:      labels,
-	}
-}
+// kindSpecificComponentsKey is the one kind-specific config key c9s carries as a typed field
+// instead of the generic passthrough: the component inventory drives c9s' own device rendering
+// (chassis component DNS aliases), and the Node CRD exposes it as a validated, typed vocabulary.
+const kindSpecificComponentsKey = "components"
 
 // RenderNodes renders the Node objects for the compiled topology, sorted by name. The emitted
 // node names are the containerlab node names, sanitized only where Kubernetes cannot carry them
 // -- the namespace is the topology boundary. Node-keyed policy on the Topology is written against
 // the definition's names, so it is looked up by the node's source name.
+//
+// The rendering itself lives in containerlab's compile engine; this function renders through the
+// engine and decodes the unstructured manifests into the clabernetes types.
 func RenderNodes(
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) []*clabernetesapisv1alpha1.Node {
-	nodes := make([]*clabernetesapisv1alpha1.Node, 0, len(compiled.Nodes))
-
-	for nodeName, nodeDefinition := range compiled.Nodes {
-		sourceName := compiled.SourceNodeName(nodeName)
-		profileName := nodeProfileNameForNode(topology, compiled, nodeName)
-		node := &clabernetesapisv1alpha1.Node{
-			ObjectMeta: topologyOwnedObjectMetadata(topology, nodeName, configManagerGetter),
-			Spec: clabernetesapisv1alpha1.NodeSpec{
-				NodeDefinition: *nodeDefinition.DeepCopy(),
-				ProfileRef:     &k8scorev1.LocalObjectReference{Name: profileName},
-				AppProtocols:   slices.Clone(compiled.AppProtocols[nodeName]),
-				FilesFromConfigMap: slices.Clone(
-					topology.Spec.Deployment.FilesFromConfigMap[sourceName],
-				),
-				FilesFromSecret: slices.Clone(
-					topology.Spec.Deployment.FilesFromSecret[sourceName],
-				),
-				FilesFromURL: slices.Clone(topology.Spec.Deployment.FilesFromURL[sourceName]),
-			},
-		}
-
-		// Retain this label for human selection and compatibility; profile attachment is explicit.
-		node.Labels[clabernetesconstants.LabelTopologyNode] = nodeName
-
-		// The containerlab group name is organizational metadata; it rides along as a label so
-		// operators can select by it, exactly as they would filter by group in containerlab.
-		if nodeDefinition.Group != "" {
-			node.Labels[clabernetesconstants.LabelTopologyGroup] = nodeDefinition.Group
-		}
-
-		// containerlab node labels are kubernetes labels here rather than docker labels on the
-		// node container. The compiler has already dropped any that kubernetes would reject or
-		// that sit in c9s' own namespace, so nothing here can shadow the labels above.
-		maps.Copy(node.Labels, nodeDefinition.Labels)
-
-		nodes = append(nodes, node)
+	nodes, _, _, err := renderAll(topology, compiled, configManagerGetter)
+	if err != nil {
+		panic(manifestContractError(err))
 	}
 
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].GetName() < nodes[j].GetName() })
+	typedNodes := make([]*clabernetesapisv1alpha1.Node, 0, len(nodes))
 
-	return nodes
-}
+	for i := range nodes {
+		node := &clabernetesapisv1alpha1.Node{}
+		decodeManifestOrPanic(nodes[i].Object, node)
 
-func nodeProfileNameForNode(
-	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
-	nodeName string,
-) string {
-	if hasDistinctProfilePolicy(topology, compiled.SourceNodeName(nodeName)) {
-		return clabernetesutilkubernetes.SafeConcatNameKubernetes(topology.GetName(), nodeName)
+		typedNodes = append(typedNodes, node)
 	}
 
-	return topology.GetName()
-}
-
-// hasDistinctProfilePolicy reports whether a Node needs a dedicated NodeProfile. Today the
-// only per-node profile policy exposed by Topology is deployment.resources; payload maps are
-// rendered directly onto Nodes and therefore do not create one-off profiles.
-func hasDistinctProfilePolicy(
-	topology *clabernetesapisv1alpha1.Topology,
-	nodeName string,
-) bool {
-	nodeResources, hasNodeResources := topology.Spec.Deployment.Resources[nodeName]
-	if !hasNodeResources {
-		return false
-	}
-
-	defaultResources, hasDefaultResources := topology.Spec.Deployment.
-		Resources[clabernetesconstants.Default]
-	if !hasDefaultResources {
-		// The map entry is itself meaningful, including an explicitly empty resource policy.
-		return true
-	}
-
-	return !apimachineryequality.Semantic.DeepEqual(nodeResources, defaultResources)
+	return typedNodes
 }
 
 // RenderLinks renders the Link objects for the compiled topology, sorted by name.
@@ -169,26 +59,21 @@ func RenderLinks(
 	compiled *CompiledTopology,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) []*clabernetesapisv1alpha1.Link {
-	links := make([]*clabernetesapisv1alpha1.Link, 0, len(compiled.Links))
-
-	for _, compiledLink := range compiled.Links {
-		links = append(links, &clabernetesapisv1alpha1.Link{
-			ObjectMeta: topologyOwnedObjectMetadata(
-				topology,
-				LinkResourceName(compiledLink.EndpointA, compiledLink.EndpointB),
-				configManagerGetter,
-			),
-			Spec: clabernetesapisv1alpha1.LinkSpec{
-				EndpointA: compiledLink.EndpointA,
-				EndpointB: compiledLink.EndpointB,
-				MTU:       compiledLink.MTU,
-			},
-		})
+	_, links, _, err := renderAll(topology, compiled, configManagerGetter)
+	if err != nil {
+		panic(manifestContractError(err))
 	}
 
-	sort.Slice(links, func(i, j int) bool { return links[i].GetName() < links[j].GetName() })
+	typedLinks := make([]*clabernetesapisv1alpha1.Link, 0, len(links))
 
-	return links
+	for i := range links {
+		link := &clabernetesapisv1alpha1.Link{}
+		decodeManifestOrPanic(links[i].Object, link)
+
+		typedLinks = append(typedLinks, link)
+	}
+
+	return typedLinks
 }
 
 // RenderNodeProfiles renders one shared topology NodeProfile plus a complete dedicated
@@ -198,217 +83,168 @@ func RenderNodeProfiles(
 	compiled *CompiledTopology,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) []*clabernetesapisv1alpha1.NodeProfile {
-	perNodeNames := make([]string, 0)
-	sharedProfileNeeded := false
-
-	for nodeName := range compiled.Nodes {
-		if !hasDistinctProfilePolicy(topology, compiled.SourceNodeName(nodeName)) {
-			sharedProfileNeeded = true
-
-			continue
-		}
-
-		perNodeNames = append(perNodeNames, nodeName)
+	_, _, profiles, err := renderAll(topology, compiled, configManagerGetter)
+	if err != nil {
+		panic(manifestContractError(err))
 	}
 
-	sort.Strings(perNodeNames)
+	typedProfiles := make([]*clabernetesapisv1alpha1.NodeProfile, 0, len(profiles))
 
-	profileCount := len(perNodeNames)
-	if sharedProfileNeeded {
-		profileCount++
+	for i := range profiles {
+		profile := &clabernetesapisv1alpha1.NodeProfile{}
+		decodeManifestOrPanic(profiles[i].Object, profile)
+
+		typedProfiles = append(typedProfiles, profile)
 	}
 
-	profiles := make([]*clabernetesapisv1alpha1.NodeProfile, 0, profileCount)
-
-	if sharedProfileNeeded {
-		profiles = append(
-			profiles,
-			renderTopologyNodeProfile(topology, compiled, configManagerGetter),
-		)
-	}
-
-	for _, nodeName := range perNodeNames {
-		profiles = append(
-			profiles,
-			renderPerNodeNodeProfile(
-				topology,
-				compiled,
-				nodeName,
-				configManagerGetter,
-			),
-		)
-	}
-
-	return profiles
+	return typedProfiles
 }
 
-// renderTopologyNodeProfile compiles topology-wide policy into the shared profile. Only
-// values represented by the Topology API are copied; omitted pointer/collection values continue
-// to inherit Config defaults.
-func renderTopologyNodeProfile(
+// manifestContractError marks an engine render failure as a contract violation: the engine
+// produced something the c9s vocabulary cannot carry, which is a programming error rather than
+// a user error.
+func manifestContractError(err error) string {
+	return fmt.Sprintf("clabernetes compiler: %v", err)
+}
+
+// renderAll renders the compiled topology through the engine once and returns every primitive
+// manifest.
+func renderAll(
 	topology *clabernetesapisv1alpha1.Topology,
 	compiled *CompiledTopology,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) *clabernetesapisv1alpha1.NodeProfile {
-	spec := clabernetesapisv1alpha1.NodeProfileSpec{
-		Expose: &clabernetesapisv1alpha1.NodeProfileExpose{
-			DisableAutoExpose: new(
-				topology.Spec.Expose.DisableAutoExpose,
-			),
-			ExposeType: topology.Spec.Expose.ExposeType,
-			UseNodeMgmtIpv4Address: new(
-				topology.Spec.Expose.UseNodeMgmtIpv4Address,
-			),
-			UseNodeMgmtIpv6Address: new(
-				topology.Spec.Expose.UseNodeMgmtIpv6Address,
-			),
-		},
+) (nodes, links, nodeProfiles []unstructured.Unstructured, err error) {
+	input := compileEngineInput(topology)
+
+	if configManagerGetter != nil {
+		annotations, globalLabels := configManagerGetter().GetAllMetadata()
+
+		input.Annotations = annotations
+		input.Labels = globalLabels
 	}
 
-	imagePull := &clabernetesapisv1alpha1.NodeProfileImagePull{
-		Policy:      topology.Spec.ImagePull.Policy,
-		PullSecrets: slices.Clone(topology.Spec.ImagePull.PullSecrets),
-	}
+	return clabcompile.CompileTopology(input, engineCompiledTopology(compiled))
+}
 
-	if !reflectValueIsZero(imagePull) {
-		spec.ImagePull = imagePull
-	}
-
-	defaultResources, hasDefaultResources := topology.Spec.Deployment.
-		Resources[clabernetesconstants.Default]
-	if hasDefaultResources {
-		spec.Resources = defaultResources.DeepCopy()
-	}
-
-	if topology.Spec.Deployment.Scheduling.NodeSelector != nil ||
-		topology.Spec.Deployment.Scheduling.Tolerations != nil ||
-		topology.Spec.Deployment.Scheduling.Affinity != nil {
-		spec.Scheduling = topology.Spec.Deployment.Scheduling.DeepCopy()
-	}
-
-	deployment := &clabernetesapisv1alpha1.NodeProfileDeployment{}
-
-	if topology.Spec.Deployment.Persistence.Enabled {
-		deployment.Persistence = topology.Spec.Deployment.Persistence.DeepCopy()
-	}
-
-	if !reflectValueIsZero(deployment) {
-		spec.Deployment = deployment
-	}
-
-	// Probe policy is matched against Node object names, so the node names the author wrote have
-	// to follow the rename the compiler made.
-	spec.StatusProbes = compiledStatusProbes(topology, compiled)
-
-	if compiled.Mgmt != nil {
-		spec.Mgmt = &clabernetesapisv1alpha1.ManagementPolicy{
-			IPv4Subnet: compiled.Mgmt.IPv4Subnet,
-			IPv4Gw:     compiled.Mgmt.IPv4Gw,
-			IPv4Range:  compiled.Mgmt.IPv4Range,
-			IPv6Subnet: compiled.Mgmt.IPv6Subnet,
-			IPv6Gw:     compiled.Mgmt.IPv6Gw,
-			IPv6Range:  compiled.Mgmt.IPv6Range,
-		}
-	}
-	if topology.Spec.DisableManagement {
-		spec.Mgmt = &clabernetesapisv1alpha1.ManagementPolicy{Disabled: true}
-	}
-
-	profile := &clabernetesapisv1alpha1.NodeProfile{
-		ObjectMeta: topologyOwnedObjectMetadata(
-			topology,
-			topology.GetName(),
-			configManagerGetter,
+// engineCompiledTopology maps the clabernetes compiled topology back onto the engine's shape so
+// the engine's renderers can run against it.
+func engineCompiledTopology(compiled *CompiledTopology) *clabcompile.CompiledTopology {
+	out := &clabcompile.CompiledTopology{
+		Kind: compiled.Kind,
+		Nodes: make(
+			map[string]*clabtypes.NodeDefinition,
+			len(compiled.Nodes),
 		),
-		Spec: spec,
+		AppProtocols:    make(map[string][]clabcompile.AppProtocol, len(compiled.AppProtocols)),
+		Links:           make([]clabcompile.CompiledLink, 0, len(compiled.Links)),
+		Mgmt:            compiled.Mgmt,
+		NodeNameSources: maps.Clone(compiled.NodeNameSources),
 	}
 
-	return profile
-}
-
-// renderPerNodeNodeProfile creates a complete policy profile for a Node with a distinct
-// resource override. NodeProfiles do not inherit from each other, so the shared policy is
-// copied before replacing Resources.
-func renderPerNodeNodeProfile(
-	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
-	nodeName string,
-	configManagerGetter clabernetesconfig.ManagerGetterFunc,
-) *clabernetesapisv1alpha1.NodeProfile {
-	profile := renderTopologyNodeProfile(topology, compiled, configManagerGetter)
-	profile.ObjectMeta = topologyOwnedObjectMetadata(
-		topology,
-		clabernetesutilkubernetes.SafeConcatNameKubernetes(topology.GetName(), nodeName),
-		configManagerGetter,
-	)
-
-	if nodeResources, ok := topology.Spec.Deployment.
-		Resources[compiled.SourceNodeName(nodeName)]; ok {
-		profile.Spec.Resources = nodeResources.DeepCopy()
+	for nodeName, nodeDefinition := range compiled.Nodes {
+		out.Nodes[nodeName] = exportNodeDefinition(nodeDefinition)
 	}
 
-	return profile
-}
+	for nodeName, appProtocols := range compiled.AppProtocols {
+		protocols := make([]clabcompile.AppProtocol, 0, len(appProtocols))
+		for _, appProtocol := range appProtocols {
+			protocols = append(protocols, clabcompile.AppProtocol{
+				Port:        appProtocol.Port,
+				AppProtocol: appProtocol.AppProtocol,
+			})
+		}
 
-// reflectValueIsZero returns true when the struct behind the pointer only holds zero values --
-// used to skip emitting empty policy blocks.
-func reflectValueIsZero(value any) bool {
-	switch typed := value.(type) {
-	case *clabernetesapisv1alpha1.NodeProfileImagePull:
-		return imagePullIsZero(typed)
-	case *clabernetesapisv1alpha1.NodeProfileDeployment:
-		return deploymentIsZero(typed)
-	default:
-		return false
-	}
-}
-
-func imagePullIsZero(imagePull *clabernetesapisv1alpha1.NodeProfileImagePull) bool {
-	return imagePull.Policy == "" && imagePull.PullSecrets == nil
-}
-
-func deploymentIsZero(deployment *clabernetesapisv1alpha1.NodeProfileDeployment) bool {
-	return deployment.Persistence == nil
-}
-
-// compiledStatusProbes copies the Topology's probe policy with every node name it holds mapped
-// onto the compiled node name the Node objects carry.
-func compiledStatusProbes(
-	topology *clabernetesapisv1alpha1.Topology,
-	compiled *CompiledTopology,
-) *clabernetesapisv1alpha1.StatusProbes {
-	statusProbes := topology.Spec.StatusProbes.DeepCopy()
-	if len(compiled.NodeNameSources) == 0 {
-		return statusProbes
+		out.AppProtocols[nodeName] = protocols
 	}
 
-	compiledNames := make(map[string]string, len(compiled.NodeNameSources))
-	for compiledName, sourceName := range compiled.NodeNameSources {
-		compiledNames[sourceName] = compiledName
+	for _, compiledLink := range compiled.Links {
+		out.Links = append(out.Links, clabcompile.CompiledLink{
+			EndpointA: clabcompile.Endpoint{
+				NodeName:      compiledLink.EndpointA.NodeName,
+				InterfaceName: compiledLink.EndpointA.InterfaceName,
+			},
+			EndpointB: clabcompile.Endpoint{
+				NodeName:      compiledLink.EndpointB.NodeName,
+				InterfaceName: compiledLink.EndpointB.InterfaceName,
+			},
+			MTU: compiledLink.MTU,
+		})
 	}
 
-	for idx, nodeName := range statusProbes.ExcludedNodes {
-		if compiledName, renamed := compiledNames[nodeName]; renamed {
-			statusProbes.ExcludedNodes[idx] = compiledName
+	return out
+}
+
+// exportNodeDefinition encodes one clabernetes node definition back into containerlab vocabulary
+// for the engine's renderers. The vocabulary's marshaler emits the kind-specific config under
+// its wrapper key; the engine's flattened definition carries the kind keys directly, so the
+// wrapper is unwrapped here.
+func exportNodeDefinition(
+	nodeDefinition *clabernetesutilcontainerlab.NodeDefinition,
+) *clabtypes.NodeDefinition {
+	exported := &clabtypes.NodeDefinition{}
+
+	raw, err := yaml.Marshal(nodeDefinition)
+	if err != nil {
+		return exported
+	}
+
+	if err := yaml.Unmarshal(raw, exported); err != nil {
+		return exported
+	}
+
+	if wrapper, wrapped := exported.KindSpecificConfig[kindSpecificWrapperKey]; wrapped {
+		if entries := kindSpecificWrapperEntries(wrapper); entries != nil {
+			delete(exported.KindSpecificConfig, kindSpecificWrapperKey)
+			maps.Copy(exported.KindSpecificConfig, entries)
 		}
 	}
 
-	if len(statusProbes.NodeProbeConfigurations) != 0 {
-		nodeProbeConfigurations := make(
-			map[string]clabernetesapisv1alpha1.ProbeConfiguration,
-			len(statusProbes.NodeProbeConfigurations),
-		)
+	// An explicitly cleared component inventory must survive the vocabulary round trip: the
+	// vocabulary's marshaler omits an empty list, so the engine's kind map gets the explicit
+	// clearing back directly.
+	if nodeDefinition.Components != nil {
+		if exported.KindSpecificConfig == nil {
+			exported.KindSpecificConfig = map[string]any{}
+		}
 
-		for nodeName, probeConfiguration := range statusProbes.NodeProbeConfigurations {
-			if compiledName, renamed := compiledNames[nodeName]; renamed {
-				nodeName = compiledName
+		if _, present := exported.KindSpecificConfig[kindSpecificComponentsKey]; !present {
+			exported.KindSpecificConfig[kindSpecificComponentsKey] = []any{}
+		}
+	}
+
+	return exported
+}
+
+// kindSpecificWrapperEntries flattens a kind-specific config wrapper mapping into per-key
+// entries. The wrapper value arrives through either yaml unmarshaler, so both mapping shapes are
+// accepted.
+func kindSpecificWrapperEntries(value any) map[string]any {
+	switch wrapper := value.(type) {
+	case map[string]any:
+		return wrapper
+	case map[any]any:
+		entries := make(map[string]any, len(wrapper))
+		for key, entryValue := range wrapper {
+			keyText, ok := key.(string)
+			if !ok {
+				return nil
 			}
 
-			nodeProbeConfigurations[nodeName] = probeConfiguration
+			entries[keyText] = entryValue
 		}
 
-		statusProbes.NodeProbeConfigurations = nodeProbeConfigurations
+		return entries
+	default:
+		return nil
 	}
+}
 
-	return statusProbes
+// decodeManifestOrPanic decodes an engine manifest into a typed clabernetes object. A failure
+// means the engine produced a manifest the c9s vocabulary cannot carry, which is a contract
+// violation rather than a user error, so it panics instead of silently dropping an object.
+func decodeManifestOrPanic(object map[string]any, typed any) {
+	err := apimachineryruntime.DefaultUnstructuredConverter.FromUnstructured(object, typed)
+	if err != nil {
+		panic(manifestContractError(fmt.Errorf("decoding compiled manifest: %w", err)))
+	}
 }
