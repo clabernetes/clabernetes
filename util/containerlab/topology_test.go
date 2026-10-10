@@ -391,10 +391,6 @@ func getFullVocabularyConfigObject() *clabernetesutilcontainerlab.Config {
 			ValidityDuration: "8760h",
 			SANs:             []string{"srl1.example.com"},
 		},
-		Extras: &clabernetesutilcontainerlab.Extras{
-			SRLAgents:       []string{"/opt/agent.yml"},
-			CeosCopyToFlash: []string{"/opt/flash-me"},
-		},
 		Components: []*clabernetesutilcontainerlab.Component{
 			{
 				Slot: "A",

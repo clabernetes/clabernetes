@@ -1277,6 +1277,46 @@ topology:
 	}
 }
 
+// TestCompileTopologyRejectsGenericFieldsInsideExplicitKindConfig proves a generic node field
+// cannot masquerade as kind-owned config by hiding inside an explicit `kind-specific-config`
+// wrapper: the compile rejects it with the same structured rejection a top-level field gets.
+func TestCompileTopologyRejectsGenericFieldsInsideExplicitKindConfig(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: masquerading-generic
+topology:
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      kind-specific-config:
+        stages:
+          create:
+            wait-for:
+              - node: n2
+`)
+	if err == nil {
+		t.Fatal("generic fields inside the explicit wrapper must fail compilation")
+	}
+
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	found := slices.ContainsFunc(
+		unsupported.Diagnostics,
+		func(diagnostic clabernetescompiler.Diagnostic) bool {
+			return diagnostic.Code == "unsupported-field" &&
+				strings.Contains(diagnostic.Message, `"stages" is rejected`)
+		},
+	)
+	if !found {
+		t.Fatalf("expected a stages rejection, got %+v", unsupported.Diagnostics)
+	}
+}
+
 func TestCompileTopologyCarriesDefaultsKindConfigToImportedValidation(t *testing.T) {
 	t.Parallel()
 
@@ -1456,5 +1496,111 @@ topology:
 	)
 	if !found {
 		t.Fatalf("expected a duplicate diagnostic, got %+v", unsupported.Diagnostics)
+	}
+}
+
+// TestCompileTopologyCarriesMigratedExtrasKeys proves the keys the containerlab extras removal
+// migrated into kind-specific config carry into the Node vocabulary: `daemons` is an
+// frr/frrouting kind key, `copy-to-flash` belongs to arista_ceos, and `kubeconfig`/`wait`
+// belong to k8s-kind.
+func TestCompileTopologyCarriesMigratedExtrasKeys(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: migrated-extras
+topology:
+  nodes:
+    frr1:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      daemons: [bgpd]
+    ceos1:
+      kind: ceos
+      image: arista/ceos:4.30.0F
+      copy-to-flash: [/etc/ceos/agent.cfg]
+`)
+	if err != nil {
+		t.Fatalf("migrated kind-specific keys must compile: %s", err)
+	}
+
+	frr := compiled.Nodes["frr1"]
+	if frr == nil {
+		t.Fatal("compiled topology has no node frr1")
+	}
+
+	if !strings.Contains(string(frr.KindSpecificConfig["daemons"].Raw), "bgpd") {
+		t.Fatalf("frr daemons were not carried as kind config: %#v", frr.KindSpecificConfig)
+	}
+
+	ceos := compiled.Nodes["ceos1"]
+	if ceos == nil {
+		t.Fatal("compiled topology has no node ceos1")
+	}
+
+	if !strings.Contains(string(ceos.KindSpecificConfig["copy-to-flash"].Raw), "agent.cfg") {
+		t.Fatalf("ceos copy-to-flash was not carried as kind config: %#v", ceos.KindSpecificConfig)
+	}
+}
+
+// TestCompileTopologyCarriesK8sKindDeployKeys proves the k8s-kind deploy settings that lived
+// under `extras.k8s_kind.deploy` travel through the generic kind config passthrough: they are
+// kind-owned keys, validated by the imported kind when the node is planned.
+func TestCompileTopologyCarriesK8sKindDeployKeys(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: k8s-kind-config
+topology:
+  nodes:
+    control:
+      kind: k8s-kind
+      image: ghcr.io/k8s-kind/node-image:v1.31.0
+      kubeconfig: /etc/kubeconfig
+      wait: 30s
+`)
+	if err != nil {
+		t.Fatalf("k8s-kind kind config must compile: %s", err)
+	}
+
+	node := compiled.Nodes["control"]
+	if node == nil {
+		t.Fatal("compiled topology has no node control")
+	}
+
+	if !strings.Contains(string(node.KindSpecificConfig["kubeconfig"].Raw), "kubeconfig") {
+		t.Fatalf("k8s-kind kubeconfig was not carried: %#v", node.KindSpecificConfig)
+	}
+
+	if !strings.Contains(string(node.KindSpecificConfig["wait"].Raw), "30s") {
+		t.Fatalf("k8s-kind wait was not carried: %#v", node.KindSpecificConfig)
+	}
+}
+
+// TestCompileTopologyRejectsRemovedExtras proves the containerlab extras removal reaches c9s
+// compilation fail-closed: a definition that still carries the node `extras` field fails with
+// the migration pointer containerlab deploys with.
+func TestCompileTopologyRejectsRemovedExtras(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: removed-extras
+topology:
+  nodes:
+    frr1:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      extras:
+        frr:
+          daemons: [bgpd]
+`)
+	if err == nil {
+		t.Fatal("the removed extras field must fail compilation")
+	}
+
+	if !strings.Contains(
+		err.Error(),
+		`the "extras" node field is removed; set its kind-specific config keys directly on the node definition instead`,
+	) {
+		t.Fatalf("expected the extras migration error, got: %s", err)
 	}
 }

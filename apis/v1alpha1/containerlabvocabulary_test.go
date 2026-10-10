@@ -11,7 +11,7 @@ import (
 
 // pinnedContainerlabVersion is the containerlab release the vocabulary below was taken from. It
 // must track the github.com/srl-labs/containerlab module version pinned in go.mod.
-const pinnedContainerlabVersion = "0.80.0"
+const pinnedContainerlabVersion = "v0.80.1-0.20261010165050-65f5eac62991"
 
 // pinnedContainerlabVocabulary is the yaml vocabulary of the pinned containerlab's node
 // definition and its sub objects, keyed by the type name clabernetes uses for the same object.
@@ -20,7 +20,7 @@ const pinnedContainerlabVersion = "0.80.0"
 // types in the new release and update both this map and pinnedContainerlabVersion:
 //
 //	types/node_definition.go -> NodeDefinition
-//	types/types.go           -> ConfigDispatcher, Extras, DNSConfig, CertificateConfig,
+//	types/types.go           -> ConfigDispatcher, DNSConfig, CertificateConfig,
 //	                            HealthcheckConfig
 //	nodes/sros/component.go  -> Component, XIOM, MDA (nokia_srsim)
 //	nodes/vr_sros/vr-sros.go -> Component, XIOM, MDA (nokia_sros)
@@ -29,7 +29,10 @@ const pinnedContainerlabVersion = "0.80.0"
 // are kept, since this map describes containerlab's vocabulary rather than ours -- the test only
 // asserts that ours is a subset of it. The Component snapshot is the union of the per-kind
 // component shapes: nokia_srsim carries env, and nokia_sros carries the typed cpu, ram, and
-// max-nics resources.
+// max-nics resources. The node `extras` field and its `srl-agents`, `ceos-copy-to-flash`, and
+// `frr` sub objects are gone since the kind-specific config migration: their keys are now
+// kind-specific config keys validated by the owning kind (`copy-to-flash` for arista_ceos,
+// `daemons` for frr/frrouting).
 var pinnedContainerlabVocabulary = map[string][]string{
 	"CertificateConfig": {
 		"issue",
@@ -55,16 +58,6 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"search",
 		"servers",
 	},
-	"Extras": {
-		"ceos-copy-to-flash",
-		"frr",
-		"k8s_kind",
-		"mysocket-proxy",
-		"srl-agents",
-	},
-	"FRRExtras": {
-		"daemons",
-	},
 	"HealthcheckConfig": {
 		"test",
 		"interval",
@@ -82,6 +75,7 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"binds",
 		"cap-add",
 		"certificate",
+		"cgroup-parent",
 		"cgroupns-mode",
 		"cmd",
 		"config",
@@ -95,9 +89,9 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"env",
 		"env-files",
 		"exec",
-		"extras",
 		"group",
 		"healthcheck",
+		"hostname",
 		"image",
 		"image-pull-policy",
 		"kind",
@@ -125,6 +119,7 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"tmpfs",
 		"type",
 		"user",
+		"volumes",
 	},
 	"XIOM": {
 		"mda",

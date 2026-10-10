@@ -49,6 +49,26 @@ per-component VM resources with the typed `cpu`, `ram`, and `max-nics` component
 environment entries. The environment variables containerlab removed (`CLAB_SROS_CONFIG_MODE`,
 `CLAB_IOL_PID_OFFSET`, `CLAB_CUSTOM_PROMPT`, ...) are gone; use the kind config keys instead.
 
+### Removed: node `extras`
+
+The node `extras` field is gone, following containerlab's
+[kind-specific config migration](https://github.com/srl-labs/containerlab/pull/3458). Everything
+it carried was either a kind config key or dead:
+
+| Old `extras` key | Use instead |
+| --------- | ------------- |
+| `extras.frr.daemons` | [`daemons`](/docs/guides/frr#daemons), a kind config key of the `frr`/`frrouting` kinds |
+| `extras.ceos-copy-to-flash` | `copy-to-flash`, a kind config key of the `arista_ceos` kind |
+| `extras.k8s_kind.deploy.kubeconfig` / `.wait` | `kubeconfig` / `wait`, kind config keys of the `k8s-kind` kind |
+| `extras.srl-agents` | Nothing, containerlab removed the agent copy it fed (nothing consumed it in c9s either) |
+| `extras.mysocket-proxy` | Nothing, mysocketctl is gone |
+
+Move the keys to the node definition in the Topology
+[`definition:`](/docs/crd/topology#spec-definition) and drop them from any hand-authored
+[`Node`](/docs/crd/node) manifest: a Topology definition that still carries `extras` fails
+compilation with the migration pointer containerlab deploys with, and a `Node` manifest that
+sets the removed `spec.extras` field fails server-side field validation on `kubectl apply`.
+
 ## Cumulus VX breakout ports
 
 `nvidia_cumulusvx` nodes can generate a breakout port layout with the `port-count` and

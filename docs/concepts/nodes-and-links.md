@@ -41,9 +41,10 @@ diagnostic naming the field.
   `env`, `user`, `sysctls`, `devices`, `cap-add`, `privileged`, `security-opts`, `tmpfs`,
   `shm-size`, `cpu`, `memory`, `dns`, `healthcheck`, `startup-delay`, `restart-policy`
   (`always` or `unless-stopped`), `exec`, `mgmt-ipv4`, `mgmt-ipv6`, `ports`, `aliases`,
-  `group`, `extras`, `components`, `mgmt-net`, and `certificate`.
+  `group`, `components`, `mgmt-net`, and `certificate`.
 - **Kind-specific config:** every other key a kind owns (for example `port-count` and
-  `breakouts` for `nvidia_cumulusvx`, or `config-mode` for the Nokia kinds) is validated by the
+  `breakouts` for `nvidia_cumulusvx`, `daemons` for the frr kinds, `copy-to-flash` for
+  `arista_ceos`, or `config-mode` for the Nokia kinds) is validated by the
   imported kind when the node is planned. In a Topology definition the keys sit inline on the
   node, exactly as containerlab reads them; a directly authored Node carries the merged keys in
   its `kind-specific-config` mapping; see

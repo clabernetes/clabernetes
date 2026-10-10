@@ -23,9 +23,6 @@ type (
 	// ConfigDispatcher represents the config of a configuration machine that is responsible to
 	// execute configuration commands on the nodes after they started.
 	ConfigDispatcher = clabernetesapisv1alpha1.ConfigDispatcher
-	// Extras contains extra node parameters which are not entitled to be part of a generic node
-	// config.
-	Extras = clabernetesapisv1alpha1.Extras
 	// DNSConfig represents DNS configuration options a node has.
 	DNSConfig = clabernetesapisv1alpha1.DNSConfig
 	// CertificateConfig represents the configuration of a TLS infrastructure used by a node.

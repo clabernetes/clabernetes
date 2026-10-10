@@ -193,9 +193,6 @@ type NodeDefinition struct {
 	// +kubebuilder:validation:Enum=live;restart;recreate
 	// +optional
 	LinkApplyMode string `json:"link-apply-mode,omitempty" yaml:"link-apply-mode,omitempty"`
-	// Extras holds extra, possibly kind specific, node parameters.
-	// +optional
-	Extras *Extras `json:"extras,omitempty" yaml:"extras,omitempty"`
 	// Components holds the hardware component (i.e. SR-OS card/mda) configuration for the node.
 	// It is the typed projection of containerlab's kind-specific `components` key; the imported
 	// kind validates it strictly when the node is planned.
@@ -209,7 +206,8 @@ type NodeDefinition struct {
 	MgmtNet string `json:"mgmt-net,omitempty" yaml:"mgmt-net,omitempty"`
 	// KindSpecificConfig carries kind-owned node keys, exactly the containerlab kind-specific
 	// config keys that sit on the node definition itself -- e.g. `port-count` and `breakouts`
-	// for nvidia_cumulusvx, or `config-mode` for the Nokia kinds. The keys arrive inline on the
+	// for nvidia_cumulusvx, `daemons` for the frr/frrouting kinds, `copy-to-flash` for
+	// arista_ceos, or `config-mode` for the Nokia kinds. The keys arrive inline on the
 	// node definition, are merged over the regular node > group > kinds.<kind> > defaults order
 	// by the topology compiler, and are validated strictly by the imported kind when the node is
 	// planned: unknown keys and mistyped values fail with the same error containerlab deploys
@@ -371,32 +369,6 @@ type ConfigDispatcher struct {
 	// Vars holds the variables for the config engine.
 	// +optional
 	Vars Vars `json:"vars,omitempty" yaml:"vars,omitempty"`
-}
-
-// Extras contains extra node parameters which are not entitled to be part of a generic node
-// config.
-type Extras struct {
-	// SRLAgents is a list of Nokia SR Linux agents (spec files) to install on the node.
-	// +listType=atomic
-	// +optional
-	SRLAgents []string `json:"srl-agents,omitempty" yaml:"srl-agents,omitempty"`
-	// CeosCopyToFlash is a list of paths to files which are to be copied to the ceos flash dir.
-	// +listType=atomic
-	// +optional
-	CeosCopyToFlash []string `json:"ceos-copy-to-flash,omitempty" yaml:"ceos-copy-to-flash,omitempty"`
-	// FRR holds FRRouting kind specific options.
-	// +optional
-	FRR *FRRExtras `json:"frr,omitempty" yaml:"frr,omitempty"`
-}
-
-// FRRExtras holds the FRRouting kind specific extra options.
-type FRRExtras struct {
-	// Daemons is the list of FRR routing daemons to enable. When empty, every daemon known to
-	// the kind is enabled; the always-on daemons (zebra, staticd, mgmtd, watchfrr) need not be
-	// listed.
-	// +listType=atomic
-	// +optional
-	Daemons []string `json:"daemons,omitempty" yaml:"daemons,omitempty"`
 }
 
 // DNSConfig represents DNS configuration options a node has.

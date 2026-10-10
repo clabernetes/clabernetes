@@ -70,17 +70,16 @@ spec:
 
 ## Daemons
 
-The kind starts every daemon it knows when `extras.frr.daemons` is unset. Restrict the daemon set
-with the FRR extras; the always-on daemons (zebra, staticd, mgmtd, watchfrr) need not be listed:
+The kind starts every daemon it knows when the `daemons` kind config key is unset. Restrict the
+daemon set with `daemons`; the always-on daemons (zebra, staticd, mgmtd, watchfrr) need not be
+listed:
 
 ```yaml
 nodes:
   frr1:
     kind: frr
     image: quay.io/frrouting/frr:containerlab-10.7.1
-    extras:
-      frr:
-        daemons: [bgpd]
+    daemons: [bgpd]
 ```
 
 ## Access

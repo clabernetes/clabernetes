@@ -146,3 +146,36 @@ func TestKindSpecificConfigReachesNokiaSrsimKind(t *testing.T) {
 		t.Fatalf("the srsim kind generated no configuration artifacts; files = %#v", plan.Files)
 	}
 }
+
+// TestKindSpecificConfigFrrDaemonsArtifact proves the migrated frr key -- the former
+// `extras.frr.daemons`, now the `daemons` kind-specific config key of the frr/frrouting
+// kinds -- reaches the imported kind and produces the daemon-selection file the kind's
+// deployment generates.
+func TestKindSpecificConfigFrrDaemonsArtifact(t *testing.T) {
+	t.Parallel()
+
+	const image = "quay.io/frrouting/frr:containerlab-10.7.1"
+
+	input := singleNodeInput("frr", image)
+	input.Nodes[0].Definition = []byte(`{"kind":"frr","image":"` + image + `",` +
+		`"kind-specific-config":{"daemons":["bgpd","ospfd"]}}`)
+
+	plan, err := (clabernetesinternaldeviceplan.Adapter{
+		Registry: clabernetesinternaldeviceplan.NewContainerlabRegistry(),
+		Revision: "kind-specific-config-v1",
+	}).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found bool
+	for _, file := range plan.Files {
+		if strings.HasSuffix(file.ArtifactPath, "daemons") {
+			found = true
+		}
+	}
+
+	if !found {
+		t.Fatalf("the frr kind planned no daemons artifact; files = %#v", plan.Files)
+	}
+}

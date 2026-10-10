@@ -93,6 +93,11 @@ The `components` key is the one kind config key c9s carries as a typed field: it
 device rendering (chassis component containers and DNS aliases), and it keeps the typed
 slot/mda/xiom vocabulary. Every other kind config key travels through the generic passthrough.
 
+The node `extras` field containerlab carried before this release is gone: its keys are now kind
+config keys written directly on the node -- `daemons` for the `frr`/`frrouting` kinds and
+`copy-to-flash` for `arista_ceos`. A definition that still sets `extras` fails compilation with
+the migration pointer, exactly as containerlab rejects it.
+
 ### Containerlab node labels
 
 The compiler carries these labels onto the generated Node's `metadata.labels`, then the Node
