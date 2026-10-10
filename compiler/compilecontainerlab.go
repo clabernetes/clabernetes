@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -1160,6 +1161,11 @@ func importedNodePorts(topology *clabtypes.Topology, nodeName string) []string {
 // (chassis component DNS aliases), and the Node CRD exposes it as a validated, typed vocabulary.
 const kindSpecificComponentsKey = "components"
 
+// kindSpecificWrapperKey is the yaml key c9s' Node vocabulary uses to carry merged kind-specific
+// config. A definition may write it explicitly; the compiler unwraps it so the same key never
+// appears as kind-owned config.
+const kindSpecificWrapperKey = "kind-specific-config"
+
 // collectKindSpecificConfig carries the node's merged kind-specific config keys onto the
 // flattened definition, mirroring containerlab's kind-specific config model: keys are merged over
 // the regular inheritance order by the imported topology, and the imported kind validates them
@@ -1200,17 +1206,115 @@ func collectKindSpecificConfig(
 	}
 
 	for _, entry := range entries {
-		if entry.Key == kindSpecificComponentsKey {
+		switch entry.Key {
+		case kindSpecificComponentsKey:
+			continue
+		case kindSpecificWrapperKey:
+			wrapper := kindSpecificWrapperEntries(entry.Value)
+			if wrapper == nil {
+				return fmt.Errorf("node %q: %w", nodeName, errInvalidKindSpecificWrapper)
+			}
+
+			for keyText, wrapperValue := range wrapper {
+				if err := carryKindSpecificValue(
+					flattened,
+					nodeName,
+					keyText,
+					wrapperValue,
+					fieldLines,
+					entry.From,
+					diagnostics,
+				); err != nil {
+					return err
+				}
+			}
+
 			continue
 		}
 
-		value, err := normalizeImportedKindSpecificValue(entry.Value)
-		if err != nil {
+		if err := carryKindSpecificValue(
+			flattened,
+			nodeName,
+			entry.Key,
+			entry.Value,
+			fieldLines,
+			entry.From,
+			diagnostics,
+		); err != nil {
 			return err
 		}
-
-		flattened.KindSpecificConfig[entry.Key] = value
 	}
+
+	return nil
+}
+
+// kindSpecificWrapperEntries flattens a kind-specific config wrapper mapping into per-key
+// entries. The wrapper value arrives through either yaml unmarshaler, so both mapping shapes are
+// accepted.
+func kindSpecificWrapperEntries(value any) map[string]any {
+	switch wrapper := value.(type) {
+	case map[string]any:
+		return wrapper
+	case map[any]any:
+		entries := make(map[string]any, len(wrapper))
+		for key, entryValue := range wrapper {
+			keyText, ok := key.(string)
+			if !ok {
+				return nil
+			}
+
+			entries[keyText] = entryValue
+		}
+
+		return entries
+	default:
+		return nil
+	}
+}
+
+// errInvalidKindSpecificWrapper marks a kind-specific config wrapper that is not a mapping of
+// kind config keys.
+var errInvalidKindSpecificWrapper = errors.New(
+	"kind-specific-config must be a mapping of kind config keys",
+)
+
+// carryKindSpecificValue renders one kind-specific config value onto the flattened node and
+// reports a duplicate declaration of the same key inside one node block.
+func carryKindSpecificValue(
+	flattened *clabernetesutilcontainerlab.NodeDefinition,
+	nodeName,
+	key string,
+	value any,
+	fieldLines map[string]map[string]int,
+	from string,
+	diagnostics *compileDiagnostics,
+) error {
+	if _, duplicated := flattened.KindSpecificConfig[key]; duplicated {
+		line := 0
+		if lines := fieldLines[from]; lines != nil {
+			line = lines[key]
+		}
+
+		diagnostics.add(Diagnostic{
+			Code: "duplicate-kind-config",
+			Path: "topology." + from + "." + key,
+			Line: line,
+			Message: fmt.Sprintf(
+				"node %q declares kind config key %q more than once",
+				nodeName,
+				key,
+			),
+		})
+
+		return nil
+	}
+
+	normalized, err := normalizeImportedKindSpecificValue(value)
+	if err != nil {
+		return err
+	}
+
+	flattened.KindSpecificConfig[key] = normalized
 
 	return nil
 }

@@ -1392,3 +1392,69 @@ topology:
 		t.Fatalf("mgmt-net was not carried: %+v", node)
 	}
 }
+
+func TestCompileTopologyUnwrapsExplicitKindSpecificConfig(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: explicit-kind-config
+topology:
+  nodes:
+    cumulus:
+      kind: nvidia_cumulusvx
+      image: ghcr.io/clab-labs/nvidia_cumulus:5.16.5-boxen
+      kind-specific-config:
+        port-count: 4
+`)
+	if err != nil {
+		t.Fatalf("explicit kind-specific-config must compile: %s", err)
+	}
+
+	node := compiled.Nodes["cumulus"]
+	if node == nil {
+		t.Fatal("compiled topology has no node cumulus")
+	}
+
+	if _, ok := node.KindSpecificConfig["port-count"]; !ok {
+		t.Fatalf("explicit kind config was not unwrapped: %#v", node.KindSpecificConfig)
+	}
+
+	if _, ok := node.KindSpecificConfig["kind-specific-config"]; ok {
+		t.Fatalf("the wrapper key leaked into kind config: %#v", node.KindSpecificConfig)
+	}
+}
+
+func TestCompileTopologyRejectsDuplicatedKindConfig(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: duplicate-kind-config
+topology:
+  nodes:
+    cumulus:
+      kind: nvidia_cumulusvx
+      image: ghcr.io/clab-labs/nvidia_cumulus:5.16.5-boxen
+      port-count: 4
+      kind-specific-config:
+        port-count: 8
+`)
+	if err == nil {
+		t.Fatal("a duplicated kind config key must fail compilation")
+	}
+
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	found := slices.ContainsFunc(
+		unsupported.Diagnostics,
+		func(diagnostic clabernetescompiler.Diagnostic) bool {
+			return diagnostic.Code == "duplicate-kind-config" &&
+				strings.Contains(diagnostic.Message, `"port-count"`)
+		},
+	)
+	if !found {
+		t.Fatalf("expected a duplicate diagnostic, got %+v", unsupported.Diagnostics)
+	}
+}

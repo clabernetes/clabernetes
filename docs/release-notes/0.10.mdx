@@ -1,0 +1,101 @@
+---
+title: "0.10"
+---
+
+2026-10-10 · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.9.0...main)
+
+<ReleaseHero
+  from="0.9.0"
+  version="0.10.0"
+  tagline="containerlab 0.80"
+  highlight="kind-specific config"
+  facts={['containerlab 0.80.0', 'cumulus breakout ports', 'frr kind in e2e']}
+/>
+
+C9s now pins containerlab 0.80.0 and adopts the kind-specific config model that release
+introduced. Cumulus VX breakout ports work end to end, the FRRouting kind is covered by the
+always-run E2E suite, and management networks gained first-class diagnostics for the new
+container-only management settings.
+
+## Kind-specific config
+
+Containerlab 0.80 replaced the `CLAB_*` environment variables with kind-specific node keys, and
+c9s adopts the same model. Kinds that need more than the generic node settings take their own
+keys directly on the node definition:
+
+```yaml
+topology:
+  nodes:
+    cumulus:
+      kind: nvidia_cumulusvx
+      image: ghcr.io/clab-labs/nvidia_cumulus:5.16.5-boxen
+      port-count: 64
+      breakouts:
+        - port: 1..20
+          channels: 4
+```
+
+c9s merges every kind config key over the regular inheritance order (node > group >
+`kinds.<kind>` > defaults) while compiling, carries the merged result on the generated Node, and
+hands it to the imported kind when the node is planned. The imported kind validates it strictly:
+a key the kind does not own, or a mistyped value, fails planning with the same error containerlab
+deploys with, naming the key and the topology block it was set in. A generic field such as
+`stages` or `runtime` still fails compilation with the structured rejection it always carried.
+
+The `components` key keeps its typed Node vocabulary: it drives c9s' own chassis component
+rendering, and the imported kind validates it when the node is planned. Per-component `sfm`
+settings moved to the node level with containerlab 0.80, and the `nokia_sros` kind sets
+per-component VM resources with the typed `cpu`, `ram`, and `max-nics` component keys instead of
+environment entries. The environment variables containerlab removed (`CLAB_SROS_CONFIG_MODE`,
+`CLAB_IOL_PID_OFFSET`, `CLAB_CUSTOM_PROMPT`, ...) are gone; use the kind config keys instead.
+
+## Cumulus VX breakout ports
+
+`nvidia_cumulusvx` nodes can generate a breakout port layout with the `port-count` and
+`breakouts` kind config keys, producing the `/config/ports.conf` the vrnetlab image uses to
+rename selected ports into the Cumulus breakout form `swpNsM`. Link endpoints use the lane
+names:
+
+```yaml
+topology:
+  nodes:
+    cumulus:
+      kind: nvidia_cumulusvx
+      image: ghcr.io/clab-labs/nvidia_cumulus:5.16.5-boxen
+      port-count: 2
+      breakouts:
+        - port: 1
+          channels: 4
+  links:
+    - endpoints: ["cumulus:swp1s0", "client:eth1"]
+```
+
+The [Cumulus example](https://github.com/clabernetes/clabernetes/tree/main/examples/basic) and
+the E2E suite boot a breakout lab and prove the dataplane across two lanes, including guest
+forwarding between them.
+
+## FRRouting in the always-run E2E suite
+
+The `frr` kind is a first-class citizen in containerlab 0.80, and c9s now covers it in the
+always-run E2E suite: two FRR nodes boot as direct device Pods with containerlab's generated
+`/etc/frr` configuration, the wire interfaces take their addresses from the startup
+configuration, an OSPF adjacency forms across the fabric link, and OSPF-learned routes carry real
+traffic. See the [FRRouting guide](/docs/guides/frr) for an example and the daemon selection
+syntax.
+
+## Management networks
+
+Containerlab 0.80 added macvlan management networks, containerlab IPAM, Tailscale management
+integration, and multiple management networks. c9s realizes a single cluster-agnostic management
+network per namespace, so:
+
+- The new Docker-only `mgmt` fields (`driver`, `ipam`, `macvlan-*`, `tailscale`) are accepted and
+  ignored with a warning, like the existing `network`, `bridge`, and `mtu` fields.
+- A single-entry `mgmt:` list is carried as-is; more than one management network fails
+  compilation until a per-network management plan exists.
+- Node `mgmt-net` selections are accepted and ignored.
+
+## Planner compatibility
+
+Plans are tied to the linked containerlab module version and registry digest, so the first
+reconcile after an upgrade re-plans every Node once. Devices restart with their pods as usual.

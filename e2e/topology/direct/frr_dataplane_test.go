@@ -97,5 +97,20 @@ func TestDirectFrrDataplane(t *testing.T) {
 		)
 	}
 
+	// The containerlab FRR image strips the management interface's default route at startup so
+	// it stays out of the lab's routing protocols. The Pod's transport routes must survive that:
+	// the management mesh has to keep carrying peer reachability, exactly as Docker's management
+	// network does for a local containerlab lab.
+	management := poolMixedManagementAddresses(t, namespace, 2)
+	for source, destination := range map[string]string{"frr1": "frr2", "frr2": "frr1"} {
+		waitForDeviceCommand(
+			t,
+			namespace,
+			observeDevicePod(t, namespace, source),
+			[]string{"ping", "-4", "-c", "2", "-W", "2", management[destination]},
+			" 0% packet loss",
+		)
+	}
+
 	waitForWorkerArtifactCollection(t, namespace)
 }
