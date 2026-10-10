@@ -1,0 +1,23 @@
+name: ToFaRev
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  review:
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.comment.user.type == 'User' &&
+      contains(fromJSON('["hellt","flosch62","kaelemc"]'), github.event.comment.user.login) &&
+      contains(github.event.comment.body, '/tofarev review')
+    uses: hellt/tofarev/.github/workflows/review.yml@03086acd967432c63495499f15fe887e992dab85
+    with:
+      bot_repository: hellt/tofarev
+      bot_ref: 03086acd967432c63495499f15fe887e992dab85
+      app_client_id: ${{ vars.TOFAREV_APP_CLIENT_ID }}
+      trusted_config: '{"repository":"clabernetes/clabernetes","repositoryId":685188215,"allowedUsers":["hellt","flosch62","kaelemc"],"shareSessions":true}'
+    secrets:
+      TOFAREV_API_KEY: ${{ secrets.TOFAREV_API_KEY }}
+      TOFAREV_APP_PRIVATE_KEY: ${{ secrets.TOFAREV_APP_PRIVATE_KEY }}
