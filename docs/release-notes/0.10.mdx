@@ -7,14 +7,15 @@ title: "0.10"
 <ReleaseHero
   from="0.9.0"
   version="0.10.0"
-  tagline="containerlab 0.80"
-  highlight="kind-specific config"
-  facts={['containerlab 0.80.0', 'cumulus breakout ports', 'frr kind in e2e']}
+  tagline="containerlab 0.81"
+  highlight="0.81"
+  facts={['containerlab 0.81.0', 'compile engine in containerlab', 'cumulus breakout ports', 'frr kind in e2e']}
 />
 
-C9s now pins containerlab 0.80.0 and adopts the kind-specific config model that release
-introduced. Cumulus VX breakout ports work end to end, the FRRouting kind is covered by the
-always-run E2E suite, and management networks gained first-class diagnostics for the new
+C9s now pins containerlab 0.81.0. The kind-specific config model that 0.80 introduced is fully
+adopted, the `extras` node field removed in 0.81 is gone, and the c9s topology compiler moved into
+containerlab itself. Cumulus VX breakout ports work end to end, the FRRouting kind is covered by
+the always-run E2E suite, and management networks gained first-class diagnostics for the new
 container-only management settings.
 
 ## Kind-specific config
@@ -114,6 +115,30 @@ network per namespace, so:
 - A single-entry `mgmt:` list is carried as-is; more than one management network fails
   compilation until a per-network management plan exists.
 - Node `mgmt-net` selections are accepted and ignored.
+
+## The compiler moved into containerlab
+
+The topology compiler that renders a containerlab definition into c9s Node, Link, and NodeProfile
+primitives moved from c9s into containerlab itself, where the topology semantics it renders live.
+The dependency now points one way — only c9s depends on containerlab — and the containerlab `c9s`
+runtime and the c9s controller compile with the same engine, so a topology the containerlab CLI
+accepts is exactly the topology the controller compiles. For controller users the engine ships
+inside the c9s release and needs no separate action; if you also deploy labs through the
+containerlab CLI's `c9s` runtime, upgrade containerlab and c9s together.
+
+The failure modes the engine path can hit — a rejected render, or an emitted manifest the c9s
+vocabulary cannot carry — used to panic the reconcile. They now return like compile failures:
+nothing is persisted, the Topology status carries the actionable error, and the reconcile
+requeues with backoff. The compiled topology is also rendered once per reconcile instead of once
+per primitive list.
+
+## Fixes
+
+- The mesh neighbor inventory ignores the generic rtnetlink notification that kernels before
+  6.13 emit after every self FDB change on a VXLAN device. It carries only the MAC — no
+  destination — so caching it produced a forwarding entry the kernel refuses to delete,
+  `clabwire` exited on the next reconcile pass, and every restart dropped the Pod's wire
+  carrier. On 6.1 workers this crash-looped every multi-link Pod; affected labs now converge.
 
 ## Planner compatibility
 

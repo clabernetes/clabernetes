@@ -4,7 +4,7 @@ description: Intentional semantic differences between a containerlab host and th
 icon: GitCompareArrows
 ---
 
-c9s consumes unmodified kind behavior from containerlab 0.80.0, but a Kubernetes cluster is
+c9s consumes unmodified kind behavior from containerlab 0.81.0, but a Kubernetes cluster is
 not a Docker host. The differences below are deliberate: each one preserves the *lab*
 semantics while replacing a Docker-host mechanism with its Kubernetes-native equivalent.
 Everything else that cannot be represented fails at compile or planning time with a clear
