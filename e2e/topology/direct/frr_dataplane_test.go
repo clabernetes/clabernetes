@@ -85,8 +85,8 @@ func TestDirectFrrDataplane(t *testing.T) {
 	}
 
 	for source, loopback := range map[string]string{
-		"frr1": "10.0.0.2",
-		"frr2": "10.0.0.1",
+		"frr1": "198.51.100.2",
+		"frr2": "198.51.100.1",
 	} {
 		waitForDeviceCommand(
 			t,

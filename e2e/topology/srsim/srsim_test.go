@@ -132,7 +132,7 @@ spec:
             image: ghcr.io/srl-labs/network-multitool:latest
             exec:
               - >-
-                ash -c 'ip l set dev eth1 up && ip addr add dev eth1 10.0.0.1/30'
+                ash -c 'ip l set dev eth1 up && ip addr add dev eth1 198.51.100.1/30'
           sros:
             kind: nokia_srsim
             image: %s
@@ -147,7 +147,7 @@ spec:
               /configure port 1/1/c23/4 ethernet mode hybrid
               /configure port 1/1/c23/4 admin-state enable
               /configure router "Base" interface "to-linux" port 1/1/c23/4:0
-              /configure router "Base" interface "to-linux" ipv4 primary address 10.0.0.2
+              /configure router "Base" interface "to-linux" ipv4 primary address 198.51.100.2
               /configure router "Base" interface "to-linux" ipv4 primary prefix-length 24
         links:
           - type: veth
@@ -313,7 +313,7 @@ func waitForDatapath(t *testing.T, namespace string) {
 			"2",
 			"-W",
 			"3",
-			"10.0.0.2",
+			"198.51.100.2",
 		)
 
 		output, err := cmd.CombinedOutput()

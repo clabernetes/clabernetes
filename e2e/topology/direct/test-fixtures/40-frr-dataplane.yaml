@@ -36,14 +36,14 @@ spec:
     service integrated-vtysh-config
     !
     interface lo
-     ip address 10.0.0.1/32
+     ip address 198.51.100.1/32
     !
     interface eth1
      ip address 192.168.0.0/31
     !
     router ospf
      network 192.168.0.0/31 area 0
-     network 10.0.0.1/32 area 0
+     network 198.51.100.1/32 area 0
     !
 ---
 apiVersion: c9s.run/v1alpha1
@@ -63,12 +63,12 @@ spec:
     service integrated-vtysh-config
     !
     interface lo
-     ip address 10.0.0.2/32
+     ip address 198.51.100.2/32
     !
     interface eth1
      ip address 192.168.0.1/31
     !
     router ospf
      network 192.168.0.0/31 area 0
-     network 10.0.0.2/32 area 0
+     network 198.51.100.2/32 area 0
     !
