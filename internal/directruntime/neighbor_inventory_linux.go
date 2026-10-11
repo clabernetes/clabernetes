@@ -149,6 +149,13 @@ func (inventory *meshNeighborInventory) apply(message syscall.NetlinkMessage) er
 
 		return err
 	}
+	// Kernels before 6.13 follow every self FDB change on a VXLAN with a generic rtnetlink
+	// notification that carries only the MAC. The device's own notification, which carries the
+	// destination, is authoritative; caching the generic one would surface an entry that cannot
+	// be deleted (the kernel rejects a destination-less delete with EAFNOSUPPORT).
+	if entry.Family == unix.AF_BRIDGE && entry.IP == nil {
+		return nil
+	}
 	scope := neighborScope{
 		index:  entry.LinkIndex,
 		family: entry.Family,
