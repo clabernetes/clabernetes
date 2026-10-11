@@ -40,8 +40,11 @@ This creates:
 
 ### cumulus-multitool.yaml
 
-An NVIDIA Cumulus VX node connected to a network multitool host. The Cumulus
-image requires GHCR access. Create the pull Secret in the namespace where you
+An NVIDIA Cumulus VX node with containerlab breakout ports, connected to two network multitool
+hosts through two breakout lanes. The kind-specific `port-count` and `breakouts` config generates
+`/config/ports.conf`, which the vrnetlab image uses to split port 1 into the lanes `swp1s0` and
+`swp1s1`; the two hosts reach each other through the guest's own forwarding between the lanes.
+The Cumulus image requires GHCR access. Create the pull Secret in the namespace where you
 will apply the topology:
 
 ```bash
@@ -53,9 +56,11 @@ kubectl -n cumulus-multitool create secret docker-registry regcred \
 kubectl -n cumulus-multitool apply -f cumulus-multitool.yaml
 ```
 
-The example connects `cumulus:swp1` (`192.0.2.0/31`) to `multitool:eth1`
-(`192.0.2.1/31`). Once the Cumulus node is ready, ping it from multitool with
-`ping 192.0.2.0`. Its default SSH login is `cumulus` / `Clab123!`; port 22 is
+The example connects `cumulus:swp1s0` (`192.0.2.0/31`) to `multitool:eth1`
+(`192.0.2.1/31`) and `cumulus:swp1s1` (`192.0.2.2/31`) to `client:eth1`
+(`192.0.2.3/31`). Once the Cumulus node is ready, ping it from multitool with
+`ping 192.0.2.0`, and reach the second host through the guest with
+`ping 192.0.2.3`. Its default SSH login is `cumulus` / `Clab123!`; port 22 is
 reachable through the Cumulus service in the cluster. The e2e test creates a
 Secret containing only the GHCR entry from the runner's Docker config. The regular
 e2e suite skips this test. Run it manually from the repository root with:

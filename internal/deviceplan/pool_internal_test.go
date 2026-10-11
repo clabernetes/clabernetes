@@ -64,7 +64,7 @@ func testPoolBootstrap() PoolBootstrap {
 	content := []byte("private startup config")
 	input := Input{
 		SchemaVersion: SchemaVersion, TopologyName: "lab", Compatibility: Compatibility{
-			ContainerlabModule: "github.com/srl-labs/containerlab", ContainerlabVersion: "v0.79.0", RegistryDigest: Digest([]byte("registry")), PlanSchemaVersion: SchemaVersion,
+			ContainerlabModule: "github.com/srl-labs/containerlab", ContainerlabVersion: "v0.80.0", RegistryDigest: Digest([]byte("registry")), PlanSchemaVersion: SchemaVersion,
 		},
 		EntropyDigest: Digest(
 			seed,

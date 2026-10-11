@@ -11,7 +11,7 @@ import (
 
 // pinnedContainerlabVersion is the containerlab release the vocabulary below was taken from. It
 // must track the github.com/srl-labs/containerlab module version pinned in go.mod.
-const pinnedContainerlabVersion = "0.78.0"
+const pinnedContainerlabVersion = "v0.80.1-0.20261010211535-6919339453c7"
 
 // pinnedContainerlabVocabulary is the yaml vocabulary of the pinned containerlab's node
 // definition and its sub objects, keyed by the type name clabernetes uses for the same object.
@@ -20,13 +20,19 @@ const pinnedContainerlabVersion = "0.78.0"
 // types in the new release and update both this map and pinnedContainerlabVersion:
 //
 //	types/node_definition.go -> NodeDefinition
-//	types/types.go           -> ConfigDispatcher, Extras, DNSConfig, CertificateConfig,
+//	types/types.go           -> ConfigDispatcher, DNSConfig, CertificateConfig,
 //	                            HealthcheckConfig
-//	types/component.go       -> Component, XIOM, MDA
+//	nodes/sros/component.go  -> Component, XIOM, MDA (nokia_srsim)
+//	nodes/vr_sros/vr-sros.go -> Component, XIOM, MDA (nokia_sros)
 //
 // Entries clabernetes deliberately does not expose (i.e. stages, credentials, runtime)
 // are kept, since this map describes containerlab's vocabulary rather than ours -- the test only
-// asserts that ours is a subset of it.
+// asserts that ours is a subset of it. The Component snapshot is the union of the per-kind
+// component shapes: nokia_srsim carries env, and nokia_sros carries the typed cpu, ram, and
+// max-nics resources. The node `extras` field and its `srl-agents`, `ceos-copy-to-flash`, and
+// `frr` sub objects are gone since the kind-specific config migration: their keys are now
+// kind-specific config keys validated by the owning kind (`copy-to-flash` for arista_ceos,
+// `daemons` for frr/frrouting).
 var pinnedContainerlabVocabulary = map[string][]string{
 	"CertificateConfig": {
 		"issue",
@@ -35,9 +41,11 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"validity-duration",
 	},
 	"Component": {
+		"cpu",
 		"env",
+		"max-nics",
 		"mda",
-		"sfm",
+		"ram",
 		"slot",
 		"type",
 		"xiom",
@@ -49,12 +57,6 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"options",
 		"search",
 		"servers",
-	},
-	"Extras": {
-		"ceos-copy-to-flash",
-		"k8s_kind",
-		"mysocket-proxy",
-		"srl-agents",
 	},
 	"HealthcheckConfig": {
 		"test",
@@ -73,9 +75,9 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"binds",
 		"cap-add",
 		"certificate",
+		"cgroup-parent",
 		"cgroupns-mode",
 		"cmd",
-		"components",
 		"config",
 		"cpu",
 		"cpu-set",
@@ -87,9 +89,9 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"env",
 		"env-files",
 		"exec",
-		"extras",
 		"group",
 		"healthcheck",
+		"hostname",
 		"image",
 		"image-pull-policy",
 		"kind",
@@ -99,6 +101,7 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"memory",
 		"mgmt-ipv4",
 		"mgmt-ipv6",
+		"mgmt-net",
 		"network-mode",
 		"pid-mode",
 		"ports",
@@ -116,6 +119,7 @@ var pinnedContainerlabVocabulary = map[string][]string{
 		"tmpfs",
 		"type",
 		"user",
+		"volumes",
 	},
 	"XIOM": {
 		"mda",
@@ -185,6 +189,15 @@ func TestNodeVocabularyIsContainerlabSubset(t *testing.T) {
 		}
 
 		for _, tag := range tags {
+			// `components` is kind-specific config since containerlab 0.80: it is no longer a
+			// field of the generic node definition, but each kind that owns it (the Nokia kinds
+			// and SR Linux) validates the value strictly through the kind-specific config
+			// decoder when the node is planned, so the vocabulary guard the field serves is the
+			// plan-time decode rather than this snapshot.
+			if typeName == "NodeDefinition" && tag == "components" {
+				continue
+			}
+
 			if !slices.Contains(theirs, tag) {
 				t.Errorf(
 					"%s field %q does not exist in containerlab %s -- the device runtime would fail to"+

@@ -873,7 +873,12 @@ func defaultApplicationContainer(
 			return "", errors.New("direct workload primary Node has no application container")
 		}
 
-		return ApplicationContainerName(node.ContainerIDs[0]), nil
+		primaryID := node.PrimaryContainerID
+		if primaryID == "" {
+			primaryID = node.ContainerIDs[0]
+		}
+
+		return ApplicationContainerName(primaryID), nil
 	}
 
 	return "", fmt.Errorf("direct workload has no logical primary named %q", workloadName)
@@ -890,7 +895,9 @@ func applyPrimaryContainerResources(
 
 	primaryIDs := make(map[string]bool, len(plan.Nodes))
 	for _, node := range plan.Nodes {
-		if len(node.ContainerIDs) != 0 {
+		if node.PrimaryContainerID != "" {
+			primaryIDs[node.PrimaryContainerID] = true
+		} else if len(node.ContainerIDs) != 0 {
 			primaryIDs[node.ContainerIDs[0]] = true
 		}
 	}

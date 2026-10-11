@@ -115,7 +115,7 @@ func validInput() clabernetesinternaldeviceplan.Input {
 		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		TopologyName:  "lab-a",
 		Compatibility: clabernetesinternaldeviceplan.Compatibility{
-			ContainerlabModule: "github.com/srl-labs/containerlab", ContainerlabVersion: "v0.78.0",
+			ContainerlabModule: "github.com/srl-labs/containerlab", ContainerlabVersion: "v0.80.0",
 			RegistryDigest:    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			PlanSchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
 		},

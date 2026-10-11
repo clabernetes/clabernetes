@@ -149,7 +149,14 @@ func TestRenderFollowsSanitizedNodeNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nodes := clabernetescompiler.RenderNodes(topology, compiled, clabernetesconfig.GetFakeManager)
+	nodes, _, _, err := clabernetescompiler.RenderAll(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
 
 	var rendered *clabernetesapisv1alpha1.Node
 
@@ -179,11 +186,16 @@ func TestRenderFollowsSanitizedNodeNames(t *testing.T) {
 		t.Fatalf("r1 application protocols = %v, want %v", got, want)
 	}
 
-	assertSanitizedProfiles(t, clabernetescompiler.RenderNodeProfiles(
+	_, _, profiles, err := clabernetescompiler.RenderAll(
 		topology,
 		compiled,
 		clabernetesconfig.GetFakeManager,
-	))
+	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
+
+	assertSanitizedProfiles(t, profiles)
 }
 
 // assertSanitizedProfiles checks the policy the profiles carry for the renamed nodes.

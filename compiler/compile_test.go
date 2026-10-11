@@ -1187,3 +1187,420 @@ topology:
 		t.Fatalf("compiled opaque Node = %#v", compiled.Nodes["node-a"])
 	}
 }
+
+func TestCompileTopologyCarriesKindSpecificConfig(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: kind-config
+topology:
+  kinds:
+    nvidia_cumulusvx:
+      port-count: 64
+  nodes:
+    leaf:
+      kind: nvidia_cumulusvx
+      image: vrnetlab/nvidia_cumulus-vx:5.16.1
+      breakouts:
+        - port: 1..20
+          channels: 4
+    spine:
+      kind: linux
+      image: alpine
+`)
+	if err != nil {
+		t.Fatalf("kind-specific config must compile: %s", err)
+	}
+
+	leaf := compiled.Nodes["leaf"]
+	if leaf == nil {
+		t.Fatal("compiled topology has no node leaf")
+	}
+
+	if got, want := len(leaf.KindSpecificConfig), 2; got != want {
+		t.Fatalf("leaf kind-specific config = %#v, want %d keys", leaf.KindSpecificConfig, want)
+	}
+
+	if leaf.KindSpecificConfig["port-count"].Raw == nil ||
+		!strings.Contains(string(leaf.KindSpecificConfig["port-count"].Raw), "64") {
+		t.Fatalf(
+			"leaf port-count was not inherited from the kind: %#v",
+			leaf.KindSpecificConfig["port-count"],
+		)
+	}
+
+	if !strings.Contains(
+		string(leaf.KindSpecificConfig["breakouts"].Raw),
+		`"channels":4`,
+	) {
+		t.Fatalf("leaf breakouts were not carried: %#v", leaf.KindSpecificConfig["breakouts"])
+	}
+
+	if spine := compiled.Nodes["spine"]; spine != nil && len(spine.KindSpecificConfig) != 0 {
+		t.Fatalf("spine inherited kind-specific config: %#v", spine.KindSpecificConfig)
+	}
+}
+
+func TestCompileTopologyRejectsGenericFieldsAbsorbedAsKindConfig(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: absorbed-generic
+topology:
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      stages:
+        create:
+          wait-for:
+            - node: n2
+`)
+	if err == nil {
+		t.Fatal("generic fields absorbed into kind config must fail compilation")
+	}
+
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	found := slices.ContainsFunc(
+		unsupported.Diagnostics,
+		func(diagnostic clabernetescompiler.Diagnostic) bool {
+			return diagnostic.Code == "unsupported-field" &&
+				strings.Contains(diagnostic.Message, `"stages" is rejected`)
+		},
+	)
+	if !found {
+		t.Fatalf("expected a stages rejection, got %+v", unsupported.Diagnostics)
+	}
+}
+
+// TestCompileTopologyRejectsGenericFieldsInsideExplicitKindConfig proves a generic node field
+// cannot masquerade as kind-owned config by hiding inside an explicit `kind-specific-config`
+// wrapper: the compile rejects it with the same structured rejection a top-level field gets.
+func TestCompileTopologyRejectsGenericFieldsInsideExplicitKindConfig(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: masquerading-generic
+topology:
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+      kind-specific-config:
+        stages:
+          create:
+            wait-for:
+              - node: n2
+`)
+	if err == nil {
+		t.Fatal("generic fields inside the explicit wrapper must fail compilation")
+	}
+
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	found := slices.ContainsFunc(
+		unsupported.Diagnostics,
+		func(diagnostic clabernetescompiler.Diagnostic) bool {
+			return diagnostic.Code == "unsupported-field" &&
+				strings.Contains(diagnostic.Message, `"stages" is rejected`)
+		},
+	)
+	if !found {
+		t.Fatalf("expected a stages rejection, got %+v", unsupported.Diagnostics)
+	}
+}
+
+func TestCompileTopologyCarriesDefaultsKindConfigToImportedValidation(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: defaults-kind-config
+topology:
+  defaults:
+    config-mode: classic
+  nodes:
+    n1:
+      kind: linux
+      image: alpine
+`)
+	if err != nil {
+		t.Fatalf("defaults-level kind config must compile: %s", err)
+	}
+
+	node := compiled.Nodes["n1"]
+	if node == nil {
+		t.Fatal("compiled topology has no node n1")
+	}
+
+	// The compile carries defaults-level kind config onto every node; the imported kind rejects
+	// keys it does not own when the node is planned.
+	if _, ok := node.KindSpecificConfig["config-mode"]; !ok {
+		t.Fatalf("defaults kind config was not carried: %#v", node.KindSpecificConfig)
+	}
+}
+
+func TestCompileTopologyAcceptsSingleEntryManagementList(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: list-management
+mgmt:
+  - network: clab-mgmt
+    bridge: br-clab-mgmt
+    ipv4-subnet: 172.30.30.0/24
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine, mgmt-net: clab-mgmt}
+`)
+	if err != nil {
+		t.Fatalf("single-entry management list must compile: %s", err)
+	}
+
+	if compiled.Mgmt == nil || compiled.Mgmt.IPv4Subnet != "172.30.30.0/24" {
+		t.Fatalf("management policy was not preserved: %+v", compiled.Mgmt)
+	}
+
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
+	if errors.As(err, &unsupported) {
+		t.Fatalf("accepted management list must compile: %s", err)
+	}
+
+	node := compiled.Nodes["n1"]
+	if node == nil {
+		t.Fatal("compiled topology has no node n1")
+	}
+
+	if node.MgmtNet != "clab-mgmt" {
+		t.Fatalf("mgmt-net was not carried: %+v", node)
+	}
+}
+
+func TestCompileTopologyRejectsMultipleManagementNetworks(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: multi-management
+mgmt:
+  - network: net1
+    ipv4-subnet: 172.31.10.0/24
+  - network: net2
+    ipv4-subnet: 172.31.20.0/24
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine, mgmt-net: net1}
+`)
+	if err == nil {
+		t.Fatal("multiple management networks must fail compilation")
+	}
+
+	if !strings.Contains(err.Error(), "single management network") {
+		t.Fatalf("multi-network error = %s", err)
+	}
+}
+
+func TestCompileTopologyWarnsOnKindOwnedMgmtNet(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: mgmt-net
+topology:
+  nodes:
+    n1: {kind: linux, image: alpine, mgmt-net: clab-mgmt}
+`)
+	if err != nil {
+		t.Fatalf("mgmt-net must compile: %s", err)
+	}
+
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
+	if errors.As(err, &unsupported) {
+		t.Fatalf("mgmt-net is a warning, got: %s", err)
+	}
+
+	node := compiled.Nodes["n1"]
+	if node == nil {
+		t.Fatal("compiled topology has no node n1")
+	}
+
+	if node.MgmtNet != "clab-mgmt" {
+		t.Fatalf("mgmt-net was not carried: %+v", node)
+	}
+}
+
+func TestCompileTopologyUnwrapsExplicitKindSpecificConfig(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: explicit-kind-config
+topology:
+  nodes:
+    cumulus:
+      kind: nvidia_cumulusvx
+      image: ghcr.io/clab-labs/nvidia_cumulus:5.16.5-boxen
+      kind-specific-config:
+        port-count: 4
+`)
+	if err != nil {
+		t.Fatalf("explicit kind-specific-config must compile: %s", err)
+	}
+
+	node := compiled.Nodes["cumulus"]
+	if node == nil {
+		t.Fatal("compiled topology has no node cumulus")
+	}
+
+	if _, ok := node.KindSpecificConfig["port-count"]; !ok {
+		t.Fatalf("explicit kind config was not unwrapped: %#v", node.KindSpecificConfig)
+	}
+
+	if _, ok := node.KindSpecificConfig["kind-specific-config"]; ok {
+		t.Fatalf("the wrapper key leaked into kind config: %#v", node.KindSpecificConfig)
+	}
+}
+
+func TestCompileTopologyRejectsDuplicatedKindConfig(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: duplicate-kind-config
+topology:
+  nodes:
+    cumulus:
+      kind: nvidia_cumulusvx
+      image: ghcr.io/clab-labs/nvidia_cumulus:5.16.5-boxen
+      port-count: 4
+      kind-specific-config:
+        port-count: 8
+`)
+	if err == nil {
+		t.Fatal("a duplicated kind config key must fail compilation")
+	}
+
+	unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+	}
+
+	found := slices.ContainsFunc(
+		unsupported.Diagnostics,
+		func(diagnostic clabernetescompiler.Diagnostic) bool {
+			return diagnostic.Code == "duplicate-kind-config" &&
+				strings.Contains(diagnostic.Message, `"port-count"`)
+		},
+	)
+	if !found {
+		t.Fatalf("expected a duplicate diagnostic, got %+v", unsupported.Diagnostics)
+	}
+}
+
+// TestCompileTopologyCarriesMigratedExtrasKeys proves the keys the containerlab extras removal
+// migrated into kind-specific config carry into the Node vocabulary: `daemons` is an
+// frr/frrouting kind key, `copy-to-flash` belongs to arista_ceos, and `kubeconfig`/`wait`
+// belong to k8s-kind.
+func TestCompileTopologyCarriesMigratedExtrasKeys(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: migrated-extras
+topology:
+  nodes:
+    frr1:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      daemons: [bgpd]
+    ceos1:
+      kind: ceos
+      image: arista/ceos:4.30.0F
+      copy-to-flash: [/etc/ceos/agent.cfg]
+`)
+	if err != nil {
+		t.Fatalf("migrated kind-specific keys must compile: %s", err)
+	}
+
+	frr := compiled.Nodes["frr1"]
+	if frr == nil {
+		t.Fatal("compiled topology has no node frr1")
+	}
+
+	if !strings.Contains(string(frr.KindSpecificConfig["daemons"].Raw), "bgpd") {
+		t.Fatalf("frr daemons were not carried as kind config: %#v", frr.KindSpecificConfig)
+	}
+
+	ceos := compiled.Nodes["ceos1"]
+	if ceos == nil {
+		t.Fatal("compiled topology has no node ceos1")
+	}
+
+	if !strings.Contains(string(ceos.KindSpecificConfig["copy-to-flash"].Raw), "agent.cfg") {
+		t.Fatalf("ceos copy-to-flash was not carried as kind config: %#v", ceos.KindSpecificConfig)
+	}
+}
+
+// TestCompileTopologyCarriesK8sKindDeployKeys proves the k8s-kind deploy settings that lived
+// under `extras.k8s_kind.deploy` travel through the generic kind config passthrough: they are
+// kind-owned keys, validated by the imported kind when the node is planned.
+func TestCompileTopologyCarriesK8sKindDeployKeys(t *testing.T) {
+	t.Parallel()
+
+	compiled, err := compileDefinition(t, `
+name: k8s-kind-config
+topology:
+  nodes:
+    control:
+      kind: k8s-kind
+      image: ghcr.io/k8s-kind/node-image:v1.31.0
+      kubeconfig: /etc/kubeconfig
+      wait: 30s
+`)
+	if err != nil {
+		t.Fatalf("k8s-kind kind config must compile: %s", err)
+	}
+
+	node := compiled.Nodes["control"]
+	if node == nil {
+		t.Fatal("compiled topology has no node control")
+	}
+
+	if !strings.Contains(string(node.KindSpecificConfig["kubeconfig"].Raw), "kubeconfig") {
+		t.Fatalf("k8s-kind kubeconfig was not carried: %#v", node.KindSpecificConfig)
+	}
+
+	if !strings.Contains(string(node.KindSpecificConfig["wait"].Raw), "30s") {
+		t.Fatalf("k8s-kind wait was not carried: %#v", node.KindSpecificConfig)
+	}
+}
+
+// TestCompileTopologyRejectsRemovedExtras proves the containerlab extras removal reaches c9s
+// compilation fail-closed: a definition that still carries the node `extras` field fails with
+// the migration pointer containerlab deploys with.
+func TestCompileTopologyRejectsRemovedExtras(t *testing.T) {
+	t.Parallel()
+
+	_, err := compileDefinition(t, `
+name: removed-extras
+topology:
+  nodes:
+    frr1:
+      kind: frr
+      image: quay.io/frrouting/frr:containerlab-10.7.1
+      extras:
+        frr:
+          daemons: [bgpd]
+`)
+	if err == nil {
+		t.Fatal("the removed extras field must fail compilation")
+	}
+
+	if !strings.Contains(
+		err.Error(),
+		`the "extras" node field is removed; set its kind-specific config keys directly on the node definition instead`,
+	) {
+		t.Fatalf("expected the extras migration error, got: %s", err)
+	}
+}

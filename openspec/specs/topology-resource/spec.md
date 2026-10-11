@@ -58,6 +58,23 @@ Docker, launcher-image, nested-CRI, or containerlab-version policy.
 - **WHEN** an existing Topology defines management settings with supported direct semantics
 - **THEN** the compiler preserves those settings in the generated resources that own them
 
+#### Scenario: Management list with one network
+
+- **WHEN** a Topology writes its management network as a one-element list
+- **THEN** the compiler carries that network exactly as the mapping form does
+
+#### Scenario: Management list with several networks
+
+- **WHEN** a Topology declares more than one management network
+- **THEN** compilation fails with a diagnostic explaining that c9s realizes a single management
+  network per namespace and naming the follow-up plan
+
+#### Scenario: Node selects a management network
+
+- **WHEN** a node declares `mgmt-net`
+- **THEN** the compiler accepts and ignores the selection with a warning diagnostic, because c9s
+  realizes one management network per namespace
+
 #### Scenario: Topology disables expose Services
 
 - **WHEN** a Topology sets `spec.expose.exposeType: None`
@@ -150,14 +167,33 @@ The system SHALL document and support direct application of generated primitive 
 
 ### Requirement: A source definition accepts native Containerlab vocabulary
 
-The compiler SHALL accept native Containerlab vocabulary from the pinned imported module only when it can preserve that vocabulary through direct resources and device plans. It MUST reject unrecognized or unrepresentable fields with deterministic structured diagnostics before rendering resources; it MUST NOT omit such fields under a compatibility warning mode.
+The compiler SHALL accept native Containerlab vocabulary from the pinned imported module only when
+it can preserve that vocabulary through direct resources and device plans. It MUST reject
+unrecognized or unrepresentable fields with deterministic structured diagnostics before rendering
+resources; it MUST NOT omit such fields under a compatibility warning mode. Keys a containerlab
+kind owns (kind-specific config keys such as `port-count` or `config-mode`) are not unrecognized:
+the compiler SHALL carry them, merged over the regular node > group > kinds > defaults order, onto
+the generated Node, and the imported kind SHALL validate them strictly when the node is planned.
+Node keys that belong to Containerlab's generic node vocabulary but not to the c9s vocabulary
+SHALL still fail compilation, so a rejected generic field cannot masquerade as kind-owned config.
 
-Malformed input, a recognized field with an unusable value, an unsupported explicit link type, or a structure that cannot identify realizable direct resources SHALL also fail. Explicit `veth` links SHALL accept brief `node:interface` endpoints or structured node/interface mappings when both identify the same representable endpoints.
+Malformed input, a recognized field with an unusable value, an unsupported explicit link type, or a
+structure that cannot identify realizable direct resources SHALL also fail. Explicit `veth` links
+SHALL accept brief `node:interface` endpoints or structured node/interface mappings when both
+identify the same representable endpoints.
 
 #### Scenario: Compile a definition carrying unimplemented vocabulary
 
-- **WHEN** a Topology definition declares baseline Containerlab vocabulary the direct planner does not implement
-- **THEN** compilation fails before resource creation with diagnostics naming every unsupported field and location
+- **WHEN** a Topology definition declares baseline Containerlab vocabulary the direct planner does
+  not implement
+- **THEN** compilation fails before resource creation with diagnostics naming every unsupported
+  field and location
+
+#### Scenario: Kind-specific config keys survive the compile
+
+- **WHEN** a node, kind, group, or defaults block declares kind-specific config keys
+- **THEN** the merged keys ride onto the generated Node, and planning rejects unknown keys or
+  mistyped values with the imported kind's own error naming the kind and the setting block
 
 #### Scenario: Recognized vocabulary survives alongside unrecognized fields
 

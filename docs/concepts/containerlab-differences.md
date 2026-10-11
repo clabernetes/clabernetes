@@ -4,7 +4,7 @@ description: Intentional semantic differences between a containerlab host and th
 icon: GitCompareArrows
 ---
 
-c9s consumes unmodified kind behavior from containerlab 0.78.0, but a Kubernetes cluster is
+c9s consumes unmodified kind behavior from containerlab 0.80.0, but a Kubernetes cluster is
 not a Docker host. The differences below are deliberate: each one preserves the *lab*
 semantics while replacing a Docker-host mechanism with its Kubernetes-native equivalent.
 Everything else that cannot be represented fails at compile or planning time with a clear
@@ -22,9 +22,13 @@ diagnostic. Nothing is silently dropped.
   bridge, but every node still gets a controller-allocated management address on a shared
   management subnet spanning the whole topology. Peers are reachable by management address
   device-to-device, and the gateway answers Pod-locally. Docker-only `mgmt` fields
-  (`network`, `bridge`, `mtu`, `external-access`, `skip-when-unused`, `driver-opts`) are
+  (`network`, `bridge`, `mtu`, `external-access`, `skip-when-unused`, `driver-opts`,
+  `driver`, `ipam`, `macvlan-parent`, `macvlan-mode`, `macvlan-aux`, `tailscale`) are
   accepted and ignored with a warning; the address-policy fields keep their meaning for the
-  management overlay.
+  management overlay. Multiple management networks (`mgmt` as a list) are not supported yet:
+  a single network is carried as-is, and more than one declaration fails compilation; a
+  per-network management plan is planned for a later release. Node `mgmt-net` selections are
+  accepted and ignored for the same reason.
 - **Management neighbors are resolved on demand.** The kernel queues the first packet while
   the sidecar installs the peer directory's authorized address and tunnel mapping. Idle peers
   consume no IPv4 neighbor or forwarding entries, and unknown destinations are not flooded.

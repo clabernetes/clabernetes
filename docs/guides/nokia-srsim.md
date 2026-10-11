@@ -170,11 +170,11 @@ spec:
             image: nokia_srsim:25.10.R1
             type: sr-7
             license: /opt/nokia/sros/license.txt
+            sfm: m-sfm6-7/12
             components:
               - slot: A
               - slot: 1
                 type: iom5-e
-                sfm: m-sfm6-7/12
                 mda:
                   - slot: 1
                     type: me6-100gb-qsfp28
@@ -298,26 +298,27 @@ nodes:
 ```
 
 For a distributed chassis, include the card inventory in the `components` block when containerlab
-should generate the corresponding SR OS card configuration:
+should generate the corresponding SR OS card configuration. The SFM (switch fabric module) is a
+node-level setting in containerlab 0.80, not a component entry:
 
 ```yaml
 nodes:
   srsim:
     kind: nokia_srsim
     type: sr-7
+    sfm: m-sfm6-7/12
     components:
       - slot: A
       - slot: 1
         type: iom5-e
-        sfm: m-sfm6-7/12
         mda:
           - slot: 1
             type: me6-100gb-qsfp28
 ```
 
 A component entry containing only `slot` starts that card's simulator container but does not tell
-containerlab which SR OS card, SFM, or MDA to provision. Supply `type`, `sfm`, and `mda` inventory
-when automatic card provisioning is required.
+containerlab which SR OS card, SFM, or MDA to provision. Supply `type` and `mda` inventory when
+automatic card provisioning is required; the `sfm` node setting selects the fabric module.
 
 ### Platform Rules Cheat Sheet
 

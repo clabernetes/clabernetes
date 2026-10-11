@@ -1,0 +1,74 @@
+---
+apiVersion: c9s.run/v1alpha1
+kind: NodeProfile
+metadata:
+  name: direct-frr
+spec:
+  expose:
+    disableAutoExpose: true
+---
+apiVersion: c9s.run/v1alpha1
+kind: Link
+metadata:
+  name: frr1-eth1-frr2-eth1
+spec:
+  endpointA:
+    nodeName: frr1
+    interfaceName: eth1
+  endpointB:
+    nodeName: frr2
+    interfaceName: eth1
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: frr1
+spec:
+  kind: frr
+  image: quay.io/frrouting/frr:containerlab-10.7.1
+  profileRef:
+    name: direct-frr
+  startup-config: |
+    frr version 10.7
+    frr defaults traditional
+    hostname frr1
+    log syslog
+    service integrated-vtysh-config
+    !
+    interface lo
+     ip address 10.0.0.1/32
+    !
+    interface eth1
+     ip address 192.168.0.0/31
+    !
+    router ospf
+     network 192.168.0.0/31 area 0
+     network 10.0.0.1/32 area 0
+    !
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: frr2
+spec:
+  kind: frr
+  image: quay.io/frrouting/frr:containerlab-10.7.1
+  profileRef:
+    name: direct-frr
+  startup-config: |
+    frr version 10.7
+    frr defaults traditional
+    hostname frr2
+    log syslog
+    service integrated-vtysh-config
+    !
+    interface lo
+     ip address 10.0.0.2/32
+    !
+    interface eth1
+     ip address 192.168.0.1/31
+    !
+    router ospf
+     network 192.168.0.0/31 area 0
+     network 10.0.0.2/32 area 0
+    !

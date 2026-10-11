@@ -7,6 +7,7 @@ import (
 	"io"
 	"maps"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -242,8 +243,22 @@ func (r *recordingRuntime) WithKeepMgmtNet() {
 	r.config.KeepMgmtNet = true
 }
 
-func (r *recordingRuntime) CreateNet(context.Context) error {
+func (r *recordingRuntime) CreateNet(
+	context.Context,
+	...clabruntime.NetworkCreateOptions,
+) error {
 	return r.blocked("runtime.CreateNet")
+}
+
+func (r *recordingRuntime) NetworkAddresses(
+	context.Context,
+	[]netip.Prefix,
+) ([]clabruntime.NetworkAddress, error) {
+	return nil, r.blocked("runtime.NetworkAddresses")
+}
+
+func (r *recordingRuntime) SyncMgmtHostRoutes(context.Context) error {
+	return r.blocked("runtime.SyncMgmtHostRoutes")
 }
 
 func (r *recordingRuntime) DeleteNet(context.Context) error {

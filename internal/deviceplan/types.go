@@ -198,6 +198,11 @@ type NodePlan struct {
 	Aliases               []string `json:"aliases,omitempty"`
 	ContainerIDs          []string `json:"containerIDs"`
 	ReadinessContainerIDs []string `json:"readinessContainerIDs"`
+	// PrimaryContainerID is the application container the imported kind declares as its runtime
+	// identity (GetContainerName), or the first planned container when the kind declares none.
+	// Profile resource policy targets this container, and internal netns-owning containers
+	// introduced by kinds like nokia_srsim never shift it.
+	PrimaryContainerID string `json:"primaryContainerID,omitempty"`
 	// EnforceStartupConfig re-stages this Node's planned artifacts on every preparation run,
 	// overwriting device-written content, mirroring containerlab's enforce-startup-config.
 	EnforceStartupConfig bool `json:"enforceStartupConfig,omitempty"`

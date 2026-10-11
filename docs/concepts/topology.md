@@ -67,6 +67,39 @@ topology:
         owner: roman
 ```
 
+### Kind-specific config
+
+Kinds that need more than the generic node settings take their own keys directly on the node
+definition, exactly as containerlab reads them -- `port-count` and `breakouts` for
+`nvidia_cumulusvx`, `config-mode` for the Nokia kinds, `pid-offset` for `cisco_iol`, and so on.
+c9s merges every kind config key over the regular containerlab inheritance order
+(node > group > `kinds.<kind>` > defaults) while compiling, carries the merged result on the
+generated Node, and hands it to the imported kind when the node is planned. The imported kind
+validates it strictly: a key the kind does not own, or a mistyped value, fails planning with the
+same error containerlab deploys with, naming the key and the topology block it was set in.
+
+```yaml
+topology:
+  nodes:
+    cumulus:
+      kind: nvidia_cumulusvx
+      port-count: 2
+      breakouts:
+        - port: 1
+          channels: 4
+```
+
+The `components` key is the one kind config key c9s carries as a typed field: it drives c9s' own
+device rendering (chassis component containers and DNS aliases), and it keeps the typed
+slot/mda/xiom vocabulary. Every other kind config key travels through the generic passthrough.
+
+The node `extras` field containerlab carried before this release is gone: its keys are now kind
+config keys written directly on the node -- `daemons` for the `frr`/`frrouting` kinds and
+`copy-to-flash` for `arista_ceos`. A definition that still sets `extras` fails compilation with
+the migration pointer, exactly as containerlab rejects it.
+
+### Containerlab node labels
+
 The compiler carries these labels onto the generated Node's `metadata.labels`, then the Node
 controller copies them to the device Deployment and its Pods. They inherit from `defaults` and
 `kinds` like `env`, so Pods can be selected with `kubectl get pods -l owner=roman`. There is no
