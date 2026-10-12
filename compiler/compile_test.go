@@ -463,7 +463,7 @@ topology:
 func TestCompileContainerlabAppProtocols(t *testing.T) {
 	compiled := compileFlattenTest(t)
 
-	expectedAppProtocols := []clabernetesapisv1alpha1.NodeAppProtocol{
+	expectedAppProtocols := []clabernetescompiler.AppProtocol{
 		{Port: "57400/tcp", AppProtocol: "kubernetes.io/h2c"},
 		{Port: "443/tcp", AppProtocol: "https"},
 	}
@@ -509,7 +509,7 @@ topology:
 		t.Fatalf("unexpected error compiling inherited application protocols: %s", err)
 	}
 
-	expected := map[string][]clabernetesapisv1alpha1.NodeAppProtocol{
+	expected := map[string][]clabernetescompiler.AppProtocol{
 		"default-node": {{Port: "830/tcp", AppProtocol: "netconf-ssh"}},
 		"kind-node": {
 			{Port: "57400/tcp", AppProtocol: "kubernetes.io/h2c"},
@@ -622,22 +622,22 @@ func TestCompileContainerlabLinks(t *testing.T) {
 
 	expected := []clabernetescompiler.CompiledLink{
 		{
-			EndpointA: clabernetesapisv1alpha1.LinkEndpointSpec{
+			EndpointA: clabernetescompiler.Endpoint{
 				NodeName:      "srl1",
 				InterfaceName: "e1-1",
 			},
-			EndpointB: clabernetesapisv1alpha1.LinkEndpointSpec{
+			EndpointB: clabernetescompiler.Endpoint{
 				NodeName:      "multitool",
 				InterfaceName: "eth1",
 			},
 			MTU: 9212,
 		},
 		{
-			EndpointA: clabernetesapisv1alpha1.LinkEndpointSpec{
+			EndpointA: clabernetescompiler.Endpoint{
 				NodeName:      "srl1",
 				InterfaceName: "e1-2",
 			},
-			EndpointB: clabernetesapisv1alpha1.LinkEndpointSpec{
+			EndpointB: clabernetescompiler.Endpoint{
 				NodeName:      "host",
 				InterfaceName: "ens5",
 			},

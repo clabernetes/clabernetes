@@ -512,8 +512,8 @@ github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiT
 github.com/spf13/pflag v1.0.9/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
 github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
-github.com/srl-labs/containerlab v0.80.1-0.20261010211535-6919339453c7 h1:6I0rl4d2xSC2I+gX8a4KHO4AlhmdoxedWLNKYDMfwJI=
-github.com/srl-labs/containerlab v0.80.1-0.20261010211535-6919339453c7/go.mod h1:NCVAvqn+of+oIlI18mO697nC8Ef4ifv6iw/na+1CHkU=
+github.com/srl-labs/containerlab v0.81.0 h1:o3iaygBtgSOHUtsGJRV2YLC7ZfBB6axcJ29YShG9OAs=
+github.com/srl-labs/containerlab v0.81.0/go.mod h1:NCVAvqn+of+oIlI18mO697nC8Ef4ifv6iw/na+1CHkU=
 github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6 h1:pnnLyeX7o/5aX8qUQ69P/mLojDqwda8hFOCBTmP/6hw=
 github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6/go.mod h1:39R/xuhNgVhi+K0/zst4TLrJrVmbm6LVgl4A0+ZFS5M=
 github.com/steiler/acls v0.1.6 h1:E7D3Z38OnpE9zTlsqbyxfwrVy2dOyqV8cvtC2sG2mls=
