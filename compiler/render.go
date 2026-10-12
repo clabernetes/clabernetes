@@ -230,6 +230,14 @@ const (
 	labelAppValue = "clabernetes"
 )
 
+// manifestObjectKey* name the fixed manifest object fields every rendered primitive carries.
+const (
+	manifestAPIVersionKey = "apiVersion"
+	manifestKindKey       = "kind"
+	manifestMetadataKey   = "metadata"
+	manifestSpecKey       = "spec"
+)
+
 // LinkHostNodeName is the reserved endpoint node name for a node-local host link.
 const LinkHostNodeName = "host"
 
@@ -401,7 +409,12 @@ func definitionPayload(flattened *clabtypes.NodeDefinition) (map[string]any, err
 		return nil, err
 	}
 
-	return normalized.(map[string]any), nil
+	normalizedMap, ok := normalized.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: definition payload is not a mapping", errInvalidData)
+	}
+
+	return normalizedMap, nil
 }
 
 // jsonPayload converts a value with JSON tags into the JSON-native shapes the emitted manifests
@@ -455,74 +468,114 @@ func renderNodes(
 			spec["profileRef"] = map[string]any{"name": profileName}
 		}
 
-		if files := input.Deployment.FilesFromConfigMap[sourceName]; len(files) != 0 {
-			raw, err := jsonPayload(files)
-			if err != nil {
-				return nil, fmt.Errorf("node %q: %w", nodeName, err)
-			}
-
-			spec["filesFromConfigMap"] = raw
-		}
-
-		if files := input.Deployment.FilesFromSecret[sourceName]; len(files) != 0 {
-			raw, err := jsonPayload(files)
-			if err != nil {
-				return nil, fmt.Errorf("node %q: %w", nodeName, err)
-			}
-
-			spec["filesFromSecret"] = raw
-		}
-
-		if files := input.Deployment.FilesFromURL[sourceName]; len(files) != 0 {
-			raw, err := jsonPayload(files)
-			if err != nil {
-				return nil, fmt.Errorf("node %q: %w", nodeName, err)
-			}
-
-			spec["filesFromURL"] = raw
+		if err := applyNodePayloadProjections(input, nodeName, sourceName, spec); err != nil {
+			return nil, err
 		}
 
 		if protocols := compiled.AppProtocols[nodeName]; len(protocols) != 0 {
-			entries := make([]map[string]any, 0, len(protocols))
-			for _, protocol := range protocols {
-				entries = append(entries, map[string]any{
-					"port":        protocol.Port,
-					"appProtocol": protocol.AppProtocol,
-				})
-			}
-
-			spec["appProtocols"] = entries
+			spec["appProtocols"] = appProtocolSpecEntries(protocols)
 		}
 
-		metadata := ownedObjectMetadata(input, nodeName)
-
-		// Retain this label for human selection and compatibility; profile attachment is
-		// explicit.
-		labels := metadata["labels"].(map[string]any)
-		labels[labelNode] = nodeName
-
-		// The containerlab group name is organizational metadata; it rides along as a label so
-		// operators can select by it, exactly as they would filter by group in containerlab.
-		if nodeDefinition.Group != "" {
-			labels[labelGroup] = nodeDefinition.Group
-		}
-
-		// containerlab node labels are kubernetes labels here rather than docker labels on the
-		// node container. The compiler has already dropped any that kubernetes would reject or
-		// that sit in c9s' own namespace, so nothing here can shadow the labels above.
-		for key, value := range nodeDefinition.Labels {
-			labels[key] = value
+		metadata, err := nodeMetadata(input, nodeName, nodeDefinition)
+		if err != nil {
+			return nil, err
 		}
 
 		nodes = append(nodes, unstructured.Unstructured{Object: map[string]any{
-			"apiVersion": c9sAPIVersion,
-			"kind":       nodeKind,
-			"metadata":   metadata,
-			"spec":       spec,
+			manifestAPIVersionKey: c9sAPIVersion,
+			manifestKindKey:       nodeKind,
+			manifestMetadataKey:   metadata,
+			manifestSpecKey:       spec,
 		}})
 	}
 
 	return nodes, nil
+}
+
+// applyNodePayloadProjections renders the per-node file projections -- ConfigMap, Secret, and
+// URL backed -- onto a Node spec.
+func applyNodePayloadProjections(
+	input *Input,
+	nodeName string,
+	sourceName string,
+	spec map[string]any,
+) error {
+	if files := input.Deployment.FilesFromConfigMap[sourceName]; len(files) != 0 {
+		raw, err := jsonPayload(files)
+		if err != nil {
+			return fmt.Errorf("node %q: %w", nodeName, err)
+		}
+
+		spec["filesFromConfigMap"] = raw
+	}
+
+	if files := input.Deployment.FilesFromSecret[sourceName]; len(files) != 0 {
+		raw, err := jsonPayload(files)
+		if err != nil {
+			return fmt.Errorf("node %q: %w", nodeName, err)
+		}
+
+		spec["filesFromSecret"] = raw
+	}
+
+	if files := input.Deployment.FilesFromURL[sourceName]; len(files) != 0 {
+		raw, err := jsonPayload(files)
+		if err != nil {
+			return fmt.Errorf("node %q: %w", nodeName, err)
+		}
+
+		spec["filesFromURL"] = raw
+	}
+
+	return nil
+}
+
+// appProtocolSpecEntries renders the application-protocol entries of one Node spec.
+func appProtocolSpecEntries(protocols []AppProtocol) []map[string]any {
+	entries := make([]map[string]any, 0, len(protocols))
+	for _, protocol := range protocols {
+		entries = append(entries, map[string]any{
+			"port":        protocol.Port,
+			"appProtocol": protocol.AppProtocol,
+		})
+	}
+
+	return entries
+}
+
+// nodeMetadata builds one Node's object metadata: the owned labels plus the containerlab group
+// and node labels.
+func nodeMetadata(
+	input *Input,
+	nodeName string,
+	nodeDefinition *clabtypes.NodeDefinition,
+) (map[string]any, error) {
+	metadata := ownedObjectMetadata(input, nodeName)
+
+	// Retain this label for human selection and compatibility; profile attachment is explicit.
+	labels, ok := metadata["labels"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf(
+			"%w: node %q metadata carries no labels", errInvalidData, nodeName,
+		)
+	}
+
+	labels[labelNode] = nodeName
+
+	// The containerlab group name is organizational metadata; it rides along as a label so
+	// operators can select by it, exactly as they would filter by group in containerlab.
+	if nodeDefinition.Group != "" {
+		labels[labelGroup] = nodeDefinition.Group
+	}
+
+	// containerlab node labels are kubernetes labels here rather than docker labels on the
+	// node container. The compiler has already dropped any that kubernetes would reject or
+	// that sit in c9s' own namespace, so nothing here can shadow the labels above.
+	for key, value := range nodeDefinition.Labels {
+		labels[key] = value
+	}
+
+	return metadata, nil
 }
 
 // nodeProfileNameForNode resolves the NodeProfile a Node references. A Node with distinct
@@ -650,7 +703,13 @@ func renderNodeProfiles(
 				return nil, fmt.Errorf("node profile %q: %w", profile.GetName(), err)
 			}
 
-			spec := profile.Object["spec"].(map[string]any)
+			spec, ok := profile.Object["spec"].(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf(
+					"%w: profile %q carries no spec", errInvalidData, profile.GetName(),
+				)
+			}
+
 			spec["resources"] = raw
 		}
 
@@ -670,40 +729,79 @@ func renderTopologyNodeProfile(
 ) (unstructured.Unstructured, error) {
 	spec := map[string]any{}
 
-	expose := map[string]any{
-		"disableAutoExpose":      input.Expose.DisableAutoExpose,
-		"useNodeMgmtIpv4Address": input.Expose.UseNodeMgmtIpv4Address,
-		"useNodeMgmtIpv6Address": input.Expose.UseNodeMgmtIpv6Address,
-	}
-	if input.Expose.ExposeType != "" {
-		expose["exposeType"] = input.Expose.ExposeType
-	}
-
-	spec["expose"] = expose
+	spec["expose"] = exposeSpec(input.Expose)
 
 	if input.ImagePull.Policy != "" || len(input.ImagePull.PullSecrets) != 0 {
-		imagePull := map[string]any{}
-
-		if input.ImagePull.Policy != "" {
-			imagePull["policy"] = input.ImagePull.Policy
-		}
-
-		if len(input.ImagePull.PullSecrets) != 0 {
-			raw, err := jsonPayload(input.ImagePull.PullSecrets)
-			if err != nil {
-				return unstructured.Unstructured{}, err
-			}
-
-			imagePull["pullSecrets"] = raw
+		imagePull, err := imagePullSpec(input.ImagePull)
+		if err != nil {
+			return unstructured.Unstructured{}, err
 		}
 
 		spec["imagePull"] = imagePull
 	}
 
+	if err := applyProfileDeploymentSpec(input, spec); err != nil {
+		return unstructured.Unstructured{}, err
+	}
+
+	// Probe policy is matched against Node object names, so the node names the author wrote have
+	// to follow the rename the compiler made.
+	spec["statusProbes"] = compiledStatusProbes(input, compiled)
+
+	applyProfileManagementSpec(input, compiled, spec)
+
+	return unstructured.Unstructured{Object: map[string]any{
+		manifestAPIVersionKey: c9sAPIVersion,
+		manifestKindKey:       nodeProfile,
+		manifestMetadataKey:   ownedObjectMetadata(input, profileName),
+		manifestSpecKey:       spec,
+	}}, nil
+}
+
+// exposeSpec renders the expose policy section of a NodeProfile spec.
+func exposeSpec(expose Expose) map[string]any {
+	out := map[string]any{
+		"disableAutoExpose":      expose.DisableAutoExpose,
+		"useNodeMgmtIpv4Address": expose.UseNodeMgmtIpv4Address,
+		"useNodeMgmtIpv6Address": expose.UseNodeMgmtIpv6Address,
+	}
+	if expose.ExposeType != "" {
+		out["exposeType"] = expose.ExposeType
+	}
+
+	return out
+}
+
+// imagePullSpec renders the image-pull section of a NodeProfile spec.
+func imagePullSpec(imagePull ImagePull) (map[string]any, error) {
+	out := map[string]any{}
+
+	if imagePull.Policy != "" {
+		out["policy"] = imagePull.Policy
+	}
+
+	if len(imagePull.PullSecrets) != 0 {
+		raw, err := jsonPayload(imagePull.PullSecrets)
+		if err != nil {
+			return nil, err
+		}
+
+		out["pullSecrets"] = raw
+	}
+
+	return out, nil
+}
+
+// applyProfileDeploymentSpec renders the per-topology deployment policy sections -- the shared
+// default resources, scheduling, and persistence -- onto a NodeProfile spec.
+func applyProfileDeploymentSpec(
+	input *Input,
+	spec map[string]any,
+) error {
 	if defaultResources, ok := input.Deployment.Resources[DefaultResourceName]; ok {
 		raw, err := jsonPayload(defaultResources)
 		if err != nil {
-			return unstructured.Unstructured{}, err
+			return err
 		}
 
 		spec["resources"] = raw
@@ -714,7 +812,7 @@ func renderTopologyNodeProfile(
 			scheduling.Affinity != nil) {
 		raw, err := jsonPayload(scheduling)
 		if err != nil {
-			return unstructured.Unstructured{}, err
+			return err
 		}
 
 		spec["scheduling"] = raw
@@ -723,37 +821,41 @@ func renderTopologyNodeProfile(
 	if persistence := input.Deployment.Persistence; persistence != nil && persistence.Enabled {
 		raw, err := jsonPayload(persistence)
 		if err != nil {
-			return unstructured.Unstructured{}, err
+			return err
 		}
 
 		spec["deployment"] = map[string]any{"persistence": raw}
 	}
 
-	// Probe policy is matched against Node object names, so the node names the author wrote have
-	// to follow the rename the compiler made.
-	spec["statusProbes"] = compiledStatusProbes(input, compiled)
+	return nil
+}
 
-	if compiled.Mgmt != nil {
-		spec["mgmt"] = map[string]any{
-			"ipv4-subnet": compiled.Mgmt.IPv4Subnet,
-			"ipv4-gw":     compiled.Mgmt.IPv4Gw,
-			"ipv4-range":  compiled.Mgmt.IPv4Range,
-			"ipv6-subnet": compiled.Mgmt.IPv6Subnet,
-			"ipv6-gw":     compiled.Mgmt.IPv6Gw,
-			"ipv6-range":  compiled.Mgmt.IPv6Range,
-		}
-	}
-
+// applyProfileManagementSpec renders the management policy section of a NodeProfile spec: the
+// topology's management policy, or an explicitly disabled management overlay when the topology
+// disables management outright.
+func applyProfileManagementSpec(
+	input *Input,
+	compiled *CompiledDefinition,
+	spec map[string]any,
+) {
 	if input.DisableManagement {
 		spec["mgmt"] = map[string]any{"disabled": true}
+
+		return
 	}
 
-	return unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": c9sAPIVersion,
-		"kind":       nodeProfile,
-		"metadata":   ownedObjectMetadata(input, profileName),
-		"spec":       spec,
-	}}, nil
+	if compiled.Mgmt == nil {
+		return
+	}
+
+	spec["mgmt"] = map[string]any{
+		"ipv4-subnet": compiled.Mgmt.IPv4Subnet,
+		"ipv4-gw":     compiled.Mgmt.IPv4Gw,
+		"ipv4-range":  compiled.Mgmt.IPv4Range,
+		"ipv6-subnet": compiled.Mgmt.IPv6Subnet,
+		"ipv6-gw":     compiled.Mgmt.IPv6Gw,
+		"ipv6-range":  compiled.Mgmt.IPv6Range,
+	}
 }
 
 // compiledStatusProbes copies the topology's probe policy with every node name it holds mapped

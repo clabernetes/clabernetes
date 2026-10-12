@@ -260,13 +260,18 @@ var errUnsupportedFieldPolicy = errors.New("unsupported topology compiler field 
 // TopologyKindContainerlab is the kind marker the compiler reports for containerlab definitions.
 const TopologyKindContainerlab = "containerlab"
 
+// errMissingTopologyDefinition marks an input that carries no rendered containerlab definition.
+var errMissingTopologyDefinition = errors.New(
+	"topology definition must include a containerlab topology",
+)
+
 // Compile parses and compiles the containerlab topology definition carried by the input into
 // primitive manifests. The definition must be self contained in containerlab vocabulary; every
 // emitted manifest carries the flattened node definition, so no topology defaults or kinds
 // survive into the API.
 func Compile(logger Logger, input *Input) (*CompiledDefinition, error) {
 	if input.Definition == "" {
-		return nil, fmt.Errorf("topology definition must include a containerlab topology")
+		return nil, errMissingTopologyDefinition
 	}
 
 	return compileContainerlabDefinition(logger, input, newCompileDiagnostics())

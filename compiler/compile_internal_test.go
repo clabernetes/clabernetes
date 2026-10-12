@@ -50,6 +50,64 @@ func compileForTest(
 	return compiled, nodes, links, profiles
 }
 
+// definitionForTest compiles a definition and returns only the compiled definition, failing the
+// test on any compile error.
+func definitionForTest(
+	t *testing.T,
+	definition string,
+) *CompiledDefinition {
+	t.Helper()
+
+	input := &Input{Name: "lab", Namespace: "ns", Definition: definition}
+
+	compiled, err := Compile(&testLogger{}, input)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	return compiled
+}
+
+// profilesForTest compiles and renders a definition and returns only the NodeProfile manifests,
+// failing the test on any compile or render error.
+func profilesForTest(
+	t *testing.T,
+	definition string,
+) []unstructured.Unstructured {
+	t.Helper()
+
+	_, nodes, _, profiles := compileForTest(t, definition)
+	_ = nodes
+
+	return profiles
+}
+
+// specOf returns the spec mapping of a rendered manifest, failing the test when the manifest
+// does not carry one.
+func specOf(t *testing.T, object unstructured.Unstructured) map[string]any {
+	t.Helper()
+
+	spec, ok := object.Object["spec"].(map[string]any)
+	if !ok {
+		t.Fatalf("manifest %q carries no spec: %#v", object.GetName(), object.Object)
+	}
+
+	return spec
+}
+
+// mappingOf returns the mapping under a manifest key, failing the test when the key holds
+// anything else.
+func mappingOf(t *testing.T, value any, key string) map[string]any {
+	t.Helper()
+
+	mapping, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("key %q carries no mapping: %#v", key, value)
+	}
+
+	return mapping
+}
+
 func nodeByName(nodes []unstructured.Unstructured, name string) (map[string]any, bool) {
 	for i := range nodes {
 		if nodes[i].GetName() == name {
@@ -201,7 +259,7 @@ topology:
 }
 
 func TestCompileUnwrapsExplicitKindSpecificWrapper(t *testing.T) {
-	compiled, _, _, _ := compileForTest(t, `
+	compiled := definitionForTest(t, `
 name: lab
 topology:
   nodes:
@@ -299,8 +357,8 @@ topology:
 		t.Fatalf("rendered links = %d, want 1", len(links))
 	}
 
-	spec := links[0].Object["spec"].(map[string]any)
-	if spec["endpointA"].(map[string]any)["nodeName"] != "r1" {
+	spec := specOf(t, links[0])
+	if mappingOf(t, spec["endpointA"], "endpointA")["nodeName"] != "r1" {
 		t.Fatalf("link endpoints were not renamed: %#v", spec)
 	}
 }
@@ -405,9 +463,9 @@ topology:
 		t.Fatalf("link mtu = %d, want 9000", compiled.Links[0].MTU)
 	}
 
-	spec := links[0].Object["spec"].(map[string]any)
-	if spec["endpointA"].(map[string]any)["nodeName"] != "r1" ||
-		spec["endpointB"].(map[string]any)["nodeName"] != "r2" {
+	spec := specOf(t, links[0])
+	if mappingOf(t, spec["endpointA"], "endpointA")["nodeName"] != "r1" ||
+		mappingOf(t, spec["endpointB"], "endpointB")["nodeName"] != "r2" {
 		t.Fatalf("link endpoints = %#v", spec)
 	}
 }
@@ -438,7 +496,7 @@ topology:
 }
 
 func TestCompileConsumesExposePortsLabel(t *testing.T) {
-	compiled, _, _, _ := compileForTest(t, `
+	compiled := definitionForTest(t, `
 name: lab
 topology:
   nodes:
@@ -534,7 +592,7 @@ topology:
 }
 
 func TestCompileAcceptsContainerNetworkMode(t *testing.T) {
-	compiled, _, _, _ := compileForTest(t, `
+	compiled := definitionForTest(t, `
 name: lab
 topology:
   nodes:
@@ -566,7 +624,7 @@ topology:
 }
 
 func TestCompileCarriesManagementPolicyIntoTheProfile(t *testing.T) {
-	_, _, _, profiles := compileForTest(t, `
+	profiles := profilesForTest(t, `
 name: lab
 mgmt:
   ipv4-subnet: 192.0.2.0/24
@@ -579,7 +637,7 @@ topology:
 		t.Fatalf("profiles = %d, want 1", len(profiles))
 	}
 
-	mgmt := profiles[0].Object["spec"].(map[string]any)["mgmt"].(map[string]any)
+	mgmt := mappingOf(t, specOf(t, profiles[0])["mgmt"], "mgmt")
 	if mgmt["ipv4-subnet"] != "192.0.2.0/24" || mgmt["ipv4-gw"] != "192.0.2.1" {
 		t.Fatalf("management policy = %#v", mgmt)
 	}
@@ -608,8 +666,8 @@ topology:
 	}
 
 	for _, n := range nodes {
-		spec := n.Object["spec"].(map[string]any)
-		profileRef := spec["profileRef"].(map[string]any)
+		spec := specOf(t, n)
+		profileRef := mappingOf(t, spec["profileRef"], "profileRef")
 		if profileRef["name"] != "lab" {
 			t.Fatalf(
 				"node %q references %q, want the shared profile",
@@ -648,7 +706,11 @@ func TestRenderPrimitivesCarryContractMetadata(t *testing.T) {
 		t.Fatalf("node metadata = %#v", node.Object["metadata"])
 	}
 
-	labels := node.Object["metadata"].(map[string]any)["labels"].(map[string]any)
+	labels := mappingOf(
+		t,
+		mappingOf(t, node.Object["metadata"], "metadata")["labels"],
+		"labels",
+	)
 	if labels["c9s.run/app"] != "clabernetes" ||
 		labels["c9s.run/topologyOwner"] != "lab" ||
 		labels["c9s.run/topologyNode"] != "r1" ||

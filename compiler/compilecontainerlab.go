@@ -26,6 +26,14 @@ const (
 	yamlMappingPairSize    = 2
 	importedNodeLayerCount = 4
 
+	// topologyPath is the source path every topology-scoped diagnostic hangs off of.
+	topologyPath = "topology"
+	// defaultsBlock is the name of the topology defaults block, the least specific
+	// inheritance layer.
+	defaultsBlock = "defaults"
+	// unsupportedFieldCode marks a source field the compile cannot preserve.
+	unsupportedFieldCode = "unsupported-field"
+
 	// maxPort is the highest valid tcp/udp port number.
 	maxPort = 65535
 	// tcpProtocol is the default port protocol.
@@ -55,10 +63,6 @@ var (
 		"mgmt: c9s supports a single management network; multiple management networks are " +
 			"planned for a later c9s release",
 	)
-	// errInvalidManagementForm marks a management block that is neither a mapping nor a sequence.
-	errInvalidManagementForm = errors.New(
-		"mgmt: expected a management network mapping or a list of networks",
-	)
 	// errInvalidKindSpecificWrapper marks a kind-specific config wrapper that is not a mapping of
 	// kind config keys.
 	errInvalidKindSpecificWrapper = errors.New(
@@ -85,15 +89,6 @@ type fileTopology struct {
 	Nodes    map[string]*clabtypes.NodeDefinition `yaml:"nodes,omitempty"`
 	Groups   map[string]*clabtypes.NodeDefinition `yaml:"groups,omitempty"`
 	Links    []*linkDefinition                    `yaml:"links,omitempty"`
-}
-
-// importedNodeTopology deliberately omits Links: the compiler parses links itself, while this
-// projection exists only to invoke containerlab's node inheritance behavior.
-type importedNodeTopology struct {
-	Defaults *clabtypes.NodeDefinition            `yaml:"defaults,omitempty"`
-	Kinds    map[string]*clabtypes.NodeDefinition `yaml:"kinds,omitempty"`
-	Nodes    map[string]*clabtypes.NodeDefinition `yaml:"nodes,omitempty"`
-	Groups   map[string]*clabtypes.NodeDefinition `yaml:"groups,omitempty"`
 }
 
 // compileContainerlabDefinition compiles a containerlab topology definition: every node gets
@@ -164,31 +159,9 @@ func compileContainerlabDefinition(
 		compiled.Mgmt = definition.Mgmt[0]
 	}
 
-	nodeNames := make([]string, 0, len(definition.Topology.Nodes))
-	for nodeName := range definition.Topology.Nodes {
-		nodeNames = append(nodeNames, nodeName)
-	}
-
-	sort.Strings(nodeNames)
-
-	for _, nodeName := range nodeNames {
-		compiled.Nodes[nodeName], err = flattenNodeDefinition(
-			importedTopology,
-			nodeName,
-			nodeFieldLines,
-			diagnostics,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		normalizeNodePorts(diagnostics, nodeName, compiled.Nodes[nodeName])
-		consumeExposePortsLabel(diagnostics, nodeName, compiled.Nodes[nodeName])
-		appProtocols := consumeAppProtocolsLabel(diagnostics, nodeName, compiled.Nodes[nodeName])
-		if len(appProtocols) != 0 {
-			compiled.AppProtocols[nodeName] = appProtocols
-		}
-		dropUnusableNodeLabels(diagnostics, nodeName, compiled.Nodes[nodeName])
+	err = compileNodes(importedTopology, definition.Topology, nodeFieldLines, compiled, diagnostics)
+	if err != nil {
+		return nil, err
 	}
 
 	validateNodeNetworkModes(compiled.Nodes, diagnostics)
@@ -219,6 +192,47 @@ func compileContainerlabDefinition(
 	return compiled, nil
 }
 
+// compileNodes flattens every node definition in sorted order and applies the per-node
+// post-processing passes, storing the results on the compiled definition.
+func compileNodes(
+	importedTopology *clabtypes.Topology,
+	definition *fileTopology,
+	nodeFieldLines map[string]map[string]int,
+	compiled *CompiledDefinition,
+	diagnostics *compileDiagnostics,
+) error {
+	nodeNames := make([]string, 0, len(definition.Nodes))
+	for nodeName := range definition.Nodes {
+		nodeNames = append(nodeNames, nodeName)
+	}
+
+	sort.Strings(nodeNames)
+
+	for _, nodeName := range nodeNames {
+		flattened, err := flattenNodeDefinition(
+			importedTopology,
+			nodeName,
+			nodeFieldLines,
+			diagnostics,
+		)
+		if err != nil {
+			return err
+		}
+
+		compiled.Nodes[nodeName] = flattened
+
+		normalizeNodePorts(diagnostics, nodeName, flattened)
+		consumeExposePortsLabel(diagnostics, nodeName, flattened)
+		appProtocols := consumeAppProtocolsLabel(diagnostics, nodeName, flattened)
+		if len(appProtocols) != 0 {
+			compiled.AppProtocols[nodeName] = appProtocols
+		}
+		dropUnusableNodeLabels(diagnostics, nodeName, flattened)
+	}
+
+	return nil
+}
+
 // validateAbsorbedNodeVocabulary rejects keys that containerlab's generic node definition
 // declares riding inside an explicit `kind-specific-config` wrapper: since the kind-specific
 // config mechanism absorbs unknown keys, a generic field like `stages` would otherwise ride into
@@ -236,87 +250,104 @@ func validateAbsorbedNodeVocabulary(
 
 	vocabulary := importedNodeVocabulary()
 
-	blocks := []struct {
-		from        string
-		definitions []*clabtypes.NodeDefinition
-	}{
-		{from: "defaults", definitions: singleDefinition(topology.Defaults)},
+	for _, block := range absorbedVocabularyBlocks(topology) {
+		for _, definition := range block.definitions {
+			validateAbsorbedVocabularyDefinition(
+				vocabulary,
+				fieldLines,
+				block.from,
+				definition,
+				diagnostics,
+			)
+		}
 	}
+}
+
+// absorbedVocabularyBlock pairs one defaults/kinds/groups/nodes block with the source path its
+// diagnostics hang off of.
+type absorbedVocabularyBlock struct {
+	// from is the source path prefix of the block.
+	from string
+	// definitions is the block's node definitions; empty blocks carry none.
+	definitions []*clabtypes.NodeDefinition
+}
+
+// absorbedVocabularyBlocks lists every defaults, kinds, groups and nodes block with its source
+// path, including blocks no node uses.
+func absorbedVocabularyBlocks(topology *fileTopology) []absorbedVocabularyBlock {
+	blocks := make(
+		[]absorbedVocabularyBlock,
+		0,
+		len(topology.Kinds)+len(topology.Groups)+len(topology.Nodes)+1,
+	)
+	blocks = append(
+		blocks,
+		absorbedVocabularyBlock{
+			from:        defaultsBlock,
+			definitions: singleDefinition(topology.Defaults),
+		},
+	)
 
 	for _, kindName := range sortedVocabularyBlockNames(topology.Kinds) {
-		blocks = append(
-			blocks,
-			struct {
-				from        string
-				definitions []*clabtypes.NodeDefinition
-			}{
-				from:        "kinds." + kindName,
-				definitions: singleDefinition(topology.Kinds[kindName]),
-			},
-		)
+		blocks = append(blocks, absorbedVocabularyBlock{
+			from:        "kinds." + kindName,
+			definitions: singleDefinition(topology.Kinds[kindName]),
+		})
 	}
 
 	for _, groupName := range sortedVocabularyBlockNames(topology.Groups) {
-		blocks = append(
-			blocks,
-			struct {
-				from        string
-				definitions []*clabtypes.NodeDefinition
-			}{
-				from:        "groups." + groupName,
-				definitions: singleDefinition(topology.Groups[groupName]),
-			},
-		)
+		blocks = append(blocks, absorbedVocabularyBlock{
+			from:        "groups." + groupName,
+			definitions: singleDefinition(topology.Groups[groupName]),
+		})
 	}
 
 	for _, nodeName := range sortedVocabularyBlockNames(topology.Nodes) {
-		blocks = append(
-			blocks,
-			struct {
-				from        string
-				definitions []*clabtypes.NodeDefinition
-			}{
-				from:        "nodes." + nodeName,
-				definitions: singleDefinition(topology.Nodes[nodeName]),
-			},
-		)
+		blocks = append(blocks, absorbedVocabularyBlock{
+			from:        "nodes." + nodeName,
+			definitions: singleDefinition(topology.Nodes[nodeName]),
+		})
 	}
 
-	for _, block := range blocks {
-		for _, definition := range block.definitions {
-			for _, key := range sortedVocabularyBlockNames(definition.KindSpecificConfig) {
-				// An explicit `kind-specific-config` wrapper may carry generic fields; unwrap it
-				// so a masquerading generic field is caught wherever it hides.
-				if key == kindSpecificWrapperKey {
-					wrapper := kindSpecificWrapperEntries(definition.KindSpecificConfig[key])
-					if wrapper == nil {
-						continue
-					}
+	return blocks
+}
 
-					for wrapperKey := range wrapper {
-						if !vocabulary[wrapperKey] {
-							continue
-						}
+// validateAbsorbedVocabularyDefinition rejects every generic vocabulary key riding in one
+// block's kind-specific config. An explicit `kind-specific-config` wrapper may carry generic
+// fields; it is unwrapped first so a masquerading generic field is caught wherever it hides.
+func validateAbsorbedVocabularyDefinition(
+	vocabulary map[string]bool,
+	fieldLines map[string]map[string]int,
+	from string,
+	definition *clabtypes.NodeDefinition,
+	diagnostics *compileDiagnostics,
+) {
+	for _, key := range sortedVocabularyBlockNames(definition.KindSpecificConfig) {
+		if key == kindSpecificWrapperKey {
+			wrapper := kindSpecificWrapperEntries(definition.KindSpecificConfig[key])
+			if wrapper == nil {
+				continue
+			}
 
-						diagnostics.add(absorbedGenericFieldDiagnostic(
-							wrapperKey,
-							fieldLines[block.from][wrapperKey],
-						))
-					}
-
-					continue
-				}
-
-				if !vocabulary[key] {
+			for wrapperKey := range wrapper {
+				if !vocabulary[wrapperKey] {
 					continue
 				}
 
 				diagnostics.add(absorbedGenericFieldDiagnostic(
-					key,
-					fieldLines[block.from][key],
+					wrapperKey,
+					fieldLines[from][wrapperKey],
 				))
 			}
+
+			continue
 		}
+
+		if !vocabulary[key] {
+			continue
+		}
+
+		diagnostics.add(absorbedGenericFieldDiagnostic(key, fieldLines[from][key]))
 	}
 }
 
@@ -348,7 +379,7 @@ func absorbedGenericFieldDiagnostic(
 	key string,
 	line int,
 ) Diagnostic {
-	diagnostic := Diagnostic{Code: "unsupported-field", Message: fmt.Sprintf(
+	diagnostic := Diagnostic{Code: unsupportedFieldCode, Message: fmt.Sprintf(
 		"field %s is not supported by clabernetes",
 		key,
 	)}
@@ -393,7 +424,7 @@ func loadDefinitionFile(definition string) (*definitionFile, []string, error) {
 	for _, entry := range typeErr.Errors {
 		if !strings.Contains(entry, "not found in type") {
 			// A genuine type error must not be swallowed by the vocabulary policy.
-			return nil, nil, fmt.Errorf("%s", entry)
+			return nil, nil, fmt.Errorf("%w: %s", errParse, entry)
 		}
 
 		unknownFields = append(unknownFields, entry)
@@ -419,7 +450,7 @@ func validateRejectedNodeFields(
 			}
 
 			diagnostics.add(Diagnostic{
-				Code:    "unsupported-field",
+				Code:    unsupportedFieldCode,
 				Path:    key,
 				Line:    fieldLines[block][key],
 				Message: fmt.Sprintf("field %q is rejected: %s", key, reason),
@@ -481,15 +512,23 @@ var unknownFieldPattern = regexp.MustCompile(`^line (\d+): field ([^ ]+) not fou
 // Types absent from the map fall back to no path, which the formatter renders as the whole
 // topology. The node definitions are absent on purpose: their unknown keys are absorbed into the
 // kind-specific config instead of reaching the strict parser.
-var unknownFieldPaths = map[string]string{
-	"compiler.definitionFile": "",
-	"compiler.fileTopology":   "topology",
-	"compiler.linkDefinition": "topology.links",
-	"compiler.linkConfig":     "topology.links",
+// unknownFieldPath maps a yaml type error's package-qualified type name onto the source path
+// prefix the diagnostic should point at. An empty prefix means the whole definition.
+func unknownFieldPath(typeName string) string {
+	switch typeName {
+	case "compiler.definitionFile":
+		return ""
+	case "compiler.fileTopology":
+		return topologyPath
+	case "compiler.linkDefinition", "compiler.linkConfig":
+		return topologyPath + ".links"
+	default:
+		return ""
+	}
 }
 
 func diagnosticFromUnknownField(message string) Diagnostic {
-	diagnostic := Diagnostic{Code: "unsupported-field"}
+	diagnostic := Diagnostic{Code: unsupportedFieldCode}
 
 	matches := unknownFieldPattern.FindStringSubmatch(message)
 	if len(matches) != unknownFieldMatchCount {
@@ -513,7 +552,7 @@ func diagnosticFromUnknownField(message string) Diagnostic {
 		)
 	}
 
-	diagnostic.Path = unknownFieldPaths[matches[3]]
+	diagnostic.Path = unknownFieldPath(matches[3])
 
 	return diagnostic
 }
@@ -633,10 +672,7 @@ func flattenNodeDefinition(
 		flattened.DNS = clonePointer(topology.GetNodeDns(nodeName))
 	}
 
-	err = flattenNodeContracts(topology, layers, nodeName, flattened)
-	if err != nil {
-		return nil, err
-	}
+	flattenNodeContracts(topology, layers, nodeName, flattened)
 
 	err = collectKindSpecificConfig(
 		topology,
@@ -659,7 +695,7 @@ func flattenNodeContracts(
 	layers []*clabtypes.NodeDefinition,
 	nodeName string,
 	flattened *clabtypes.NodeDefinition,
-) error {
+) {
 	if firstImportedPointer(
 		layers,
 		func(definition *clabtypes.NodeDefinition) *clabtypes.HealthcheckConfig {
@@ -686,8 +722,6 @@ func flattenNodeContracts(
 			flattened.Certificate.ValidityDuration = certificate.ValidityDuration
 		}
 	}
-
-	return nil
 }
 
 func importedNodeLayers(
@@ -811,8 +845,7 @@ func collectKindSpecificConfig(
 	}
 
 	for _, entry := range entries {
-		switch entry.Key {
-		case kindSpecificWrapperKey:
+		if entry.Key == kindSpecificWrapperKey {
 			wrapper := kindSpecificWrapperEntries(entry.Value)
 			if wrapper == nil {
 				return fmt.Errorf("node %q: %w", nodeName, errInvalidKindSpecificWrapper)
@@ -867,7 +900,7 @@ func mgmtNetSourceBlock(topology *clabtypes.Topology, nodeName, mgmtNet string) 
 		{"nodes." + nodeName, topology.Nodes[nodeName]},
 		{"groups." + group, topology.GetGroup(group)},
 		{"kinds." + kind, topology.GetKind(kind)},
-		{"defaults", topology.GetDefaults()},
+		{defaultsBlock, topology.GetDefaults()},
 	}
 
 	for _, block := range blocks {
@@ -942,7 +975,7 @@ func carryKindSpecificValue(
 // importedNodeVocabulary is the yaml vocabulary containerlab's generic node definition declares.
 // Keys absorbed by the inline kind-specific config mapping that collide with it are generic
 // fields, not kind-owned keys, and get the compiler's unsupported-field diagnostics.
-var importedNodeVocabulary = sync.OnceValue(
+var importedNodeVocabulary = sync.OnceValue( //nolint:gochecknoglobals // the vocabulary is static per process; the OnceValue memoizes the reflection walk
 	func() map[string]bool {
 		vocabulary := map[string]bool{}
 
@@ -990,7 +1023,7 @@ func definitionFieldLines(definition string) (map[string]map[string]int, error) 
 	root := document.Content[0]
 
 	for index := 0; index+1 < len(root.Content); index += 2 {
-		if root.Content[index].Value != "topology" {
+		if root.Content[index].Value != topologyPath {
 			continue
 		}
 
@@ -1014,7 +1047,7 @@ func mappingFieldLines(topology *yamlv3.Node) (map[string]map[string]int, error)
 		key, value := topology.Content[index], topology.Content[index+1]
 
 		switch key.Value {
-		case "defaults":
+		case defaultsBlock:
 			if value.Kind == yamlv3.MappingNode {
 				lines["defaults"] = childFieldLines(value)
 			}

@@ -27,15 +27,15 @@ type Input struct {
 	// own labels.
 	Labels map[string]string `json:"labels,omitempty"`
 	// Deployment carries the deployment policy keyed per source node name.
-	Deployment Deployment `json:"deployment,omitempty"`
+	Deployment Deployment `json:"deployment,omitzero"`
 	// DisableManagement disables the c9s management overlay for the topology.
 	DisableManagement bool `json:"disableManagement,omitempty"`
 	// Expose carries the service exposure policy.
-	Expose Expose `json:"expose,omitempty"`
+	Expose Expose `json:"expose,omitzero"`
 	// ImagePull carries the default image pull policy for the topology.
-	ImagePull ImagePull `json:"imagePull,omitempty"`
+	ImagePull ImagePull `json:"imagePull,omitzero"`
 	// StatusProbes carries the status probe policy; node names follow the definition.
-	StatusProbes StatusProbes `json:"statusProbes,omitempty"`
+	StatusProbes StatusProbes `json:"statusProbes,omitzero"`
 }
 
 // Deployment carries the per-node deployment policy of the clabernetes Topology spec.
@@ -85,7 +85,7 @@ type StatusProbes struct {
 	// NodeProbeConfigurations maps definition node names to per-node probe configurations.
 	NodeProbeConfigurations map[string]ProbeConfiguration `json:"nodeProbeConfigurations,omitempty"`
 	// ProbeConfiguration is the default probe configuration for the topology.
-	ProbeConfiguration ProbeConfiguration `json:"probeConfiguration,omitempty"`
+	ProbeConfiguration ProbeConfiguration `json:"probeConfiguration,omitzero"`
 }
 
 // ProbeConfiguration is one status probe configuration.

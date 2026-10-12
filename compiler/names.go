@@ -135,7 +135,7 @@ func nodeNameRenames(
 ) (map[string]string, error) {
 	renames, err := clabnames.SanitizeNodeNames(sortedNodeNames(nodes))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", errInvalidData, err)
+		return nil, fmt.Errorf("%w: %w", errInvalidData, err)
 	}
 
 	return renames, nil
