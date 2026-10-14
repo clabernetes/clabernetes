@@ -204,18 +204,6 @@
     c9s-hero-flow 0s linear 2.3s both;
 }
 
-.c9s-release-hero-swap > span {
-  grid-area: 1 / 1;
-}
-
-.c9s-release-hero-old {
-  animation: c9s-hero-out 0.55s cubic-bezier(0.6, 0, 0.8, 0.4) 1.75s both;
-}
-
-.c9s-release-hero-new {
-  animation: c9s-hero-in 0.75s cubic-bezier(0.2, 0.9, 0.3, 1.25) 2.05s both;
-}
-
 .c9s-release-hero-tagline {
   display: flex;
   flex-wrap: wrap;
