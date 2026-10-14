@@ -7,21 +7,17 @@ title: "0.10"
 <ReleaseHero
   from="0.9.0"
   version="0.10.0"
-  tagline="containerlab 0.80"
-  highlight="kind-specific config"
-  facts={['containerlab 0.80.0', 'cumulus breakout ports', 'frr kind in e2e']}
+  tagline="containerlab 0.81"
+  highlight="0.81"
+  facts={['containerlab 0.81.0', 'compile engine in containerlab', 'cumulus breakout ports', 'frr kind in e2e']}
 />
 
-C9s now pins containerlab 0.80.0 and adopts the kind-specific config model that release
-introduced. Cumulus VX breakout ports work end to end, the FRRouting kind is covered by the
-always-run E2E suite, and management networks gained first-class diagnostics for the new
-container-only management settings.
+C9s now pins [containerlab 0.81.0](https://containerlab.dev/rn/0.81/). The [kind-specific](https://containerlab.dev/manual/nodes/#kind-specific-config) config model that 0.80 introduced is fully adopted.
 
 ## Kind-specific config
 
 Containerlab 0.80 replaced the `CLAB_*` environment variables with kind-specific node keys, and
-c9s adopts the same model. Kinds that need more than the generic node settings take their own
-keys directly on the node definition:
+c9s adopts the same model. Kinds that need more than the generic node settings are now configured with their "specific" keys on the node config level. Like the `breakouts` in the example below:
 
 ```yaml
 topology:
@@ -34,20 +30,6 @@ topology:
         - port: 1..20
           channels: 4
 ```
-
-c9s merges every kind config key over the regular inheritance order (node > group >
-`kinds.<kind>` > defaults) while compiling, carries the merged result on the generated Node, and
-hands it to the imported kind when the node is planned. The imported kind validates it strictly:
-a key the kind does not own, or a mistyped value, fails planning with the same error containerlab
-deploys with, naming the key and the topology block it was set in. A generic field such as
-`stages` or `runtime` still fails compilation with the structured rejection it always carried.
-
-The `components` key keeps its typed Node vocabulary: it drives c9s' own chassis component
-rendering, and the imported kind validates it when the node is planned. Per-component `sfm`
-settings moved to the node level with containerlab 0.80, and the `nokia_sros` kind sets
-per-component VM resources with the typed `cpu`, `ram`, and `max-nics` component keys instead of
-environment entries. The environment variables containerlab removed (`CLAB_SROS_CONFIG_MODE`,
-`CLAB_IOL_PID_OFFSET`, `CLAB_CUSTOM_PROMPT`, ...) are gone; use the kind config keys instead.
 
 ### Removed: node `extras`
 
@@ -94,7 +76,7 @@ The [Cumulus example](https://github.com/clabernetes/clabernetes/tree/main/examp
 the E2E suite boot a breakout lab and prove the dataplane across two lanes, including guest
 forwarding between them.
 
-## FRRouting in the always-run E2E suite
+## FRR node added to the end-to-end test suite
 
 The `frr` kind is a first-class citizen in containerlab 0.80, and c9s now covers it in the
 always-run E2E suite: two FRR nodes boot as direct device Pods with containerlab's generated
@@ -114,6 +96,14 @@ network per namespace, so:
 - A single-entry `mgmt:` list is carried as-is; more than one management network fails
   compilation until a per-network management plan exists.
 - Node `mgmt-net` selections are accepted and ignored.
+
+## Fixes
+
+- The mesh neighbor inventory ignores the generic rtnetlink notification that kernels before
+  6.13 emit after every self FDB change on a VXLAN device. It carries only the MAC — no
+  destination — so caching it produced a forwarding entry the kernel refuses to delete,
+  `clabwire` exited on the next reconcile pass, and every restart dropped the Pod's wire
+  carrier. On 6.1 workers this crash-looped every multi-link Pod; affected labs now converge.
 
 ## Planner compatibility
 

@@ -174,20 +174,34 @@
   -webkit-background-clip: text;
 }
 
-.c9s-release-hero-swap {
+/* The version rolls as one cylinder of two whole strings. The incoming string waits absolutely
+   positioned and takes over the flow the moment the outgoing one has fully left, so the counter
+   grows or shrinks with the release — a digit crossing (0.9.0 -> 0.10.0) just widens the row.
+   Keep the handoff at 2.3s in both animations: the swap must happen while both strings are
+   invisible, so the width change never moves visible glyphs. */
+.c9s-release-hero-roll {
+  position: relative;
   display: inline-grid;
 }
 
-.c9s-release-hero-swap > span {
+.c9s-release-hero-roll > span {
   grid-area: 1 / 1;
+  display: flex;
+  align-items: flex-end;
 }
 
 .c9s-release-hero-old {
-  animation: c9s-hero-out 0.55s cubic-bezier(0.6, 0, 0.8, 0.4) 1.75s both;
+  animation:
+    c9s-hero-out 0.55s cubic-bezier(0.6, 0, 0.8, 0.4) 1.75s both,
+    c9s-hero-abs 0s linear 2.3s both;
 }
 
 .c9s-release-hero-new {
-  animation: c9s-hero-in 0.75s cubic-bezier(0.2, 0.9, 0.3, 1.25) 2.05s both;
+  position: absolute;
+  inset: 0;
+  animation:
+    c9s-hero-in 0.75s cubic-bezier(0.2, 0.9, 0.3, 1.25) 2.3s both,
+    c9s-hero-flow 0s linear 2.3s both;
 }
 
 .c9s-release-hero-tagline {
@@ -301,6 +315,8 @@
 @keyframes c9s-hero-pulse { 50% { opacity: 0.55; transform: scale(0.92); } }
 @keyframes c9s-hero-out { to { opacity: 0; transform: translateY(-0.35em); filter: blur(6px); } }
 @keyframes c9s-hero-in { from { opacity: 0; transform: translateY(0.35em); filter: blur(6px); } }
+@keyframes c9s-hero-abs { to { position: absolute; } }
+@keyframes c9s-hero-flow { to { position: static; } }
 @keyframes c9s-hero-sweep { from { transform: scaleX(0); } }
 @keyframes c9s-hero-shine { 0%, 55% { background-position: 130% 0; } 100% { background-position: -30% 0; } }
 @keyframes c9s-hero-glint {

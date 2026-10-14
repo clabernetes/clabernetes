@@ -3,7 +3,9 @@ import { useEffect, useRef, type CSSProperties } from 'react';
 import './release-hero.css';
 
 type ReleaseHeroProps = {
-  /** Version the counter starts from, same length as `version`. */
+  /** Version the counter starts from. It may be shorter or longer than `version`: the roll
+   * renders both strings whole, so a release that crosses a digit boundary simply grows the
+   * row (0.9.0 -> 0.10.0). */
   from: string;
   version: string;
   /** Tagline words; the word equal to `highlight` is accented. */
@@ -111,9 +113,10 @@ export function ReleaseHero({ from, version, tagline, highlight, facts = [] }: R
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useMesh(canvasRef);
 
+  const fromChars = [...from];
   const chars = [...version];
-  const glyph = (i: number): CSSProperties =>
-    ({ '--i': i, '--n': chars.length }) as CSSProperties;
+  const glyph = (i: number, n: number): CSSProperties =>
+    ({ '--i': i, '--n': n }) as CSSProperties;
 
   return (
     <figure className="c9s-release-hero not-prose" aria-label={`clabernetes ${version}: ${tagline}`}>
@@ -133,16 +136,18 @@ export function ReleaseHero({ from, version, tagline, highlight, facts = [] }: R
           <p className="c9s-release-hero-version">
             <span className="sr-only">{version}</span>
             <span className="c9s-release-hero-glyphs" aria-hidden="true">
-              {chars.map((c, i) =>
-                c === from[i] ? (
-                  <span key={i} style={glyph(i)}>{c}</span>
-                ) : (
-                  <span key={i} className="c9s-release-hero-swap">
-                    <span className="c9s-release-hero-old" style={glyph(i)}>{from[i]}</span>
-                    <span className="c9s-release-hero-new" style={glyph(i)}>{c}</span>
-                  </span>
-                ),
-              )}
+              <span className="c9s-release-hero-roll">
+                <span className="c9s-release-hero-old">
+                  {fromChars.map((c, i) => (
+                    <span key={i} style={glyph(i, fromChars.length)}>{c}</span>
+                  ))}
+                </span>
+                <span className="c9s-release-hero-new">
+                  {chars.map((c, i) => (
+                    <span key={i} style={glyph(i, chars.length)}>{c}</span>
+                  ))}
+                </span>
+              </span>
             </span>
           </p>
           <p className="c9s-release-hero-tagline">
