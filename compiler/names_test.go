@@ -64,7 +64,7 @@ func TestCompileSanitizesNodeNamesKubernetesCannotCarry(t *testing.T) {
 	}
 
 	if got, want := compiled.AppProtocols["r1"],
-		[]clabernetesapisv1alpha1.NodeAppProtocol{{
+		[]clabernetescompiler.AppProtocol{{
 			Port: "57400/tcp", AppProtocol: "kubernetes.io/h2c",
 		}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("r1 application protocols = %v, want %v", got, want)
@@ -72,21 +72,21 @@ func TestCompileSanitizesNodeNamesKubernetesCannotCarry(t *testing.T) {
 
 	expectedLinks := []clabernetescompiler.CompiledLink{
 		{
-			EndpointA: clabernetesapisv1alpha1.LinkEndpointSpec{
+			EndpointA: clabernetescompiler.Endpoint{
 				NodeName:      "r1",
 				InterfaceName: "eth1",
 			},
-			EndpointB: clabernetesapisv1alpha1.LinkEndpointSpec{
+			EndpointB: clabernetescompiler.Endpoint{
 				NodeName:      "client-2",
 				InterfaceName: "eth1",
 			},
 		},
 		{
-			EndpointA: clabernetesapisv1alpha1.LinkEndpointSpec{
+			EndpointA: clabernetescompiler.Endpoint{
 				NodeName:      "client-2",
 				InterfaceName: "eth2",
 			},
-			EndpointB: clabernetesapisv1alpha1.LinkEndpointSpec{
+			EndpointB: clabernetescompiler.Endpoint{
 				NodeName:      "host",
 				InterfaceName: "ens5",
 			},

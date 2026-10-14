@@ -69,4 +69,3 @@ func EnforceDNSLabelConvention(s string) string {
 
 	return s
 }
-
