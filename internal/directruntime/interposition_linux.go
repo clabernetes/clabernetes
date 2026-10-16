@@ -344,6 +344,11 @@ func preserveTransportInterface(
 			return nil, 0, captureErr
 		}
 
+		neighbors, neighborErr := captureTransportNeighbors(original.Attrs().Index)
+		if neighborErr != nil {
+			return nil, 0, neighborErr
+		}
+
 		if err = netlink.LinkSetDown(original); err != nil {
 			return nil, 0, fmt.Errorf("preparing transport interface rename: %w", err)
 		}
@@ -361,6 +366,10 @@ func preserveTransportInterface(
 		transport, _, err = lookupLink(spec.TransportInterface)
 		if err != nil || transport == nil {
 			return nil, 0, fmt.Errorf("transport interface vanished after rename: %w", err)
+		}
+
+		if err = restoreTransportNeighbors(transport.Attrs().Index, neighbors); err != nil {
+			return nil, 0, err
 		}
 
 		// The rename resurrects the kernel auto-connected prefix route, which the CNI may

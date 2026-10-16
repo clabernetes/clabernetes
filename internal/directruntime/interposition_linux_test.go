@@ -394,11 +394,61 @@ func testEnsureInterpositionConverges(t *testing.T) {
 
 	// The device interface name equals the original CNI name, exactly like real kinds: the
 	// rename must free the name before the synthetic pair claims it.
+	// Some CNIs reach the Pod gateway only through a permanent neighbor entry (the Amazon VPC
+	// CNI installs 169.254.1.1 this way). Setting the link down for the rename flushes it.
+	cniGatewayNeighbor := net.ParseIP("169.254.1.1")
+
+	cniGatewayMAC, err := net.ParseMAC("02:c9:00:00:01:01")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = netlink.NeighAdd(&netlink.Neigh{
+		LinkIndex:    cni.Attrs().Index,
+		Family:       netlink.FAMILY_V4,
+		State:        netlink.NUD_PERMANENT,
+		IP:           cniGatewayNeighbor,
+		HardwareAddr: cniGatewayMAC,
+	}); err != nil {
+		t.Fatalf("adding the CNI gateway neighbor: %v", err)
+	}
+
 	operations := netlinkOperations{neighbors: newMeshNeighborInventory()}
 	defer operations.Close() //nolint:errcheck // isolated test namespace teardown.
 
 	if err = operations.EnsureInterposition(spec); err != nil {
 		t.Fatalf("EnsureInterposition() cold pass: %v", err)
+	}
+
+	preservedTransport, err := netlink.LinkByName(TransportInterfaceName)
+	if err != nil {
+		t.Fatalf("cold pass: preserved transport interface is absent: %v", err)
+	}
+
+	transportNeighbors, err := netlink.NeighList(
+		preservedTransport.Attrs().Index,
+		netlink.FAMILY_V4,
+	)
+	if err != nil {
+		t.Fatalf("cold pass: listing transport neighbors: %v", err)
+	}
+
+	gatewayPreserved := false
+
+	for _, entry := range transportNeighbors {
+		if entry.IP.Equal(cniGatewayNeighbor) && entry.State&netlink.NUD_PERMANENT != 0 &&
+			entry.HardwareAddr.String() == cniGatewayMAC.String() {
+			gatewayPreserved = true
+
+			break
+		}
+	}
+
+	if !gatewayPreserved {
+		t.Fatalf(
+			"cold pass: permanent CNI gateway neighbor %s is absent from %s: %v",
+			cniGatewayNeighbor, TransportInterfaceName, transportNeighbors,
+		)
 	}
 
 	assertInterposedState := func(step string) {
