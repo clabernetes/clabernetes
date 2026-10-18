@@ -4,6 +4,7 @@ metadata:
   labels:
     c9s.run/app: clabernetes
     c9s.run/name: srl2
+    c9s.run/originalNodeName: srl2
     c9s.run/topologyKind: containerlab
     c9s.run/topologyNode: srl2
     c9s.run/topologyOwner: topology-basic
