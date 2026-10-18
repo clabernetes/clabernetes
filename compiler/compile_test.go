@@ -284,10 +284,9 @@ topology:
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("effective env = %q, want %q", got, want)
 	}
-	if got, want := primary.Labels, map[string]string{"tier": "kind", "owner": "node"}; !reflect.DeepEqual(
-		got,
-		want,
-	) {
+	if got, want := primary.Labels, map[string]string{
+		"tier": "kind", "owner": "node", "c9s.run/originalNodeName": "primary",
+	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("effective labels = %q, want %q", got, want)
 	}
 	if primary.Config == nil || len(primary.Config.Vars) != 4 ||
@@ -595,9 +594,9 @@ func TestCompileContainerlabLabels(t *testing.T) {
 
 	expected := map[string]map[string]string{
 		// defaults, then kind, then node, most specific winning "owner"
-		"srl1": {"tier": "lab", "vendor": "nokia", "owner": "roman"},
+		"srl1": {"tier": "lab", "vendor": "nokia", "owner": "roman", "c9s.run/originalNodeName": "srl1"},
 		// the linux kind declares no labels, so only the topology defaults apply
-		"multitool": {"tier": "lab", "owner": "defaults"},
+		"multitool": {"tier": "lab", "owner": "defaults", "c9s.run/originalNodeName": "multitool"},
 	}
 
 	for nodeName, expectedLabels := range expected {

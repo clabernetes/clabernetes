@@ -39,6 +39,10 @@ const (
 	// this is strictly a clabernetes concept, obviously not a kubernetes one!
 	LabelTopologyServiceType = LabelPrefix + "/topologyServiceType"
 
+	// LabelOriginalNodeName carries the node name the containerlab topology used before the
+	// sanitizer mapped it onto the Kubernetes-safe name the Node object carries.
+	LabelOriginalNodeName = LabelPrefix + "/originalNodeName"
+
 	// LabelExposePorts is a definition-only containerlab label that declares destination ports
 	// c9s should expose. The topology compiler consumes it into Node.spec.ports; it must never be
 	// copied onto Kubernetes object metadata like an ordinary containerlab label.
