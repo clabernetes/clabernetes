@@ -594,7 +594,12 @@ func TestCompileContainerlabLabels(t *testing.T) {
 
 	expected := map[string]map[string]string{
 		// defaults, then kind, then node, most specific winning "owner"
-		"srl1": {"tier": "lab", "vendor": "nokia", "owner": "roman", "c9s.run/originalNodeName": "srl1"},
+		"srl1": {
+			"tier":                     "lab",
+			"vendor":                   "nokia",
+			"owner":                    "roman",
+			"c9s.run/originalNodeName": "srl1",
+		},
 		// the linux kind declares no labels, so only the topology defaults apply
 		"multitool": {"tier": "lab", "owner": "defaults", "c9s.run/originalNodeName": "multitool"},
 	}

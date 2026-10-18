@@ -66,15 +66,21 @@ diagnostic. Nothing is silently dropped.
 - **Node names are Kubernetes object names.** Kubernetes only takes lowercase DNS labels, so a
   node name it cannot carry is sanitized: the name is lower-cased, every other character becomes
   `-`, a name starting with a digit is prefixed with `clab-`, and a name longer than 63
-  characters is truncated and suffixed with a hash. `R1` becomes `r1`, `PE_1` becomes `pe-1`.
-  Every reference follows the node: links, `network-mode: container:<node>`, and the node-keyed
-  policy on the Topology (`filesFromConfigMap`, `filesFromSecret`, `filesFromURL`, `resources`,
-  `statusProbes`) are still written with the name the definition uses. Two node names that differ
-  only in something Kubernetes cannot carry (`R1` and `r1`) would become one object, and that
-  fails compilation. The namespace is the topology boundary.
+  characters is truncated and suffixed with a hash. `R1` becomes `r1`, `PE_1` becomes `pe-1`. The
+  Node carries the name the definition used in the `c9s.run/originalNodeName` label, so tooling
+  that only holds the clab file can select Nodes with `kubectl` without reproducing the
+  sanitizer. Every reference follows the node: links, `network-mode: container:<node>`, and the
+  node-keyed policy on the Topology (`filesFromConfigMap`, `filesFromSecret`, `filesFromURL`,
+  `resources`, `statusProbes`) are still written with the name the definition uses. Two node
+  names that differ only in something Kubernetes cannot carry (`R1` and `r1`) would become one
+  object, and that fails compilation. The namespace is the topology boundary.
 - **`labels` become Kubernetes labels** on the emitted Node, its Deployment, and Pods
   (selectable with `kubectl`) instead of Docker container labels. Labels Kubernetes would
-  reject, reserved `c9s.run/` keys, and controller-owned keys fail compilation.
+  reject fail compilation. The labels the compiler sets on the Node (`c9s.run/app`,
+  `c9s.run/name`, `c9s.run/topologyOwner`, `c9s.run/topologyKind`, `c9s.run/topologyNode`, and
+  `c9s.run/topologyGroup` on Nodes that carry a group) keep their compiler-assigned values, so a
+  topology value cannot shadow them; every other `c9s.run/` label rides along as written. The
+  spawned workload keeps `app.kubernetes.io/name` set to the Node's object name.
 
 ## Lifecycle
 
