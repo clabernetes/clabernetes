@@ -382,7 +382,9 @@ func preserveTransportInterface(
 	// died between the flush and the restore left the record to recover from. Only the
 	// recorded entries are re-asserted; dynamic entries and anything the kernel or the CNI
 	// added since stay with their owners.
-	recalledNeighbors, _ := rememberTransportNeighbors(spec.StateDirectory, nil)
+	// The recall path is defined to never fail — a missing file is expected on first boot
+	// with no permanent entries, and corrupt reads are reported inside the helper.
+	recalledNeighbors := recallTransportNeighbors(spec.StateDirectory)
 	if err = restoreTransportNeighbors(
 		transport.Attrs().Index,
 		recalledNeighbors,

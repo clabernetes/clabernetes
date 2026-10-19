@@ -813,7 +813,7 @@ func testEnsureInterpositionConverges(t *testing.T) {
 	}
 
 	// A pass not asked to reconcile peers leaves the peer state alone even with a different
-	// peer list, so unchanged ticks never touch the neighbor tables.
+	// peer list, so unchanged ticks never touch the mesh neighbor tables.
 	untouched := spec
 	untouched.MeshPeers = nil
 	untouched.ReconcileMeshPeers = false

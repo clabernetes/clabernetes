@@ -81,31 +81,81 @@ func rememberTransportNeighbors(
 
 	record := filepath.Join(filepath.Clean(stateDirectory), transportNeighborsRecordName)
 
-	if len(captured) != 0 {
-		raw, err := json.Marshal(captured)
-		if err != nil {
-			fmt.Fprintf(
-				os.Stderr,
-				"connectivity: marshaling transport-neighbors record %q: %v\n",
-				record, err,
-			)
+	if len(captured) == 0 {
+		return recallTransportNeighbors(stateDirectory), nil
+	}
 
-			return captured, nil
-		}
-
-		//nolint:gosec,mnd // non-sensitive sidecar-owned state, standard mode.
-		if err := os.WriteFile(record, raw, 0o644); err != nil {
-			fmt.Fprintf(
-				os.Stderr,
-				"connectivity: writing transport-neighbors record %q: %v\n",
-				record, err,
-			)
-
-			return nil, fmt.Errorf("writing transport-neighbors record %q: %w", record, err)
-		}
+	raw, err := json.Marshal(captured)
+	if err != nil {
+		fmt.Fprintf(
+			os.Stderr,
+			"connectivity: marshaling transport-neighbors record %q: %v\n",
+			record, err,
+		)
 
 		return captured, nil
 	}
+
+	staging, err := os.CreateTemp(stateDirectory, transportNeighborsRecordName+".*")
+	if err != nil {
+		fmt.Fprintf(
+			os.Stderr,
+			"connectivity: creating transport-neighbors staging file in %q: %v\n",
+			stateDirectory, err,
+		)
+
+		return nil, fmt.Errorf(
+			"creating transport-neighbors staging file in %q: %w",
+			stateDirectory, err,
+		)
+	}
+
+	stagingName := staging.Name()
+
+	writeErr := func() error {
+		if _, err := staging.Write(raw); err != nil {
+			return err
+		}
+
+		if err := staging.Chmod(0o644); err != nil { //nolint:mnd // sidecar-owned state.
+			return err
+		}
+
+		if err := staging.Close(); err != nil {
+			return err
+		}
+
+		if err := os.Rename(stagingName, record); err != nil {
+			return err
+		}
+
+		return nil
+	}()
+
+	if writeErr != nil {
+		_ = os.Remove(stagingName)
+
+		fmt.Fprintf(
+			os.Stderr,
+			"connectivity: writing transport-neighbors record %q: %v\n",
+			record, writeErr,
+		)
+
+		return nil, fmt.Errorf("writing transport-neighbors record %q: %w", record, writeErr)
+	}
+
+	return captured, nil
+}
+
+// recallTransportNeighbors loads a previously recorded neighbor set. It never returns an
+// error: a missing file on first boot is expected, and any other read or parse failure is
+// reported to stderr and treated as an empty recall so the reconcile loop can continue.
+func recallTransportNeighbors(stateDirectory string) []capturedNeighbor {
+	if stateDirectory == "" {
+		return nil
+	}
+
+	record := filepath.Join(filepath.Clean(stateDirectory), transportNeighborsRecordName)
 
 	raw, err := os.ReadFile(record)
 	if err != nil {
@@ -117,7 +167,7 @@ func rememberTransportNeighbors(
 			)
 		}
 
-		return nil, nil
+		return nil
 	}
 
 	recalled := []capturedNeighbor{}
@@ -128,10 +178,10 @@ func rememberTransportNeighbors(
 			record, err,
 		)
 
-		return nil, nil
+		return nil
 	}
 
-	return recalled, nil
+	return recalled
 }
 
 // restoreTransportNeighbors re-installs captured permanent neighbors on the given interface. One
