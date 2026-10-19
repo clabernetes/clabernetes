@@ -121,8 +121,9 @@ type InterpositionSpec struct {
 	ManagementIPv6 string
 	// GatewayIPv6 optionally carries the bare IPv6 management gateway for the router leg.
 	GatewayIPv6 string
-	// StateDirectory is the sidecar-owned state root where the captured transport gateway is
-	// persisted, so re-assertion survives a device stripping routes from every table.
+	// StateDirectory is the sidecar-owned state root where the captured transport routes and
+	// permanent neighbor entries are persisted, so re-assertion survives a device stripping
+	// routes from every table or flushing the shared neighbor table.
 	StateDirectory string
 	// MeshTunnelID is the VNI of the namespace's management mesh.
 	MeshTunnelID int
