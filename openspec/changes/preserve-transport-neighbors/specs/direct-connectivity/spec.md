@@ -25,3 +25,5 @@ Kubernetes transport — Pod IP reachability, default egress, cluster CIDR routi
 
 - **WHEN** the CNI plugin installs the Pod gateway as a permanent neighbor entry on the Pod interface instead of relying on address resolution
 - **THEN** the entry is present on the preserved interface after interposition, and Pod IP reachability and default egress work without manual repair
+- **WHEN** a device flushes the recorded entry from the shared neighbor table
+- **THEN** the sidecar re-asserts the recorded entry on the next pass, and Pod IP reachability keeps working without manual repair

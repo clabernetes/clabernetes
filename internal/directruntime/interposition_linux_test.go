@@ -413,6 +413,25 @@ func testEnsureInterpositionConverges(t *testing.T) {
 		t.Fatalf("adding the CNI gateway neighbor: %v", err)
 	}
 
+	// An IPv6 entry proves the family round-trips through the recorded state: the restore must
+	// land each recorded entry in its own family's table.
+	cniGateway6Neighbor := net.ParseIP("fe80::c9")
+
+	cniGateway6MAC, err := net.ParseMAC("02:c9:00:00:01:02")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = netlink.NeighAdd(&netlink.Neigh{
+		LinkIndex:    cni.Attrs().Index,
+		Family:       netlink.FAMILY_V6,
+		State:        netlink.NUD_PERMANENT,
+		IP:           cniGateway6Neighbor,
+		HardwareAddr: cniGateway6MAC,
+	}); err != nil {
+		t.Fatalf("adding the CNI IPv6 gateway neighbor: %v", err)
+	}
+
 	operations := netlinkOperations{neighbors: newMeshNeighborInventory()}
 	defer operations.Close() //nolint:errcheck // isolated test namespace teardown.
 
@@ -425,31 +444,12 @@ func testEnsureInterpositionConverges(t *testing.T) {
 		t.Fatalf("cold pass: preserved transport interface is absent: %v", err)
 	}
 
-	transportNeighbors, err := netlink.NeighList(
-		preservedTransport.Attrs().Index,
-		netlink.FAMILY_V4,
+	assertPermanentNeighbor(
+		t, "cold pass", preservedTransport, netlink.FAMILY_V4, cniGatewayNeighbor, cniGatewayMAC,
 	)
-	if err != nil {
-		t.Fatalf("cold pass: listing transport neighbors: %v", err)
-	}
-
-	gatewayPreserved := false
-
-	for _, entry := range transportNeighbors {
-		if entry.IP.Equal(cniGatewayNeighbor) && entry.State&netlink.NUD_PERMANENT != 0 &&
-			entry.HardwareAddr.String() == cniGatewayMAC.String() {
-			gatewayPreserved = true
-
-			break
-		}
-	}
-
-	if !gatewayPreserved {
-		t.Fatalf(
-			"cold pass: permanent CNI gateway neighbor %s is absent from %s: %v",
-			cniGatewayNeighbor, TransportInterfaceName, transportNeighbors,
-		)
-	}
+	assertPermanentNeighbor(
+		t, "cold pass", preservedTransport, netlink.FAMILY_V6, cniGateway6Neighbor, cniGateway6MAC,
+	)
 
 	assertInterposedState := func(step string) {
 		routes, listErr := netlink.RouteListFiltered(
@@ -788,6 +788,30 @@ func testEnsureInterpositionConverges(t *testing.T) {
 
 	assertReversePathFiltersCleared(t)
 
+	// A device that flushes the shared neighbor table (the same class of damage the route and
+	// address re-assertion already survive) must not leave the Pod without its gateway: the
+	// recorded entries are re-asserted on the next pass, across both families.
+	for _, flushed := range []*netlink.Neigh{
+		{
+			LinkIndex:    preservedTransport.Attrs().Index,
+			Family:       netlink.FAMILY_V4,
+			State:        netlink.NUD_PERMANENT,
+			IP:           cniGatewayNeighbor,
+			HardwareAddr: cniGatewayMAC,
+		},
+		{
+			LinkIndex:    preservedTransport.Attrs().Index,
+			Family:       netlink.FAMILY_V6,
+			State:        netlink.NUD_PERMANENT,
+			IP:           cniGateway6Neighbor,
+			HardwareAddr: cniGateway6MAC,
+		},
+	} {
+		if err = netlink.NeighDel(flushed); err != nil {
+			t.Fatalf("flushing the CNI gateway neighbor like a device would: %v", err)
+		}
+	}
+
 	// A pass not asked to reconcile peers leaves the peer state alone even with a different
 	// peer list, so unchanged ticks never touch the neighbor tables.
 	untouched := spec
@@ -797,6 +821,15 @@ func testEnsureInterpositionConverges(t *testing.T) {
 	if err = operations.EnsureInterposition(untouched); err != nil {
 		t.Fatalf("EnsureInterposition() steady pass: %v", err)
 	}
+
+	assertPermanentNeighbor(
+		t, "steady pass after the neighbor flush", preservedTransport, netlink.FAMILY_V4,
+		cniGatewayNeighbor, cniGatewayMAC,
+	)
+	assertPermanentNeighbor(
+		t, "steady pass after the neighbor flush", preservedTransport, netlink.FAMILY_V6,
+		cniGateway6Neighbor, cniGateway6MAC,
+	)
 
 	assertInterposedState("steady pass")
 
@@ -1199,6 +1232,32 @@ func assertTransportDefaultRoute(t *testing.T, step string) {
 		t.Fatalf("%s: main table defaults = %d via the transport %t, want exactly the CNI "+
 			"default: %+v", step, defaults, viaTransport, routes)
 	}
+}
+
+// assertPermanentNeighbor checks the link carries the given permanent neighbor entry with its
+// link-layer identity: some CNIs (the Amazon VPC CNI) reach the Pod gateway only through such
+// an entry, so its presence on the preserved interface is what the Pod's transport lives on.
+func assertPermanentNeighbor(
+	t *testing.T, step string, link netlink.Link, family int, address net.IP, mac net.HardwareAddr,
+) {
+	t.Helper()
+
+	entries, err := netlink.NeighList(link.Attrs().Index, family)
+	if err != nil {
+		t.Fatalf("%s: listing neighbors on %s: %v", step, link.Attrs().Name, err)
+	}
+
+	for _, entry := range entries {
+		if entry.IP.Equal(address) && entry.State&netlink.NUD_PERMANENT != 0 &&
+			entry.HardwareAddr.String() == mac.String() {
+			return
+		}
+	}
+
+	t.Fatalf(
+		"%s: permanent neighbor %s is absent from %s: %v",
+		step, address, link.Attrs().Name, entries,
+	)
 }
 
 // assertReversePathFiltersCleared verifies the interposition cleared the inherited rp_filter
