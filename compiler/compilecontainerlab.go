@@ -1680,27 +1680,21 @@ func addInvalidAppProtocolsLabelDiagnostic(
 // dropUnusableNodeLabels records containerlab node labels that cannot be carried onto the emitted
 // Node's metadata. The compile fails after collecting diagnostics, so the temporary flattened Node
 // can be pruned without silently changing any emitted resource.
+//
+// Labels under the c9s.run prefix are not rejected: c9s owns that namespace, and the renderer
+// overwrites the values of the labels it manages itself.
 func dropUnusableNodeLabels(
 	diagnostics *compileDiagnostics,
 	nodeName string,
 	nodeDefinition *clabtypes.NodeDefinition,
 ) {
 	for key, value := range nodeDefinition.Labels {
-		var reason string
-
-		switch {
-		case isReservedNodeLabel(key):
-			reason = "the label is reserved by c9s"
-		default:
-			problems := append(
-				k8svalidation.IsQualifiedName(key),
-				k8svalidation.IsValidLabelValue(value)...,
-			)
-			if len(problems) == 0 {
-				continue
-			}
-
-			reason = strings.Join(problems, "; ")
+		problems := append(
+			k8svalidation.IsQualifiedName(key),
+			k8svalidation.IsValidLabelValue(value)...,
+		)
+		if len(problems) == 0 {
+			continue
 		}
 
 		diagnostics.add(Diagnostic{
@@ -1710,24 +1704,10 @@ func dropUnusableNodeLabels(
 				"node %q label %q cannot become a Kubernetes label: %s",
 				nodeName,
 				key,
-				reason,
+				strings.Join(problems, "; "),
 			),
 		})
 
 		delete(nodeDefinition.Labels, key)
-	}
-}
-
-func isReservedNodeLabel(key string) bool {
-	if strings.HasPrefix(key, labelPrefix+"/") {
-		return true
-	}
-
-	switch key {
-	case "app.kubernetes.io/name", labelApp, labelName,
-		labelOwner, labelKind, labelNode:
-		return true
-	default:
-		return false
 	}
 }

@@ -109,3 +109,18 @@ network per namespace, so:
 
 Plans are tied to the linked containerlab module version and registry digest, so the first
 reconcile after an upgrade re-plans every Node once. Devices restart with their pods as usual.
+
+## Patches
+
+### 0.10.1
+
+- Compiled Nodes carry the new `c9s.run/originalNodeName` label with the node name the
+  containerlab definition used, posted before the Kubernetes-safe rename: `R1` becomes the Node
+  `r1` while the label stays `R1`, so tooling that only holds the clab file can select Nodes with
+  `kubectl` without reproducing the sanitizer function.
+- Labels in the `c9s.run/` namespace no longer fail compilation as reserved. The labels the
+  compiler sets itself — `c9s.run/app`, `c9s.run/name`, `c9s.run/topologyOwner`,
+  `c9s.run/topologyKind`, `c9s.run/topologyNode`, and `c9s.run/topologyGroup` on Nodes that carry
+  a group — keep their compiler-assigned values, so a topology value can never shadow what the
+  compiled object is; every other `c9s.run/` label is set onto the Node metadata as written, and
+  `app.kubernetes.io/name` is carried the same way. Labels Kubernetes would reject still fail compilation.

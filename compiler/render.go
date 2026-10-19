@@ -216,18 +216,19 @@ func decodeManifest(object map[string]any, typed any) error {
 }
 
 const (
-	c9sAPIVersion = "c9s.run/v1alpha1"
-	nodeKind      = "Node"
-	linkKind      = "Link"
-	nodeProfile   = "NodeProfile"
-	labelPrefix   = "c9s.run"
-	labelApp      = labelPrefix + "/app"
-	labelName     = labelPrefix + "/name"
-	labelOwner    = labelPrefix + "/topologyOwner"
-	labelKind     = labelPrefix + "/topologyKind"
-	labelNode     = labelPrefix + "/topologyNode"
-	labelGroup    = labelPrefix + "/topologyGroup"
-	labelAppValue = "clabernetes"
+	c9sAPIVersion         = "c9s.run/v1alpha1"
+	nodeKind              = "Node"
+	linkKind              = "Link"
+	nodeProfile           = "NodeProfile"
+	labelPrefix           = "c9s.run"
+	labelApp              = labelPrefix + "/app"
+	labelName             = labelPrefix + "/name"
+	labelOwner            = labelPrefix + "/topologyOwner"
+	labelKind             = labelPrefix + "/topologyKind"
+	labelNode             = labelPrefix + "/topologyNode"
+	labelGroup            = labelPrefix + "/topologyGroup"
+	labelOriginalNodeName = labelPrefix + "/originalNodeName"
+	labelAppValue         = "clabernetes"
 )
 
 // manifestObjectKey* name the fixed manifest object fields every rendered primitive carries.
@@ -321,7 +322,13 @@ func ownedObjectMetadata(input *Input, name string) map[string]any {
 		labelKind:  TopologyKindContainerlab,
 	}
 
+	// Global topology labels ride along as user metadata; the labels the compiler sets itself
+	// keep their compiler-assigned values.
 	for key, value := range input.Labels {
+		if compilerOwnedLabel(key, false) {
+			continue
+		}
+
 		labels[key] = value
 	}
 
@@ -552,7 +559,6 @@ func nodeMetadata(
 ) (map[string]any, error) {
 	metadata := ownedObjectMetadata(input, nodeName)
 
-	// Retain this label for human selection and compatibility; profile attachment is explicit.
 	labels, ok := metadata["labels"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf(
@@ -560,6 +566,18 @@ func nodeMetadata(
 		)
 	}
 
+	// The labels the topology carries ride along as user metadata; the ones the compiler sets
+	// itself keep their compiler-assigned values, so a c9s.run label in the clab file can never
+	// shadow what the compiled object actually is.
+	for key, value := range nodeDefinition.Labels {
+		if compilerOwnedLabel(key, nodeDefinition.Group != "") {
+			continue
+		}
+
+		labels[key] = value
+	}
+
+	// Retain this label for human selection and compatibility; profile attachment is explicit.
 	labels[labelNode] = nodeName
 
 	// The containerlab group name is organizational metadata; it rides along as a label so
@@ -568,14 +586,21 @@ func nodeMetadata(
 		labels[labelGroup] = nodeDefinition.Group
 	}
 
-	// containerlab node labels are kubernetes labels here rather than docker labels on the
-	// node container. The compiler has already dropped any that kubernetes would reject or
-	// that sit in c9s' own namespace, so nothing here can shadow the labels above.
-	for key, value := range nodeDefinition.Labels {
-		labels[key] = value
-	}
-
 	return metadata, nil
+}
+
+// compilerOwnedLabel reports whether the compiler sets the label key itself, so a value coming
+// from the topology cannot shadow the compiler's. The group label is only owned by a Node that
+// actually carries a group; every other object never sets it.
+func compilerOwnedLabel(key string, hasGroup bool) bool {
+	switch key {
+	case labelApp, labelName, labelOwner, labelKind, labelNode:
+		return true
+	case labelGroup:
+		return hasGroup
+	default:
+		return false
+	}
 }
 
 // nodeProfileNameForNode resolves the NodeProfile a Node references. A Node with distinct

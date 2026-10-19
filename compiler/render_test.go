@@ -399,6 +399,64 @@ func TestRenderNodesCarriesContainerlabLabels(t *testing.T) {
 	}
 }
 
+// TestRenderNodesKeepsOwnedLabelValues pins the ownership boundary of the c9s.run label
+// namespace: labels the compiler sets itself keep their compiler-assigned values no matter what
+// the topology declares, while every other c9s.run label a topology carries -- including
+// originalNodeName -- rides onto the Node metadata as written.
+func TestRenderNodesKeepsOwnedLabelValues(t *testing.T) {
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Name = "render-test"
+	topology.Namespace = "clabernetes"
+	topology.Spec.Definition.Containerlab = `
+name: lab
+topology:
+  nodes:
+    r1:
+      kind: linux
+      image: img
+      labels:
+        c9s.run/topologyNode: fake
+        c9s.run/topologyOwner: fake
+        c9s.run/originalNodeName: R1
+`
+	topology.Spec.Expose.DisableAutoExpose = true
+
+	compiled, err := clabernetescompiler.CompileTopology(
+		&claberneteslogging.FakeInstance{},
+		topology,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error compiling topology: %s", err)
+	}
+
+	nodes, _, _, err := clabernetescompiler.RenderAll(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
+
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 rendered node, got %d", len(nodes))
+	}
+
+	node := nodes[0]
+
+	if node.Labels[clabernetesconstants.LabelTopologyNode] != "r1" {
+		t.Errorf("expected the compiler-owned node label value, got %v", node.Labels)
+	}
+
+	if node.Labels[clabernetesconstants.LabelTopologyOwner] != "render-test" {
+		t.Errorf("expected the compiler-owned owner label value, got %v", node.Labels)
+	}
+
+	if node.Labels[clabernetesconstants.LabelOriginalNodeName] != "R1" {
+		t.Errorf("expected the originalNodeName value the definition carries, got %v", node.Labels)
+	}
+}
+
 func TestRenderLinks(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 

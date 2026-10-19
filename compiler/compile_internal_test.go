@@ -526,7 +526,6 @@ topology:
       kind: linux
       image: img
       labels:
-        "c9s.run/name": owned
         "invalid key!": value
 `})
 	if err == nil {
@@ -535,6 +534,44 @@ topology:
 
 	if !strings.Contains(err.Error(), "cannot become a Kubernetes label") {
 		t.Errorf("error %q does not mention the label problem", err)
+	}
+}
+
+// TestCompileStampsOriginalNodeNames pins the c9s.run/originalNodeName label: every compiled Node
+// carries the name the definition used, derived when the definition does not say so itself, and a
+// value the definition carries survives the compile untouched.
+func TestCompileStampsOriginalNodeNames(t *testing.T) {
+	compiled, err := Compile(&testLogger{}, &Input{Definition: `
+name: lab
+topology:
+  nodes:
+    r1:
+      kind: linux
+      image: img
+    R2:
+      kind: linux
+      image: img
+    r3:
+      kind: linux
+      image: img
+      labels:
+        c9s.run/originalNodeName: R-three
+`})
+	if err != nil {
+		t.Fatalf("unexpected error compiling topology: %s", err)
+	}
+
+	if got := compiled.Nodes["r1"].Labels["c9s.run/originalNodeName"]; got != "r1" {
+		t.Errorf("expected the derived original name on r1, got %q", got)
+	}
+
+	// The renamed node keeps the name the definition wrote.
+	if got := compiled.Nodes["r2"].Labels["c9s.run/originalNodeName"]; got != "R2" {
+		t.Errorf("expected the pre-rename name on r2, got %q", got)
+	}
+
+	if got := compiled.Nodes["r3"].Labels["c9s.run/originalNodeName"]; got != "R-three" {
+		t.Errorf("expected the definition label to survive untouched, got %q", got)
 	}
 }
 

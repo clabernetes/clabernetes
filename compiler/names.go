@@ -11,6 +11,7 @@ import (
 
 	clabnames "github.com/srl-labs/containerlab/names"
 	clabtypes "github.com/srl-labs/containerlab/types"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
 // NetworkModeContainerPrefix is the prefix of the `network-mode` node setting expressing that a
@@ -72,6 +73,23 @@ func sanitizeCompiledNodeNames(
 		})
 
 		return
+	}
+
+	// Every Node records the name the definition used before the rename pass, so tooling holding
+	// only the clab file can select nodes by the names it uses there. A definition that already
+	// carries the label keeps the value its author wrote.
+	for nodeName, nodeDefinition := range compiled.Nodes {
+		if _, present := nodeDefinition.Labels[labelOriginalNodeName]; present {
+			continue
+		}
+		if nodeDefinition.Labels == nil {
+			nodeDefinition.Labels = map[string]string{}
+		}
+		if problems := k8svalidation.IsValidLabelValue(nodeName); len(problems) != 0 {
+			continue
+		}
+
+		nodeDefinition.Labels[labelOriginalNodeName] = nodeName
 	}
 
 	if len(renames) == 0 {
