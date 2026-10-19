@@ -382,9 +382,10 @@ func preserveTransportInterface(
 	// died between the flush and the restore left the record to recover from. Only the
 	// recorded entries are re-asserted; dynamic entries and anything the kernel or the CNI
 	// added since stay with their owners.
+	recalledNeighbors, _ := rememberTransportNeighbors(spec.StateDirectory, nil)
 	if err = restoreTransportNeighbors(
 		transport.Attrs().Index,
-		rememberTransportNeighbors(spec.StateDirectory, nil),
+		recalledNeighbors,
 	); err != nil {
 		return nil, 0, err
 	}
@@ -419,7 +420,12 @@ func preserveTransportColdPass(
 	// dies between the flush and the restore recovers them from the record on a later pass
 	// instead of stranding the Pod without its gateway. Routes are recorded only once a pass
 	// has converged; the neighbor record cannot wait for that.
-	neighbors = rememberTransportNeighbors(spec.StateDirectory, neighbors)
+	rememberedNeighbors, rememberErr := rememberTransportNeighbors(spec.StateDirectory, neighbors)
+	if rememberErr != nil {
+		return nil, 0, rememberErr
+	}
+
+	neighbors = rememberedNeighbors
 
 	originalIndex := original.Attrs().Index
 
@@ -462,9 +468,9 @@ func preserveTransportColdPass(
 		return nil, 0, fmt.Errorf("transport interface vanished after rename: %w", lookupErr)
 	}
 
-	// The entries go back before the route replay: the auto-connected prefix removal pass
-	// below must stay last, so the freshly restored gateway is never left behind a route that
-	// cleanup deletes.
+	// The preserved neighbors are reinstalled while the interface is up and before the
+	// pass returns; any error between the flush and here is covered by the deferred guard.
+	// Ordering relative to the route replay below is immaterial — the tables are independent.
 	if err := restoreTransportNeighbors(transport.Attrs().Index, neighbors); err != nil {
 		return nil, 0, err
 	}

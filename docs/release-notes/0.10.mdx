@@ -99,6 +99,11 @@ network per namespace, so:
 
 ## Fixes
 
+- The sidecar now preserves CNI-installed permanent neighbor entries (e.g. the Amazon VPC
+  CNI's `169.254.1.1` gateway) across interposition and re-asserts them when a device flushes
+  the table. On EKS the missing entry stranded every direct-runtime Pod in Init; affected
+  topologies now converge without manual repair.
+
 - The mesh neighbor inventory ignores the generic rtnetlink notification that kernels before
   6.13 emit after every self FDB change on a VXLAN device. It carries only the MAC — no
   destination — so caching it produced a forwarding entry the kernel refuses to delete,

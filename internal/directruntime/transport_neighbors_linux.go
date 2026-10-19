@@ -66,36 +66,72 @@ func captureTransportNeighbors(linkIndex int) ([]capturedNeighbor, error) {
 // written before the flush, not after the pass converges like the routes: the flush is not
 // recapturable (the next look at the interface finds the steady-state shape), so a sidecar that
 // dies between the flush and the restore must find the entries on disk to re-assert them.
+//
+// Failures are reported to stderr like the other neighbor paths; a write failure is propagated
+// so the cold pass can fail before anything destructive has happened and be retried by the
+// reconcile loop. A missing record on the recall path (first boot with no permanent entries is
+// common) remains silent, but any other read or parse failure is reported.
 func rememberTransportNeighbors(
 	stateDirectory string,
 	captured []capturedNeighbor,
-) []capturedNeighbor {
+) ([]capturedNeighbor, error) {
 	if stateDirectory == "" {
-		return captured
+		return captured, nil
 	}
 
 	record := filepath.Join(filepath.Clean(stateDirectory), transportNeighborsRecordName)
 
 	if len(captured) != 0 {
-		if raw, err := json.Marshal(captured); err == nil {
-			//nolint:gosec,mnd // non-sensitive sidecar-owned state, standard mode.
-			_ = os.WriteFile(record, raw, 0o644)
+		raw, err := json.Marshal(captured)
+		if err != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"connectivity: marshaling transport-neighbors record %q: %v\n",
+				record, err,
+			)
+
+			return captured, nil
 		}
 
-		return captured
+		//nolint:gosec,mnd // non-sensitive sidecar-owned state, standard mode.
+		if err := os.WriteFile(record, raw, 0o644); err != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"connectivity: writing transport-neighbors record %q: %v\n",
+				record, err,
+			)
+
+			return nil, fmt.Errorf("writing transport-neighbors record %q: %w", record, err)
+		}
+
+		return captured, nil
 	}
 
 	raw, err := os.ReadFile(record)
 	if err != nil {
-		return nil
+		if !errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintf(
+				os.Stderr,
+				"connectivity: reading transport-neighbors record %q: %v\n",
+				record, err,
+			)
+		}
+
+		return nil, nil
 	}
 
 	recalled := []capturedNeighbor{}
 	if err := json.Unmarshal(raw, &recalled); err != nil {
-		return nil
+		fmt.Fprintf(
+			os.Stderr,
+			"connectivity: parsing transport-neighbors record %q: %v\n",
+			record, err,
+		)
+
+		return nil, nil
 	}
 
-	return recalled
+	return recalled, nil
 }
 
 // restoreTransportNeighbors re-installs captured permanent neighbors on the given interface. One
