@@ -332,50 +332,7 @@ func preserveTransportInterface(
 	}
 
 	if !present {
-		// First pass: find the interface carrying the exact Pod address, snapshot its exact
-		// CNI-installed route set, and preserve both through the rename.
-		original, findErr := linkByAddress(podAddress)
-		if findErr != nil {
-			return nil, 0, findErr
-		}
-
-		captured, captureErr := captureTransportRoutes(original.Attrs().Index)
-		if captureErr != nil {
-			return nil, 0, captureErr
-		}
-
-		if err = netlink.LinkSetDown(original); err != nil {
-			return nil, 0, fmt.Errorf("preparing transport interface rename: %w", err)
-		}
-
-		if err = netlink.LinkSetName(original, spec.TransportInterface); err != nil {
-			_ = netlink.LinkSetUp(original)
-
-			return nil, 0, fmt.Errorf("renaming transport interface: %w", err)
-		}
-
-		if err = netlink.LinkSetUp(original); err != nil {
-			return nil, 0, fmt.Errorf("restoring transport interface: %w", err)
-		}
-
-		transport, _, err = lookupLink(spec.TransportInterface)
-		if err != nil || transport == nil {
-			return nil, 0, fmt.Errorf("transport interface vanished after rename: %w", err)
-		}
-
-		// The rename resurrects the kernel auto-connected prefix route, which the CNI may
-		// intentionally not use; converge main back to the exact snapshot once, before any
-		// device starts. Main is never touched again afterwards.
-		if err = replayTransportRoutes(
-			transport.Attrs().Index,
-			unix.RT_TABLE_MAIN,
-			captured,
-			true,
-		); err != nil {
-			return nil, 0, err
-		}
-
-		return captured, transport.Attrs().Index, nil
+		return preserveTransportColdPass(spec, podAddress)
 	}
 
 	// Steady state: the preserved interface must still carry the Pod address.
@@ -420,7 +377,121 @@ func preserveTransportInterface(
 		)
 	}
 
+	// The recorded permanent neighbors are sidecar-owned state too: a device that flushes the
+	// shared neighbor table must not leave the Pod without its gateway, and a first pass that
+	// died between the flush and the restore left the record to recover from. Only the
+	// recorded entries are re-asserted; dynamic entries and anything the kernel or the CNI
+	// added since stay with their owners.
+	// The recall path is defined to never fail — a missing file is expected on first boot
+	// with no permanent entries, and corrupt reads are reported inside the helper.
+	recalledNeighbors := recallTransportNeighbors(spec.StateDirectory)
+	if err = restoreTransportNeighbors(
+		transport.Attrs().Index,
+		recalledNeighbors,
+	); err != nil {
+		return nil, 0, err
+	}
+
 	return nil, transport.Attrs().Index, nil
+}
+
+// preserveTransportColdPass finds the interface carrying the exact Pod address, snapshots its
+// exact CNI-installed route and permanent neighbor set, and renames it to the sidecar-owned
+// transport name with both restored.
+func preserveTransportColdPass(
+	spec InterpositionSpec,
+	podAddress netip.Addr,
+) ([]capturedRoute, int, error) {
+	original, findErr := linkByAddress(podAddress)
+	if findErr != nil {
+		return nil, 0, findErr
+	}
+
+	captured, captureErr := captureTransportRoutes(original.Attrs().Index)
+	if captureErr != nil {
+		return nil, 0, captureErr
+	}
+
+	neighbors, neighborErr := captureTransportNeighbors(original.Attrs().Index)
+	if neighborErr != nil {
+		return nil, 0, neighborErr
+	}
+
+	// The entries are recorded before the link goes down: the flush is not recapturable (the
+	// next look at the interface finds the steady-state shape), so a pass or a sidecar that
+	// dies between the flush and the restore recovers them from the record on a later pass
+	// instead of stranding the Pod without its gateway. Routes are recorded only once a pass
+	// has converged; the neighbor record cannot wait for that.
+	rememberedNeighbors, rememberErr := rememberTransportNeighbors(spec.StateDirectory, neighbors)
+	if rememberErr != nil {
+		return nil, 0, rememberErr
+	}
+
+	neighbors = rememberedNeighbors
+
+	originalIndex := original.Attrs().Index
+
+	if err := netlink.LinkSetDown(original); err != nil {
+		return nil, 0, fmt.Errorf("preparing transport interface rename: %w", err)
+	}
+
+	// The flush has already happened: every failure from here to the restore must still
+	// re-install the captured entries on the same ifindex (the rename preserves it), or a
+	// retried pass observes the steady-state shape and never restores them again.
+	neighborsRestored := false
+
+	defer func() {
+		if neighborsRestored {
+			return
+		}
+
+		restoreErr := restoreTransportNeighbors(originalIndex, neighbors)
+		if restoreErr != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"connectivity: re-installing transport neighbors after a failed pass: %v\n",
+				restoreErr,
+			)
+		}
+	}()
+
+	if err := netlink.LinkSetName(original, spec.TransportInterface); err != nil {
+		_ = netlink.LinkSetUp(original)
+
+		return nil, 0, fmt.Errorf("renaming transport interface: %w", err)
+	}
+
+	if err := netlink.LinkSetUp(original); err != nil {
+		return nil, 0, fmt.Errorf("restoring transport interface: %w", err)
+	}
+
+	transport, _, lookupErr := lookupLink(spec.TransportInterface)
+	if lookupErr != nil || transport == nil {
+		return nil, 0, fmt.Errorf("transport interface vanished after rename: %w", lookupErr)
+	}
+
+	// The preserved neighbors are reinstalled while the interface is up and before the
+	// pass returns; any error between the flush and here is covered by the deferred guard.
+	// Ordering relative to the route replay below is immaterial — the tables are independent.
+	if err := restoreTransportNeighbors(transport.Attrs().Index, neighbors); err != nil {
+		return nil, 0, err
+	}
+
+	neighborsRestored = true
+
+	// The rename resurrects the kernel auto-connected prefix route, which the CNI may
+	// intentionally not use; converge main back to the exact snapshot once, before any
+	// device starts. Main is never touched again afterwards.
+	if err := replayTransportRoutes(
+		transport.Attrs().Index,
+		unix.RT_TABLE_MAIN,
+		captured,
+		true,
+	); err != nil {
+		return nil, 0, err
+	}
+
+	return captured, transport.Attrs().Index, nil
 }
 
 // linkByAddress finds the exact interface carrying the given address.

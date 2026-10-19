@@ -114,6 +114,10 @@ reconcile after an upgrade re-plans every Node once. Devices restart with their 
 
 ### 0.10.1
 
+- The sidecar now preserves CNI-installed permanent neighbor entries (e.g. the Amazon VPC
+  CNI's `169.254.1.1` gateway) across interposition and re-asserts them when a device flushes
+  the table. On EKS the missing entry stranded every direct-runtime Pod in Init; affected
+  topologies now converge without manual repair.
 - Compiled Nodes carry the new `c9s.run/originalNodeName` label with the node name the
   containerlab definition used, posted before the Kubernetes-safe rename: `R1` becomes the Node
   `r1` while the label stays `R1`, so tooling that only holds the clab file can select Nodes with
