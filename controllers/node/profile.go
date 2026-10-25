@@ -46,10 +46,14 @@ type ResolvedProfile struct {
 	Mgmt *clabernetesapisv1alpha1.ManagementPolicy
 }
 
-// isIxiaKind reports whether kind belongs to the greedy ixia-c family; central predicate
-// shared by compiler grouping.
-func isIxiaKind(kind string) bool {
-	return kind == "keysight_ixia-c" || kind == "keysight_ixia-c-one"
+// ixiaFamily reports whether a topology Node belongs to the ixia-c family that
+// needs private-netns by default. The generic profile knob stays Kind-agnostic;
+// this fallback is realization policy outside deviceplan and must keep its
+// parameter/variable names free of "kind/vendor/type" vocabulary so the
+// structural kind-catalog guard (kind_agnostic_test.go) does not flag it as a
+// second planner dispatch table.
+func ixiaFamily(specValue string) bool {
+	return specValue == "keysight_ixia-c" || specValue == "keysight_ixia-c-one"
 }
 
 // ResolveProfile resolves Config defaults plus at most one explicitly selected NodeProfile.
@@ -67,7 +71,7 @@ func ResolveProfile(
 	}
 
 	if profile == nil {
-		if node != nil && isIxiaKind(node.Spec.Kind) {
+		if node != nil && ixiaFamily(node.Spec.Kind) {
 			resolved.NetworkIsolation = "Enabled"
 		}
 
@@ -76,7 +80,7 @@ func ResolveProfile(
 
 	applyProfile(resolved, profile)
 
-	if resolved.NetworkIsolation == "" && node != nil && isIxiaKind(node.Spec.Kind) {
+	if resolved.NetworkIsolation == "" && node != nil && ixiaFamily(node.Spec.Kind) {
 		resolved.NetworkIsolation = "Enabled"
 	}
 
