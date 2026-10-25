@@ -39,13 +39,14 @@ We need a device whose *view* of the namespace contains only its own ports.
   shared-namespace today. Topology maps `spec.deployment.networkIsolation`
   through the compiler into emitted profiles unchanged.
 
-- **Automatic assignment for ixia-c.** At compile/render time the same `kind`
-  string containerlab already owns (`keysight_ixia-c-one` + alias
-  `keysight_ixia-c`) causes the controller/compiler layer to emit/select a
-  profile with `networkIsolation: Enabled` when none is explicitly set. This
-  keeps the public API generic — justification for per-kind defaulting living
-  outside `device-planning` is in `design.md` — while making ixia-c work
-  without opt-in.
+- **Automatic assignment for ixia-c.** At profile-resolution time the controller
+  inspects the same `kind` string containerlab already owns
+  (`keysight_ixia-c-one` + alias `keysight_ixia-c`) and resolves
+  `networkIsolation: Enabled` when the field is unset. Explicit profile values
+  always win. This keeps the public API generic — justification for the
+  per-kind default living outside `device-planning` is in `design.md` — while
+  making ixia-c work without opt-in. Compilation copies only explicit values
+  into emitted profiles; it does not synthesize the default.
 
 - **Lifecycle plumbing for the private netns.** A dedicated emptyDir-backed
   bind-mount (`/var/run/netns/<pod-uid>`) materialized by an init helper and
@@ -87,8 +88,8 @@ consumer proves the shape.
   generic realization policy controlling whether the Node's device containers
   run in a sidecar-created private netns. Topology maps the same field and
   defaults ixia-c kinds to `Enabled` when unset.
-- `topology-resource`: topology compilation carries the new deployment policy
-  into emitted node-profiles and applies the ixia-c default grouping.
+- `topology-resource`: topology compilation copies an explicit deployment
+  policy value into emitted NodeProfiles and leaves omitted values unset.
 - `direct-connectivity`: sidecar transport/VTEP state stays Pod-scoped; data +
   mgmt legs live behind `c9s0` in a second netns when the resolved profile
   enables isolation, discovered from the resolved profile.
@@ -100,8 +101,8 @@ consumer proves the shape.
 
 - `apis/v1alpha1/{nodeprofile,topologyspec}.go` + generated deepcopy/OpenAPI/CRDs
   (`make generate` / `make manifests`) — new deployment profile field; docs-site reference regen (`make docs`).
-- `compiler/{compile,render}.go` — map topology deployment policy into compiler input, emit dedicated profiles for the isolated group, and synthesize an isolated profile on-demand for standalone Node flows (and controller path via `internal/directpod` fallback predicate).
-- `controllers/node/profile.go` + `internal/directpod/renderer.go` — resolve `networkIsolation`, render dedicated `device-netns` emptyDir/volume+mounts only when enabled, thread pod identity into sidecar args and launch env.
+- `compiler/{compile,render}.go` — map an explicit topology deployment policy value into compiler input and emitted profiles; no default synthesis or profile grouping key change.
+- `controllers/node/profile.go` + `internal/directpod/renderer.go` — resolve `networkIsolation` (including the ixia-c family default), render dedicated `device-netns` emptyDir/volume+mounts only when enabled, thread pod identity into sidecar args and launch env.
 - `internal/directruntime/{launch,connectivity,interposition,fabric,links}_linux.go`
   + new `devicenetns_linux.go` — netns lifecycle + cross-namespace pair logic.
 - `cmd/clabernetes/cli/entrypoint.go` — new wiring flag surfaced through

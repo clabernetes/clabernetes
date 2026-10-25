@@ -922,7 +922,7 @@
                                 "description": "Deployment holds device workload settings.",
                                 "properties": {
                                     "networkIsolation": {
-                                        "description": "NetworkIsolation controls whether device containers run in a private\nnetwork namespace created by the connectivity helper. Disabled keeps the\nlegacy shared Pod network namespace; Enabled isolates data-plane interfaces\nwhile keeping sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns.\nEmpty means Disabled for compatibility; per-kind defaults populate this\nbefore emission when unset.",
+                                        "description": "NetworkIsolation controls whether device containers run in a private\nnetwork namespace created by the connectivity helper. Disabled keeps the\nlegacy shared Pod network namespace; Enabled isolates data-plane interfaces\nwhile keeping sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns.\nOmitted leaves the field unset so ResolveProfile can apply the ixia-c\nfamily default; an explicit value always wins.",
                                         "enum": [
                                             "Disabled",
                                             "Enabled",
@@ -3064,7 +3064,7 @@
                                         "type": "object"
                                     },
                                     "networkIsolation": {
-                                        "description": "NetworkIsolation controls whether device Pods place data-plane interfaces\nin a private network namespace. Disabled keeps legacy shared Pod ns;\nEnabled isolates while keeping sidecar infra (c9s0/c9sr0/c9sm0/fabric) in\nthe Pod ns. Omitted means Disabled; per-kind defaults may set Enabled.",
+                                        "description": "NetworkIsolation controls whether device Pods place data-plane interfaces\nin a private network namespace. Disabled keeps legacy shared Pod ns;\nEnabled isolates while keeping sidecar infra (c9s0/c9sr0/c9sm0/fabric) in\nthe Pod ns. Omitted leaves emitted profiles unset; the Node controller\napplies the ixia-c family default at resolve time.",
                                         "enum": [
                                             "Disabled",
                                             "Enabled",

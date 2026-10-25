@@ -1,18 +1,15 @@
-## MODIFIED Requirement: Topology emits self-contained Nodes with deployment profile grouping
+## ADDED Requirements
 
-The compiler SHALL preserve the topology's explicit `spec.deployment.networkIsolation` into emitted NodeProfiles unchanged and SHALL include that field in its profile-grouping key, so distinct isolation modes yield distinct profiles even when other policy matches. For the `keysight_ixia-c` family, an unset value from a source topology SHALL be treated as `Enabled` for emitted nodes of that kind, ensuring standalone repro topologies without manual policy converge.
+### Requirement: Topology preserves deployment network isolation policy
+
+The compiler SHALL copy an explicit `spec.deployment.networkIsolation` value into every emitted NodeProfile's `spec.deployment.networkIsolation` unchanged. An omitted value SHALL remain unset in emitted profiles; the Node controller resolves the ixia-c family default at apply time, so compilation MUST NOT synthesize it.
 
 #### Scenario: Explicit setting passes through
 
 - **WHEN** a Topology sets `spec.deployment.networkIsolation: Enabled`
-- **THEN** exactly the Nodes referencing its emitted profiles observe isolation
+- **THEN** every emitted NodeProfile carries `networkIsolation: Enabled`
 
-#### Scenario: Mixed topology groups correctly
+#### Scenario: Omitted setting remains unset
 
-- **WHEN** one Topology mixes an explicit isolated Node and a shared Node whose other deployment policy is identical
-- **THEN** the compiler emits two profiles differing only in `networkIsolation`, each referenced exactly by the Nodes in that group
-
-#### Scenario: Ixia-c default without user policy
-
-- **WHEN** a Topology contains a `keysight_ixia-c-one` Node and no explicit `networkIsolation` is declared
-- **THEN** the compiled profile for that Node has `networkIsolation: Enabled`
+- **WHEN** a Topology omits `spec.deployment.networkIsolation`
+- **THEN** emitted NodeProfiles leave the field unset, and resolve-time defaulting remains the sole source of the ixia-c family opt-in

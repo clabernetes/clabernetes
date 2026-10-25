@@ -33,24 +33,21 @@ that: planning keeps emitting unchanged `DevicePlan`/`InterfacePlan`.
 
 The knob lives one layer later — **realization policy on `NodeProfile`** —
 which by definition carries reusable, explicitly referenced workload policy.
-Topology is the natural place to map topology-level deployment policy
-(`topology.spec.deployment.networkIsolation`) into dedicated emitted profiles,
-exactly as it does for resources/persistence today. For standalone Node
-flows without Topology, `controllers/node/profile` resolves an implicit
-profile: empty means follow global defaults, but for ixia-c kinds we synthesize
-an isolated-resolved profile on resolve — still outside planning, in
-reconciliation/renderer. User explicit value always wins; the per-kind bit
-only fires when the generic field is absent, so Topology-emitted Nodes never
-need manual editing and imperative Nodes still get sane-by-default behavior.
+Topology compilation copies an explicit `topology.spec.deployment.networkIsolation`
+value into emitted profiles exactly as it does for persistence today; omitted
+values remain unset. `controllers/node/profile.ResolveProfile` is the single
+place that applies the ixia-c family default when the resolved value is empty.
+Explicit values always win, so Topology-emitted Nodes and imperative Nodes
+share identical semantics and compilation never synthesizes policy.
 
 ## API addition
 
 `apis/v1alpha1/nodeprofile.go:NodeProfileDeployment` gains optional enum
-`NetworkIsolation` (`Disabled`/`Enabled`, omitted → `Disabled`). Same field is
-mirrored on `apis/v1alpha1/topologyspec.go:Deployment` and carried through
-`compiler.Input.Deployment` into emitted NodeProfiles; standalone Nodes without
-Topology follow the per-kind default described above when the resolved profile
-is absent or leaves the field unset.
+`NetworkIsolation` (`Disabled`/`Enabled`; omitted stays unset). The same field
+is mirrored on `apis/v1alpha1/topologyspec.go:Deployment` and an explicit value
+is carried through `compiler.Input.Deployment` into emitted NodeProfiles.
+Omitted values stay unset; `ResolveProfile` applies the ixia-c family default
+when the resolved profile is absent or leaves the field empty.
 
 ## Architecture
 

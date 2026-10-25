@@ -16,6 +16,7 @@ Typical profile settings include:
 - Kubernetes image pull policy and pull Secrets
 - status probes
 - persistence
+- network isolation for device-side interfaces
 - management overlay address allocation
 
 Device privilege, capabilities, and devices are never profile policy: they come from the imported
@@ -54,6 +55,16 @@ referenced profile take precedence over supported global `Config` defaults; omit
 their built-in defaults or, where available, Config resolution. Service exposure uses the built-in
 `LoadBalancer` default because Config has no exposure-mode field. Set `spec.expose.exposeType` to
 `ClusterIP`, `Headless`, or `None` to override it.
+
+`spec.deployment.networkIsolation` selects the network-namespace layout for the device's
+data-plane interfaces. `Disabled` (the default when omitted) keeps the shared Pod network
+namespace. `Enabled` isolates the device-side interfaces in a private namespace while the
+connectivity sidecar keeps Kubernetes transport, the management router/mesh, and Link transport
+legs in the Pod namespace. Kinds in the `keysight_ixia-c` family default to isolated at profile
+resolution when no value is set, because their entrypoint claims every interface it can see; set
+`Disabled` explicitly to opt out. For a Topology, configure the equivalent field at
+`spec.deployment.networkIsolation`; the Topology controller copies an explicit value into the
+generated NodeProfile and leaves it unset otherwise.
 
 The `spec.scheduling.affinity` field accepts the native Kubernetes node affinity, pod affinity, and
 pod anti-affinity structure. A single NodeProfile can be referenced by multiple Nodes, so the

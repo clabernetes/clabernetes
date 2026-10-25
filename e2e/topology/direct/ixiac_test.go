@@ -6,12 +6,10 @@ import (
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 )
 
-// TestIxiac validates that an ixiac node starts correctly. It covers the
-// regression from #372 where the device's greedy interface handling stole
-// sidecar infra and left the Pod unready. The explicit-profile proxy keeps
-// coverage cheap (multitool dataplane), while the real ixiac case is below;
-// future light-traffic checks should extend this file rather than adding a new
-// constrained test name.
+// TestIxiac covers the profile-supported path for #372: an explicit
+// NodeProfile with networkIsolation Enabled must keep management mesh and
+// Link dataplane intact (checked here with linux proxies). Extension point for
+// future ixiac light-traffic checks; keep this file's naming generic.
 func TestIxiac(t *testing.T) {
 	t.Parallel()
 

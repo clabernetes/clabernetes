@@ -22,6 +22,12 @@ func TestDirectRuntimeSourceContainsNoContainerlabKindKnowledge(t *testing.T) {
 	legacyNestedFiles := map[string]bool{
 		filepath.Clean("../../controllers/node/deployment.go"): true,
 	}
+	// kindPolicyFunctions is the explicit, function-scoped allowlist for
+	// realization policy that must inspect the Node kind outside device
+	// planning. Entries are keyed by absolute file path plus function name.
+	kindPolicyFunctions := map[string]string{
+		filepath.Clean("../../controllers/node/profile.go") + ":ixiaFamily": "the ixia-c family default is NodeProfile realization policy applied at resolve time; planner remains kind-agnostic",
+	}
 
 	for _, directory := range []string{
 		".",
@@ -63,12 +69,51 @@ func TestDirectRuntimeSourceContainsNoContainerlabKindKnowledge(t *testing.T) {
 				}
 			}
 
-			assertNoKindDispatch(t, fset, parsed)
+			assertNoKindDispatch(
+				t,
+				fset,
+				parsed,
+				allowedKindPolicyRanges(parsed, filename, kindPolicyFunctions),
+			)
 		}
 	}
 }
 
-func assertNoKindDispatch(t *testing.T, fset *token.FileSet, parsed *ast.File) {
+type tokenRange struct {
+	start token.Pos
+	end   token.Pos
+}
+
+// allowedKindPolicyRanges resolves the function-scoped allowlist for one file.
+func allowedKindPolicyRanges(
+	parsed *ast.File,
+	filename string,
+	allowed map[string]string,
+) []tokenRange {
+	ranges := make([]tokenRange, 0)
+
+	for _, declaration := range parsed.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Name == nil {
+			continue
+		}
+
+		if _, present := allowed[filename+":"+function.Name.Name]; !present {
+			continue
+		}
+
+		ranges = append(ranges, tokenRange{start: function.Pos(), end: function.End()})
+	}
+
+	return ranges
+}
+
+func assertNoKindDispatch(
+	t *testing.T,
+	fset *token.FileSet,
+	parsed *ast.File,
+	allowed []tokenRange,
+) {
 	t.Helper()
 
 	kindConstants := map[string]bool{}
@@ -98,7 +143,7 @@ func assertNoKindDispatch(t *testing.T, fset *token.FileSet, parsed *ast.File) {
 
 			if (expressionCarriesKindIdentity(value.X) && kindIdentityValue(value.Y, kindConstants)) ||
 				(expressionCarriesKindIdentity(value.Y) && kindIdentityValue(value.X, kindConstants)) {
-				reportKindDispatch(t, fset, value.Pos())
+				reportKindDispatch(t, fset, value.Pos(), allowed)
 			}
 		case *ast.SwitchStmt:
 			if !expressionCarriesKindIdentity(value.Tag) {
@@ -113,7 +158,7 @@ func assertNoKindDispatch(t *testing.T, fset *token.FileSet, parsed *ast.File) {
 
 				for _, expression := range clause.List {
 					if kindIdentityValue(expression, kindConstants) {
-						reportKindDispatch(t, fset, expression.Pos())
+						reportKindDispatch(t, fset, expression.Pos(), allowed)
 					}
 				}
 			}
@@ -121,7 +166,7 @@ func assertNoKindDispatch(t *testing.T, fset *token.FileSet, parsed *ast.File) {
 			for index, name := range value.Names {
 				if kindKnowledgeName(name.Name) && index < len(value.Values) &&
 					containsNonEmptyStringLiteral(value.Values[index]) {
-					reportKindDispatch(t, fset, value.Pos())
+					reportKindDispatch(t, fset, value.Pos(), allowed)
 				}
 			}
 		case *ast.AssignStmt:
@@ -129,7 +174,7 @@ func assertNoKindDispatch(t *testing.T, fset *token.FileSet, parsed *ast.File) {
 				identifier, ok := left.(*ast.Ident)
 				if ok && kindKnowledgeName(identifier.Name) && index < len(value.Rhs) &&
 					containsNonEmptyStringLiteral(value.Rhs[index]) {
-					reportKindDispatch(t, fset, value.Pos())
+					reportKindDispatch(t, fset, value.Pos(), allowed)
 				}
 			}
 		}
@@ -231,8 +276,19 @@ func containsNonEmptyStringLiteral(node ast.Node) bool {
 	return result
 }
 
-func reportKindDispatch(t *testing.T, fset *token.FileSet, position token.Pos) {
+func reportKindDispatch(
+	t *testing.T,
+	fset *token.FileSet,
+	position token.Pos,
+	allowed []tokenRange,
+) {
 	t.Helper()
+
+	for _, permitted := range allowed {
+		if position >= permitted.start && position <= permitted.end {
+			return
+		}
+	}
 
 	location := fset.Position(position)
 	t.Errorf(

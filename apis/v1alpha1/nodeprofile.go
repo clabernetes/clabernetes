@@ -81,14 +81,14 @@ type NodeProfileImagePull struct {
 	PullSecrets []string `json:"pullSecrets,omitempty"`
 }
 
-// NodeProfileDeployment holds portable direct workload persistence policy.
+// NodeProfileDeployment holds portable direct workload policy.
 type NodeProfileDeployment struct {
 	// NetworkIsolation controls whether device containers run in a private
 	// network namespace created by the connectivity helper. Disabled keeps the
 	// legacy shared Pod network namespace; Enabled isolates data-plane interfaces
 	// while keeping sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns.
-	// Empty means Disabled for compatibility; per-kind defaults populate this
-	// before emission when unset.
+	// Omitted leaves the field unset so ResolveProfile can apply the ixia-c
+	// family default; an explicit value always wins.
 	// +kubebuilder:validation:Enum=Disabled;Enabled;""
 	// +optional
 	NetworkIsolation string `json:"networkIsolation,omitempty"`

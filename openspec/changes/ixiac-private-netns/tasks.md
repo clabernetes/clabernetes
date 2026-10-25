@@ -6,10 +6,10 @@
 
 - [ ] CRD/API plumbing
   - [ ] Extend `apis/v1alpha1/nodeprofile.go:NodeProfileDeployment` + `apis/v1alpha1/topologyspec.go:Deployment` with optional enum `networkIsolation` (`Disabled`/`Enabled`, default `Disabled`); emit deepcopy/OpenAPI/CRDs via `make generate && make manifests`; regen docs-site (`make docs`)
-  - [ ] Thread field through `compiler/{compile,render}.go` — bucket topologies by deployment policy including isolation so ixia-c nodes land in their own dedicated NodeProfile; add ixia-c → `Enabled` default when topology leaves it unset (Topology path)
+  - [ ] Thread field through `compiler/{compile,render}.go` as an explicit passthrough only; omitted values stay unset in emitted profiles (no compiler-side defaulting or grouping-key change)
 
 - [ ] Resolver/renderer plumbing
-  - [ ] Teach `controllers/node/profile.go` (`ResolvedProfile`) to carry `NetworkIsolation` through `applyProfileDeployment`, honoring explicit values and layering the ixia-c implicit default when the profile field is absent/empty (standalone Node path)
+  - [ ] Teach `controllers/node/profile.go` (`ResolvedProfile`) to carry `NetworkIsolation` through `applyProfileDeployment`, honoring explicit values and layering the ixia-c family default when the resolved value is empty (single defaulting site)
   - [ ] In `internal/directpod/renderer.go`, gate `device-netns` emptyDir volume + mounts to when `resolvedProfile.networkIsolation == Enabled`; thread pod UID/name into sidecar args and launch-ops env
   - [ ] Extend renderer + compiler render tests (normalize fixtures with isolated vs shared profiles; assert volume/mounts absent for non-isolated kinds)
 

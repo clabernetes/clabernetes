@@ -547,6 +547,49 @@ func TestRenderNodeProfiles(t *testing.T) {
 	assertPerNodeNodeProfile(t, profiles[1])
 }
 
+func TestRenderNodeProfilesCarriesNetworkIsolationWithPersistence(t *testing.T) {
+	t.Parallel()
+
+	topology, compiled := renderTestTopology(t)
+	topology.Spec.Deployment.NetworkIsolation = "Enabled"
+	topology.Spec.Deployment.Persistence = clabernetesapisv1alpha1.Persistence{
+		Enabled:   true,
+		ClaimSize: "1Gi",
+	}
+
+	_, _, profiles, err := clabernetescompiler.RenderAll(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
+
+	for _, profile := range profiles {
+		if profile.Spec.Deployment == nil {
+			t.Fatalf("profile %q has no deployment policy", profile.GetName())
+		}
+
+		if profile.Spec.Deployment.NetworkIsolation != "Enabled" {
+			t.Fatalf(
+				"profile %q networkIsolation = %q, want Enabled",
+				profile.GetName(),
+				profile.Spec.Deployment.NetworkIsolation,
+			)
+		}
+
+		if profile.Spec.Deployment.Persistence == nil ||
+			!profile.Spec.Deployment.Persistence.Enabled {
+			t.Fatalf(
+				"profile %q lost persistence while rendering networkIsolation: %+v",
+				profile.GetName(),
+				profile.Spec.Deployment,
+			)
+		}
+	}
+}
+
 func TestRenderNodeProfilesPreservesNoneExposeType(t *testing.T) {
 	t.Parallel()
 
