@@ -36,6 +36,9 @@ type ResolvedProfile struct {
 	// direct workload persistence settings
 	Persistence clabernetesapisv1alpha1.Persistence
 
+	// NetworkIsolation controls private netns mode.
+	NetworkIsolation string
+
 	// status probes
 	StatusProbes clabernetesapisv1alpha1.StatusProbes
 
@@ -43,9 +46,15 @@ type ResolvedProfile struct {
 	Mgmt *clabernetesapisv1alpha1.ManagementPolicy
 }
 
+// isIxiaKind reports whether kind belongs to the greedy ixia-c family; central predicate
+// shared by compiler grouping.
+func isIxiaKind(kind string) bool {
+	return kind == "keysight_ixia-c" || kind == "keysight_ixia-c-one"
+}
+
 // ResolveProfile resolves Config defaults plus at most one explicitly selected NodeProfile.
 func ResolveProfile(
-	_ *clabernetesapisv1alpha1.Node,
+	node *clabernetesapisv1alpha1.Node,
 	profile *clabernetesapisv1alpha1.NodeProfile,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) (*ResolvedProfile, error) {
@@ -58,10 +67,19 @@ func ResolveProfile(
 	}
 
 	if profile == nil {
+		if node != nil && isIxiaKind(node.Spec.Kind) {
+			resolved.NetworkIsolation = "Enabled"
+		}
+
 		return resolved, nil
 	}
 
 	applyProfile(resolved, profile)
+
+	if resolved.NetworkIsolation == "" && node != nil && isIxiaKind(node.Spec.Kind) {
+		resolved.NetworkIsolation = "Enabled"
+	}
+
 	resolved.AppliedProfile = &clabernetesapisv1alpha1.AppliedProfileStatus{
 		Name:       profile.GetName(),
 		UID:        profile.GetUID(),
@@ -157,6 +175,10 @@ func applyProfileDeployment(
 ) {
 	if deployment == nil {
 		return
+	}
+
+	if deployment.NetworkIsolation != "" {
+		resolved.NetworkIsolation = deployment.NetworkIsolation
 	}
 
 	if deployment.Persistence != nil {

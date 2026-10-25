@@ -83,6 +83,15 @@ type NodeProfileImagePull struct {
 
 // NodeProfileDeployment holds portable direct workload persistence policy.
 type NodeProfileDeployment struct {
+	// NetworkIsolation controls whether device containers run in a private
+	// network namespace created by the connectivity helper. Disabled keeps the
+	// legacy shared Pod network namespace; Enabled isolates data-plane interfaces
+	// while keeping sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns.
+	// Empty means Disabled for compatibility; per-kind defaults populate this
+	// before emission when unset.
+	// +kubebuilder:validation:Enum=Disabled;Enabled;""
+	// +optional
+	NetworkIsolation string `json:"networkIsolation,omitempty"`
 	// Persistence enables persistence of the containerlab working directory.
 	// +optional
 	Persistence *Persistence `json:"persistence,omitempty"`

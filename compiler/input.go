@@ -40,6 +40,8 @@ type Input struct {
 
 // Deployment carries the per-node deployment policy of the clabernetes Topology spec.
 type Deployment struct {
+	// NetworkIsolation controls private netns mode for device Pods.
+	NetworkIsolation string `json:"networkIsolation,omitempty"`
 	// FilesFromConfigMap maps source node names to ConfigMap-backed file projections.
 	FilesFromConfigMap map[string][]FileFromConfigMap `json:"filesFromConfigMap,omitempty"`
 	// FilesFromSecret maps source node names to Secret-backed file projections.

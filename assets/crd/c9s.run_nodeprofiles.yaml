@@ -51,6 +51,19 @@ spec:
               deployment:
                 description: Deployment holds device workload settings.
                 properties:
+                  networkIsolation:
+                    description: |-
+                      NetworkIsolation controls whether device containers run in a private
+                      network namespace created by the connectivity helper. Disabled keeps the
+                      legacy shared Pod network namespace; Enabled isolates data-plane interfaces
+                      while keeping sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns.
+                      Empty means Disabled for compatibility; per-kind defaults populate this
+                      before emission when unset.
+                    enum:
+                    - Disabled
+                    - Enabled
+                    - ""
+                    type: string
                   persistence:
                     description: Persistence enables persistence of the containerlab
                       working directory.

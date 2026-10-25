@@ -843,13 +843,25 @@ func applyProfileDeploymentSpec(
 		spec["scheduling"] = raw
 	}
 
+	if input.Deployment.NetworkIsolation != "" {
+		if _, hasDeployment := spec["deployment"]; !hasDeployment {
+			spec["deployment"] = map[string]any{}
+		}
+
+		spec["deployment"].(map[string]any)["networkIsolation"] = input.Deployment.NetworkIsolation
+	}
+
 	if persistence := input.Deployment.Persistence; persistence != nil && persistence.Enabled {
 		raw, err := jsonPayload(persistence)
 		if err != nil {
 			return err
 		}
 
-		spec["deployment"] = map[string]any{"persistence": raw}
+		if _, hasDeployment := spec["deployment"]; !hasDeployment {
+			spec["deployment"] = map[string]any{}
+		}
+
+		spec["deployment"].(map[string]any)["persistence"] = raw
 	}
 
 	return nil

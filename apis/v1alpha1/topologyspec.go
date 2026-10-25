@@ -157,6 +157,13 @@ type Expose struct {
 
 // Deployment holds portable policy compiled into direct Node workloads.
 type Deployment struct {
+	// NetworkIsolation controls whether device Pods place data-plane interfaces
+	// in a private network namespace. Disabled keeps legacy shared Pod ns;
+	// Enabled isolates while keeping sidecar infra (c9s0/c9sr0/c9sm0/fabric) in
+	// the Pod ns. Omitted means Disabled; per-kind defaults may set Enabled.
+	// +kubebuilder:validation:Enum=Disabled;Enabled;""
+	// +optional
+	NetworkIsolation string `json:"networkIsolation,omitempty"`
 	// Resources is a mapping of nodeName (or "default") to kubernetes resource requirements -- any
 	// value set here overrides the "global" config resource definitions. If a key "default" is set,
 	// those resource values will be preferred over *all global settings* for this topology --
