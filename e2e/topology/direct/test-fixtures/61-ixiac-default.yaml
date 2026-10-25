@@ -1,8 +1,0 @@
----
-apiVersion: c9s.run/v1alpha1
-kind: Node
-metadata:
-  name: ixia-default
-spec:
-  kind: keysight_ixia-c-one
-  image: ghcr.io/srl-labs/network-multitool
