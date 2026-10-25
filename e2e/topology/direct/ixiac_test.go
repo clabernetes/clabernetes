@@ -34,7 +34,12 @@ func TestIxiac(t *testing.T) {
 			}
 		}()
 
-		clabernetestesthelper.KubectlFileOp(t, clabernetestesthelper.Apply, namespace, "test-fixtures/60-ixiac.yaml")
+		clabernetestesthelper.KubectlFileOp(
+			t,
+			clabernetestesthelper.Apply,
+			namespace,
+			"test-fixtures/60-ixiac.yaml",
+		)
 
 		for _, nodeName := range []string{"iso-lin1", "iso-lin2"} {
 			waitForDirectNodeReady(t, namespace, nodeName)
@@ -47,10 +52,28 @@ func TestIxiac(t *testing.T) {
 		// to live in private netns once runtime plumbing lands — today this
 		// just proves we didn't break non-isolated paths with new CRD fields.
 		mgmt := poolMixedManagementAddresses(t, namespace, 2)
-		waitForDeviceCommand(t, namespace, d1, []string{"ping", "-4", "-c", "2", "-W", "2", mgmt["iso-lin2"]}, " 0% packet loss")
-		waitForDeviceCommand(t, namespace, d2, []string{"ping", "-4", "-c", "2", "-W", "2", mgmt["iso-lin1"]}, " 0% packet loss")
+		waitForDeviceCommand(
+			t,
+			namespace,
+			d1,
+			[]string{"ping", "-4", "-c", "2", "-W", "2", mgmt["iso-lin2"]},
+			" 0% packet loss",
+		)
+		waitForDeviceCommand(
+			t,
+			namespace,
+			d2,
+			[]string{"ping", "-4", "-c", "2", "-W", "2", mgmt["iso-lin1"]},
+			" 0% packet loss",
+		)
 
-		waitForDeviceCommand(t, namespace, d1, []string{"ping", "-c", "2", "-W", "2", "192.168.90.1"}, " 0% packet loss")
+		waitForDeviceCommand(
+			t,
+			namespace,
+			d1,
+			[]string{"ping", "-c", "2", "-W", "2", "192.168.90.1"},
+			" 0% packet loss",
+		)
 	})
 
 	t.Run("starts with implicit per-kind defaults", func(t *testing.T) {
@@ -69,20 +92,36 @@ func TestIxiac(t *testing.T) {
 			}
 		}()
 
-		clabernetestesthelper.KubectlFileOp(t, clabernetestesthelper.Apply, namespace, "test-fixtures/61-ixiac-default.yaml")
+		clabernetestesthelper.KubectlFileOp(
+			t,
+			clabernetestesthelper.Apply,
+			namespace,
+			"test-fixtures/61-ixiac-default.yaml",
+		)
 
 		// Poll Deployment spec briefly for the future isolation volume without
 		// requiring full Node readiness (runtime plumbing still pending).
-		for i := 0; i < 6; i++ {
+		for i := 0; i < 6; i++ { //nolint:intrange,modernize
 			if assertDevicePodVolumeMount(t, namespace, "ixia-default", "Enabled") {
 				break
 			}
+
 			if i == 5 {
-				t.Logf("PENDING isolation volume: deployment %q has no device-netns volume yet (expected once runtime slice lands)", "ixia-default")
+				t.Logf(
+					"PENDING isolation volume: deployment %q has no device-netns volume yet (expected once runtime slice lands)",
+					"ixia-default",
+				)
+
 				break
 			}
+
 			// small backoff
-			clabernetestesthelper.KubectlWaitForOutput(t, directPollInterval, []string{"get", "deployment", "ixia-default", "--namespace", namespace}, "")
+			clabernetestesthelper.KubectlWaitForOutput(
+				t,
+				directPollInterval,
+				[]string{"get", "deployment", "ixia-default", "--namespace", namespace},
+				"",
+			)
 		}
 	})
 }
@@ -94,8 +133,8 @@ func TestIxiac(t *testing.T) {
 func assertDevicePodVolumeMount(t *testing.T, namespace, nodeName, expect string) bool {
 	t.Helper()
 
-	cmd := exec.CommandContext(t.Context(), "kubectl", "get", "deployment",
-		nodeName, "--namespace", namespace, "-o", "json") //nolint:gosec
+	cmd := exec.CommandContext(t.Context(), "kubectl", "get", "deployment", //nolint:gosec
+		nodeName, "--namespace", namespace, "-o", "json")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return false
@@ -117,9 +156,11 @@ func assertDevicePodVolumeMount(t *testing.T, namespace, nodeName, expect string
 	}
 
 	found := false
+
 	for _, v := range dep.Spec.Template.Spec.Volumes {
 		if strings.Contains(v.Name, "netns") || v.Name == "device-netns" {
 			found = true
+
 			break
 		}
 	}
@@ -127,8 +168,10 @@ func assertDevicePodVolumeMount(t *testing.T, namespace, nodeName, expect string
 	if expect == "Enabled" && !found {
 		return false
 	}
+
 	if expect == "Disabled" && found {
 		t.Fatalf("deployment %q has unexpected isolation volume for mode %s", nodeName, expect)
 	}
+
 	return true
 }

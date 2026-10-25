@@ -844,11 +844,13 @@ func applyProfileDeploymentSpec(
 	}
 
 	if input.Deployment.NetworkIsolation != "" {
-		if _, hasDeployment := spec["deployment"]; !hasDeployment {
-			spec["deployment"] = map[string]any{}
+		deploymentSpec, ok := spec["deployment"].(map[string]any)
+		if !ok {
+			deploymentSpec = map[string]any{}
+			spec["deployment"] = deploymentSpec
 		}
 
-		spec["deployment"].(map[string]any)["networkIsolation"] = input.Deployment.NetworkIsolation
+		deploymentSpec["networkIsolation"] = input.Deployment.NetworkIsolation
 	}
 
 	if persistence := input.Deployment.Persistence; persistence != nil && persistence.Enabled {
@@ -857,11 +859,13 @@ func applyProfileDeploymentSpec(
 			return err
 		}
 
-		if _, hasDeployment := spec["deployment"]; !hasDeployment {
-			spec["deployment"] = map[string]any{}
+		deploymentSpec, ok := spec["deployment"].(map[string]any)
+		if !ok {
+			deploymentSpec = map[string]any{}
+			spec["deployment"] = deploymentSpec
 		}
 
-		spec["deployment"].(map[string]any)["persistence"] = raw
+		deploymentSpec["persistence"] = raw
 	}
 
 	return nil
