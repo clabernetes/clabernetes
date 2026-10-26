@@ -6,8 +6,8 @@ The compiler SHALL copy an explicit `spec.deployment.networkIsolation` value int
 
 #### Scenario: Explicit setting passes through
 
-- **WHEN** a Topology sets `spec.deployment.networkIsolation: Enabled`
-- **THEN** every emitted NodeProfile carries `networkIsolation: Enabled`
+- **WHEN** a Topology sets `spec.deployment.networkIsolation: true`
+- **THEN** every emitted NodeProfile carries `networkIsolation: true`
 
 #### Scenario: Omitted setting remains unset
 

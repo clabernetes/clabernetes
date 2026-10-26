@@ -7,7 +7,7 @@ import (
 )
 
 // TestIxiac covers the profile-supported path for #372: an explicit
-// NodeProfile with networkIsolation Enabled must keep management mesh and
+// NodeProfile with networkIsolation true must keep management mesh and
 // Link dataplane intact (checked here with linux proxies). Extension point for
 // future ixiac light-traffic checks; keep this file's naming generic.
 func TestIxiac(t *testing.T) {

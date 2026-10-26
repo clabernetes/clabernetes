@@ -843,8 +843,8 @@ func applyProfileDeploymentSpec(
 		spec["scheduling"] = raw
 	}
 
-	if input.Deployment.NetworkIsolation != "" {
-		profileDeploymentSpec(spec)["networkIsolation"] = input.Deployment.NetworkIsolation
+	if input.Deployment.NetworkIsolation != nil {
+		profileDeploymentSpec(spec)["networkIsolation"] = *input.Deployment.NetworkIsolation
 	}
 
 	if persistence := input.Deployment.Persistence; persistence != nil && persistence.Enabled {

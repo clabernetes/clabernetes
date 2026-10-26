@@ -36,8 +36,8 @@ type ResolvedProfile struct {
 	// direct workload persistence settings
 	Persistence clabernetesapisv1alpha1.Persistence
 
-	// NetworkIsolation records the requested private netns mode. Runtime enforcement is staged.
-	NetworkIsolation string
+	// NetworkIsolation records the resolved private netns mode. Runtime enforcement is staged.
+	NetworkIsolation bool
 
 	// status probes
 	StatusProbes clabernetesapisv1alpha1.StatusProbes
@@ -63,24 +63,17 @@ func ResolveProfile(
 	configManager := configManagerGetter()
 
 	resolved := &ResolvedProfile{
-		ExposeType:      "LoadBalancer",
-		ImagePullPolicy: configManager.GetApplicationImagePullPolicy(),
-		PullSecrets:     configManager.GetImagePullSecrets(),
+		ExposeType:       "LoadBalancer",
+		ImagePullPolicy:  configManager.GetApplicationImagePullPolicy(),
+		PullSecrets:      configManager.GetImagePullSecrets(),
+		NetworkIsolation: node != nil && ixiaFamily(node.Spec.Kind),
 	}
 
 	if profile == nil {
-		if node != nil && ixiaFamily(node.Spec.Kind) {
-			resolved.NetworkIsolation = "Enabled"
-		}
-
 		return resolved, nil
 	}
 
 	applyProfile(resolved, profile)
-
-	if resolved.NetworkIsolation == "" && node != nil && ixiaFamily(node.Spec.Kind) {
-		resolved.NetworkIsolation = "Enabled"
-	}
 
 	resolved.AppliedProfile = &clabernetesapisv1alpha1.AppliedProfileStatus{
 		Name:       profile.GetName(),
@@ -179,8 +172,8 @@ func applyProfileDeployment(
 		return
 	}
 
-	if deployment.NetworkIsolation != "" {
-		resolved.NetworkIsolation = deployment.NetworkIsolation
+	if deployment.NetworkIsolation != nil {
+		resolved.NetworkIsolation = *deployment.NetworkIsolation
 	}
 
 	if deployment.Persistence != nil {

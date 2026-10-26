@@ -932,8 +932,8 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Deployment(
 				Properties: map[string]spec.Schema{
 					"networkIsolation": {
 						SchemaProps: spec.SchemaProps{
-							Description: "NetworkIsolation records the requested network-namespace layout for device Pods. Disabled keeps the legacy shared Pod ns. Enabled requests a private namespace for data-plane interfaces while keeping sidecar infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; the direct runtime accepts and propagates this value but does not enforce isolation yet. Omitted leaves emitted profiles unset; the Node controller applies the ixia-c family default at resolve time.",
-							Type:        []string{"string"},
+							Description: "NetworkIsolation requests a private network namespace for device Pods. True requests isolation while keeping sidecar infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; false keeps the legacy shared Pod ns. The direct runtime accepts and propagates this value but does not enforce isolation yet. Omitted leaves emitted profiles unset; the Node controller applies the ixia-c family default at resolve time.",
+							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},
@@ -2568,8 +2568,8 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileDeployment(
 				Properties: map[string]spec.Schema{
 					"networkIsolation": {
 						SchemaProps: spec.SchemaProps{
-							Description: "NetworkIsolation records the requested network-namespace layout for the device's data-plane interfaces. Disabled keeps the legacy shared Pod network namespace. Enabled requests a private namespace while keeping sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; the direct runtime accepts and propagates this value but does not enforce isolation yet. Omitted leaves the field unset so ResolveProfile can apply the ixia-c family default; an explicit value always wins.",
-							Type:        []string{"string"},
+							Description: "NetworkIsolation requests a private network namespace for the device's data-plane interfaces. True requests isolation while keeping sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; false keeps the legacy shared Pod network namespace. The direct runtime accepts and propagates this value but does not enforce isolation yet. Omitted leaves the field unset so ResolveProfile can apply the ixia-c family default; an explicit value always wins.",
+							Type:        []string{"boolean"},
 							Format:      "",
 						},
 					},

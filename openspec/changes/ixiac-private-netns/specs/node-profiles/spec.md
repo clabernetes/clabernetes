@@ -6,12 +6,12 @@
 
 #### Scenario: Explicit opt-in
 
-- **WHEN** a referenced NodeProfile sets `networkIsolation: Enabled`
+- **WHEN** a referenced NodeProfile sets `networkIsolation: true`
 - **THEN** affected Nodes run with device-netns isolation regardless of kind
 
 #### Scenario: Explicit opt-out overrides default
 
-- **WHEN** a `keysight_ixia-c-one` Node references a NodeProfile with `networkIsolation: Disabled`
+- **WHEN** a `keysight_ixia-c-one` Node references a NodeProfile with `networkIsolation: false`
 - **THEN** the Node stays in shared-namespace mode despite the implicit kind default and exhibits the pre-existing greedy-interface failure until re-profiled
 
 #### Scenario: Omitted value inherits family default

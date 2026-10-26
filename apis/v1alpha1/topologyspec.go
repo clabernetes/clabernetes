@@ -157,16 +157,14 @@ type Expose struct {
 
 // Deployment holds portable policy compiled into direct Node workloads.
 type Deployment struct {
-	// NetworkIsolation records the requested network-namespace layout for device
-	// Pods. Disabled keeps the legacy shared Pod ns. Enabled requests a private
-	// namespace for data-plane interfaces while keeping sidecar infra
-	// (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; the direct runtime accepts and
-	// propagates this value but does not enforce isolation yet. Omitted leaves
-	// emitted profiles unset; the Node controller applies the ixia-c family
-	// default at resolve time.
-	// +kubebuilder:validation:Enum=Disabled;Enabled;""
+	// NetworkIsolation requests a private network namespace for device Pods.
+	// True requests isolation while keeping sidecar infra
+	// (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; false keeps the legacy shared Pod
+	// ns. The direct runtime accepts and propagates this value but does not
+	// enforce isolation yet. Omitted leaves emitted profiles unset; the Node
+	// controller applies the ixia-c family default at resolve time.
 	// +optional
-	NetworkIsolation string `json:"networkIsolation,omitempty"`
+	NetworkIsolation *bool `json:"networkIsolation,omitempty"`
 	// Resources is a mapping of nodeName (or "default") to kubernetes resource requirements -- any
 	// value set here overrides the "global" config resource definitions. If a key "default" is set,
 	// those resource values will be preferred over *all global settings* for this topology --

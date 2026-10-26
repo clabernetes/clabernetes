@@ -33,16 +33,16 @@ We need a device whose *view* of the namespace contains only its own ports.
 ## What Changes
 
 - **Explicit profile setting for isolation.** Add a generic knob
-  `NodeProfile.spec.deployment.networkIsolation` (string enum, values `Disabled`
-  / `Enabled`, optional, defaults to `Disabled`) as reusable realization policy.
-  Any Node referencing the profile inherits the behavior; omitted means
-  shared-namespace today. Topology maps `spec.deployment.networkIsolation`
-  through the compiler into emitted profiles unchanged.
+  `NodeProfile.spec.deployment.networkIsolation` (optional `*bool`) as reusable
+  realization policy. Any Node referencing the profile inherits the behavior;
+  omitted leaves the field unset so resolution can apply the kind default.
+  Topology maps `spec.deployment.networkIsolation` through the compiler into
+  emitted profiles unchanged.
 
 - **Automatic assignment for ixia-c.** At profile-resolution time the controller
   inspects the same `kind` string containerlab already owns
   (`keysight_ixia-c-one` + alias `keysight_ixia-c`) and resolves
-  `networkIsolation: Enabled` when the field is unset. Explicit profile values
+  `networkIsolation: true` when the field is unset. Explicit profile values
   always win. This keeps the public API generic — justification for the
   per-kind default living outside `device-planning` is in `design.md` — while
   making ixia-c work without opt-in. Compilation copies only explicit values
@@ -87,7 +87,7 @@ consumer proves the shape.
 - `node-profiles`: `NodeProfile` gains `spec.deployment.networkIsolation` as a
   generic realization policy controlling whether the Node's device containers
   run in a sidecar-created private netns. Topology maps the same field and
-  defaults ixia-c kinds to `Enabled` when unset.
+  resolves isolation to `true` for ixia-c kinds when unset.
 - `topology-resource`: topology compilation copies an explicit deployment
   policy value into emitted NodeProfiles and leaves omitted values unset.
 - `direct-connectivity`: sidecar transport/VTEP state stays Pod-scoped; data +

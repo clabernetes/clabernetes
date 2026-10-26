@@ -179,18 +179,13 @@ spec:
                     type: object
                   networkIsolation:
                     description: |-
-                      NetworkIsolation records the requested network-namespace layout for device
-                      Pods. Disabled keeps the legacy shared Pod ns. Enabled requests a private
-                      namespace for data-plane interfaces while keeping sidecar infra
-                      (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; the direct runtime accepts and
-                      propagates this value but does not enforce isolation yet. Omitted leaves
-                      emitted profiles unset; the Node controller applies the ixia-c family
-                      default at resolve time.
-                    enum:
-                    - Disabled
-                    - Enabled
-                    - ""
-                    type: string
+                      NetworkIsolation requests a private network namespace for device Pods.
+                      True requests isolation while keeping sidecar infra
+                      (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; false keeps the legacy shared Pod
+                      ns. The direct runtime accepts and propagates this value but does not
+                      enforce isolation yet. Omitted leaves emitted profiles unset; the Node
+                      controller applies the ixia-c family default at resolve time.
+                    type: boolean
                   persistence:
                     description: Persistence holds direct device artifact persistence
                       policy.

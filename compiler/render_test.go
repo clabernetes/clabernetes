@@ -551,7 +551,8 @@ func TestRenderNodeProfilesCarriesNetworkIsolationWithPersistence(t *testing.T) 
 	t.Parallel()
 
 	topology, compiled := renderTestTopology(t)
-	topology.Spec.Deployment.NetworkIsolation = "Enabled"
+	enabled := true
+	topology.Spec.Deployment.NetworkIsolation = &enabled
 	topology.Spec.Deployment.Persistence = clabernetesapisv1alpha1.Persistence{
 		Enabled:   true,
 		ClaimSize: "1Gi",
@@ -571,11 +572,14 @@ func TestRenderNodeProfilesCarriesNetworkIsolationWithPersistence(t *testing.T) 
 			t.Fatalf("profile %q has no deployment policy", profile.GetName())
 		}
 
-		if profile.Spec.Deployment.NetworkIsolation != "Enabled" {
+		if profile.Spec.Deployment.NetworkIsolation == nil {
+			t.Fatalf("profile %q networkIsolation is unset, want true", profile.GetName())
+		}
+
+		if !*profile.Spec.Deployment.NetworkIsolation {
 			t.Fatalf(
-				"profile %q networkIsolation = %q, want Enabled",
+				"profile %q networkIsolation = false, want true",
 				profile.GetName(),
-				profile.Spec.Deployment.NetworkIsolation,
 			)
 		}
 

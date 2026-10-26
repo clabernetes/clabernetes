@@ -25,10 +25,10 @@ Kubernetes transport — Pod IP reachability, default egress, cluster CIDR routi
 
 #### Scenario: Private device netns when enabled
 
-- **WHEN** a Node's resolved NodeProfile has `networkIsolation: Enabled`
+- **WHEN** a Node's resolved NodeProfile has `networkIsolation: true`
 - **THEN** its device container starts inside a sidecar-created private netns containing only its device-side ports while the sidecar keeps `c9s0`, `c9sr0`, `c9sm0`, and each fabric sidecar leg in the Pod namespace linked across namespaces by veth pairs
 
 #### Scenario: Ixia-c family default at profile resolution
 
 - **WHEN** a `keysight_ixia-c-one` (or alias `keysight_ixia-c`) Node resolves a profile with no explicit `networkIsolation`
-- **THEN** profile resolution enables isolation so the single-Node repro behind #372 converges without manual opt-in, and an explicit `Disabled` still wins
+- **THEN** profile resolution enables isolation so the single-Node repro behind #372 converges without manual opt-in, and an explicit `false` still wins

@@ -7,7 +7,7 @@ spec:
   expose:
     disableAutoExpose: true
   deployment:
-    networkIsolation: Enabled
+    networkIsolation: true
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Link

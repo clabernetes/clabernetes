@@ -42,12 +42,12 @@ share identical semantics and compilation never synthesizes policy.
 
 ## API addition
 
-`apis/v1alpha1/nodeprofile.go:NodeProfileDeployment` gains optional enum
-`NetworkIsolation` (`Disabled`/`Enabled`; omitted stays unset). The same field
-is mirrored on `apis/v1alpha1/topologyspec.go:Deployment` and an explicit value
-is carried through `compiler.Input.Deployment` into emitted NodeProfiles.
-Omitted values stay unset; `ResolveProfile` applies the ixia-c family default
-when the resolved profile is absent or leaves the field empty.
+`apis/v1alpha1/nodeprofile.go:NodeProfileDeployment` gains optional `*bool`
+`NetworkIsolation`; omitted stays unset. The same field is mirrored on
+`apis/v1alpha1/topologyspec.go:Deployment` and an explicit value is carried
+through `compiler.Input.Deployment` into emitted NodeProfiles. Omitted values
+stay unset; `ResolveProfile` applies the ixia-c family default when the
+resolved profile is absent or leaves the field unset.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ when the resolved profile is absent or leaves the field empty.
 1. A dedicated emptyDir volume (`device-netns`) is mounted at `/var/run/netns`
    in both an init container `device-netns-init` (first in
    `spec.initContainers`) and the `clabwire` sidecar + every application
-   container — **only when** the resolved profile's `networkIsolation == Enabled`.
+   container — **only when** the resolved profile's `networkIsolation` is true.
 2. The init writes nothing; it only ensures the shared directory exists before
    the sidecar starts. The sidecar owns creation:
 
