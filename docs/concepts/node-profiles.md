@@ -16,7 +16,8 @@ Typical profile settings include:
 - Kubernetes image pull policy and pull Secrets
 - status probes
 - persistence
-- network isolation for device-side interfaces
+- a network-isolation request for device-side interfaces (accepted but not yet enforced by the
+  direct runtime)
 - management overlay address allocation
 
 Device privilege, capabilities, and devices are never profile policy: they come from the imported
@@ -56,15 +57,17 @@ their built-in defaults or, where available, Config resolution. Service exposure
 `LoadBalancer` default because Config has no exposure-mode field. Set `spec.expose.exposeType` to
 `ClusterIP`, `Headless`, or `None` to override it.
 
-`spec.deployment.networkIsolation` selects the network-namespace layout for the device's
-data-plane interfaces. `Disabled` (the default when omitted) keeps the shared Pod network
-namespace. `Enabled` isolates the device-side interfaces in a private namespace while the
-connectivity sidecar keeps Kubernetes transport, the management router/mesh, and Link transport
-legs in the Pod namespace. Kinds in the `keysight_ixia-c` family default to isolated at profile
-resolution when no value is set, because their entrypoint claims every interface it can see; set
-`Disabled` explicitly to opt out. For a Topology, configure the equivalent field at
-`spec.deployment.networkIsolation`; the Topology controller copies an explicit value into the
-generated NodeProfile and leaves it unset otherwise.
+`spec.deployment.networkIsolation` records the requested network-namespace layout for the
+device's data-plane interfaces. `Disabled` keeps the shared Pod network namespace. `Enabled`
+requests a private namespace for the device-side interfaces while the connectivity sidecar
+keeps Kubernetes transport, the management router/mesh, and Link transport legs in the Pod
+namespace. The field is accepted and propagated today, but the direct runtime does not enforce
+isolation yet; that lands with the staged device-netns work. An omitted value leaves the field
+unset, so behaviour depends on the Node kind: kinds in the `keysight_ixia-c` family resolve to
+`Enabled` at profile resolution because their entrypoint claims every interface it can see, and
+all other kinds behave as `Disabled`. Set `Disabled` explicitly on an ixia-c Node to opt out. For
+a Topology, configure the equivalent field at `spec.deployment.networkIsolation`; the Topology
+controller copies an explicit value into the generated NodeProfile and leaves it unset otherwise.
 
 The `spec.scheduling.affinity` field accepts the native Kubernetes node affinity, pod affinity, and
 pod anti-affinity structure. A single NodeProfile can be referenced by multiple Nodes, so the

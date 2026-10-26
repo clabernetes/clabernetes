@@ -36,7 +36,7 @@ type ResolvedProfile struct {
 	// direct workload persistence settings
 	Persistence clabernetesapisv1alpha1.Persistence
 
-	// NetworkIsolation controls private netns mode.
+	// NetworkIsolation records the requested private netns mode. Runtime enforcement is staged.
 	NetworkIsolation string
 
 	// status probes

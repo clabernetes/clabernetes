@@ -25,8 +25,11 @@ func TestDirectRuntimeSourceContainsNoContainerlabKindKnowledge(t *testing.T) {
 	// kindPolicyFunctions is the explicit, function-scoped allowlist for
 	// realization policy that must inspect the Node kind outside device
 	// planning. Entries are keyed by absolute file path plus function name.
-	kindPolicyFunctions := map[string]string{
-		filepath.Clean("../../controllers/node/profile.go") + ":ixiaFamily": "the ixia-c family default is NodeProfile realization policy applied at resolve time; planner remains kind-agnostic",
+	// controllers/node/profile.go:ixiaFamily -- the ixia-c family default is
+	// NodeProfile realization policy applied at resolve time; the planner
+	// remains kind-agnostic.
+	kindPolicyFunctions := map[string]struct{}{
+		filepath.Clean("../../controllers/node/profile.go") + ":ixiaFamily": {},
 	}
 
 	for _, directory := range []string{
@@ -88,7 +91,7 @@ type tokenRange struct {
 func allowedKindPolicyRanges(
 	parsed *ast.File,
 	filename string,
-	allowed map[string]string,
+	allowed map[string]struct{},
 ) []tokenRange {
 	ranges := make([]tokenRange, 0)
 

@@ -157,11 +157,13 @@ type Expose struct {
 
 // Deployment holds portable policy compiled into direct Node workloads.
 type Deployment struct {
-	// NetworkIsolation controls whether device Pods place data-plane interfaces
-	// in a private network namespace. Disabled keeps legacy shared Pod ns;
-	// Enabled isolates while keeping sidecar infra (c9s0/c9sr0/c9sm0/fabric) in
-	// the Pod ns. Omitted leaves emitted profiles unset; the Node controller
-	// applies the ixia-c family default at resolve time.
+	// NetworkIsolation records the requested network-namespace layout for device
+	// Pods. Disabled keeps the legacy shared Pod ns. Enabled requests a private
+	// namespace for data-plane interfaces while keeping sidecar infra
+	// (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; the direct runtime accepts and
+	// propagates this value but does not enforce isolation yet. Omitted leaves
+	// emitted profiles unset; the Node controller applies the ixia-c family
+	// default at resolve time.
 	// +kubebuilder:validation:Enum=Disabled;Enabled;""
 	// +optional
 	NetworkIsolation string `json:"networkIsolation,omitempty"`

@@ -844,13 +844,7 @@ func applyProfileDeploymentSpec(
 	}
 
 	if input.Deployment.NetworkIsolation != "" {
-		deploymentSpec, ok := spec["deployment"].(map[string]any)
-		if !ok {
-			deploymentSpec = map[string]any{}
-			spec["deployment"] = deploymentSpec
-		}
-
-		deploymentSpec["networkIsolation"] = input.Deployment.NetworkIsolation
+		profileDeploymentSpec(spec)["networkIsolation"] = input.Deployment.NetworkIsolation
 	}
 
 	if persistence := input.Deployment.Persistence; persistence != nil && persistence.Enabled {
@@ -859,16 +853,24 @@ func applyProfileDeploymentSpec(
 			return err
 		}
 
-		deploymentSpec, ok := spec["deployment"].(map[string]any)
-		if !ok {
-			deploymentSpec = map[string]any{}
-			spec["deployment"] = deploymentSpec
-		}
-
-		deploymentSpec["persistence"] = raw
+		profileDeploymentSpec(spec)["persistence"] = raw
 	}
 
 	return nil
+}
+
+// profileDeploymentSpec returns the persistence/isolation map of a rendered NodeProfile spec,
+// creating it when absent.
+func profileDeploymentSpec(spec map[string]any) map[string]any {
+	deploymentSpec, ok := spec["deployment"].(map[string]any)
+	if ok {
+		return deploymentSpec
+	}
+
+	deploymentSpec = map[string]any{}
+	spec["deployment"] = deploymentSpec
+
+	return deploymentSpec
 }
 
 // applyProfileManagementSpec renders the management policy section of a NodeProfile spec: the

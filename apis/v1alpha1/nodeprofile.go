@@ -83,11 +83,12 @@ type NodeProfileImagePull struct {
 
 // NodeProfileDeployment holds portable direct workload policy.
 type NodeProfileDeployment struct {
-	// NetworkIsolation controls whether device containers run in a private
-	// network namespace created by the connectivity helper. Disabled keeps the
-	// legacy shared Pod network namespace; Enabled isolates data-plane interfaces
-	// while keeping sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns.
-	// Omitted leaves the field unset so ResolveProfile can apply the ixia-c
+	// NetworkIsolation records the requested network-namespace layout for the
+	// device's data-plane interfaces. Disabled keeps the legacy shared Pod
+	// network namespace. Enabled requests a private namespace while keeping
+	// sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; the direct
+	// runtime accepts and propagates this value but does not enforce isolation
+	// yet. Omitted leaves the field unset so ResolveProfile can apply the ixia-c
 	// family default; an explicit value always wins.
 	// +kubebuilder:validation:Enum=Disabled;Enabled;""
 	// +optional
