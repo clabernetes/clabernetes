@@ -1545,6 +1545,11 @@ func (r *Reconciler) directMetadata(
 	if owner, ok := node.GetLabels()[clabernetesconstants.LabelTopologyOwner]; ok {
 		labels[clabernetesconstants.LabelTopologyOwner] = owner
 	}
+	// The containerlab node name lets clients map a Pod back to the topology node without
+	// reading the Node. Grouped Pods carry the primary's name, like c9s.run/topologyNode.
+	if original, ok := node.GetLabels()[clabernetesconstants.LabelOriginalNodeName]; ok {
+		labels[clabernetesconstants.LabelOriginalNodeName] = original
+	}
 	annotations := maps.Clone(node.GetAnnotations())
 	if annotations == nil {
 		annotations = map[string]string{}

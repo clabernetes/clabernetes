@@ -80,7 +80,8 @@ diagnostic. Nothing is silently dropped.
   `c9s.run/name`, `c9s.run/topologyOwner`, `c9s.run/topologyKind`, `c9s.run/topologyNode`, and
   `c9s.run/topologyGroup` on Nodes that carry a group) keep their compiler-assigned values, so a
   topology value cannot shadow them; every other `c9s.run/` label rides along as written. The
-  spawned workload keeps `app.kubernetes.io/name` set to the Node's object name.
+  spawned workload keeps `app.kubernetes.io/name` set to the Node's object name. Pods carry
+  `c9s.run/topologyNode` and `c9s.run/originalNodeName` but no other `c9s.run/` label.
 
 ## Lifecycle
 
