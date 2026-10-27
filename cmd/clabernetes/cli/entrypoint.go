@@ -516,50 +516,7 @@ func deviceRuntimeCommand() *cli.Command {
 					)
 				},
 			},
-			{
-				Name:  "packet-capture",
-				Usage: "stream pcap for one plan-owned direct interface",
-				Flags: []cli.Flag{
-					&cli.StringFlag{Name: deviceRuntimePlan, Required: true},
-					&cli.StringFlag{Name: deviceRuntimeInput, Required: true},
-					&cli.StringFlag{Name: deviceRuntimeConnectivityRevision, Required: true},
-					&cli.StringFlag{Name: deviceRuntimeNodeID, Required: true},
-					&cli.StringFlag{Name: deviceRuntimeInterface, Required: true},
-					&cli.IntFlag{Name: deviceRuntimeSnapLength},
-					&cli.IntFlag{Name: deviceRuntimePacketLimit},
-					&cli.DurationFlag{Name: deviceRuntimeDuration},
-				},
-				Action: func(c *cli.Context) error {
-					input, plan, err := readRuntimePlanInput(
-						c.String(deviceRuntimeInput),
-						c.String(deviceRuntimePlan),
-					)
-					if err != nil {
-						return err
-					}
-
-					ctx := c.Context
-					if ctx == nil {
-						ctx = context.Background()
-					}
-
-					return clabernetesinternaldirectruntime.RunPacketCaptureWithRevision(
-						ctx,
-						input,
-						plan,
-						c.String(deviceRuntimeConnectivityRevision),
-						clabernetesinternaldirectruntime.PacketCaptureOptions{
-							NodeID:        c.String(deviceRuntimeNodeID),
-							InterfaceName: c.String(deviceRuntimeInterface),
-							SnapLength:    c.Int(deviceRuntimeSnapLength),
-							PacketLimit:   c.Int(deviceRuntimePacketLimit),
-							Duration:      c.Duration(deviceRuntimeDuration),
-						},
-						c.App.Writer,
-						c.App.ErrWriter,
-					)
-				},
-			},
+			packetCaptureCommand(),
 			{
 				Name:  "connectivity-ready",
 				Usage: "verify direct device connectivity readiness",

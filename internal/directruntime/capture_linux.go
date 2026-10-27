@@ -25,10 +25,13 @@ func openPacketCaptureSource(interfaceName string, snapLength int) (packetCaptur
 
 	protocol := hostToNetworkShort(uint16(unix.ETH_P_ALL))
 
+	// The socket starts with protocol 0 so it receives nothing until bind attaches it to the
+	// planned interface. A socket created with ETH_P_ALL queues frames of every interface in
+	// the Pod, the management interface included, until bind runs.
 	fd, err := unix.Socket(
 		unix.AF_PACKET,
 		unix.SOCK_RAW|unix.SOCK_CLOEXEC|unix.SOCK_NONBLOCK,
-		int(protocol),
+		0,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("opening packet socket: %w", err)
