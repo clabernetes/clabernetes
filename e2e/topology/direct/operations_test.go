@@ -1,12 +1,16 @@
 package direct_test
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +19,7 @@ import (
 
 const (
 	captureTrafficWindow            = 8 * time.Second
+	captureStdinCloseExitBudget     = 5 * time.Second
 	pcapHeaderLength                = 24
 	pcapngSectionHeaderBlock        = 0x0a0d0d0a
 	pcapngInterfaceDescriptionBlock = 0x00000001
@@ -85,7 +90,8 @@ func TestDirectSaveOperation(t *testing.T) {
 // helper lists the Node's capturable interfaces, streams pcapng for two interfaces selected by
 // Node name while dataplane traffic crosses both links, runs a second capture on the same Pod
 // at the same time through the original explicit-path invocation, and accepts a follow-up
-// capture the moment the first one ends.
+// capture the moment the first one ends. A capture with --stop-on-stdin-close ends within
+// seconds of its client closing stdin, over both remotecommand transports.
 func TestDirectPacketCaptureOperation(t *testing.T) {
 	t.Parallel()
 
@@ -212,6 +218,144 @@ func TestDirectPacketCaptureOperation(t *testing.T) {
 	<-trafficDone
 
 	verifyContractCaptures(t, pcap, pcapng, chained)
+
+	for _, transport := range []captureTransport{
+		{name: "websocket", websockets: "true", evidence: `protocol="v5.channel.k8s.io"`},
+		{name: "spdy", websockets: "false", evidence: `verb="POST"`},
+	} {
+		verifyCaptureStopsWhenStdinCloses(t, namespace, device, sidecar, transport)
+	}
+}
+
+// captureTransport selects kubectl's remotecommand transport and the -v=6 log line that proves
+// it was used: the negotiated websocket subprotocol (v5 carries the stdin CLOSE signal), or the
+// SPDY upgrade POST.
+type captureTransport struct {
+	name       string
+	websockets string
+	evidence   string
+}
+
+// verifyCaptureStopsWhenStdinCloses starts an hour-long capture with stdin attached, closes stdin
+// once it runs, and requires the exec to end within the budget with a Succeeded record that names
+// the client close. Kubernetes ends an exec only when its process exits, so kubectl returning is
+// the process ending.
+func verifyCaptureStopsWhenStdinCloses(
+	t *testing.T,
+	namespace string,
+	device devicePodObservation,
+	sidecar string,
+	transport captureTransport,
+) {
+	t.Helper()
+
+	cmd := exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
+		t.Context(),
+		"kubectl",
+		"exec", "-v=6", "-i", "--namespace", namespace, device.podName, "-c", sidecar, "--",
+		"/clabernetes/manager", "node-runtime", "packet-capture",
+		"--nodeName", "lin1", "--interface", "eth1", "--format", "pcapng",
+		"--duration", "1h", "--stop-on-stdin-close",
+	)
+	cmd.Env = append(os.Environ(), "KUBECTL_REMOTE_COMMAND_WEBSOCKETS="+transport.websockets)
+	cmd.Stdout = io.Discard
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	var (
+		mu     sync.Mutex
+		stderr strings.Builder
+	)
+
+	started := make(chan struct{})
+	stderrDone := make(chan struct{})
+
+	go func() {
+		defer close(stderrDone)
+
+		scanner := bufio.NewScanner(stderrPipe)
+		scanner.Buffer(make([]byte, 64<<10), 1<<20)
+
+		once := sync.Once{}
+
+		for scanner.Scan() {
+			mu.Lock()
+			stderr.WriteString(scanner.Text() + "\n")
+			mu.Unlock()
+
+			if strings.Contains(scanner.Text(), `"status":"Started"`) {
+				once.Do(func() { close(started) })
+			}
+		}
+	}()
+
+	output := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return stderr.String()
+	}
+
+	select {
+	case <-started:
+	case <-time.After(time.Minute):
+		_ = cmd.Process.Kill()
+
+		t.Fatalf("%s: capture did not start: %s", transport.name, output())
+	}
+
+	// Let it capture for a moment, then go away.
+	time.Sleep(2 * time.Second)
+
+	closed := time.Now()
+	_ = stdin.Close()
+
+	done := make(chan error, 1)
+
+	go func() {
+		<-stderrDone
+
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case err = <-done:
+	case <-time.After(captureStdinCloseExitBudget):
+		_ = cmd.Process.Kill()
+
+		t.Fatalf("%s: capture still runs %s after stdin closed: %s",
+			transport.name, captureStdinCloseExitBudget, output())
+	}
+
+	elapsed := time.Since(closed)
+	log := output()
+
+	if err != nil {
+		t.Fatalf("%s: capture ended with %v: %s", transport.name, err, log)
+	}
+
+	if !strings.Contains(log, `"status":"Succeeded"`) ||
+		!strings.Contains(log, `"reason":"client closed: stdin reached EOF"`) {
+		t.Fatalf("%s: capture audit does not record the client close: %s", transport.name, log)
+	}
+
+	if !strings.Contains(log, transport.evidence) {
+		t.Fatalf("%s: kubectl log lacks %s: %s", transport.name, transport.evidence, log)
+	}
+
+	t.Logf("%s: capture process ended %s after stdin closed", transport.name, elapsed)
 }
 
 // verifyContractCaptures checks the audit trail of every capture, the legacy pcap stream, the
