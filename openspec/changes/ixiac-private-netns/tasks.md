@@ -38,5 +38,5 @@
   - [x] `make verify-generated` inspected (only intended generated diffs remain in the working tree)
   - [x] `go test ./internal/directpod/... ./internal/directruntime/... ./controllers/node/...`
   - [x] Real `ixia-c-one:1.61.0-9` e2e on local KinD: `TestIxiac` passes in ~52-63s, including netns inode, `c9s0` absence, management address, and `ConnectivityReady`
-  - [ ] Re-run `TestIxiac` on the Nebius test cluster (requires interactive `npc` browser auth)
-  - [ ] Negative check: a non-isolated `nokia_srlinux` single-node lab on the same cluster unchanged
+  - [x] Re-run `TestIxiac` on the Nebius test cluster (`npc-mk8s-c9s-beta-e0tavhzqdhqv0jeyvk`): PASS in 86.35s with the real `ixia-c-one:1.61.0-9` image
+  - [x] Negative check: non-isolated `TestNodeLinkDirect` on the same cluster: PASS in 59.60s
