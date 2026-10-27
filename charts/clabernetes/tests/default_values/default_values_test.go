@@ -409,7 +409,12 @@ func labEditorRuleProblem(rule k8srbacv1.PolicyRule) string {
 			if slices.ContainsFunc(rule.Verbs, isWriteVerb) {
 				return "writes Pods"
 			}
-		case "secrets", "*", "pods/attach", "pods/ephemeralcontainers", "namespaces":
+		case "namespaces":
+			// Bound per namespace, get reads only the lab's own Namespace.
+			if !slices.Equal(rule.Verbs, []string{"get"}) {
+				return "grants more than get on namespaces"
+			}
+		case "secrets", "*", "pods/attach", "pods/ephemeralcontainers":
 			return "grants " + resource
 		}
 	}

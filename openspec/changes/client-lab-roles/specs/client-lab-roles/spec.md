@@ -20,7 +20,7 @@ The chart SHALL install the ClusterRoles `<appName>-lab-viewer` and `<appName>-l
 
 ### Requirement: The viewer role reads labs
 
-The viewer role SHALL grant get, list, and watch on Topologies, Nodes, Links, NodeProfiles, Pods, Events, Services, ConfigMaps, and PersistentVolumeClaims, get on Pod logs, and get and list on Pod metrics, and nothing else.
+The viewer role SHALL grant get, list, and watch on Topologies, Nodes, Links, NodeProfiles, Pods, Events, Services, ConfigMaps, and PersistentVolumeClaims, get on Pod logs, get on the Namespace the role is bound in, and get and list on Pod metrics, and nothing else.
 
 #### Scenario: Viewer reads a lab
 
@@ -29,7 +29,7 @@ The viewer role SHALL grant get, list, and watch on Topologies, Nodes, Links, No
 
 ### Requirement: The editor role operates labs only through c9s resources and Pod streams
 
-The editor role SHALL grant the viewer rules, create, update, patch, and delete on Topologies, Nodes, Links, NodeProfiles, and ConfigMaps, delete on PersistentVolumeClaims, and `pods/exec` and `pods/portforward`. It MUST NOT grant any `apps` resource, Pod create, update, or delete, Secrets, Namespaces, or RBAC objects.
+The editor role SHALL grant the viewer rules, create, update, patch, and delete on Topologies, Nodes, Links, NodeProfiles, and ConfigMaps, delete on PersistentVolumeClaims, and `pods/exec` and `pods/portforward`. It MUST NOT grant any `apps` resource, Pod create, update, or delete, Secrets, Namespace writes or reads of other Namespaces, or RBAC objects.
 
 #### Scenario: Editor operates a lab in its namespace
 

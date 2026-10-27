@@ -42,6 +42,14 @@ rules:
       - pods/log
     verbs:
       - get
+  # Bound with a RoleBinding, this is the lab namespace object itself and nothing else; clients
+  # read it to check the lab's namespace before they deploy into it.
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
   - apiGroups:
       - events.k8s.io
     resources:
@@ -99,6 +107,14 @@ rules:
       - ""
     resources:
       - pods/log
+    verbs:
+      - get
+  # Bound with a RoleBinding, this is the lab namespace object itself and nothing else; clients
+  # read it to check the lab's namespace before they deploy into it.
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
     verbs:
       - get
   - apiGroups:
