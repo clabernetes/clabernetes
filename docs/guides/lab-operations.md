@@ -111,20 +111,48 @@ Chassis cards and grouped nodes are separate application containers. List them w
 
 ## Packet capture
 
-The connectivity sidecar streams a pcap for any interface it realized for a Node. Address the
-Node by its UID and the interface by the name the Link uses:
+The connectivity sidecar streams packets from the lab-link interfaces it realized for a Node.
+Name the Node and one or more of its interfaces:
 
 ```bash
-NODE_UID=$(kubectl get nodes.c9s.run srl1 -o jsonpath='{.metadata.uid}')
 kubectl exec deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
-  --plan /var/run/clabernetes/plan/plan.json \
-  --input /var/run/clabernetes/input/input.json \
-  --connectivityRevision /var/run/clabernetes/connectivity-revision/revision.json \
-  --nodeID "$NODE_UID" --interface e1-1 --duration 30s > e1-1.pcap
+  --nodeName srl1 --interface e1-1 --duration 30s > e1-1.pcap
 ```
 
-`--duration` and `--packetLimit` bound the capture, and the first bound reached ends it. The
-output is a standard pcap file for Wireshark or `tcpdump -r`.
+The output is a pcap file for Wireshark or `tcpdump -r`. For several interfaces in one stream,
+repeat `--interface` and ask for pcapng, which names each interface in its own Interface
+Description Block:
+
+```bash
+kubectl exec deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
+  --nodeName srl1 --interface e1-1 --interface e1-2 --format pcapng --duration 30s > srl1.pcapng
+```
+
+List the interfaces you can capture, with the peer at the other end of each link:
+
+```bash
+kubectl exec deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
+  --nodeName srl1 --list-interfaces
+```
+
+```json
+[{"node":"srl1","interface":"e1-1","alias":"ethernet-1/1","peerNode":"srl2","peerInterface":"e1-1"}]
+```
+
+- `--nodeName` is the Node object name. Nodes that share a Pod are each selected by their own
+  name; `--nodeID <Node UID>` works too. Without either, `--list-interfaces` lists every Node in
+  the Pod.
+- `--interface` takes the interface name or the alias the Link used, such as `ethernet-1/1`
+  for SR Linux `e1-1`. If any requested interface is not a link of that Node, nothing is
+  captured. The management interface is never capturable.
+- `--duration` (at most 1h) and `--packetLimit` (at most 1,000,000, counted across all
+  interfaces) bound the capture; the first bound reached ends it. `--snapLength` defaults to
+  256 KiB and takes 64 B to 1 MiB.
+- Several captures may run on one Pod at once. To capture for longer than an hour, start the
+  next capture before the previous one ends; each call writes a complete stream with its own
+  header.
+- Each capture writes JSON audit records with status `Started`, `Succeeded`, `Failed`, or
+  `Denied` to stderr. Packet data goes only to stdout.
 
 ## Network policies
 
