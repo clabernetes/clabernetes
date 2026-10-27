@@ -2,6 +2,7 @@ package direct_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -13,8 +14,12 @@ import (
 )
 
 const (
-	captureTrafficWindow = 20 * time.Second
-	pcapHeaderLength     = 24
+	captureTrafficWindow            = 8 * time.Second
+	pcapHeaderLength                = 24
+	pcapngSectionHeaderBlock        = 0x0a0d0d0a
+	pcapngInterfaceDescriptionBlock = 0x00000001
+	pcapngEnhancedPacketBlock       = 0x00000006
+	pcapngIfNameOption              = 2
 )
 
 // TestDirectSaveOperation proves the package-owned save lifecycle end to end: the same typed
@@ -76,8 +81,11 @@ func TestDirectSaveOperation(t *testing.T) {
 	}
 }
 
-// TestDirectPacketCaptureOperation proves plan-scoped packet capture: the connectivity helper
-// streams pcap for a plan-owned interface while dataplane traffic crosses the fabric.
+// TestDirectPacketCaptureOperation proves the packet capture client contract: the connectivity
+// helper lists the Node's capturable interfaces, streams pcapng for two interfaces selected by
+// Node name while dataplane traffic crosses both links, runs a second capture on the same Pod
+// at the same time through the original explicit-path invocation, and accepts a follow-up
+// capture the moment the first one ends.
 func TestDirectPacketCaptureOperation(t *testing.T) {
 	t.Parallel()
 
@@ -100,7 +108,7 @@ func TestDirectPacketCaptureOperation(t *testing.T) {
 		t,
 		clabernetestesthelper.Apply,
 		namespace,
-		"test-fixtures/30-linux-dataplane.yaml",
+		"test-fixtures/30-linux-capture.yaml",
 	)
 
 	for _, nodeName := range []string{"lin1", "lin2"} {
@@ -108,88 +116,298 @@ func TestDirectPacketCaptureOperation(t *testing.T) {
 	}
 
 	device := observeDevicePod(t, namespace, "lin1")
+	sidecar := connectivityContainerName(t, namespace, device)
 
-	// The dataplane must be alive before capturing so the window is guaranteed traffic.
-	waitForDeviceCommand(
-		t,
-		namespace,
-		device,
-		[]string{"ping", "-c", "2", "-W", "2", "192.168.1.1"},
-		" 0% packet loss",
-	)
+	// The dataplane must be alive on both links before capturing so the window is guaranteed
+	// traffic on each.
+	for _, address := range []string{"192.168.1.1", "192.168.2.1"} {
+		waitForDeviceCommand(
+			t,
+			namespace,
+			device,
+			[]string{"ping", "-c", "2", "-W", "2", address},
+			" 0% packet loss",
+		)
+	}
 
-	nodeID, interfaceName := planInterfaceTarget(t, namespace, device, "lin1")
+	listed := capturableInterfaces(t, namespace, device, sidecar, "--nodeName", "lin1")
+	if len(listed) != 2 ||
+		listed[0] != (capturableInterface{"lin1", "eth1", "lin2", "eth1"}) ||
+		listed[1] != (capturableInterface{"lin1", "eth2", "lin2", "eth2"}) {
+		t.Fatalf("lin1 capturable interfaces = %#v", listed)
+	}
+
+	if podWide := capturableInterfaces(t, namespace, device, sidecar); len(podWide) != 2 {
+		t.Fatalf("Pod-wide capturable interfaces = %#v", podWide)
+	}
+
+	nodeID, _ := planInterfaceTarget(t, namespace, device, "lin1")
 
 	trafficDone := make(chan struct{})
 
 	go func() {
 		defer close(trafficDone)
 
-		trafficCmd := exec.CommandContext( //nolint:gosec // kubectl args are test-controlled.
-			t.Context(),
-			"kubectl",
-			"exec",
-			"--namespace",
-			namespace,
-			device.podName,
-			"-c",
-			device.containerName,
-			"--",
-			"ping",
-			"-c",
-			"10",
-			"-i",
-			"1",
-			"192.168.1.1",
-		)
-		_ = trafficCmd.Run()
+		pings := make(chan struct{}, 2)
+
+		for _, address := range []string{"192.168.1.1", "192.168.2.1"} {
+			go func() {
+				defer func() { pings <- struct{}{} }()
+
+				trafficCmd := exec.CommandContext( //nolint:gosec // kubectl args are test-controlled.
+					t.Context(),
+					"kubectl",
+					"exec",
+					"--namespace",
+					namespace,
+					device.podName,
+					"-c",
+					device.containerName,
+					"--",
+					"ping",
+					"-c",
+					"40",
+					"-i",
+					"0.5",
+					address,
+				)
+				_ = trafficCmd.Run()
+			}()
+		}
+
+		<-pings
+		<-pings
 	}()
 
-	captureCmd := exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
-		t.Context(),
-		"kubectl",
-		"exec",
-		"--namespace",
-		namespace,
-		device.podName,
-		"-c",
-		connectivityContainerName(t, namespace, device),
-		"--",
-		"/clabernetes/manager",
-		"node-runtime",
-		"packet-capture",
-		"--plan",
-		"/var/run/clabernetes/plan/plan.json",
-		"--input",
-		"/var/run/clabernetes/input/input.json",
-		"--connectivityRevision",
-		"/var/run/clabernetes/connectivity-revision/revision.json",
-		"--nodeID",
-		nodeID,
-		"--interface",
-		interfaceName,
-		"--packetLimit",
-		"4",
-		"--duration",
-		captureTrafficWindow.String(),
+	pcapngCapture := make(chan captureResult, 1)
+
+	go func() {
+		pcapngCapture <- runCapture(
+			t, namespace, device, sidecar,
+			"--nodeName", "lin1", "--interface", "eth1", "--interface", "eth2",
+			"--format", "pcapng", "--duration", captureTrafficWindow.String(),
+		)
+	}()
+
+	// The original invocation with explicit paths and the Node UID runs concurrently on the
+	// same Pod and the same interface.
+	pcap := runCapture(
+		t, namespace, device, sidecar,
+		"--plan", "/var/run/clabernetes/plan/plan.json",
+		"--input", "/var/run/clabernetes/input/input.json",
+		"--connectivityRevision", "/var/run/clabernetes/connectivity-revision/revision.json",
+		"--nodeID", nodeID, "--interface", "eth1", "--duration", captureTrafficWindow.String(),
 	)
 
-	pcap, err := captureCmd.Output()
+	pcapng := <-pcapngCapture
+
+	// A follow-up capture starts the moment the previous one ends, as clients chaining calls
+	// past the one-hour bound do.
+	chained := runCapture(
+		t, namespace, device, sidecar,
+		"--nodeName", "lin1", "--interface", "eth2", "--format", "pcapng",
+		"--packetLimit", "2", "--duration", captureTrafficWindow.String(),
+	)
 
 	<-trafficDone
 
+	verifyContractCaptures(t, pcap, pcapng, chained)
+}
+
+// verifyContractCaptures checks the audit trail of every capture, the legacy pcap stream, the
+// two-interface pcapng stream, and the chained follow-up stream.
+func verifyContractCaptures(t *testing.T, pcap, pcapng, chained captureResult) {
+	t.Helper()
+
+	for name, result := range map[string]captureResult{
+		"pcapng": pcapng, "pcap": pcap, "chained": chained,
+	} {
+		requireCaptureSucceeded(t, name, result)
+	}
+
+	// The helper writes little-endian pcap.
+	if len(pcap.stdout) <= pcapHeaderLength ||
+		!bytes.HasPrefix(pcap.stdout, []byte{0xd4, 0xc3, 0xb2, 0xa1}) {
+		t.Fatalf("packet capture is not pcap with packet records: % x", pcap.stdout)
+	}
+
+	names, packets := parsePCAPNGStream(t, pcapng.stdout)
+	if len(names) != 2 || names[0] != "eth1" || names[1] != "eth2" ||
+		packets[0] == 0 || packets[1] == 0 {
+		t.Fatalf("pcapng capture interfaces %v carried packets %v", names, packets)
+	}
+
+	if !strings.Contains(pcapng.stderr, `"name":"eth1"`) ||
+		!strings.Contains(pcapng.stderr, `"name":"eth2"`) {
+		t.Fatalf("pcapng capture audit does not list both interfaces: %s", pcapng.stderr)
+	}
+
+	if names, packets = parsePCAPNGStream(t, chained.stdout); len(names) != 1 ||
+		packets[0] != 2 {
+		t.Fatalf("chained capture interfaces %v carried packets %v", names, packets)
+	}
+}
+
+func requireCaptureSucceeded(t *testing.T, name string, result captureResult) {
+	t.Helper()
+
+	if result.err != nil {
+		t.Fatalf("%s capture failed: %v: %s", name, result.err, result.stderr)
+	}
+
+	if !strings.Contains(result.stderr, `"status":"Started"`) ||
+		!strings.Contains(result.stderr, `"status":"Succeeded"`) {
+		t.Fatalf("%s capture audit lacks Started and Succeeded: %s", name, result.stderr)
+	}
+}
+
+type capturableInterface struct {
+	Node          string `json:"node"`
+	Interface     string `json:"interface"`
+	PeerNode      string `json:"peerNode"`
+	PeerInterface string `json:"peerInterface"`
+}
+
+type captureResult struct {
+	stdout []byte
+	stderr string
+	err    error
+}
+
+func captureCommand(
+	t *testing.T,
+	namespace string,
+	device devicePodObservation,
+	sidecar string,
+	arguments ...string,
+) *exec.Cmd {
+	t.Helper()
+
+	return exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
+		t.Context(),
+		"kubectl",
+		append([]string{
+			"exec", "--namespace", namespace, device.podName, "-c", sidecar, "--",
+			"/clabernetes/manager", "node-runtime", "packet-capture",
+		}, arguments...)...,
+	)
+}
+
+func runCapture(
+	t *testing.T,
+	namespace string,
+	device devicePodObservation,
+	sidecar string,
+	arguments ...string,
+) captureResult {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+
+	cmd := captureCommand(t, namespace, device, sidecar, arguments...)
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+
+	err := cmd.Run()
+
+	return captureResult{stdout: stdout.Bytes(), stderr: stderr.String(), err: err}
+}
+
+func capturableInterfaces(
+	t *testing.T,
+	namespace string,
+	device devicePodObservation,
+	sidecar string,
+	arguments ...string,
+) []capturableInterface {
+	t.Helper()
+
+	raw := clabernetestesthelper.Execute(
+		t,
+		captureCommand(
+			t,
+			namespace,
+			device,
+			sidecar,
+			append(arguments, "--list-interfaces")...,
+		),
+	)
+
+	var interfaces []capturableInterface
+
+	err := json.Unmarshal(raw, &interfaces)
 	if err != nil {
-		t.Fatalf("packet capture failed: %v", err)
+		t.Fatalf("decoding capturable interfaces: %v: %s", err, raw)
 	}
 
-	if len(pcap) <= pcapHeaderLength {
-		t.Fatalf("packet capture produced no packet records: %d bytes", len(pcap))
+	return interfaces
+}
+
+// parsePCAPNGStream walks a little-endian single-section pcapng stream and returns the
+// interface names and the packet count per interface.
+func parsePCAPNGStream(t *testing.T, raw []byte) ([]string, []int) {
+	t.Helper()
+
+	names := []string{}
+	packets := []int{}
+
+	if len(raw) < 12 || binary.LittleEndian.Uint32(raw) != pcapngSectionHeaderBlock {
+		t.Fatalf("capture stream is not little-endian pcapng: % x", raw[:min(len(raw), 12)])
 	}
 
-	if !bytes.HasPrefix(pcap, []byte{0xd4, 0xc3, 0xb2, 0xa1}) &&
-		!bytes.HasPrefix(pcap, []byte{0xa1, 0xb2, 0xc3, 0xd4}) {
-		t.Fatalf("packet capture stream is not pcap: % x", pcap[:8])
+	for len(raw) > 0 {
+		if len(raw) < 12 {
+			t.Fatalf("truncated pcapng block: % x", raw)
+		}
+
+		blockType := binary.LittleEndian.Uint32(raw)
+		total := int(binary.LittleEndian.Uint32(raw[4:]))
+
+		if total < 12 || total%4 != 0 || total > len(raw) {
+			t.Fatalf("invalid pcapng block length %d", total)
+		}
+
+		body := raw[8 : total-4]
+
+		switch blockType {
+		case pcapngInterfaceDescriptionBlock:
+			names = append(names, pcapngInterfaceName(body[8:]))
+			packets = append(packets, 0)
+		case pcapngEnhancedPacketBlock:
+			interfaceID := int(binary.LittleEndian.Uint32(body))
+			if interfaceID >= len(packets) {
+				t.Fatalf("packet references undescribed interface %d", interfaceID)
+			}
+
+			packets[interfaceID]++
+		case pcapngSectionHeaderBlock:
+			if len(names) != 0 {
+				t.Fatal("pcapng stream repeats its section header")
+			}
+		}
+
+		raw = raw[total:]
 	}
+
+	return names, packets
+}
+
+func pcapngInterfaceName(options []byte) string {
+	for len(options) >= 4 {
+		code := binary.LittleEndian.Uint16(options)
+		length := int(binary.LittleEndian.Uint16(options[2:]))
+
+		if code == 0 || len(options) < 4+length {
+			break
+		}
+
+		if code == pcapngIfNameOption {
+			return string(options[4 : 4+length])
+		}
+
+		options = options[4+(length+3)/4*4:]
+	}
+
+	return ""
 }
 
 // lifecyclePhaseCommand derives a typed lifecycle invocation from the workload's own PostStart
