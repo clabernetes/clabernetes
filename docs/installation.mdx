@@ -127,6 +127,12 @@ kubectl -n c9s get pods
 The manager Pods must be `Running`. Then deploy a lab, for example one of the
 [basic examples](/docs/examples).
 
+## Lab access
+
+The chart also installs the `clabernetes-lab-viewer` and `clabernetes-lab-editor` ClusterRoles
+for lab users. Bind them per lab namespace with a RoleBinding, see
+[Lab access](/docs/guides/lab-access). Set `labRoles.enabled: false` to leave them out.
+
 ## Global configuration
 
 Cluster-wide defaults (pull policy and pull Secrets, default resources, node selectors by image,

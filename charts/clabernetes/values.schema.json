@@ -68,6 +68,14 @@
         }
       }
     },
+    "labRoles": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
     "ui": {
       "type": "object",
       "properties": {

@@ -1,0 +1,159 @@
+---
+# Source: clabernetes/templates/lab-roles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    chart: "clabernetes-0.0.0"
+    release: release-name
+    heritage: Helm
+    revision: "1"
+    c9s.run/app: clabernetes-plus-clicker
+    c9s.run/name: "clabernetes-plus-clicker-lab-viewer"
+    c9s.run/component: lab-role
+    anotherlabel: anotherlabelvalue
+    somelabel: somelabelvalue
+  annotations:
+    annotherannotation: anotherannotationvalue
+    someannotation: someannotationvalue
+  name: "clabernetes-plus-clicker-lab-viewer"
+rules:
+  - apiGroups:
+      - c9s.run
+    resources:
+      - topologies
+      - nodes
+      - links
+      - nodeprofiles
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - events
+      - services
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
+  - apiGroups:
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - metrics.k8s.io
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+---
+# Source: clabernetes/templates/lab-roles.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    chart: "clabernetes-0.0.0"
+    release: release-name
+    heritage: Helm
+    revision: "1"
+    c9s.run/app: clabernetes-plus-clicker
+    c9s.run/name: "clabernetes-plus-clicker-lab-editor"
+    c9s.run/component: lab-role
+    anotherlabel: anotherlabelvalue
+    somelabel: somelabelvalue
+  annotations:
+    annotherannotation: anotherannotationvalue
+    someannotation: someannotationvalue
+  name: "clabernetes-plus-clicker-lab-editor"
+rules:
+  - apiGroups:
+      - c9s.run
+    resources:
+      - topologies
+      - nodes
+      - links
+      - nodeprofiles
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - events
+      - services
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
+  - apiGroups:
+      - events.k8s.io
+    resources:
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - metrics.k8s.io
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+  # Labs are edited only through c9s resources: stopping, starting, and restarting a node is a
+  # patch on its Node. No apps/* and no Pod create/update/delete.
+  - apiGroups:
+      - c9s.run
+    resources:
+      - topologies
+      - nodes
+      - links
+      - nodeprofiles
+    verbs:
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - create
+      - update
+      - patch
+      - delete
+  # Interactive streams. WebSocket clients open them with GET, which API servers before
+  # Kubernetes 1.35 authorize as the get verb; create covers SPDY clients and 1.35+.
+  - apiGroups:
+      - ""
+    resources:
+      - pods/exec
+      - pods/portforward
+    verbs:
+      - get
+      - create
