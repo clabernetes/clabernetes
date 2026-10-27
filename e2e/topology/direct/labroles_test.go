@@ -100,12 +100,17 @@ func TestLabEditorRoleIsNamespaceScoped(t *testing.T) {
 	kubectl(t, asUser("logs", lin1.podName, "-c", lin1.containerName, "--tail", "1")...)
 	assertPortForward(t, asUser("port-forward", "pod/"+lin1.podName, ":80"))
 
+	// The lab's own Namespace is readable, as clients check it before they deploy.
+	kubectl(t, "--as", user, "get", "namespace", namespace)
+
 	// Workloads stay controller-owned, and other namespaces stay out of reach.
 	for _, arguments := range [][]string{
 		asUser("scale", "deployment", "lin1", "--replicas", "0"),
 		asUser("delete", "pod", lin1.podName),
 		asUser("get", "secrets"),
 		{"--as", user, "--namespace", other, "get", "nodes.c9s.run"},
+		{"--as", user, "get", "namespace", other},
+		{"--as", user, "get", "namespaces"},
 	} {
 		forbidden := exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
 			t.Context(), "kubectl", arguments...,
@@ -150,8 +155,11 @@ func assertLabEditorAccess(t *testing.T, user, namespace, other string) {
 		{"get", "secrets", "", namespace, false},
 		{"create", "rolebindings.rbac.authorization.k8s.io", "", namespace, false},
 		{"create", "namespaces", "", "", false},
-		{"get", "namespaces/" + namespace, "", "", true},
-		{"get", "namespaces/" + other, "", "", false},
+		// The API server authorizes GET /api/v1/namespaces/<name> in namespace <name>, so a
+		// RoleBinding there reaches the Namespace object itself. kubectl auth can-i sends the
+		// kubeconfig's namespace instead unless --namespace names it.
+		{"get", "namespaces/" + namespace, "", namespace, true},
+		{"get", "namespaces/" + other, "", other, false},
 		{"list", "namespaces", "", "", false},
 		{"patch", "nodes.c9s.run", "", other, false},
 		{"get", "pods", "", other, false},
