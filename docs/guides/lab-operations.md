@@ -40,7 +40,8 @@ kubectl get nodes.c9s.run
 kubectl get nodes.c9s.run -o wide
 ```
 
-`READINESS` is `ready`, `notready`, or `unknown`. The wide view adds the container,
+`READINESS` is `ready`, `notready`, or `unknown`, and `RUNSTATE` is `Running` or `Stopped`.
+The wide view adds the container,
 preparation, and connectivity conditions, the plan digest, and the applied NodeProfile.
 `kubectl describe` shows every condition:
 
@@ -53,6 +54,7 @@ preparation, and connectivity conditions, the plan digest, and the applied NodeP
 | `ContainersReady` | every application container of the Node runs and passes its probes |
 | `LinkLifecycleAction` | the action taken for the latest Link-only change: `live` or `recreate` (`restart` also recreates the Pod) |
 | `DeviceStateReset` | progress of a device-state reset, see [Persistent storage](/docs/guides/persistence) |
+| `Stopped` | `True` once a stopped Node's Pod is gone; `False` with reason `Stopping` while it terminates, or `Running`, see [Stopping, starting, and restarting a Node](#stopping-starting-and-restarting-a-node) |
 
 A spec change flips readiness to `notready` at once, with `PlanApplied=False` and reason
 `PlanPending`, and readiness returns when the new plan is applied. Wait for a Node with:
@@ -69,6 +71,57 @@ kubectl get events --field-selector involvedObject.kind=Node,involvedObject.name
 
 The status also records the allocated management address under `status.directManagement` and
 the exposed ports under `status.exposedPorts`.
+
+## Stopping, starting, and restarting a Node
+
+A Node's `spec.runState` is `Running` by default. Setting it to `Stopped` scales the Node's
+Deployment to zero; the Node, its Deployment, Services, PersistentVolumeClaim, and Links stay.
+Setting it back to `Running` starts one Pod again:
+
+```bash
+kubectl patch node.c9s.run srl1 --type merge -p '{"spec":{"runState":"Stopped"}}'
+kubectl wait node.c9s.run/srl1 --for=condition=Stopped=True --timeout=5m
+
+kubectl patch node.c9s.run srl1 --type merge -p '{"spec":{"runState":"Running"}}'
+kubectl wait node.c9s.run/srl1 --for=jsonpath='{.status.readiness}'=ready --timeout=10m
+```
+
+While a Node is stopped:
+
+- Its readiness is `notready` and its `Stopped` condition is `True` once no Pod of it remains.
+  The Topology counts it as not ready, so a Topology that was running reports `degraded`.
+- Every Link to it goes carrier-down at its peers, like a pulled cable, and comes back up once
+  the Node runs again. The peers keep running.
+- The Topology and Node controllers keep reconciling. Applying a changed Topology updates the
+  stopped Node, which stays stopped and boots the updated definition when started. The
+  Topology compiler never sets `runState`, so an apply never starts a stopped Node.
+- With persistence enabled, saved device state is kept on the claim and survives the stop.
+
+The Node API is the only control: do not scale the Deployment by hand, the controller reverts
+it. Grouped Nodes (`network-mode: container:<primary>`) share the primary's Pod, so only the
+primary Node's `runState` counts; it stops and starts every Node of the group, and the
+secondaries' `runState` has no effect. Under startup admission (`rollout.batchSize` on the
+Topology or the global `Config`), a stopped Node takes no admission slot and starting it again
+waits for a slot like a new Node.
+
+To restart a Node, annotate it with an opaque token of your choice:
+
+```bash
+TOKEN=$(date +%s%N)
+kubectl annotate node.c9s.run srl1 c9s.run/restart-requested="$TOKEN" --overwrite
+kubectl wait node.c9s.run/srl1 --for=jsonpath='{.status.observedRestartToken}'="$TOKEN" --timeout=10m
+kubectl wait node.c9s.run/srl1 --for=jsonpath='{.status.readiness}'=ready --timeout=10m
+```
+
+The controller replaces the Pod once for every token that differs from the last one it handled,
+and `status.observedRestartToken` reports the token the current Pod was started with. The
+annotation can stay in place, and removing it does not restart the Node again. Restarting a
+grouped Node replaces the shared Pod, which restarts the whole group. A token set on a stopped
+Node is handled when the Node starts. A restart keeps persistent device state; to also discard
+it, use a [device-state reset](/docs/guides/persistence#resetting-a-node-to-its-startup-configuration).
+
+Stopping, starting, and restarting need only `patch` on `nodes.c9s.run`, no rights on
+Deployments or Pods.
 
 ## Link and Topology status
 
@@ -104,6 +157,15 @@ The other containers of the Pod:
 ```bash
 kubectl logs deploy/srl1 -c planner    # preparation: staged and preserved files
 kubectl logs deploy/srl1 -c clabwire   # connectivity: wires, carrier, management mesh
+```
+
+Device Pods carry the labels `c9s.run/topologyNode` (the Node name) and, for Nodes compiled from
+a Topology, `c9s.run/originalNodeName` (the node name the containerlab definition used), so a
+Pod can be mapped back to its node without reading the Node. A grouped Pod carries the primary
+Node's values:
+
+```bash
+kubectl get pods -l c9s.run/originalNodeName=R1
 ```
 
 Chassis cards and grouped nodes are separate application containers. List them with

@@ -157,10 +157,7 @@ func (c *Controller) Reconcile(
 	if c.BaseController.ShouldIgnoreReconcile(node) {
 		return ctrlruntime.Result{}, nil
 	}
-	if node.Annotations[clabernetesconstants.AnnotationStartupHold] != "" {
-		return ctrlruntime.Result{RequeueAfter: directRequeueInterval}, nil
-	}
-	if startupAdmissionRequired(node, c.reconciler.startupBatchSize()) {
+	if startupGated(node, c.reconciler.startupBatchSize) {
 		return ctrlruntime.Result{RequeueAfter: directRequeueInterval}, nil
 	}
 
@@ -178,6 +175,19 @@ func (c *Controller) Reconcile(
 	// The fixed snapshot deadline prevents status events from postponing full validation.
 	// Periodic passes backstop missed input events and stalled worker/Pod phases.
 	return ctrlruntime.Result{RequeueAfter: c.reconciler.observationRequeueAfter(node)}, nil
+}
+
+// startupGated reports whether a Topology startup hold or installation-wide startup admission
+// still defers the Node. Both pace Pod starts; a stopped Node starts no Pod, so it is reconciled
+// (planned, updated, and kept at zero replicas) without waiting. Once it is set Running again it
+// waits for both like any other starting Node.
+func startupGated(node *clabernetesapisv1alpha1.Node, batchSize func() int32) bool {
+	if node.Spec.IsStopped() {
+		return false
+	}
+
+	return node.Annotations[clabernetesconstants.AnnotationStartupHold] != "" ||
+		startupAdmissionRequired(node, batchSize())
 }
 
 // Expected convergence waits get a short fast-retry window, then the watchdog pace. Keep real

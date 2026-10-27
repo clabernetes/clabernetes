@@ -3319,6 +3319,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeSpec(
 							},
 						},
 					},
+					"runState": {
+						SchemaProps: spec.SchemaProps{
+							Description: "RunState is the operational run state of the Node's workload: Running (the default) keeps one workload Pod, Stopped scales it to zero while keeping the Node, its Services, PersistentVolumeClaims, and Links. RunState is operational state, not node intent: it never enters the device plan, the Topology compiler never sets it, and the Topology controller preserves it on emitted Nodes. For grouped Nodes the primary Node's RunState governs the shared Pod; secondary Nodes' RunState has no effect.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
@@ -3416,6 +3423,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeStatus(
 							Ref: ref(
 								"github.com/clabernetes/clabernetes/apis/v1alpha1.NodeDirectManagementStatus",
 							),
+						},
+					},
+					"observedRestartToken": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ObservedRestartToken is the c9s.run/restart-requested token the current workload Pod was started with. It equals the Node's annotation once the controller replaced the Pod for that token; together with readiness it tells a client that a requested restart finished. It keeps its last value while no workload Pod exists.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},

@@ -103,12 +103,35 @@ const (
 	// DeviceStateResetsAnnotation carries the projected per-Node reset tokens on the workload
 	// template as canonical JSON, keyed by Node ID.
 	DeviceStateResetsAnnotation = "c9s.run/device-state-resets"
-	PreparationContainerName    = preparationName
-	ConnectivityContainerName   = connectivityName
+	// RestartRequestedAnnotation is the user-facing Node annotation requesting one Pod
+	// replacement per new opaque token.
+	RestartRequestedAnnotation = "c9s.run/restart-requested"
+	// RestartTokensAnnotation carries the handled per-Node restart tokens on the workload template
+	// as canonical JSON, keyed by Node ID. It records the last token each Node's restart request
+	// was honored for, so a token value rolls the Pod exactly once.
+	RestartTokensAnnotation   = "c9s.run/restart-tokens" //nolint:gosec // annotation key, not a credential.
+	PreparationContainerName  = preparationName
+	ConnectivityContainerName = connectivityName
 	// KubectlDefaultContainerAnnotation makes unqualified kubectl exec/logs target the logical
 	// primary application container rather than a c9s helper or imported component.
 	KubectlDefaultContainerAnnotation = "kubectl.kubernetes.io/default-container"
 )
+
+// DecodeNodeTokens decodes a per-Node token annotation (DeviceStateResetsAnnotation or
+// RestartTokensAnnotation) into its Node ID to token map. A missing or malformed value yields an
+// empty map, so a corrupted annotation is treated like no handled token at all.
+func DecodeNodeTokens(raw string) map[string]string {
+	tokens := map[string]string{}
+	if raw == "" {
+		return tokens
+	}
+
+	if err := json.Unmarshal([]byte(raw), &tokens); err != nil {
+		return map[string]string{}
+	}
+
+	return tokens
+}
 
 // Options supplies c9s/Kubernetes realization policy that does not belong to kind planning.
 type Options struct {
@@ -139,10 +162,16 @@ type Options struct {
 	ProbePolicies                     map[string]ProbePolicy
 	PersistentVolumeClaims            map[string]string
 	DeviceStateResets                 map[string]string
-	EnableContainerStopSignals        bool
-	EnableApplicationLogBroker        bool
-	LinkLifecycleMode                 clabernetesinternaldeviceplan.LinkApplyMode
-	LinkLifecyclePlanDigest           string
+	// RestartTokens holds the handled restart token per Node ID; a changed token changes the Pod
+	// template and so replaces the Pod once.
+	RestartTokens map[string]string
+	// Stopped renders the workload with zero replicas. Everything else is rendered unchanged so
+	// starting the workload again restores exactly the current plan.
+	Stopped                    bool
+	EnableContainerStopSignals bool
+	EnableApplicationLogBroker bool
+	LinkLifecycleMode          clabernetesinternaldeviceplan.LinkApplyMode
+	LinkLifecyclePlanDigest    string
 }
 
 // ProbePolicy is explicit, kind-neutral NodeProfile policy for one logical Node. Password
@@ -434,6 +463,8 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 	delete(annotations, LinkLifecycleModeAnnotation)
 	delete(annotations, LinkLifecyclePlanDigestAnnotation)
 	delete(annotations, DeviceStateResetsAnnotation)
+	delete(annotations, RestartRequestedAnnotation)
+	delete(annotations, RestartTokensAnnotation)
 
 	if options.LinkLifecycleMode != "" {
 		annotations[LinkLifecycleModeAnnotation] = string(options.LinkLifecycleMode)
@@ -447,6 +478,15 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 		}
 
 		annotations[DeviceStateResetsAnnotation] = string(resetPayload)
+	}
+
+	if len(options.RestartTokens) != 0 {
+		restartPayload, restartErr := json.Marshal(options.RestartTokens)
+		if restartErr != nil {
+			return nil, fmt.Errorf("serializing restart token annotation: %w", restartErr)
+		}
+
+		annotations[RestartTokensAnnotation] = string(restartPayload)
 	}
 
 	annotations[planDigestAnnotation] = planDigest
@@ -723,6 +763,10 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 
 	one := int32(1)
 	zero := int32(0)
+	replicas := one
+	if options.Stopped {
+		replicas = zero
+	}
 	falseValue := false
 	linux := k8scorev1.Linux
 
@@ -732,7 +776,7 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 			Labels: labels, Annotations: annotations, OwnerReferences: options.OwnerReferences,
 		},
 		Spec: k8sappsv1.DeploymentSpec{
-			Replicas:             &one,
+			Replicas:             &replicas,
 			RevisionHistoryLimit: &zero,
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{
 				directWorkloadLabel: options.Name,

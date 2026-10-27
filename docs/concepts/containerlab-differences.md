@@ -96,6 +96,11 @@ diagnostic. Nothing is silently dropped.
   Kubernetes PostStart hook, and a failed hook would take the container down; a command that
   fails is instead reported on the node's container log and the remaining commands still run,
   which is what containerlab does. Commands a kind's own deployment records stay fail-closed.
+- **Stop, start, and restart are Node operations.** `containerlab stop`, `start`, and
+  `restart` of single nodes map to the Node's `spec.runState` and the
+  `c9s.run/restart-requested` annotation. A stopped node keeps its Node, Services, links, and
+  persistent state, and the rest of the lab keeps reconciling, see
+  [Stopping, starting, and restarting a Node](/docs/guides/lab-operations#stopping-starting-and-restarting-a-node).
 - **`stages` are rejected.** Multi-node boot orchestration gates the nodes of one lab against
   each other on a single host; direct device Pods start independently. `startup-delay` is
   honored per node.

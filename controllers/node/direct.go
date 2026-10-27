@@ -416,6 +416,10 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	// Run state and restart requests are operational state: they shape the rendered workload
+	// but never the plan, so changing them neither replans nor touches other Nodes.
+	renderOptions.Stopped = node.Spec.IsStopped()
+	renderOptions.RestartTokens = directRestartTokens(groupMembers, nodesByName, existingDeployment)
 	connectivityDecision, err := r.directConnectivityRevision(
 		ctx,
 		node,
@@ -616,6 +620,41 @@ func (r *Reconciler) reconcileDirect(
 		linkLifecycleMode,
 	)
 	return nil
+}
+
+// directRestartTokens resolves the restart token each group member's workload carries. A Node's
+// c9s.run/restart-requested annotation wins; without it the token the current workload already
+// handled is kept. Removing the annotation, or a Topology drift update dropping it, therefore
+// never replaces the Pod, and only a token that differs from the handled one rolls it, once.
+func directRestartTokens(
+	groupMembers []string,
+	nodesByName map[string]*clabernetesapisv1alpha1.Node,
+	existing *k8sappsv1.Deployment,
+) map[string]string {
+	handled := map[string]string{}
+	if existing != nil {
+		templateAnnotations := existing.Spec.Template.Annotations
+		handled = clabernetesinternaldirectpod.DecodeNodeTokens(
+			templateAnnotations[clabernetesinternaldirectpod.RestartTokensAnnotation],
+		)
+	}
+	tokens := map[string]string{}
+	for _, memberName := range groupMembers {
+		member := nodesByName[memberName]
+		if member == nil {
+			continue
+		}
+		nodeID := string(member.GetUID())
+		token := member.GetAnnotations()[clabernetesinternaldirectpod.RestartRequestedAnnotation]
+		if token == "" {
+			token = handled[nodeID]
+		}
+		if token != "" {
+			tokens[nodeID] = token
+		}
+	}
+
+	return tokens
 }
 
 func (r *Reconciler) reconcileDirectSecondary(
