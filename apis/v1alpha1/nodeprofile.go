@@ -83,13 +83,13 @@ type NodeProfileImagePull struct {
 
 // NodeProfileDeployment holds portable direct workload policy.
 type NodeProfileDeployment struct {
-	// NetworkIsolation requests a private network namespace for the device's
-	// data-plane interfaces. True requests isolation while keeping sidecar-owned
-	// infra (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; false keeps the legacy
-	// shared Pod network namespace. The direct runtime accepts and propagates
-	// this value but does not enforce isolation yet. Omitted leaves the field
-	// unset so ResolveProfile can apply the ixia-c family default; an explicit
-	// value always wins.
+	// NetworkIsolation runs the device's data-plane interfaces in a private
+	// network namespace while keeping sidecar-owned infra
+	// (c9s0/c9sr0/c9sm0/fabric) in the Pod namespace. False keeps the legacy
+	// shared Pod network namespace. The device container must be privileged or
+	// carry CAP_SYS_ADMIN so the launch boundary can enter the private
+	// namespace. Omitted leaves the field unset so ResolveProfile can apply the
+	// ixia-c family default; an explicit value always wins.
 	// +optional
 	NetworkIsolation *bool `json:"networkIsolation,omitempty"`
 	// Persistence enables persistence of the containerlab working directory.

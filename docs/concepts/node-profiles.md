@@ -57,17 +57,20 @@ their built-in defaults or, where available, Config resolution. Service exposure
 `LoadBalancer` default because Config has no exposure-mode field. Set `spec.expose.exposeType` to
 `ClusterIP`, `Headless`, or `None` to override it.
 
-`spec.deployment.networkIsolation` requests a private network namespace for the device's
-data-plane interfaces. `true` requests isolation for the device-side interfaces while the
-connectivity sidecar keeps Kubernetes transport, the management router/mesh, and Link transport
-legs in the Pod namespace; `false` keeps the shared Pod network namespace. The field is accepted
-and propagated today, but the direct runtime does not enforce isolation yet; that lands with the
-staged device-netns work. An omitted value leaves the field unset, so behaviour depends on the
-Node kind: kinds in the `keysight_ixia-c` family resolve to `true` at profile resolution because
-their entrypoint claims every interface it can see, and all other kinds behave as `false`. Set
-`false` explicitly on an ixia-c Node to opt out. For a Topology, configure the equivalent field
-at `spec.deployment.networkIsolation`; the Topology controller copies an explicit value into the
-generated NodeProfile and leaves it unset otherwise.
+`spec.deployment.networkIsolation` runs the device's data-plane interfaces in a private network
+namespace. `true` isolates the device-side interfaces while the connectivity sidecar keeps
+Kubernetes transport, the management router/mesh, and Link transport legs in the Pod namespace;
+`false` keeps the shared Pod network namespace. The device container must be privileged or carry
+`CAP_SYS_ADMIN`, because the launch boundary enters the private namespace before executing the
+image process. The runtime creates the namespace in a dedicated init container, moves the
+device-side management and Link legs into it, and leaves the sidecar in the Pod namespace. An
+omitted value leaves the field unset, so behaviour depends on the Node kind: kinds in the
+`keysight_ixia-c` family resolve to `true` at profile resolution because their entrypoint claims
+every interface it can see, and all other kinds behave as `false`. Set `false` explicitly on an
+ixia-c Node to opt out. For a Topology, configure the equivalent field at
+`spec.deployment.networkIsolation`; the Topology controller copies an explicit value into the
+generated NodeProfile and leaves it unset otherwise. Same-Pod and loopback Links are not yet
+supported inside an isolated device namespace.
 
 The `spec.scheduling.affinity` field accepts the native Kubernetes node affinity, pod affinity, and
 pod anti-affinity structure. A single NodeProfile can be referenced by multiple Nodes, so the

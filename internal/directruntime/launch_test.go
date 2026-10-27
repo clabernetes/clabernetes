@@ -25,6 +25,15 @@ type recordingLaunchOperations struct {
 	hostname    string
 	files       map[string][]byte
 	updateErr   error
+	deviceNetns []string
+	calls       []string
+}
+
+func (r *recordingLaunchOperations) EnterDeviceNetns(path string) error {
+	r.deviceNetns = append(r.deviceNetns, path)
+	r.calls = append(r.calls, "netns")
+
+	return nil
 }
 
 func (r *recordingLaunchOperations) Delay(duration time.Duration) error {
@@ -87,12 +96,14 @@ func (r *recordingLaunchOperations) Hostname() (string, error) {
 
 func (r *recordingLaunchOperations) LimitOpenFiles(limit uint64) error {
 	r.fileLimits = append(r.fileLimits, limit)
+	r.calls = append(r.calls, "limit")
 
 	return nil
 }
 
 func (r *recordingLaunchOperations) Exec(argv []string) error {
 	r.argv = append([]string(nil), argv...)
+	r.calls = append(r.calls, "exec")
 
 	return nil
 }
@@ -330,5 +341,32 @@ func TestRunLaunchRejectsCrossNodeMount(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "unknown Node") {
 		t.Fatalf("RunLaunchWithOperations() error = %v", err)
+	}
+}
+
+func TestRunLaunchEntersPrivateDeviceNetnsBeforeExec(t *testing.T) {
+	t.Parallel()
+
+	plan := lifecycleTestPlan()
+	plan.Containers[0].ImageEntrypoint = []string{"/bin/true"}
+
+	operations := &recordingLaunchOperations{}
+
+	err := clabernetesinternaldirectruntime.RunLaunchWithOperationsAndNetns(
+		plan,
+		"container-a",
+		"/var/run/netns/pod-uid.ns",
+		operations,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(operations.deviceNetns, []string{"/var/run/netns/pod-uid.ns"}) {
+		t.Fatalf("device netns entries = %#v", operations.deviceNetns)
+	}
+
+	if !reflect.DeepEqual(operations.calls, []string{"netns", "limit", "exec"}) {
+		t.Fatalf("launch boundary order = %#v", operations.calls)
 	}
 }

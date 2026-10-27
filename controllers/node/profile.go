@@ -36,7 +36,8 @@ type ResolvedProfile struct {
 	// direct workload persistence settings
 	Persistence clabernetesapisv1alpha1.Persistence
 
-	// NetworkIsolation records the resolved private netns mode. Runtime enforcement is staged.
+	// NetworkIsolation runs device-side interfaces in a private netns created by the Pod's
+	// device-netns init container; the connectivity sidecar remains in the Pod namespace.
 	NetworkIsolation bool
 
 	// status probes

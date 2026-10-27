@@ -48,29 +48,30 @@ We need a device whose *view* of the namespace contains only its own ports.
   making ixia-c work without opt-in. Compilation copies only explicit values
   into emitted profiles; it does not synthesize the default.
 
-- **Lifecycle plumbing for the private netns.** A dedicated emptyDir-backed
-  bind-mount (`/var/run/netns/<pod-uid>`) materialized by an init helper and
-  kept alive by the sidecar holds a bound netns fd (same pattern as the
-  existing worker-host handle's `/proc/1/ns` mount). The application launch
-  boundary (`node-runtime launch`) enters that netns via `setns(CLONE_NEWNET)`
-  before `unix.Exec(argv)` (mirrors
-  `endpoint_namespace_linux.go:115,130`).
+- **Lifecycle plumbing for the private netns.** A dedicated hostPath-backed
+  bind-mount (`/var/run/netns/<pod-uid>.ns`) is created by the
+  `device-netns-init` init container with bidirectional propagation and opened
+  by the sidecar through a netlink handle bound to that namespace. The
+  application launch boundary (`node-runtime launch --deviceNetns`) enters the
+  namespace via `setns(CLONE_NEWNET)` immediately before `unix.Exec(argv)`.
+  The sidecar detaches and removes its file on graceful termination. A hostPath
+  is used instead of an emptyDir because kubelet cannot unlink the bind-mounted
+  file during emptyDir teardown.
 
 - **Cross-namespace veth pairs.** Synthetic management and fabric veth pairs
   continue to be created in the Pod namespace; the device-side end
   (`spec.DeviceInterface`, `spec.InterfaceName`/fabric) is then
-  `Netlink.LinkSetNsFd(deviceLeg, devNsFd)`-moved into the device netns
-  (precedent: `fabric_linux.go:575` for host Links, tests already depend on
-  `github.com/vishvananda/netns`).
+  `netlink.LinkSetNsFd(deviceLeg, devNsFd)`-moved into the device netns and
+  addressed/raised there. Host Links move the worker end to the worker
+  namespace and the device end into the private namespace.
 
 - **Reconciler awareness.** `EnsureInterposition`, `EnsureFabricEndpoint`,
-  `EnsureVethPair`, `SweepTransportState` become aware that the device leg may
-  live in another namespace: they skip Pod-local MTU/address fixups for absent
-  device legs (already tolerated for SR Linux-style renames) and resolve peer
-  indices appropriately.
+  `EnsureHostInterface`, and `SweepTransportState` tolerate the device leg
+  living in another namespace. Same-Pod and loopback Links are rejected with a
+  clear error until their cross-namespace placement is implemented.
 
 - **Smallest-first scope.** Mgmt + data-plane fidelity for ixia-c on direct
-  runtime is the target. Local/loopback/host-Link cross-cases and same-pod
+  runtime is the target. Same-Pod/loopback Link placement and same-pod
   secondaries joining the isolated netns are explicitly deferred as non-blocking
   until proven needed — see Out of Scope.
 
@@ -102,12 +103,11 @@ consumer proves the shape.
 - `apis/v1alpha1/{nodeprofile,topologyspec}.go` + generated deepcopy/OpenAPI/CRDs
   (`make generate` / `make manifests`) — new deployment profile field; docs-site reference regen (`make docs`).
 - `compiler/{compile,render}.go` — map an explicit topology deployment policy value into compiler input and emitted profiles; no default synthesis or profile grouping key change.
-- `controllers/node/profile.go` + `internal/directpod/renderer.go` — resolve `networkIsolation` (including the ixia-c family default), render dedicated `device-netns` emptyDir/volume+mounts only when enabled, thread pod identity into sidecar args and launch env.
+- `controllers/node/profile.go` + `internal/directpod/renderer.go` — resolve `networkIsolation` (including the ixia-c family default), render the dedicated `device-netns` hostPath/init container/mounts only when enabled, and thread the namespace path into the sidecar and application launch commands.
 - `internal/directruntime/{launch,connectivity,interposition,fabric,links}_linux.go`
-  + new `devicenetns_linux.go` — netns lifecycle + cross-namespace pair logic.
-- `cmd/clabernetes/cli/entrypoint.go` — new wiring flag surfaced through
-  `render` if not zero-config provable otherwise.
-- Docs: architecture note + troubleshooting addition.
+  + new `devicenetns_linux.go` — netns lifecycle, namespace-bound netlink handle, cross-namespace management/fabric/host leg placement, and launch `setns`.
+- `cmd/clabernetes/cli/entrypoint.go` — `device-netns` init command and `--deviceNetns` wiring on the launch and connectivity boundaries.
+- Docs: node-profile behavior, privilege requirement, and the same-Pod Link limitation.
 
 ## Open Questions
 

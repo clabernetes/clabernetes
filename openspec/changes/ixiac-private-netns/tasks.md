@@ -1,35 +1,42 @@
 # Tasks
 
 - [ ] Create change scope and validate cluster
-  - [ ] `kubectl get --raw /readyz` on current context + confirm no existing `ixia-probe` namespace; document baseline
-  - [ ] Reproduce #372 locally (single Node `keysight_ixia-c-one`) and capture failing logs as `openspec/changes/ixiac-private-netns/repro.log`
+  - [x] Validate the local KinD cluster (`kind-c9s-e2e`) and install the current checkout
+  - [ ] Reproduce #372 on the Nebius test cluster and capture `openspec/changes/ixiac-private-netns/repro.log`
+  - [x] Confirm the failure mode from the issue: `ixiacd` moves `c9s0`/`c9sr0`/`c9sm0`/`c9ss*` out of the shared Pod namespace
 
-- [ ] CRD/API plumbing
-  - [ ] Extend `apis/v1alpha1/nodeprofile.go:NodeProfileDeployment` + `apis/v1alpha1/topologyspec.go:Deployment` with optional `*bool` `networkIsolation`; emit deepcopy/OpenAPI/CRDs via `make generate && make manifests`; regen docs-site (`make docs`)
-  - [ ] Thread field through `compiler/{compile,render}.go` as an explicit passthrough only; omitted values stay unset in emitted profiles (no compiler-side defaulting or grouping-key change)
+- [x] CRD/API plumbing
+  - [x] Extend `apis/v1alpha1/nodeprofile.go:NodeProfileDeployment` + `apis/v1alpha1/topologyspec.go:Deployment` with optional `*bool` `networkIsolation`; regenerate deepcopy/OpenAPI/CRDs
+  - [x] Thread the field through `compiler/{compile,render}.go` as an explicit passthrough only; omitted values stay unset in emitted profiles
 
-- [ ] Resolver/renderer plumbing
-  - [ ] Teach `controllers/node/profile.go` (`ResolvedProfile`) to carry `NetworkIsolation` through `applyProfileDeployment`, honoring explicit values and layering the ixia-c family default when the resolved value is empty (single defaulting site)
-  - [ ] In `internal/directpod/renderer.go`, gate `device-netns` emptyDir volume + mounts to when `resolvedProfile.networkIsolation` is true; thread pod UID/name into sidecar args and launch-ops env
-  - [ ] Extend renderer + compiler render tests (normalize fixtures with isolated vs shared profiles; assert volume/mounts absent for non-isolated kinds)
+- [x] Resolver/renderer plumbing
+  - [x] Teach `controllers/node/profile.go` (`ResolvedProfile`) to carry `NetworkIsolation` through `applyProfileDeployment`, honoring explicit values and layering the ixia-c family default when unset
+  - [x] In `internal/directpod/renderer.go`, render the `device-netns` volume, init container, sidecar mount/arg, and application mount/arg only when isolation is resolved
+  - [x] Extend renderer tests with isolated vs shared profiles, including init-before-sidecar ordering
 
-- [ ] Netns lifecycle primitive
-  - [ ] New file `internal/directruntime/devicenetns_linux.go` (+ *_linux_test.go) exposing `EnsureDeviceNetns(stateDir, podUID) (path string, cleanup func(), error)` using `vishvananda/netns` + bind-mount; include non-Linux stub
-  - [ ] Wire lifecycle into `connectivity.go` startup before `EnsureInterposition` — ensure idempotency across sidecar restarts
+- [x] Netns lifecycle primitive
+  - [x] New `internal/directruntime/devicenetns_linux.go` (+ non-Linux stub) exposing `EnsureDeviceNetns`, `openDeviceNetworkNamespace`, and `CleanupDeviceNetns`
+  - [x] Create the bind mount in `device-netns-init` with bidirectional propagation; open it in the sidecar with `netlink.NewHandleAt`
+  - [x] Clean up the file on graceful sidecar termination; use a dedicated hostPath because emptyDir teardown cannot unlink the submount
 
-- [ ] Cross-namespace pair placement
-  - [ ] Refactor `EnsureFabricEndpoint` + `EnsureInterposition` to `LinkSetNsFd` the device-side leg into dev ns; reuse host-link pattern `fabric_linux.go:575`
-  - [ ] Adjust `links_linux.go` `EnsureVethPair`/lookup to tolerate absent-in-Pod device leg when owner is isolated; add reconciler tests exercising the absence branch
+- [x] Cross-namespace pair placement
+  - [x] Move the synthetic management device leg into the private namespace, address it there, and assert its default route there
+  - [x] Move fabric and host Link device legs into the private namespace and raise them there
+  - [x] Reject same-Pod and loopback Links with a clear error until their cross-namespace placement lands
 
-- [ ] Launch boundary crossing
-  - [ ] Extend `LaunchOperations` with `EnterDeviceNetns(path string) error` and implement via thread-locked `setns(CLONE_NEWNET)` mirroring `endpoint_namespace_linux.go:115-143`
-  - [ ] Call before `Exec` in `RunLaunchWithOperations`; verify non-isolated pods still pass existing `launch_test.go`
+- [x] Launch boundary crossing
+  - [x] Extend `LaunchOperations` with `EnterDeviceNetns(path)` and implement the thread-locked `setns(CLONE_NEWNET)` in the Linux launch operations
+  - [x] Call it before `LimitOpenFiles`/`Exec`; non-isolated pods keep the existing path
 
-- [ ] Conditions/events/docs
-  - [ ] Surface isolation in conditions/events; extend interposition condition scenario wording under `direct-connectivity`
-  - [ ] Minimal architecture note in `docs/` or repo comment where network sharing is documented
+- [x] Conditions/events/docs
+  - [x] Log the active isolation mode in the sidecar
+  - [x] Record `DeviceNetworkIsolation=True` in the interposition conditions file
+  - [x] Document the profile behavior, privilege requirement, and same-Pod Link limitation
 
 - [ ] Verification
-  - [ ] `make lint` + targeted `go test ./internal/directpod/... ./internal/directruntime/...`
-  - [ ] Re-apply ixia-c Node, assert `NodeReady + ConnectivityReady True`, no `CrashLoopBackOff` across one resync tick window (capture logs)
-  - [ ] Negative check: a `nokia_srlinux` single-node lab on same cluster unchanged (ensure no accidental global enablement)
+  - [x] `make lint`
+  - [x] `make verify-generated` inspected (only intended generated diffs remain in the working tree)
+  - [x] `go test ./internal/directpod/... ./internal/directruntime/... ./controllers/node/...`
+  - [x] Real `ixia-c-one:1.61.0-9` e2e on local KinD: `TestIxiac` passes in ~52-63s, including netns inode, `c9s0` absence, management address, and `ConnectivityReady`
+  - [ ] Re-run `TestIxiac` on the Nebius test cluster (requires interactive `npc` browser auth)
+  - [ ] Negative check: a non-isolated `nokia_srlinux` single-node lab on the same cluster unchanged

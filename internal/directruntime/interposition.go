@@ -335,33 +335,40 @@ func reconcileInterposition(
 	spec.MeshPeers = meshPeersForSpec(spec, peers)
 	spec.ReconcileMeshPeers = reconcilePeers
 
+	isolated := options.DeviceNetnsPath != ""
+
 	if err := operations.EnsureInterposition(spec); err != nil {
-		recordInterpositionConditions(options.StateDirectory, err, nil)
+		recordInterpositionConditions(options.StateDirectory, err, nil, isolated)
 
 		return fmt.Errorf("ensuring management interposition: %w", err)
 	}
 
 	if options.NATOperations == nil {
 		err := fmt.Errorf("%w: translation operations are unavailable", errInterposition)
-		recordInterpositionConditions(options.StateDirectory, nil, err)
+		recordInterpositionConditions(options.StateDirectory, nil, err, isolated)
 
 		return err
 	}
 
 	if err := options.NATOperations.EnsureInterpositionNAT(natSpec); err != nil {
-		recordInterpositionConditions(options.StateDirectory, nil, err)
+		recordInterpositionConditions(options.StateDirectory, nil, err, isolated)
 
 		return fmt.Errorf("ensuring management translation: %w", err)
 	}
 
-	recordInterpositionConditions(options.StateDirectory, nil, nil)
+	recordInterpositionConditions(options.StateDirectory, nil, nil, isolated)
 
 	return nil
 }
 
-// recordInterpositionConditions persists the two named interposition conditions. Recording is
+// recordInterpositionConditions persists the named interposition conditions. Recording is
 // best-effort observability: the fail-closed path is the returned error itself.
-func recordInterpositionConditions(stateDirectory string, underlayErr, translationErr error) {
+func recordInterpositionConditions(
+	stateDirectory string,
+	underlayErr,
+	translationErr error,
+	isolated bool,
+) {
 	if stateDirectory == "" {
 		return
 	}
@@ -379,6 +386,9 @@ func recordInterpositionConditions(stateDirectory string, underlayErr, translati
 
 	content := condition("CNIUnderlayPreserved", underlayErr, false) +
 		condition("ManagementTranslationReady", translationErr, underlayErr != nil)
+	if isolated {
+		content += "DeviceNetworkIsolation=True\n"
+	}
 
 	//nolint:gosec,mnd // non-sensitive sidecar-owned observability record, standard file mode.
 	_ = os.WriteFile(

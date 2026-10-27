@@ -157,12 +157,12 @@ type Expose struct {
 
 // Deployment holds portable policy compiled into direct Node workloads.
 type Deployment struct {
-	// NetworkIsolation requests a private network namespace for device Pods.
-	// True requests isolation while keeping sidecar infra
-	// (c9s0/c9sr0/c9sm0/fabric) in the Pod ns; false keeps the legacy shared Pod
-	// ns. The direct runtime accepts and propagates this value but does not
-	// enforce isolation yet. Omitted leaves emitted profiles unset; the Node
-	// controller applies the ixia-c family default at resolve time.
+	// NetworkIsolation runs direct device Pods with their data-plane interfaces
+	// in a private network namespace while keeping sidecar infra
+	// (c9s0/c9sr0/c9sm0/fabric) in the Pod namespace. False keeps the legacy
+	// shared Pod namespace. Device containers must be privileged or carry
+	// CAP_SYS_ADMIN. Omitted leaves emitted profiles unset; the Node controller
+	// applies the ixia-c family default at resolve time.
 	// +optional
 	NetworkIsolation *bool `json:"networkIsolation,omitempty"`
 	// Resources is a mapping of nodeName (or "default") to kubernetes resource requirements -- any

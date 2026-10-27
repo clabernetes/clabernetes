@@ -2,45 +2,21 @@
 apiVersion: c9s.run/v1alpha1
 kind: NodeProfile
 metadata:
-  name: ixiac-isolated
+  name: ixia-pull
 spec:
   expose:
     disableAutoExpose: true
-  deployment:
-    networkIsolation: true
----
-apiVersion: c9s.run/v1alpha1
-kind: Link
-metadata:
-  name: iso-lin1-eth1-iso-lin2-eth1
-spec:
-  endpointA:
-    nodeName: iso-lin1
-    interfaceName: eth1
-  endpointB:
-    nodeName: iso-lin2
-    interfaceName: eth1
+  imagePull:
+    pullSecrets:
+      - ixia-regcred
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Node
 metadata:
-  name: iso-lin1
+  name: ixia-c-one
 spec:
-  kind: linux
-  image: ghcr.io/srl-labs/network-multitool
+  kind: keysight_ixia-c-one
+  image: ghcr.io/open-traffic-generator/ixia-c-one:1.61.0-9
+  privileged: true
   profileRef:
-    name: ixiac-isolated
-  exec:
-    - ip address add 192.168.90.0/31 dev eth1
----
-apiVersion: c9s.run/v1alpha1
-kind: Node
-metadata:
-  name: iso-lin2
-spec:
-  kind: linux
-  image: ghcr.io/srl-labs/network-multitool
-  profileRef:
-    name: ixiac-isolated
-  exec:
-    - ip address add 192.168.90.1/31 dev eth1
+    name: ixia-pull

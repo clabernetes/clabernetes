@@ -26,9 +26,10 @@ type peerAddressResolver interface {
 }
 
 type netlinkOperations struct {
-	resolver  peerAddressResolver
-	namespace EndpointNamespace
-	neighbors *meshNeighborInventory
+	resolver    peerAddressResolver
+	namespace   EndpointNamespace
+	neighbors   *meshNeighborInventory
+	deviceNetns *deviceNetworkNamespace
 }
 
 const vethLinkType = "veth"
@@ -38,6 +39,13 @@ const managementAddressReadyTimeout = 5 * time.Second
 var errVethOwnership = errors.New("veth ownership invariant failed")
 
 func newLinkOperations(networkNamespace EndpointNamespace) LinkOperations {
+	return newLinkOperationsWithDeviceNetns(networkNamespace, nil)
+}
+
+func newLinkOperationsWithDeviceNetns(
+	networkNamespace EndpointNamespace,
+	deviceNetns *deviceNetworkNamespace,
+) LinkOperations {
 	resolver := peerAddressResolver(net.DefaultResolver)
 	if networkNamespace != nil {
 		resolver = &net.Resolver{
@@ -47,14 +55,15 @@ func newLinkOperations(networkNamespace EndpointNamespace) LinkOperations {
 	}
 
 	return netlinkOperations{
-		resolver:  resolver,
-		namespace: networkNamespace,
-		neighbors: newMeshNeighborInventory(),
+		resolver:    resolver,
+		namespace:   networkNamespace,
+		neighbors:   newMeshNeighborInventory(),
+		deviceNetns: deviceNetns,
 	}
 }
 
 func (o netlinkOperations) Close() error {
-	return o.neighbors.close()
+	return errors.Join(o.neighbors.close(), o.deviceNetns.Close())
 }
 
 func (netlinkOperations) EnsureSysctl(name, value string) error {
