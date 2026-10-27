@@ -31,6 +31,7 @@ rules:
       - events
       - services
       - configmaps
+      - persistentvolumeclaims
     verbs:
       - get
       - list
@@ -89,6 +90,7 @@ rules:
       - events
       - services
       - configmaps
+      - persistentvolumeclaims
     verbs:
       - get
       - list
@@ -136,6 +138,14 @@ rules:
       - create
       - update
       - patch
+      - delete
+  # Persistent node state survives a plain destroy; deleting it (destroy --cleanup) is the
+  # only write a lab needs on claims. The controllers create them.
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumeclaims
+    verbs:
       - delete
   # Interactive streams. WebSocket clients open them with GET, which API servers before
   # Kubernetes 1.35 authorize as the get verb; create covers SPDY clients and 1.35+.

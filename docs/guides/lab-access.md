@@ -9,14 +9,15 @@ into the built-in `view` and `edit` roles, so lab access is always granted expli
 
 | ClusterRole | Grants |
 | --- | --- |
-| `clabernetes-lab-viewer` | get, list, and watch on Topologies, Nodes, Links, NodeProfiles, Pods, Events, Services, and ConfigMaps; Pod logs; Pod metrics (`metrics.k8s.io`) |
-| `clabernetes-lab-editor` | everything the viewer has, plus create, update, patch, and delete on Topologies, Nodes, Links, NodeProfiles, and ConfigMaps, plus `pods/exec` and `pods/portforward` |
+| `clabernetes-lab-viewer` | get, list, and watch on Topologies, Nodes, Links, NodeProfiles, Pods, Events, Services, ConfigMaps, and PersistentVolumeClaims; Pod logs; Pod metrics (`metrics.k8s.io`) |
+| `clabernetes-lab-editor` | everything the viewer has, plus create, update, patch, and delete on Topologies, Nodes, Links, NodeProfiles, and ConfigMaps, delete on PersistentVolumeClaims, plus `pods/exec` and `pods/portforward` |
 
 Neither role grants anything in the `apps` group, Pod create, update, or delete, Secrets,
 Namespaces, or RBAC objects. An editor deploys, changes, and destroys labs through c9s
 resources, and stops, starts, and restarts nodes by patching their Node, see
 [Stopping, starting, and restarting a Node](/docs/guides/lab-operations#stopping-starting-and-restarting-a-node).
-The controllers create the Deployments, Pods, and Services from there. `pods/exec` and
+The controllers create the Deployments, Pods, Services, and claims from there. Deleting the
+claims of saved node state (`containerlab destroy --cleanup`) is the only claim write an editor has. `pods/exec` and
 `pods/portforward` carry both `create` and `get`, because WebSocket clients open these streams
 with a GET request, which API servers before Kubernetes 1.35 authorize as `get`.
 
