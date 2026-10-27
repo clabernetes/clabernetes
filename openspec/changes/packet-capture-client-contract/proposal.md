@@ -27,6 +27,11 @@ capture support on this command, so the command needs a contract that clients ca
   call ends, are specified as supported, so clients can chain calls under the one-hour bound.
 - The capture socket no longer receives packets from other interfaces in the window between
   socket creation and binding to the planned interface.
+- `--stop-on-stdin-close` (opt-in) ends a capture when stdin reaches EOF or fails, like a
+  reached bound. A Kubernetes exec does not stop its process when the client's stream closes;
+  without this, an interrupted capture kept running in the Pod until a write failed or its
+  bound was reached, up to an hour. A broken stdout pipe (EPIPE, EBADF) also ends the capture
+  cleanly with a final record; the command no longer dies from SIGPIPE first.
 
 No breaking change: existing single-interface pcap invocations with explicit paths and
 `--nodeID` keep working and produce the same bytes.

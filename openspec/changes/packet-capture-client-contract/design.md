@@ -72,6 +72,20 @@ Facts the design relies on:
   planned ID, packet count). The singular `interfaceName` and `interfaceID` stay for
   single-interface calls, so the change is additive for existing parsers.
 
+- **Client departure through stdin.** Kubernetes keeps an exec'd process running after the
+  client's stream closes, but it closes the process's stdin: client-go's websocket executor
+  sends the v5 `CLOSE` signal for stdin (`v5.channel.k8s.io`, served since Kubernetes 1.29 and
+  translated by the API server for the kubelet), and the SPDY executor half-closes the stdin
+  stream. `--stop-on-stdin-close` reads stdin and ends the capture on EOF or a read error,
+  through the same path as a reached bound, so the record is `Succeeded` with a reason. It is
+  opt-in because an exec without `-i` gets an empty stdin that would end the capture at once.
+  Alternatives: a heartbeat on stdin (needs a client protocol for no gain over EOF), or
+  probing stdout with zero-length writes (pipes do not report a closed reader that way).
+- **SIGPIPE ignored.** Go kills a process with SIGPIPE when a write to stdout fails with
+  EPIPE. The command ignores SIGPIPE so the write returns EPIPE; EPIPE, EBADF, and a closed
+  descriptor end the capture as a departed client with a final record. Other write errors
+  still fail it.
+
 ## Risks / Trade-offs
 
 - [A slow stdout consumer stalls every reader behind the writer lock] → The kernel socket
@@ -79,6 +93,8 @@ Facts the design relies on:
   call stays bounded by duration.
 - [Wire peer naming depends on the Service name convention] → Both sides use one function,
   and a unit test pins the round trip.
+- [A client that cannot close stdin without closing the whole stream] → Abrupt disconnects
+  also end the exec's stdin, so the capture still stops; the flag only needs stdin attached.
 - [Clients may treat a pcap and pcapng stream alike] → `pcap` stays the default; pcapng is
   opt-in and documented with its layout.
 

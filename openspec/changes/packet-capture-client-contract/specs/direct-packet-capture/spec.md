@@ -117,6 +117,34 @@ across all requested interfaces, and `--snapLength` between 64 bytes and 1 MiB w
 - **WHEN** a caller captures two interfaces with `--packetLimit 4`
 - **THEN** the stream holds exactly four packets in total and the command succeeds
 
+### Requirement: Captures end when their client goes away
+
+A Kubernetes exec does not stop its process when the client's stream closes, so the command
+SHALL detect a departed client itself. With `--stop-on-stdin-close`, the command SHALL read
+stdin and discard its bytes; when stdin reaches EOF or a read fails, the capture SHALL end as
+when a bound is reached: packets already read are written, the exit status is zero, and the
+final record is `Succeeded` with a `reason` starting with `client closed`. The flag SHALL be
+opt-in, so a caller without stdin attached keeps the previous behaviour, and SHALL be rejected
+with `--list-interfaces`. Independently of the flag, a write to stdout that fails because the
+reader is gone (EPIPE, EBADF, a closed descriptor) SHALL end the capture the same way; the
+command SHALL NOT be killed by SIGPIPE before it writes its final record. Any other write
+failure SHALL fail the capture.
+
+#### Scenario: Client closes stdin
+
+- **WHEN** a caller runs `kubectl exec -i ... packet-capture --stop-on-stdin-close --duration 1h ...` and closes stdin while the capture runs
+- **THEN** the process exits with status zero within seconds, and its final record is `Succeeded` with reason `client closed: stdin reached EOF`
+
+#### Scenario: Reader of stdout is gone
+
+- **WHEN** the reader of the capture's stdout closes its end of the pipe
+- **THEN** the next write fails with EPIPE, the process exits with status zero, and its final record is `Succeeded` with a reason starting with `client closed: writing stdout`
+
+#### Scenario: Caller without stdin
+
+- **WHEN** a caller runs the capture without `--stop-on-stdin-close`
+- **THEN** stdin is not read and the capture runs until a bound is reached
+
 ### Requirement: Captures may overlap and chain
 
 Each capture SHALL be an independent process that holds no Pod-wide lock or exclusive
@@ -142,7 +170,8 @@ Each capture SHALL write JSON audit records with schema version
 `Succeeded` or `Failed`, or a single `Denied` record when authorization fails. Records SHALL
 carry the plan digest, the Node UID and name, the format, the bounds, and every requested
 interface with its planned interface ID when it is authorized; the final record SHALL carry
-packet and byte counts. Records MUST NOT contain packet payload bytes.
+packet and byte counts. A `Succeeded` record of a capture whose client went away SHALL carry
+a `reason` starting with `client closed`. Records MUST NOT contain packet payload bytes.
 
 #### Scenario: Audit lists all interfaces
 

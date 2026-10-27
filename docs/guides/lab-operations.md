@@ -154,6 +154,30 @@ kubectl exec deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet
 - Each capture writes JSON audit records with status `Started`, `Succeeded`, `Failed`, or
   `Denied` to stderr. Packet data goes only to stdout.
 
+### Stop a capture when the client goes away
+
+Kubernetes does not stop an exec'd process when `kubectl` exits or its connection drops. A
+capture you interrupt with Ctrl+C keeps running in the Pod until its next write fails or its
+bound is reached. Attach stdin and add `--stop-on-stdin-close` so the capture ends as soon as
+the client is gone:
+
+```bash
+kubectl exec -i deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
+  --nodeName srl1 --interface e1-1 --format pcapng --duration 1h --stop-on-stdin-close \
+  | wireshark -k -i -
+```
+
+- The capture reads stdin and ignores its bytes. When stdin reaches EOF or a read fails, the
+  capture ends like a reached bound: packets already captured are written, the exit status is
+  0, and the final record is `Succeeded` with `reason` `client closed: stdin reached EOF`.
+- Kubernetes closes the process's stdin when the client closes its stdin or the exec
+  connection ends. Both transports deliver it: the websocket protocol `v5.channel.k8s.io`
+  (sends a close signal for stdin; Kubernetes 1.29 or newer) and SPDY.
+- Use the flag only with stdin attached (`kubectl exec -i`). Without `-i`, stdin is empty and
+  the capture would end at once. Without the flag, stdin is not read.
+- When the reader of stdout goes away, the next write fails and the capture ends the same way
+  with `reason` `client closed: writing stdout: ...`, whether or not the flag is set.
+
 ## Network policies
 
 Device Pods talk to each other over UDP: port 14789 carries the management mesh and port 14790
