@@ -7,12 +7,12 @@ import (
 	clabtypes "github.com/srl-labs/containerlab/types"
 )
 
+var errConditionNotMet = errors.New("condition not met")
+
 func TestDeploymentConditionsSeeContainerlabContainerName(t *testing.T) {
 	t.Parallel()
 
-	hookErr := errors.New("condition not met")
-
-	for _, want := range []error{nil, hookErr} {
+	for _, want := range []error{nil, errConditionNotMet} {
 		config := &clabtypes.NodeConfig{ShortName: "a", LongName: "a"}
 
 		var seen string
