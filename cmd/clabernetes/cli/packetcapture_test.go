@@ -141,6 +141,10 @@ func TestPacketCaptureRejectsMalformedRequests(t *testing.T) {
 			arguments: []string{"--list-interfaces", "--interface", "eth1"},
 			reason:    "does not accept capture flags: --interface",
 		},
+		"listing that stops on stdin close": {
+			arguments: []string{"--list-interfaces", "--stop-on-stdin-close"},
+			reason:    "does not accept capture flags: --stop-on-stdin-close",
+		},
 		"both selectors": {
 			arguments: []string{
 				"--nodeID", "lin1-uid", "--nodeName", "lin1", "--interface", "eth1",
@@ -195,6 +199,21 @@ func TestPacketCaptureDeniesForeignInterfaceBeforeCapturing(t *testing.T) {
 	if record.Status != "Denied" || record.NodeID != "lin1-uid" ||
 		len(record.Interfaces) != 2 || record.Interfaces[1].Name != "eth0" {
 		t.Fatalf("denied audit = %#v", record)
+	}
+}
+
+// TestPacketCaptureAcceptsStopOnStdinClose parses the opt-in flag: the request is authorized as
+// any other, here denied before stdin is read or anything is written.
+func TestPacketCaptureAcceptsStopOnStdinClose(t *testing.T) {
+	inputPath, planPath := writeCapturePlan(t)
+
+	stdout, stderr, err := runPacketCapture(
+		t,
+		"--plan", planPath, "--input", inputPath, "--nodeName", "lin1",
+		"--interface", "eth0", "--duration", "1s", "--stop-on-stdin-close",
+	)
+	if err == nil || stdout != "" || !strings.Contains(stderr, `"status":"Denied"`) {
+		t.Fatalf("capture = %v, stdout %q, stderr %s", err, stdout, stderr)
 	}
 }
 

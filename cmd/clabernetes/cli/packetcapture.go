@@ -17,6 +17,7 @@ const (
 	deviceRuntimeNodeName       = "nodeName"
 	deviceRuntimeFormat         = "format"
 	deviceRuntimeListInterfaces = "list-interfaces"
+	deviceRuntimeStopOnStdin    = "stop-on-stdin-close"
 )
 
 // packetCaptureCommand is the client contract of the connectivity sidecar's packet capture:
@@ -61,6 +62,11 @@ func packetCaptureCommand() *cli.Command {
 				Name:  deviceRuntimeListInterfaces,
 				Usage: "print the capturable interfaces as JSON and exit",
 			},
+			&cli.BoolFlag{
+				Name: deviceRuntimeStopOnStdin,
+				Usage: "end the capture when stdin reaches EOF or fails; " +
+					"needs stdin attached (kubectl exec -i)",
+			},
 		},
 		Action: runPacketCaptureCommand,
 	}
@@ -80,6 +86,7 @@ func runPacketCaptureCommand(c *cli.Context) error {
 			deviceRuntimeSnapLength,
 			deviceRuntimePacketLimit,
 			deviceRuntimeDuration,
+			deviceRuntimeStopOnStdin,
 		} {
 			if c.IsSet(flag) {
 				return fmt.Errorf("%w: --%s", errListingTakesNoCaptureFlag, flag)
@@ -94,6 +101,9 @@ func runPacketCaptureCommand(c *cli.Context) error {
 		SnapLength:            c.Int(deviceRuntimeSnapLength),
 		PacketLimit:           c.Int(deviceRuntimePacketLimit),
 		Duration:              c.Duration(deviceRuntimeDuration),
+	}
+	if c.Bool(deviceRuntimeStopOnStdin) {
+		options.ClientInput = c.App.Reader
 	}
 
 	// Reject malformed requests before reading any file, so a caller sees the request error
@@ -136,6 +146,8 @@ func runPacketCaptureCommand(c *cli.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	clabernetesinternaldirectruntime.PreparePacketCaptureProcess()
 
 	return clabernetesinternaldirectruntime.RunPacketCaptureWithRevision(
 		ctx,

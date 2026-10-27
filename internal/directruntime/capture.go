@@ -10,9 +10,11 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"os/signal"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
@@ -32,6 +34,10 @@ const (
 	PacketCaptureFormatPCAPNG = "pcapng"
 	// PacketCaptureHostPeer names the peer of a Link endpoint on the worker host.
 	PacketCaptureHostPeer = "host"
+	// PacketCaptureReasonClientClosed starts the reason of a Succeeded record for a capture
+	// that ended because its client went away: stdin reached EOF or failed
+	// (--stop-on-stdin-close), or stdout was closed.
+	PacketCaptureReasonClientClosed = "client closed"
 
 	minimumPacketCaptureSnapLength = 64
 	maximumPacketCaptureSnapLength = 1 << 20
@@ -71,6 +77,11 @@ type PacketCaptureSelector struct {
 // PacketCaptureOptions identifies one logical Node, its plan-owned direct interfaces, the
 // output format, and finite capture bounds. PacketLimit and Duration may both be set; the
 // first bound reached completes the capture. PacketLimit counts packets across all interfaces.
+//
+// ClientInput, when set, is the client's stdin (--stop-on-stdin-close). Its bytes are
+// discarded; when reading it returns EOF or an error, the capture ends like a reached bound.
+// A Kubernetes exec does not stop the process when the client's stream closes, but it does
+// close the process's stdin, so this is how a capture learns that nobody reads it anymore.
 type PacketCaptureOptions struct {
 	PacketCaptureSelector
 
@@ -79,6 +90,7 @@ type PacketCaptureOptions struct {
 	SnapLength  int
 	PacketLimit int
 	Duration    time.Duration
+	ClientInput io.Reader
 }
 
 // PacketCaptureInterface is one capturable interface as --list-interfaces reports it.
@@ -577,18 +589,18 @@ func runPacketCapture(
 
 	writePacketCaptureAudit(audit, withPacketCaptureStatus(record, "Started", ""))
 
-	sink := &packetCaptureSink{options: options, record: &record}
+	sink := &packetCaptureSink{options: options, record: &record, stop: func() {}}
 
 	defer func() {
-		status, reason := "Succeeded", ""
-		if returnErr != nil {
-			status, reason = "Failed", boundedPacketCaptureReason(returnErr.Error())
-		}
-
 		sink.mu.Lock()
 		final := record
 		final.Interfaces = slices.Clone(record.Interfaces)
+		status, reason := "Succeeded", sink.reason
 		sink.mu.Unlock()
+
+		if returnErr != nil {
+			status, reason = "Failed", boundedPacketCaptureReason(returnErr.Error())
+		}
 
 		writePacketCaptureAudit(audit, withPacketCaptureStatus(final, status, reason))
 	}()
@@ -620,6 +632,14 @@ func runPacketCapture(
 	}
 
 	if err = sink.stream.WriteHeader(interfaceNames, options.SnapLength); err != nil {
+		if isPacketCaptureOutputClosed(err) {
+			// The client went away before the first packet; nothing is left to capture for.
+			sink.outputClosed = true
+			sink.end(packetCaptureOutputClosedReason(err))
+
+			return ctx.Err()
+		}
+
 		return fmt.Errorf("writing packet capture header: %w", err)
 	}
 
@@ -633,7 +653,16 @@ func runPacketCapture(
 		defer cancelTimeout()
 	}
 
+	sink.mu.Lock()
 	sink.stop = cancel
+	sink.mu.Unlock()
+
+	if options.ClientInput != nil {
+		// The reader is left blocked when the capture ends first; the process exits right after.
+		go func() {
+			sink.end(waitForPacketCaptureClientClose(options.ClientInput))
+		}()
+	}
 
 	group, groupCtx := errgroup.WithContext(captureCtx)
 
@@ -643,7 +672,14 @@ func runPacketCapture(
 		})
 	}
 
-	if err = group.Wait(); err != nil {
+	err = group.Wait()
+
+	// A client that goes away from here on did not end the capture.
+	sink.mu.Lock()
+	sink.finished = true
+	sink.mu.Unlock()
+
+	if err != nil {
 		return err
 	}
 
@@ -659,6 +695,62 @@ type packetCaptureSink struct {
 	record  *PacketCaptureAuditRecord
 	stream  packetCaptureStream
 	stop    context.CancelFunc
+	// reason explains why a capture that ended early still succeeded: its client went away.
+	reason string
+	// outputClosed is set once stdout has no reader; later packets are not written.
+	outputClosed bool
+	// finished is set once every interface reader returned.
+	finished bool
+}
+
+// end stops the capture because its client went away, as a reached bound does: packets
+// already read are still written. The first reason is kept.
+func (s *packetCaptureSink) end(reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.finished {
+		return
+	}
+
+	if s.reason == "" {
+		s.reason = reason
+	}
+
+	s.stop()
+}
+
+// PreparePacketCaptureProcess makes a stdout pipe that nobody reads a write error instead of a
+// fatal signal. Go kills a process with SIGPIPE when a write to stdout or stderr fails with
+// EPIPE, before the capture can write its final audit record; with SIGPIPE ignored, the write
+// returns EPIPE and the capture ends as one whose client went away.
+func PreparePacketCaptureProcess() {
+	signal.Ignore(syscall.SIGPIPE)
+}
+
+// waitForPacketCaptureClientClose reads the client's stdin until it ends and describes how.
+func waitForPacketCaptureClientClose(input io.Reader) string {
+	if _, err := io.Copy(io.Discard, input); err != nil {
+		return boundedPacketCaptureReason(
+			PacketCaptureReasonClientClosed + ": reading stdin: " + err.Error(),
+		)
+	}
+
+	return PacketCaptureReasonClientClosed + ": stdin reached EOF"
+}
+
+// isPacketCaptureOutputClosed reports a write error that means the reader of stdout is gone:
+// a broken pipe, or a closed or invalid descriptor. The packet-capture command ignores
+// SIGPIPE, so a broken pipe arrives here as EPIPE instead of killing the process.
+func isPacketCaptureOutputClosed(err error) bool {
+	return errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.EBADF) ||
+		errors.Is(err, os.ErrClosed) || errors.Is(err, io.ErrClosedPipe)
+}
+
+func packetCaptureOutputClosedReason(err error) string {
+	return boundedPacketCaptureReason(
+		PacketCaptureReasonClientClosed + ": writing stdout: " + err.Error(),
+	)
 }
 
 func (s *packetCaptureSink) capture(
@@ -707,11 +799,22 @@ func (s *packetCaptureSink) write(index int, packet capturedPacket) (bool, error
 	defer s.mu.Unlock()
 
 	limit := s.options.PacketLimit
-	if limit != 0 && s.record.Packets >= limit {
+	if s.outputClosed || (limit != 0 && s.record.Packets >= limit) {
 		return true, nil
 	}
 
 	if err := s.stream.WritePacket(index, packet); err != nil {
+		if isPacketCaptureOutputClosed(err) {
+			s.outputClosed = true
+			if s.reason == "" {
+				s.reason = packetCaptureOutputClosedReason(err)
+			}
+
+			s.stop()
+
+			return true, nil
+		}
+
 		return true, fmt.Errorf("writing captured packet: %w", err)
 	}
 
