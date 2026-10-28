@@ -23,6 +23,7 @@ spec:
     - 9273/tcp
   profileRef:
     name: topology-basic
+  runState: Running
 status:
   appliedProfile:
     name: topology-basic
