@@ -92,6 +92,17 @@ func TestIxiac(t *testing.T) {
 		[]string{"sh", "-c", "ip -o -4 addr show dev eth0"},
 		management+"/",
 	)
+
+	// The plan declares a network sysctl for this Node. The device process lives in the private
+	// namespace, so the declared value has to be visible there; the shared Pod namespace keeps
+	// its own value and would never satisfy this read.
+	waitForDeviceCommand(
+		t,
+		namespace,
+		device,
+		[]string{"sh", "-c", "cat /proc/sys/net/ipv4/ip_default_ttl"},
+		"42",
+	)
 }
 
 func waitForNodeCondition(t *testing.T, namespace, nodeName, condition string) {

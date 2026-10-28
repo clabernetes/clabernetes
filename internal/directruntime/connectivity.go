@@ -58,7 +58,9 @@ var (
 //
 //nolint:interfacebloat // one deliberate seam over all Pod-namespace mutation families.
 type LinkOperations interface {
-	// EnsureSysctl applies one package-requested setting in the shared Pod network namespace.
+	// EnsureSysctl applies one package-requested setting in the network namespace the device
+	// process runs in: the shared Pod namespace, or the private device namespace when isolation
+	// is active.
 	EnsureSysctl(name, value string) error
 	ListVethInterfaces(ownerPrefix string) ([]VethInterface, error)
 	EnsureVethPair(leftName, rightName string, mtu int, owner string) error
@@ -1354,6 +1356,9 @@ func validateIsolatedPlan(plan clabernetesinternaldeviceplan.Plan) error {
 	return nil
 }
 
+// reconcileSysctls applies the package-declared network sysctls in the namespace the device
+// process runs in; the operations value selects it, so an isolated device gets its own settings
+// while the Pod namespace keeps the sidecar's hardening baseline.
 func reconcileSysctls(plan clabernetesinternaldeviceplan.Plan, operations LinkOperations) error {
 	values := map[string]string{}
 

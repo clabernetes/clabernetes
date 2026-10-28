@@ -138,6 +138,12 @@ The `LaunchOperations` seam covers the new operation, and the renderer adds
   later passes an absent Pod-namespace leg is accepted as already isolated.
 - `validateIsolatedPlan`: fails closed for same-Pod and loopback Links, which
   are not yet placed inside the private namespace.
+- `EnsureSysctl`: package-declared network sysctls follow the device into the
+  private namespace. `/proc/sys/net` resolves against the calling thread's
+  network namespace and has no netlink interface, so the write runs on a
+  thread that enters the bound namespace and is then discarded; the sidecar's
+  own Pod-namespace hardening baseline is unaffected because it uses a
+  namespace-less operations value.
 - `SweepTransportState` continues to own only Pod-namespace sidecar legs; the
   device legs leave the Pod namespace and cannot be reaped by the sweep.
 
@@ -172,5 +178,5 @@ The `LaunchOperations` seam covers the new operation, and the renderer adds
   isolation is active, so a readiness failure includes the isolation mode in
   its diagnostic.
 - The real `ixia-c-one` e2e asserts the private netns inode, the absence of
-  `c9s0`, the management address on `eth0`, and
-  `ConnectivityReady=True`.
+  `c9s0`, the management address on `eth0`, `ConnectivityReady=True`, and a
+  package-declared sysctl read back from inside the private namespace.

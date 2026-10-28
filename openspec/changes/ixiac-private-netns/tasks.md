@@ -23,6 +23,7 @@
   - [x] Move the synthetic management device leg into the private namespace, address it there, and assert its default route there
   - [x] Move fabric and host Link device legs into the private namespace and raise them there
   - [x] Reject same-Pod and loopback Links with a clear error until their cross-namespace placement lands
+  - [x] Apply package-declared network sysctls inside the private device namespace instead of the Pod namespace
 
 - [x] Launch boundary crossing
   - [x] Extend `LaunchOperations` with `EnterDeviceNetns(path)` and implement the thread-locked `setns(CLONE_NEWNET)` in the Linux launch operations
@@ -37,6 +38,8 @@
   - [x] `make lint`
   - [x] `make verify-generated` inspected (only intended generated diffs remain in the working tree)
   - [x] `go test ./internal/directpod/... ./internal/directruntime/... ./controllers/node/...`
+  - [x] Isolated sysctl write verified against a real netns (`TestNetlinkOperationsApplySysctlsInsideDeviceNetns`; passes in a privileged container and skips where user namespaces are unavailable)
   - [x] Real `ixia-c-one:1.61.0-9` e2e on local KinD: `TestIxiac` passes in ~52-63s, including netns inode, `c9s0` absence, management address, and `ConnectivityReady`
+  - [x] `TestIxiac` re-run on local KinD with the device-namespace sysctl assertion: PASS in 83.18s
   - [x] Re-run `TestIxiac` on the Nebius test cluster (`npc-mk8s-c9s-beta-e0tavhzqdhqv0jeyvk`): PASS in 86.35s with the real `ixia-c-one:1.61.0-9` image
   - [x] Negative check: non-isolated `TestNodeLinkDirect` on the same cluster: PASS in 59.60s

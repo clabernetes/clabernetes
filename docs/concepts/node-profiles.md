@@ -16,8 +16,7 @@ Typical profile settings include:
 - Kubernetes image pull policy and pull Secrets
 - status probes
 - persistence
-- a network-isolation request for device-side interfaces (accepted but not yet enforced by the
-  direct runtime)
+- a network-isolation request for device-side interfaces
 - management overlay address allocation
 
 Device privilege, capabilities, and devices are never profile policy: they come from the imported
@@ -70,7 +69,9 @@ every interface it can see, and all other kinds behave as `false`. Set `false` e
 ixia-c Node to opt out. For a Topology, configure the equivalent field at
 `spec.deployment.networkIsolation`; the Topology controller copies an explicit value into the
 generated NodeProfile and leaves it unset otherwise. Same-Pod and loopback Links are not yet
-supported inside an isolated device namespace.
+supported inside an isolated device namespace. Network sysctls declared by the imported
+package apply inside the private device namespace, so they configure the device's network stack
+instead of the Pod's; the sidecar's own hardening of the Pod namespace is unaffected.
 
 The `spec.scheduling.affinity` field accepts the native Kubernetes node affinity, pod affinity, and
 pod anti-affinity structure. A single NodeProfile can be referenced by multiple Nodes, so the

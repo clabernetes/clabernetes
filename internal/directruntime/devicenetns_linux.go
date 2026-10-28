@@ -180,6 +180,33 @@ func (d *deviceNetworkNamespace) Close() error {
 	return d.ns.Close()
 }
 
+// applySysctl writes one package-requested setting inside the private device namespace. Sysctls
+// under /proc/sys/net are resolved against the calling thread's network namespace and have no
+// netlink interface, so the write runs on a thread that enters the namespace instead of using
+// the netlink handle the other operations share.
+func (d *deviceNetworkNamespace) applySysctl(name, value string) error {
+	result := make(chan error, 1)
+
+	go func() {
+		runtime.LockOSThread()
+
+		if err := unix.Setns(int(d.ns), unix.CLONE_NEWNET); err != nil {
+			runtime.UnlockOSThread()
+
+			result <- fmt.Errorf("entering device network namespace: %w", err)
+
+			return
+		}
+
+		result <- writeNetSysctl(name, value)
+		// The goroutine returns while the thread is still in the device namespace. The runtime
+		// terminates a thread whose locked goroutine exits, so the namespace entry cannot leak
+		// into unrelated work on a reused thread.
+	}()
+
+	return <-result
+}
+
 func (d *deviceNetworkNamespace) ensureLoopbackUp() error {
 	loopback, err := d.handle.LinkByName(deviceNetnsLoopbackName)
 	if err != nil {
