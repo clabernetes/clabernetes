@@ -44,7 +44,8 @@ func (s *pcapStream) WriteHeader(interfaces []string, snapLength int) error {
 	binary.LittleEndian.PutUint32(header[0:], pcapMagicMicroseconds)
 	binary.LittleEndian.PutUint16(header[4:], 2)
 	binary.LittleEndian.PutUint16(header[6:], 4)
-	binary.LittleEndian.PutUint32(header[16:], uint32(snapLength)) //nolint:gosec // snap length is validated to at most 1 MiB.
+	snap := uint32(snapLength) //nolint:gosec // validated to at most 1 MiB.
+	binary.LittleEndian.PutUint32(header[16:], snap)
 	binary.LittleEndian.PutUint32(header[20:], packetCaptureLinkTypeEthernet)
 
 	_, err := s.output.Write(header)
@@ -60,9 +61,11 @@ func (s *pcapStream) WritePacket(_ int, packet capturedPacket) error {
 
 	record := make([]byte, 16, 16+len(packet.Data))
 	binary.LittleEndian.PutUint32(record[0:], uint32(seconds))
-	binary.LittleEndian.PutUint32(record[4:], uint32(packet.Timestamp.Nanosecond()/1_000)) //nolint:gosec // microseconds are below one million.
-	binary.LittleEndian.PutUint32(record[8:], uint32(len(packet.Data)))                    //nolint:gosec // data is bounded by the snap length.
-	binary.LittleEndian.PutUint32(record[12:], uint32(packet.OriginalLength))              //nolint:gosec // validated to fit 32 bits.
+	micros := uint32(packet.Timestamp.Nanosecond() / 1_000) //nolint:gosec // below one million.
+	captured, original := packetLengths(packet)
+	binary.LittleEndian.PutUint32(record[4:], micros)
+	binary.LittleEndian.PutUint32(record[8:], captured)
+	binary.LittleEndian.PutUint32(record[12:], original)
 	record = append(record, packet.Data...)
 
 	_, err := s.output.Write(record)
@@ -88,10 +91,12 @@ func (s *pcapngStream) WriteHeader(interfaces []string, snapLength int) error {
 
 	header := pcapngBlock(pcapngSectionHeaderType, section)
 
+	snap := uint32(snapLength) //nolint:gosec // validated to at most 1 MiB.
+
 	for _, name := range interfaces {
 		description := make([]byte, 8)
 		binary.LittleEndian.PutUint16(description[0:], packetCaptureLinkTypeEthernet)
-		binary.LittleEndian.PutUint32(description[4:], uint32(snapLength)) //nolint:gosec // snap length is validated to at most 1 MiB.
+		binary.LittleEndian.PutUint32(description[4:], snap)
 		description = appendPCAPNGOption(description, pcapngOptionIfName, []byte(name))
 		description = appendPCAPNGOption(
 			description,
@@ -114,11 +119,14 @@ func (s *pcapngStream) WritePacket(interfaceIndex int, packet capturedPacket) er
 	}
 
 	body := make([]byte, 20, 20+len(packet.Data)+3)
-	binary.LittleEndian.PutUint32(body[0:], uint32(interfaceIndex)) //nolint:gosec // bounded by the requested interfaces.
-	binary.LittleEndian.PutUint32(body[4:], uint32(uint64(nanoseconds)>>32))
-	binary.LittleEndian.PutUint32(body[8:], uint32(nanoseconds))            //nolint:gosec // low 32 bits by design.
-	binary.LittleEndian.PutUint32(body[12:], uint32(len(packet.Data)))      //nolint:gosec // data is bounded by the snap length.
-	binary.LittleEndian.PutUint32(body[16:], uint32(packet.OriginalLength)) //nolint:gosec // validated to fit 32 bits.
+	index := uint32(interfaceIndex) //nolint:gosec // bounded by the requested interfaces.
+	timestamp := uint64(nanoseconds)
+	captured, original := packetLengths(packet)
+	binary.LittleEndian.PutUint32(body[0:], index)
+	binary.LittleEndian.PutUint32(body[4:], uint32(timestamp>>32))
+	binary.LittleEndian.PutUint32(body[8:], uint32(timestamp&math.MaxUint32))
+	binary.LittleEndian.PutUint32(body[12:], captured)
+	binary.LittleEndian.PutUint32(body[16:], original)
 	body = append(body, packet.Data...)
 	body = append(body, make([]byte, pcapngPadding(len(packet.Data)))...)
 
@@ -140,10 +148,21 @@ func pcapngBlock(blockType uint32, body []byte) []byte {
 
 func appendPCAPNGOption(body []byte, code uint16, value []byte) []byte {
 	body = binary.LittleEndian.AppendUint16(body, code)
-	body = binary.LittleEndian.AppendUint16(body, uint16(len(value))) //nolint:gosec // option values are short names.
+	length := uint16(len(value)) //nolint:gosec // option values are short names.
+	body = binary.LittleEndian.AppendUint16(body, length)
 	body = append(body, value...)
 
 	return append(body, make([]byte, pcapngPadding(len(value)))...)
+}
+
+// packetLengths returns the captured and original lengths of a packet as 32-bit fields.
+// The capture loop bounds the data by the snap length and rejects original lengths
+// that do not fit 32 bits.
+func packetLengths(packet capturedPacket) (captured, original uint32) {
+	captured = uint32(len(packet.Data))      //nolint:gosec // bounded by the snap length.
+	original = uint32(packet.OriginalLength) //nolint:gosec // validated to fit 32 bits.
+
+	return captured, original
 }
 
 func pcapngPadding(length int) int {
