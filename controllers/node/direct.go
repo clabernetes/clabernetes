@@ -407,6 +407,7 @@ func (r *Reconciler) reconcileDirect(
 		PersistentVolumeClaims:     persistentVolumeClaims,
 		DeviceStateResets:          deviceStateResets,
 		EnableContainerStopSignals: r.configManagerGetter().GetContainerStopSignals(),
+		NetworkIsolation:           profile.NetworkIsolation,
 	}
 	existingDeployment, err := r.currentOwnedDirectDeployment(ctx, node)
 	if err != nil {

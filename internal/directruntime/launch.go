@@ -1,4 +1,4 @@
-//nolint:err113,gocyclo // single-pass boundary logic with structured one-off diagnostics and protocol literals.
+//nolint:err113,gocognit,gocyclo // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -28,6 +28,10 @@ type LaunchOperations interface {
 	UpdateFile(path string, update func(current []byte) (updated []byte, write bool)) error
 	ReadFile(path string) ([]byte, error)
 	Hostname() (string, error)
+	// EnterDeviceNetns enters the private device network namespace immediately before the
+	// image process replaces this helper. The implementation must keep the calling goroutine
+	// locked to the entered thread until Exec.
+	EnterDeviceNetns(path string) error
 	LimitOpenFiles(limit uint64) error
 	Exec(argv []string) error
 }
@@ -35,13 +39,39 @@ type LaunchOperations interface {
 // RunLaunch applies synchronous pre-start operations and replaces the helper with the image's
 // real process. This prevents a kubelet PostStart race for mount security options.
 func RunLaunch(plan clabernetesinternaldeviceplan.Plan, containerID string) error {
-	return RunLaunchWithOperations(plan, containerID, newLaunchOperations())
+	return RunLaunchWithNetns(plan, containerID, "")
+}
+
+// RunLaunchWithNetns is the production launch boundary for an isolated device. An empty path
+// preserves the legacy shared-Pod-namespace behavior.
+func RunLaunchWithNetns(
+	plan clabernetesinternaldeviceplan.Plan,
+	containerID,
+	deviceNetnsPath string,
+) error {
+	return RunLaunchWithOperationsAndNetns(
+		plan,
+		containerID,
+		deviceNetnsPath,
+		newLaunchOperations(),
+	)
 }
 
 // RunLaunchWithOperations exposes the generic syscall seam for deterministic tests.
 func RunLaunchWithOperations(
 	plan clabernetesinternaldeviceplan.Plan,
 	containerID string,
+	operations LaunchOperations,
+) error {
+	return RunLaunchWithOperationsAndNetns(plan, containerID, "", operations)
+}
+
+// RunLaunchWithOperationsAndNetns exposes both the syscall seam and the isolation path for
+// deterministic tests.
+func RunLaunchWithOperationsAndNetns(
+	plan clabernetesinternaldeviceplan.Plan,
+	containerID,
+	deviceNetnsPath string,
 	operations LaunchOperations,
 ) error {
 	if operations == nil {
@@ -126,6 +156,12 @@ func RunLaunchWithOperations(
 		command...) //nolint:gocritic // OCI argv is entrypoint plus command by contract.
 	if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
 		return errors.New("application image and plan provide no executable command")
+	}
+
+	if deviceNetnsPath != "" {
+		if err = operations.EnterDeviceNetns(deviceNetnsPath); err != nil {
+			return fmt.Errorf("entering private device network namespace: %w", err)
+		}
 	}
 
 	if err = operations.LimitOpenFiles(conventionalNoFileLimit); err != nil {
