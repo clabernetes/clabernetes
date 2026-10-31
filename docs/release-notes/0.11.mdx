@@ -1,0 +1,176 @@
+---
+title: "0.11"
+---
+
+Unreleased · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.10.1...main)
+
+<ReleaseHero
+  from="0.10.1"
+  version="0.11.0"
+  tagline="packets on the wire"
+  highlight="packets"
+  facts={['packet capture', 'pcap and pcapng streams', 'stop on client close', 'node run state']}
+/>
+
+## Packet capture
+
+Capturing from a c9s lab used to mean knowing where the sidecar keeps its plan: every call spelled
+out `--plan`, `--input`, `--connectivityRevision` and the Node UID. Those paths now default to the
+sidecar mounts, and the Node is named the way you name it in Kubernetes:
+
+```bash
+kubectl exec deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
+  --nodeName srl1 --interface e1-1 --duration 30s > e1-1.pcap
+```
+
+`--interface` takes the interface name the Link uses or its alias, such as `ethernet-1/1` for SR
+Linux `e1-1`, and repeats for several interfaces. With `--format pcapng` each interface gets its
+own Interface Description Block, so one file opens cleanly in Wireshark with names instead of
+guessed link types. `--list-interfaces` prints what is capturable on a Node, with the peer at the
+other end of each link, and refuses capture flags.
+
+Interfaces that are not Links of the selected Node make the call fail before anything is opened,
+and the management interface is never capturable. `--duration` still caps at one hour and
+`--packetLimit` at a million packets across all interfaces; `--snapLength` defaults to 256 KiB.
+
+Kubernetes does not stop an exec'd process when `kubectl` goes away, so a Ctrl+C used to leave the
+capture running in the Pod until it hit a bound. Add `-i` and `--stop-on-stdin-close` to tie it to
+the client:
+
+```bash
+kubectl exec -i deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
+  --nodeName srl1 --interface e1-1 --format pcapng --stop-on-stdin-close | wireshark -k -i -
+```
+
+When stdin closes, packets already captured are written, the exit status is 0, and the final audit
+record says so. `Started`, `Succeeded`, `Failed`, and `Denied` records go to stderr; only packet
+data goes to stdout.
+
+See [Packet capture](/docs/guides/lab-operations#packet-capture) for the full set of flags and the
+audit reasons.
+
+Done in [#374](https://github.com/clabernetes/clabernetes/pull/374)
+
+## Ixia-c
+
+`keysight_ixia-c-one` and its `keysight_ixia-c` alias now boot in their own network namespace on
+the direct runtime. There is nothing to set in the topology or NodeProfile.
+
+The ixia-c entrypoint, `ixiacd`, claims every interface it can see. In the shared Pod namespace
+that included the sidecar's transport and management legs, so the Node never reached connectivity.
+The device now sees only the device-side interfaces, while the sidecar keeps Kubernetes transport,
+the management router and mesh, and the Link transport legs in the Pod namespace.
+
+A plan-declared network sysctl follows the device into its namespace instead of configuring the
+Pod's. The e2e suite runs the real `ghcr.io/open-traffic-generator/ixia-c-one:1.61.0-9` image and
+checks the namespace inode, the absence of `c9s0`, the management address, connectivity readiness,
+and a declared sysctl read back from inside the namespace.
+
+Done in [#372](https://github.com/clabernetes/clabernetes/pull/372) [#373](https://github.com/clabernetes/clabernetes/pull/373)
+
+## Device network isolation
+
+The isolation ixia-c gets is available to any Node through the new optional
+`spec.deployment.networkIsolation` field on [`NodeProfile`](/docs/concepts/node-profiles):
+
+```yaml
+apiVersion: c9s.run/v1alpha1
+kind: NodeProfile
+metadata:
+  name: isolated-device
+spec:
+  deployment:
+    networkIsolation: true
+```
+
+`true` moves the device's management and Link legs and its application processes into a private
+namespace created by a dedicated init container. `false` keeps the shared Pod namespace, including
+for ixia-c. Leaving the field out keeps the kind default: the ixia-c family is isolated, everything
+else is not. A Topology carries the same field at `spec.deployment.networkIsolation`, and an
+explicit value is copied into the generated NodeProfiles.
+
+The device container must be privileged or carry `CAP_SYS_ADMIN`; isolation does not grant that.
+Isolated Pods use the worker's `/var/run/clabernetes/device-netns` hostPath to hand the namespace
+file to the sidecar and every application container.
+
+Two Link shapes are not placed in a private namespace yet: same-Pod and loopback Links are
+rejected when isolation is on, rather than realized in the wrong namespace. Cross-Pod fabric and
+host Links work. Keep those Nodes on the shared namespace until same-Pod placement lands.
+
+## Stopping and starting nodes
+
+Stopping, starting, and restarting one Node are now Node API operations instead of something you do
+around the controller. `spec.runState` is `Running` by default and accepts `Stopped`:
+
+```bash
+kubectl patch node.c9s.run srl1 --type merge -p '{"spec":{"runState":"Stopped"}}'
+kubectl wait node.c9s.run/srl1 --for=condition=Stopped=True --timeout=5m
+```
+
+A stopped Node scales its Deployment to zero and keeps everything else: the Node, its Deployment,
+Services, PersistentVolumeClaims, and Links. Its readiness is `notready`, the new `Stopped`
+condition reports `Stopping` while the Pod terminates, and Links to it go carrier-down at their
+peers like a pulled cable. Apply a changed Topology and the stopped Node updates without starting;
+it boots the new definition when you set `runState` back to `Running`. Grouped Nodes share the
+primary's Pod, so the primary's `runState` governs the group, and with persistence enabled the
+saved device state survives the stop.
+
+A restart is a token in the `c9s.run/restart-requested` annotation:
+
+```bash
+TOKEN=$(date +%s%N)
+kubectl annotate node.c9s.run srl1 c9s.run/restart-requested="$TOKEN" --overwrite
+kubectl wait node.c9s.run/srl1 --for=jsonpath='{.status.observedRestartToken}'="$TOKEN"
+```
+
+The controller replaces the Pod once for every token it has not handled, and
+`status.observedRestartToken` reports the token the current Pod started with. Leaving the
+annotation in place does not restart the Node again, and removing it does not either.
+
+`kubectl get nodes.c9s.run` grows a `RUNSTATE` column. Device Pods now carry
+`c9s.run/topologyNode` and `c9s.run/originalNodeName`, so a Pod can be selected by the node name the
+containerlab file uses without reading the Node.
+
+See [Operating a lab](/docs/guides/lab-operations#stopping-starting-and-restarting-a-node) for
+restarts on stopped Nodes, startup admission, and device-state resets.
+
+Done in [#376](https://github.com/clabernetes/clabernetes/pull/376)
+
+## Lab roles
+
+The chart now ships `clabernetes-lab-viewer` and `clabernetes-lab-editor`. They are ClusterRoles
+meant to be bound per lab namespace with a RoleBinding, and they are not aggregated into the
+built-in `view` and `edit` roles, so lab access is something you grant on purpose:
+
+```bash
+kubectl create namespace lab-alice
+kubectl create rolebinding alice-lab-editor --namespace lab-alice \
+  --clusterrole clabernetes-lab-editor --user alice
+```
+
+The viewer reads the c9s resources, Pods, Events, Services, ConfigMaps, and claims, plus Pod logs
+and metrics. The editor adds writes on the c9s resources and ConfigMaps, claim deletion for
+`destroy --cleanup`, and `pods/exec` and `pods/portforward`. Neither role touches the `apps`
+group, Pod writes, Secrets, Namespaces, or RBAC; with Node run state and restart requests, a lab is
+fully operable without them.
+
+RBAC cannot make lab Pods safe: they are privileged, and `pods/exec` cannot be limited to one
+container. A lab user can reach the worker their Pod runs on, so keep labs on dedicated workers on
+a shared cluster. The [Lab access guide](/docs/guides/lab-access) has the taint/toleration setup
+and the exact rule list.
+
+Set `labRoles.enabled: false` to install without the roles.
+
+Done in [#376](https://github.com/clabernetes/clabernetes/pull/376)
+
+## Miscellaneous
+
+- CNI-installed permanent neighbor entries survive management interposition and are re-asserted
+  after a device flushes its neighbor table. On EKS, losing the Amazon VPC CNI's `169.254.1.1`
+  gateway entry stranded every direct-runtime Pod in Init. Captured entries are recorded in the
+  sidecar state directory, so a sidecar that dies inside the flush window still restores them on
+  the next pass. [#369](https://github.com/clabernetes/clabernetes/pull/369)
+- Nodes named with a single character, such as `a`, plan again. Deployment conditions were run
+  with the c9s container name, which fails the Docker two-character rule; they now run with the
+  `clab-<lab>-<node>` name containerlab uses on its own runtimes.
+  [#377](https://github.com/clabernetes/clabernetes/pull/377)
