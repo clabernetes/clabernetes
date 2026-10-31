@@ -21,26 +21,25 @@ func artifactTestPlan(t *testing.T) clabernetesinternaldeviceplan.Plan {
 
 	regularContent := []byte("generated\n")
 	sensitiveContent := []byte("tls material\n")
-	return clabernetesinternaldeviceplan.Plan{
-		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,
-		Files: []clabernetesinternaldeviceplan.FilePlan{
-			{
-				ID: "generated/public", NodeID: "node-a",
-				SourceKind:      clabernetesinternaldeviceplan.FileSourcePlanArtifact,
-				ArtifactKind:    clabernetesinternaldeviceplan.ArtifactRegular,
-				SourceReference: "generated/public", ArtifactPath: "generated/public.conf",
-				Digest: clabernetesinternaldeviceplan.Digest(regularContent), Mode: 0o644,
-			},
-			{
-				ID: "generated/tls", NodeID: "node-a",
-				SourceKind:      clabernetesinternaldeviceplan.FileSourcePlanArtifact,
-				ArtifactKind:    clabernetesinternaldeviceplan.ArtifactRegular,
-				SourceReference: "generated/tls", ArtifactPath: "generated/tls.pem",
-				Digest: clabernetesinternaldeviceplan.Digest(sensitiveContent), Mode: 0o600,
-				Sensitive: true,
-			},
+	plan := validPlannerResult(t, validInput(), "artifacts")
+	plan.Files = []clabernetesinternaldeviceplan.FilePlan{
+		{
+			ID: "generated/public", NodeID: "node-a",
+			SourceKind:      clabernetesinternaldeviceplan.FileSourcePlanArtifact,
+			ArtifactKind:    clabernetesinternaldeviceplan.ArtifactRegular,
+			SourceReference: "generated/public", ArtifactPath: "generated/public.conf",
+			Digest: clabernetesinternaldeviceplan.Digest(regularContent), Mode: 0o644,
+		},
+		{
+			ID: "generated/tls", NodeID: "node-a",
+			SourceKind:      clabernetesinternaldeviceplan.FileSourcePlanArtifact,
+			ArtifactKind:    clabernetesinternaldeviceplan.ArtifactRegular,
+			SourceReference: "generated/tls", ArtifactPath: "generated/tls.pem",
+			Digest: clabernetesinternaldeviceplan.Digest(sensitiveContent), Mode: 0o600,
+			Sensitive: true,
 		},
 	}
+	return plan
 }
 
 func TestPlanArtifactReferencesKeepSensitiveContentOutOfConfigMaps(t *testing.T) {
@@ -127,11 +126,11 @@ func TestPlanArtifactReconcilerPersistsDigestNamedObjects(t *testing.T) {
 			Digest: plan.Files[1].Digest, Data: []byte("tls material\n"), Sensitive: true,
 		},
 	}
-	if err := reconciler.Ensure(ctx, node, artifacts); err != nil {
+	if err := reconciler.Ensure(ctx, node, plan, artifacts); err != nil {
 		t.Fatal(err)
 	}
 	// A second persist of the same content is idempotent.
-	if err := reconciler.Ensure(ctx, node, artifacts); err != nil {
+	if err := reconciler.Ensure(ctx, node, plan, artifacts); err != nil {
 		t.Fatal(err)
 	}
 	if err := reconciler.Verify(ctx, node, plan); err != nil {
@@ -146,7 +145,7 @@ func TestPlanArtifactReconcilerPersistsDigestNamedObjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	if public.Immutable == nil || !*public.Immutable ||
-		public.Data[PlanArtifactKey] != "generated\n" ||
+		string(public.BinaryData[PlanArtifactKey]) != "generated\n" ||
 		!metav1.IsControlledBy(public, node) {
 		t.Fatalf("persisted ConfigMap artifact = %#v", public)
 	}
@@ -186,6 +185,18 @@ func TestPlanArtifactReconcilerRejectsConflictingObject(t *testing.T) {
 	err := reconciler.Ensure(
 		context.Background(),
 		node,
+		artifactPlanForContents(
+			t,
+			[]clabernetesinternaldeviceplan.ArtifactContent{
+				{
+					NodeID:       "node-a",
+					ArtifactPath: "generated/tls.pem",
+					Digest:       plan.Files[1].Digest,
+					Data:         []byte("tls material\n"),
+					Sensitive:    true,
+				},
+			},
+		),
 		[]clabernetesinternaldeviceplan.ArtifactContent{{
 			NodeID: "node-a", ArtifactPath: "generated/tls.pem",
 			Digest: plan.Files[1].Digest, Data: []byte("tls material\n"), Sensitive: true,
@@ -210,6 +221,33 @@ func TestPlanArtifactVerifyReportsMissingObject(t *testing.T) {
 	}
 }
 
+func TestPlanArtifactPersistsEmptyFile(t *testing.T) {
+	t.Parallel()
+
+	node := planTestNode("router")
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(planTestScheme(t)).
+		WithObjects(node).
+		Build()
+	reconciler := &PlanArtifactReconciler{Client: client}
+	artifact := clabernetesinternaldeviceplan.ArtifactContent{
+		NodeID: "node-a", ArtifactPath: "empty", Sensitive: true,
+		Digest: clabernetesinternaldeviceplan.Digest(nil),
+	}
+	if err := reconciler.Ensure(t.Context(), node, artifactPlanForContents(t, []clabernetesinternaldeviceplan.ArtifactContent{artifact}), []clabernetesinternaldeviceplan.ArtifactContent{artifact}); err != nil {
+		t.Fatal(err)
+	}
+	secret := &k8scorev1.Secret{}
+	if err := client.Get(t.Context(), apimachinerytypes.NamespacedName{
+		Namespace: node.Namespace, Name: PlanArtifactObjectName(node.Name, artifact.Digest),
+	}, secret); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := secret.Data[PlanArtifactKey]; !exists {
+		t.Fatal("empty artifact has no content key for Kubernetes to project")
+	}
+}
+
 func TestPlanArtifactReconcilerCollectsSupersededObjects(t *testing.T) {
 	t.Parallel()
 
@@ -229,10 +267,10 @@ func TestPlanArtifactReconcilerCollectsSupersededObjects(t *testing.T) {
 		Digest: clabernetesinternaldeviceplan.Digest([]byte("current\n")),
 		Data:   []byte("current\n"), Sensitive: true,
 	}}
-	if err := reconciler.Ensure(ctx, node, stale); err != nil {
+	if err := reconciler.Ensure(ctx, node, artifactPlanForContents(t, stale), stale); err != nil {
 		t.Fatal(err)
 	}
-	if err := reconciler.Ensure(ctx, node, current); err != nil {
+	if err := reconciler.Ensure(ctx, node, artifactPlanForContents(t, current), current); err != nil {
 		t.Fatal(err)
 	}
 
@@ -258,5 +296,92 @@ func TestPlanArtifactReconcilerCollectsSupersededObjects(t *testing.T) {
 		Name:      PlanArtifactObjectName(node.GetName(), current[0].Digest),
 	}, currentObject); err != nil {
 		t.Fatalf("referenced artifact was collected: %v", err)
+	}
+}
+
+func artifactPlanForContents(
+	t *testing.T,
+	artifacts []clabernetesinternaldeviceplan.ArtifactContent,
+) clabernetesinternaldeviceplan.Plan {
+	t.Helper()
+	plan := validPlannerResult(t, validInput(), "artifacts")
+	for _, artifact := range artifacts {
+		file := clabernetesinternaldeviceplan.FilePlan{
+			ID: artifact.ArtifactPath, NodeID: artifact.NodeID,
+			SourceKind:   clabernetesinternaldeviceplan.FileSourcePlanArtifact,
+			ArtifactKind: clabernetesinternaldeviceplan.ArtifactRegular,
+			ArtifactPath: artifact.ArtifactPath, SourceReference: artifact.ArtifactPath,
+			Digest: clabernetesinternaldeviceplan.Digest(
+				artifact.Data,
+			), Sensitive: artifact.Sensitive,
+		}
+		for _, attribute := range artifact.ExtendedAttributes {
+			file.ExtendedAttributes = append(
+				file.ExtendedAttributes,
+				clabernetesinternaldeviceplan.ExtendedAttribute{
+					Name: attribute.Name, Digest: clabernetesinternaldeviceplan.Digest(attribute.Value),
+				},
+			)
+		}
+		plan.Files = append(plan.Files, file)
+	}
+	return plan
+}
+
+func TestPlanArtifactVerificationRejectsIncompleteOrMutableObjects(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"missing content", "mutable", "changed attribute", "missing attribute"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			node := planTestNode("router")
+			client := ctrlruntimefake.NewClientBuilder().
+				WithScheme(planTestScheme(t)).
+				WithObjects(node).
+				Build()
+			reconciler := &PlanArtifactReconciler{Client: client}
+			artifacts := []clabernetesinternaldeviceplan.ArtifactContent{{
+				NodeID: "node-a", ArtifactPath: "config", Sensitive: true, Data: []byte("same bytes"),
+				ExtendedAttributes: []clabernetesinternaldeviceplan.ArtifactExtendedAttribute{
+					{Name: "user.a", Value: []byte("value")},
+				},
+			}}
+			plan := artifactPlanForContents(t, artifacts)
+			artifacts[0].Digest = clabernetesinternaldeviceplan.PlanArtifactIdentity(plan.Files[0])
+			if err := reconciler.Ensure(t.Context(), node, plan, artifacts); err != nil {
+				t.Fatal(err)
+			}
+			secret := &k8scorev1.Secret{}
+			key := apimachinerytypes.NamespacedName{
+				Namespace: node.Namespace,
+				Name:      PlanArtifactObjectName(node.Name, artifacts[0].Digest),
+			}
+			if err := client.Get(t.Context(), key, secret); err != nil {
+				t.Fatal(err)
+			}
+			switch name {
+			case "missing content":
+				delete(secret.Data, PlanArtifactKey)
+			case "mutable":
+				secret.Immutable = nil
+			case "changed attribute":
+				secret.Data[clabernetesinternaldeviceplan.PlanArtifactAttributeKey("user.a")] = []byte(
+					"changed",
+				)
+			case "missing attribute":
+				delete(
+					secret.Data,
+					clabernetesinternaldeviceplan.PlanArtifactAttributeKey("user.a"),
+				)
+			}
+			if err := client.Update(t.Context(), secret); err != nil {
+				t.Fatal(err)
+			}
+			if err := reconciler.Verify(t.Context(), node, plan); !errors.Is(
+				err,
+				ErrPlanArtifactConflict,
+			) {
+				t.Fatalf("Verify() = %v, want artifact conflict", err)
+			}
+		})
 	}
 }

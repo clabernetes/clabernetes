@@ -224,12 +224,11 @@ func (r *PlannerReconciler) Reconcile(
 }
 
 // executeWorkerAttempt advances one content-addressed worker attempt to a persisted framed
-// record.
+// record. A persisted record short-circuits all Pod work; a completed Pod has its record stored
+// and its Pod and NetworkPolicy removed. A Pod that terminated without a framed record is deleted
+// so controller backoff retries it instead of caching the failure.
 //
-// and its Pod, NetworkPolicy, and input ConfigMap removed; a Pod that terminated without any
-// framed record is deleted so controller backoff retries it instead of caching the failure.
-//
-//nolint:maintidx // one linear attempt state machine; extracting stages would obscure the ordering. A persisted record short-circuits all Pod work; a completed Pod has its record stored
+//nolint:maintidx // one linear attempt state machine keeps persistence ordering visible.
 func (r *PlannerReconciler) executeWorkerAttempt(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
@@ -317,7 +316,7 @@ func (r *PlannerReconciler) executeWorkerAttempt(
 		) == clabernetesinternaldeviceplan.WorkerFrameSession {
 			session, decodeErr := clabernetesinternaldeviceplan.DecodeSessionResult(
 				extracted,
-				maxInputBytes+defaultPlannerMaxPlanBytes,
+				clabernetesinternaldeviceplan.MaxSessionFrameBytes,
 			)
 			if decodeErr != nil {
 				return nil, podName, false, decodeErr
@@ -384,6 +383,7 @@ func (r *PlannerReconciler) executeWorkerAttempt(
 			if err = (&PlanArtifactReconciler{Client: r.Client}).Ensure(
 				ctx,
 				node,
+				session.Plan,
 				session.Artifacts,
 			); err != nil {
 				return nil, podName, false, err

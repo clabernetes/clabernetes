@@ -22,8 +22,8 @@ import (
 // plan, so preparation stages exactly the bytes planning accepted instead of re-running imported
 // generation inside the device Pod.
 const (
-	// PlanArtifactKey is the only data key in a generated-artifact object.
-	PlanArtifactKey              = "content"
+	// PlanArtifactKey holds file content; other keys hold extended attributes.
+	PlanArtifactKey              = clabernetesinternaldeviceplan.PlanArtifactContentKey
 	planArtifactComponentLabel   = "node-plan-artifact"
 	planArtifactDigestAnnotation = clabernetesconstants.LabelPrefix + "/planArtifactDigest"
 	planArtifactNamePrefix       = "c9s-artifact"
@@ -63,15 +63,10 @@ func PlanArtifactReferences(
 	payloads := []clabernetesinternaldeviceplan.PayloadInput{}
 	seen := map[string]bool{}
 	for _, file := range plan.Files {
-		if file.SourceKind != clabernetesinternaldeviceplan.FileSourcePlanArtifact ||
-			file.ArtifactKind == clabernetesinternaldeviceplan.ArtifactSymlink {
+		if !clabernetesinternaldeviceplan.PlanArtifactNeedsPayload(file) {
 			continue
 		}
 		identity := clabernetesinternaldeviceplan.PlanArtifactIdentity(file)
-		if file.ArtifactKind == clabernetesinternaldeviceplan.ArtifactDirectory &&
-			identity == "" {
-			continue
-		}
 		if file.SourceReference == "" || identity == "" || seen[file.SourceReference] {
 			return nil, fmt.Errorf(
 				"%w %s/%s: generated artifact %q has no unique content identity",
@@ -106,10 +101,20 @@ func PlanArtifactReferences(
 func (r *PlanArtifactReconciler) Ensure(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
+	plan clabernetesinternaldeviceplan.Plan,
 	artifacts []clabernetesinternaldeviceplan.ArtifactContent,
 ) error {
-	for _, artifact := range artifacts {
-		if err := r.ensureOne(ctx, node, artifact); err != nil {
+	normalized, err := clabernetesinternaldeviceplan.NormalizeSessionArtifacts(plan, artifacts)
+	if err != nil {
+		return err
+	}
+	files := map[string]clabernetesinternaldeviceplan.FilePlan{}
+	for _, file := range plan.Files {
+		files[file.NodeID+"\x00"+file.ArtifactPath] = file
+	}
+	for _, artifact := range normalized {
+		file := files[artifact.NodeID+"\x00"+artifact.ArtifactPath]
+		if err := r.ensureOne(ctx, node, file, artifact); err != nil {
 			return err
 		}
 	}
@@ -128,7 +133,15 @@ func (r *PlanArtifactReconciler) Verify(
 	if err != nil {
 		return err
 	}
+	files := map[string]clabernetesinternaldeviceplan.FilePlan{}
+	for _, file := range plan.Files {
+		files[file.SourceReference] = file
+	}
+	verified := map[string]bool{}
 	for _, reference := range references {
+		if verified[string(reference.Kind)+reference.Reference] {
+			continue
+		}
 		name, key, found := strings.Cut(strings.TrimPrefix(
 			reference.Reference,
 			node.GetNamespace()+"/",
@@ -154,9 +167,10 @@ func (r *PlanArtifactReconciler) Verify(
 
 			return fmt.Errorf("reading generated plan artifact: %w", err)
 		}
-		if err = planArtifactObjectConforms(node, object, reference.Digest); err != nil {
+		if err = planArtifactObjectConforms(node, object, files[reference.ID]); err != nil {
 			return err
 		}
+		verified[string(reference.Kind)+reference.Reference] = true
 	}
 
 	return nil
@@ -202,18 +216,9 @@ func PlanArtifactObjectNames(
 func (r *PlanArtifactReconciler) ensureOne(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
+	file clabernetesinternaldeviceplan.FilePlan,
 	artifact clabernetesinternaldeviceplan.ArtifactContent,
 ) error {
-	if artifact.NodeID == "" || artifact.Digest == "" ||
-		(len(artifact.Data) != 0 &&
-			clabernetesinternaldeviceplan.Digest(artifact.Data) != artifact.Digest) {
-		return fmt.Errorf(
-			"%w %s/%s: generated artifact content is invalid",
-			ErrInvalidPlanArtifact,
-			node.GetNamespace(),
-			node.GetName(),
-		)
-	}
 	name := PlanArtifactObjectName(node.GetName(), artifact.Digest)
 	immutable := true
 	controller := true
@@ -238,27 +243,17 @@ func (r *PlanArtifactReconciler) ensureOne(
 		}},
 	}
 
-	secretData := map[string][]byte{}
-	configMapData := map[string]string{}
-	if len(artifact.Data) != 0 {
-		secretData[PlanArtifactKey] = artifact.Data
-		configMapData[PlanArtifactKey] = string(artifact.Data)
-	}
+	data := map[string][]byte{PlanArtifactKey: artifact.Data}
 	for _, attribute := range artifact.ExtendedAttributes {
 		key := clabernetesinternaldeviceplan.PlanArtifactAttributeKey(attribute.Name)
-		secretData[key] = attribute.Value
-		configMapData[key] = string(attribute.Value)
+		data[key] = attribute.Value
 	}
 	var desired ctrlruntimeclient.Object = &k8scorev1.Secret{
-		ObjectMeta: metadata,
-		Immutable:  &immutable,
-		Data:       secretData,
+		ObjectMeta: metadata, Immutable: &immutable, Data: data,
 	}
 	if !artifact.Sensitive {
 		desired = &k8scorev1.ConfigMap{
-			ObjectMeta: metadata,
-			Immutable:  &immutable,
-			Data:       configMapData,
+			ObjectMeta: metadata, Immutable: &immutable, BinaryData: data,
 		}
 	}
 
@@ -285,16 +280,19 @@ func (r *PlanArtifactReconciler) ensureOne(
 		return fmt.Errorf("reading generated plan artifact object: %w", err)
 	}
 
-	return planArtifactObjectConforms(node, existing, artifact.Digest)
+	return planArtifactObjectConforms(node, existing, file)
 }
 
 // planArtifactObjectConforms proves an existing immutable artifact object carries exactly the
 // planned bytes and Node ownership.
+//
+//nolint:gocyclo // each guard rejects a distinct object-integrity failure.
 func planArtifactObjectConforms(
 	node *clabernetesapisv1alpha1.Node,
 	object ctrlruntimeclient.Object,
-	digest string,
+	file clabernetesinternaldeviceplan.FilePlan,
 ) error {
+	digest := clabernetesinternaldeviceplan.PlanArtifactIdentity(file)
 	conflict := func() error {
 		return fmt.Errorf(
 			"%w %s/%s",
@@ -309,19 +307,37 @@ func planArtifactObjectConforms(
 		!metav1.IsControlledBy(object, node) {
 		return conflict()
 	}
+	var data map[string][]byte
+	var immutable *bool
 	switch typed := object.(type) {
 	case *k8scorev1.Secret:
-		content, present := typed.Data[PlanArtifactKey]
-		if present && clabernetesinternaldeviceplan.Digest(content) != digest {
-			return conflict()
-		}
+		data, immutable = typed.Data, typed.Immutable
 	case *k8scorev1.ConfigMap:
-		content, present := typed.Data[PlanArtifactKey]
-		if present && clabernetesinternaldeviceplan.Digest([]byte(content)) != digest {
+		data, immutable = typed.BinaryData, typed.Immutable
+		if len(typed.Data) != 0 {
 			return conflict()
 		}
 	default:
 		return conflict()
+	}
+	if immutable == nil || !*immutable || len(data) != 1+len(file.ExtendedAttributes) {
+		return conflict()
+	}
+	content, present := data[PlanArtifactKey]
+	expectedDigest := file.Digest
+	if file.ArtifactKind == clabernetesinternaldeviceplan.ArtifactDirectory ||
+		file.ArtifactKind == clabernetesinternaldeviceplan.ArtifactSymlink {
+		expectedDigest = clabernetesinternaldeviceplan.Digest(nil)
+	}
+	if !present || clabernetesinternaldeviceplan.Digest(content) != expectedDigest {
+		return conflict()
+	}
+	for _, attribute := range file.ExtendedAttributes {
+		key := clabernetesinternaldeviceplan.PlanArtifactAttributeKey(attribute.Name)
+		value, exists := data[key]
+		if !exists || clabernetesinternaldeviceplan.Digest(value) != attribute.Digest {
+			return conflict()
+		}
 	}
 
 	return nil

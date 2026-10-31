@@ -18,10 +18,12 @@ import (
 
 const (
 	// SessionProtocolVersion identifies the full-duplex planner protocol.
-	SessionProtocolVersion  = "v1alpha1"
-	sessionFramePrefix      = "C9S_DEVICE_SESSION_V1:"
-	sessionCachePrefix      = "C9S_DEVICE_SESSION_CACHE_V1:"
-	defaultMaxSessionBytes  = 8 << 20
+	SessionProtocolVersion = "v1alpha1"
+	sessionFramePrefix     = "C9S_DEVICE_SESSION_V1:"
+	sessionCachePrefix     = "C9S_DEVICE_SESSION_CACHE_V1:"
+	// MaxSessionFrameBytes includes bounded input, plan, and artifact content, plus JSON and
+	// base64 framing. Artifact []byte fields are also base64-encoded inside the JSON.
+	MaxSessionFrameBytes    = 16 << 20
 	defaultMaxSessionRounds = 8
 	sessionScannerBuffer    = 64 << 10
 	sessionDirectoryMode    = 0o700
@@ -69,166 +71,6 @@ type SessionResult struct {
 	Artifacts         []ArtifactContent        `json:"artifacts,omitempty"`
 	Certificates      []CertificateRequirement `json:"certificates,omitempty"`
 	CertificateSecret string                   `json:"certificateSecret,omitempty"`
-}
-
-// NormalizeSessionArtifacts proves the artifact content beside a plan is exactly what that plan
-// declares, and enforces the per-artifact and total size bounds.
-func NormalizeSessionArtifacts(
-	plan Plan,
-	artifacts []ArtifactContent,
-) ([]ArtifactContent, error) {
-	normalizedPlan, err := NormalizePlan(plan)
-	if err != nil {
-		return nil, err
-	}
-	expected := map[string]bool{}
-	for _, file := range normalizedPlan.Files {
-		if file.SourceKind != FileSourcePlanArtifact || file.ArtifactKind == ArtifactSymlink {
-			continue
-		}
-		if file.ArtifactKind == ArtifactDirectory && len(file.ExtendedAttributes) == 0 {
-			continue
-		}
-		expected[artifactContentKey(file.NodeID, file.ArtifactPath)] = true
-	}
-	seen := map[string]bool{}
-	result := make([]ArtifactContent, 0, len(artifacts))
-	total := 0
-	for index, artifact := range artifacts {
-		field := fmt.Sprintf("session.result.artifacts[%d]", index)
-		key := artifactContentKey(artifact.NodeID, artifact.ArtifactPath)
-		if !expected[key] || seen[key] {
-			return nil, planningError(
-				ErrorInvariant,
-				field,
-				"generated artifact content does not match the accepted plan",
-				nil,
-			)
-		}
-		if len(artifact.Data) > MaxPlanArtifactBytes {
-			return nil, planningError(
-				ErrorUnsupported,
-				field,
-				"generated artifact content exceeds the plan artifact bound",
-				nil,
-			)
-		}
-		total += len(artifact.Data)
-		if total > MaxPlanArtifactsBytes {
-			return nil, planningError(
-				ErrorUnsupported,
-				field,
-				"generated artifact content exceeds the plan artifact total bound",
-				nil,
-			)
-		}
-		attributes, attributeErr := normalizeArtifactExtendedAttributes(
-			normalizedPlan,
-			artifact,
-		)
-		if attributeErr != nil {
-			return nil, attributeErr
-		}
-		artifact.ExtendedAttributes = attributes
-		if artifact.Digest == "" || !validDigest(artifact.Digest) {
-			return nil, planningError(
-				ErrorInvariant,
-				field,
-				"generated artifact content has no identity",
-				nil,
-			)
-		}
-		if len(artifact.Data) == 0 {
-			if artifact.ArtifactPath == "" {
-				return nil, planningError(
-					ErrorInvariant,
-					field,
-					"generated artifact content is missing",
-					nil,
-				)
-			}
-		} else if Digest(artifact.Data) != artifact.Digest {
-			return nil, planningError(
-				ErrorInvariant,
-				field,
-				"generated artifact content does not match its digest",
-				nil,
-			)
-		}
-		seen[key] = true
-		clone := artifact
-		clone.Data = slices.Clone(artifact.Data)
-		result = append(result, clone)
-	}
-	if len(seen) != len(expected) {
-		return nil, planningError(
-			ErrorInvariant,
-			"session.result.artifacts",
-			"accepted plan declares generated artifact content that is absent",
-			nil,
-		)
-	}
-	slices.SortFunc(result, func(left, right ArtifactContent) int {
-		if left.NodeID != right.NodeID {
-			return strings.Compare(left.NodeID, right.NodeID)
-		}
-
-		return strings.Compare(left.ArtifactPath, right.ArtifactPath)
-	})
-
-	return result, nil
-}
-
-func artifactContentKey(nodeID, artifactPath string) string {
-	return nodeID + "\x00" + artifactPath
-}
-
-// normalizeArtifactExtendedAttributes proves the artifact's attribute values are exactly the ones
-// the plan recorded digests for.
-func normalizeArtifactExtendedAttributes(
-	plan Plan,
-	artifact ArtifactContent,
-) ([]ArtifactExtendedAttribute, error) {
-	declared := map[string]string{}
-	for _, file := range plan.Files {
-		if file.NodeID != artifact.NodeID || file.ArtifactPath != artifact.ArtifactPath ||
-			file.SourceKind != FileSourcePlanArtifact {
-			continue
-		}
-		for _, attribute := range file.ExtendedAttributes {
-			declared[attribute.Name] = attribute.Digest
-		}
-
-		break
-	}
-	if len(declared) != len(artifact.ExtendedAttributes) {
-		return nil, planningError(
-			ErrorInvariant,
-			"session.result.artifacts",
-			"generated artifact attribute values do not match the accepted plan",
-			nil,
-		)
-	}
-	values := make([]ArtifactExtendedAttribute, 0, len(artifact.ExtendedAttributes))
-	for _, attribute := range artifact.ExtendedAttributes {
-		digest, exists := declared[attribute.Name]
-		if !exists || !validDigest(digest) || Digest(attribute.Value) != digest {
-			return nil, planningError(
-				ErrorInvariant,
-				"session.result.artifacts",
-				"generated artifact attribute value does not match its plan digest",
-				nil,
-			)
-		}
-		values = append(values, ArtifactExtendedAttribute{
-			Name: attribute.Name, Value: slices.Clone(attribute.Value),
-		})
-	}
-	slices.SortFunc(values, func(left, right ArtifactExtendedAttribute) int {
-		return strings.Compare(left.Name, right.Name)
-	})
-
-	return values, nil
 }
 
 // SessionTerminalDigest binds one terminal result to its initial session and sequence.
@@ -482,7 +324,7 @@ type SessionFrameDecoder struct {
 // NewSessionFrameDecoder returns a bounded decoder for an attached worker stream.
 func NewSessionFrameDecoder(input io.Reader, maxBytes int) *SessionFrameDecoder {
 	if maxBytes == 0 {
-		maxBytes = defaultMaxSessionBytes
+		maxBytes = MaxSessionFrameBytes
 	}
 	scanner := bufio.NewScanner(input)
 	scanner.Buffer(make([]byte, sessionScannerBuffer), maxBytes)
@@ -501,7 +343,7 @@ func (d *SessionFrameDecoder) Next() (SessionFrame, error) {
 	for d.scanner.Scan() {
 		line := d.scanner.Text()
 		if FrameKind([]byte(line)) == WorkerFrameError {
-			diagnostic, err := DecodeWorkerError([]byte(line), defaultMaxSessionBytes)
+			diagnostic, err := DecodeWorkerError([]byte(line), MaxSessionFrameBytes)
 			if err != nil {
 				return SessionFrame{}, err
 			}

@@ -2393,8 +2393,7 @@ func renderPayloadSources(
 		// content rather than something the Pod regenerates. Symbolic links and plain directories
 		// carry no object: preparation realizes them from plan metadata alone.
 		if file.SourceKind == clabernetesinternaldeviceplan.FileSourcePlanArtifact &&
-			(file.ArtifactKind == clabernetesinternaldeviceplan.ArtifactSymlink ||
-				clabernetesinternaldeviceplan.PlanArtifactIdentity(file) == "") {
+			!clabernetesinternaldeviceplan.PlanArtifactNeedsPayload(file) {
 			continue
 		}
 		if file.SourceKind != clabernetesinternaldeviceplan.FileSourcePayload &&
@@ -2455,7 +2454,8 @@ func renderPayloadSources(
 		// requested destination mode when staging the verified artifact.
 		mode := int32(0o444)
 		items := []k8scorev1.KeyToPath{}
-		if file.ArtifactKind != clabernetesinternaldeviceplan.ArtifactDirectory {
+		if file.ArtifactKind != clabernetesinternaldeviceplan.ArtifactDirectory &&
+			file.ArtifactKind != clabernetesinternaldeviceplan.ArtifactSymlink {
 			items = append(items, k8scorev1.KeyToPath{Key: key, Path: "source", Mode: &mode})
 		}
 		if file.SourceKind == clabernetesinternaldeviceplan.FileSourcePlanArtifact {

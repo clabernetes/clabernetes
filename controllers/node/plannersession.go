@@ -137,7 +137,7 @@ func (r *PlannerSessionReconciler) Reconcile(
 	}
 	decoder := clabernetesinternaldeviceplan.NewSessionFrameDecoder(
 		stdoutReader,
-		DefaultMaxInputBytes+DefaultMaxPlanBytes,
+		clabernetesinternaldeviceplan.MaxSessionFrameBytes,
 	)
 	expectedSequence := 1
 	servicedRequests := map[string]bool{}
@@ -350,7 +350,7 @@ func validateControllerSessionResult(
 	}
 	if _, err = clabernetesinternaldeviceplan.DecodeSessionResult(
 		encoded.Bytes(),
-		DefaultMaxInputBytes+DefaultMaxPlanBytes,
+		clabernetesinternaldeviceplan.MaxSessionFrameBytes,
 	); err != nil {
 		return err
 	}

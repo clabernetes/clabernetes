@@ -127,6 +127,7 @@ func (p *PlannerPool) run(
 	if err = (&PlanArtifactReconciler{Client: p.Client}).Ensure(
 		ctx,
 		node,
+		result.Plan,
 		result.Artifacts,
 	); err != nil {
 		return nil, err
@@ -304,7 +305,7 @@ func (p *PlannerPool) converse(ctx context.Context, worker *k8scorev1.Pod,
 	}
 	decoder := clabernetesinternaldeviceplan.NewSessionFrameDecoder(
 		stdoutReader,
-		DefaultMaxInputBytes+DefaultMaxPlanBytes,
+		clabernetesinternaldeviceplan.MaxSessionFrameBytes,
 	)
 	seen := map[string]bool{}
 	var images []clabernetesinternaldeviceplan.ImageInput

@@ -663,8 +663,7 @@ func validatePlan(plan Plan) error {
 
 		for attributeIndex, attribute := range file.ExtendedAttributes {
 			attributeField := fmt.Sprintf("%s.extendedAttributes[%d]", field, attributeIndex)
-			if attribute.Name == "" ||
-				len(attribute.Name) > maxPlanArtifactAttributeNameBytes ||
+			if attribute.Name == "" || len(attribute.Name) > 255 ||
 				strings.ContainsRune(attribute.Name, 0) || !validDigest(attribute.Digest) ||
 				attributeNames[attribute.Name] {
 				return planningError(

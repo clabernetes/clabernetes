@@ -2,7 +2,9 @@
 package node
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -173,5 +175,48 @@ func TestPlannerSessionReconcilerResolvesRequestedImageMetadata(t *testing.T) {
 		len(response.ImageInputs) != 1 ||
 		response.ImageInputs[0].SourceReference != "registry.example/extra:1" {
 		t.Fatalf("image response = %#v", response)
+	}
+}
+
+func TestPlannerSessionAcceptsFullArtifactBudget(t *testing.T) {
+	t.Parallel()
+	input := validInput()
+	plan := validPlannerResult(t, input, "artifact-budget")
+	content := bytes.Repeat([]byte("x"), clabernetesinternaldeviceplan.MaxPlanArtifactBytes)
+	count := clabernetesinternaldeviceplan.MaxPlanArtifactsBytes / len(content)
+	artifacts := make([]clabernetesinternaldeviceplan.ArtifactContent, 0, count)
+	for index := range count {
+		path := fmt.Sprintf("generated/%d", index)
+		plan.Files = append(plan.Files, clabernetesinternaldeviceplan.FilePlan{
+			ID: path, NodeID: "node-a", SourceReference: path, ArtifactPath: path,
+			SourceKind: clabernetesinternaldeviceplan.FileSourcePlanArtifact,
+			Digest:     clabernetesinternaldeviceplan.Digest(content), Sensitive: true,
+		})
+		artifacts = append(artifacts, clabernetesinternaldeviceplan.ArtifactContent{
+			NodeID: "node-a", ArtifactPath: path, Data: content,
+			Digest: clabernetesinternaldeviceplan.Digest(content), Sensitive: true,
+		})
+	}
+	frame := clabernetesinternaldeviceplan.SessionFrame{
+		Version: clabernetesinternaldeviceplan.SessionProtocolVersion,
+		Type:    clabernetesinternaldeviceplan.SessionFrameResult, Sequence: 1,
+		SessionDigest: plan.InputDigest,
+		Result: &clabernetesinternaldeviceplan.SessionResult{
+			Input:     input,
+			Plan:      plan,
+			Artifacts: artifacts,
+		},
+	}
+	encoded := &bytes.Buffer{}
+	if err := clabernetesinternaldeviceplan.WriteSessionFrame(encoded, frame); err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := clabernetesinternaldeviceplan.NewSessionFrameDecoder(encoded, clabernetesinternaldeviceplan.MaxSessionFrameBytes).
+		Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = validateControllerSessionResult(decoded, input, nil, nil, nil, ""); err != nil {
+		t.Fatal(err)
 	}
 }

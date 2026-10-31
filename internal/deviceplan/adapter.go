@@ -27,10 +27,6 @@ import (
 
 const maxGeneratedSymlinkTargetBytes = 4096
 
-// maxPlanArtifactAttributeNameBytes bounds a generated extended-attribute name so its artifact
-// object key stays within Kubernetes object-key limits.
-const maxPlanArtifactAttributeNameBytes = 128
-
 // Adapter evaluates explicit inputs against the pinned containerlab registry through generic
 // containerlab interfaces. It contains no kind-name dispatch.
 type Adapter struct {

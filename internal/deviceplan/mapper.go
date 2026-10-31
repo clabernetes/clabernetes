@@ -80,64 +80,29 @@ func normalizePlanArtifactContents(
 	plan Plan,
 	nodes []EvaluatedNode,
 ) ([]ArtifactContent, error) {
-	expected := map[string]FilePlan{}
-	for _, file := range plan.Files {
-		if file.SourceKind != FileSourcePlanArtifact || file.ArtifactKind == ArtifactSymlink {
-			continue
-		}
-		if file.ArtifactKind == ArtifactDirectory && len(file.ExtendedAttributes) == 0 {
-			continue
-		}
-		expected[artifactContentKey(file.NodeID, file.ArtifactPath)] = file
-	}
-	artifacts := make([]ArtifactContent, 0, len(expected))
-	for index := range nodes {
-		node := &nodes[index]
+	artifacts := []ArtifactContent{}
+	for _, node := range nodes {
 		for _, generated := range node.GeneratedArtifacts {
-			if generated.Kind == ArtifactSymlink || (generated.Kind == ArtifactDirectory &&
-				len(generated.ExtendedAttributes) == 0) {
+			if (generated.Kind == ArtifactDirectory || generated.Kind == ArtifactSymlink) &&
+				len(generated.ExtendedAttributes) == 0 {
 				continue
 			}
-			key := artifactContentKey(node.Input.ID, generated.Path)
-			file, declared := expected[key]
-			if !declared || PlanArtifactIdentity(file) != generatedIdentity(generated) {
-				return nil, &Error{
-					Code: ErrorInvariant, NodeID: node.Input.ID,
-					Field:    "plan.artifacts",
-					Behavior: behaviorArtifactGeneration,
-					Message:  "generated artifact content does not match the accepted plan",
-				}
-			}
-			delete(expected, key)
 			contents := make([]ArtifactExtendedAttribute, 0, len(generated.ExtendedAttributes))
 			for _, attribute := range generated.ExtendedAttributes {
-				contents = append(contents, ArtifactExtendedAttribute{
-					Name: attribute.Name, Value: slices.Clone(attribute.value),
-				})
+				contents = append(
+					contents,
+					ArtifactExtendedAttribute{Name: attribute.Name, Value: attribute.value},
+				)
 			}
 			artifacts = append(artifacts, ArtifactContent{
 				NodeID: node.Input.ID, ArtifactPath: generated.Path,
-				Digest: generatedIdentity(generated), Sensitive: file.Sensitive,
+				Digest: generatedIdentity(generated), Sensitive: true,
 				Data: generated.Data, ExtendedAttributes: contents,
 			})
 		}
 	}
-	if len(expected) != 0 {
-		return nil, &Error{
-			Code: ErrorInvariant, Field: "plan.artifacts",
-			Behavior: behaviorArtifactGeneration,
-			Message:  "accepted plan declares generated artifact content that is absent",
-		}
-	}
-	slices.SortFunc(artifacts, func(left, right ArtifactContent) int {
-		if left.NodeID != right.NodeID {
-			return strings.Compare(left.NodeID, right.NodeID)
-		}
 
-		return strings.Compare(left.ArtifactPath, right.ArtifactPath)
-	})
-
-	return artifacts, nil
+	return NormalizeSessionArtifacts(plan, artifacts)
 }
 
 func indexRecordedContainers(
@@ -1648,18 +1613,10 @@ func nodeMappingError(nodeID, field, message string) error {
 	}
 }
 
-// generatedIdentity returns the stable identity of one generated artifact: its content digest, or
-// the metadata identity of an attribute-carrying directory.
+// generatedIdentity includes every byte the artifact object will carry.
 func generatedIdentity(artifact GeneratedArtifact) string {
-	if artifact.Kind != ArtifactDirectory {
-		return artifact.Digest
-	}
-	plan := FilePlan{ArtifactKind: ArtifactDirectory}
-	for _, attribute := range artifact.ExtendedAttributes {
-		plan.ExtendedAttributes = append(plan.ExtendedAttributes, ExtendedAttribute{
-			Name: attribute.Name, Digest: attribute.Digest,
-		})
-	}
-
-	return PlanArtifactIdentity(plan)
+	return PlanArtifactIdentity(FilePlan{
+		ArtifactKind: artifact.Kind, Digest: artifact.Digest,
+		ExtendedAttributes: mapGeneratedExtendedAttributes(artifact.ExtendedAttributes),
+	})
 }
