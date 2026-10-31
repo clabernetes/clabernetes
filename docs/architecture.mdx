@@ -137,11 +137,11 @@ without rolling the Pod.
 
 Each rendered Pod runs, in order:
 
-1. a **preparation init container** that re-runs the imported deterministic file generation
-   against its mounted payload/certificate inputs, verifies every planned path, mode, and
-   digest, and stages artifacts into plan-scoped volumes. It renders generated configuration
-   with the runtime-completed management identity, so package templates emit the real
-   management address, prefix, and gateway;
+1. a **preparation init container** that stages the accepted plan's content into plan-scoped
+   volumes. Every generated file travels with the plan as a digest-named artifact object, so
+   preparation verifies path, mode, ownership, extended attributes, and digest and publishes
+   those bytes; it never evaluates imported code, and it therefore cannot produce content the
+   plan did not accept;
 2. a **restartable privileged connectivity init-sidecar** whose startup probe gates device
    start until local initialization, the accepted cold-start interface set, and imported endpoint
    hooks are complete. Missing remote peers keep its readiness probe failing without restarting
@@ -159,6 +159,11 @@ expands into card containers that are directly visible as application containers
 with validated namespace ownership. Container names are deterministic DNS labels derived from
 logical Node and component identity, so `kubectl logs` and `kubectl exec` target the actual
 device container (`-c` selects components).
+
+Imported lifecycle hooks - post-deploy, readiness, save, and endpoint fixup - run inside the Pod
+against the live device container, because their branches depend on what the device reports.
+They are bound to the accepted plan by input digest: the Pod rebuilds only the imported Node graph
+the hook needs and does not replay or diff the plan's construction operations.
 
 VM-backed kinds stay ordinary application containers running their packaged qemu/vrnetlab
 entrypoint; the plan grants `/dev/kvm`, tap access, and resources, and clabernetes does not
@@ -203,8 +208,10 @@ management traffic to the Pod address and DNATs declared ports from it, so Servi
 keeps working. Inbound translated connections also get the Pod-local gateway as their source,
 so a device that only knows its connected management route (SR OS reads its routes from a
 Docker-shaped environment) can always answer. This is the same source identity containerlab's
-Docker port publishing presents. Management configuration renders at plan time through each kind's own imported
-templates using the allocated address, prefix, and gateway.
+Docker port publishing presents. Management configuration renders at plan time through each kind's own
+imported templates using the allocated address, prefix, and gateway, and completes its resolver
+set from the resolver addresses the manager resolved once for the cluster. Preparation stages
+those bytes unchanged, so generated configuration and the accepted plan cannot diverge.
 
 The management subnet is one shared subnet across the whole namespace, exactly as on
 containerlab's management network: a device dialing a peer's *management address* (a hardcoded

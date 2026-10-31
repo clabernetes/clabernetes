@@ -116,6 +116,12 @@ diagnostic. Nothing is silently dropped.
 - **No arbitrary host binds.** Files come from ConfigMaps, Secrets, digest-pinned URLs, generated
   artifacts, and PVC-backed persistence; the preparation init container stages and
   digest-verifies everything before the device starts. Arbitrary host paths are rejected.
+- **Generation happens once, at plan time.** containerlab generates a node's files on the host
+  right before it creates the container, so the same topology can render differently on a machine
+  whose environment changed. c9s generates them during planning, persists the bytes as digest-named
+  objects owned by the Node, and stages exactly those bytes in the Pod: preparation re-runs no
+  imported code, and a file whose digest differs from the plan is rejected or preserved rather than
+  silently regenerated.
 - **Runtime binaries use a bounded worker cache.** The preparation container alone mounts
   `/var/lib/clabernetes/runtime-binary-cache`, which retains four content-verified binary
   versions (at most 256 MiB each). When this cache and the Pod's storage share a filesystem
