@@ -150,7 +150,8 @@ Each rendered Pod runs, in order:
 3. one **regular application container** per grouped logical Node or planned chassis component,
    running the unmodified device image. Kubernetes-native image pull policy, pull Secrets,
    environment, users, ports, resources, devices, capabilities, privilege, seccomp/AppArmor,
-   sysctls, tmpfs, shared memory, and DNS all map from the plan onto native Pod fields.
+   tmpfs, shared memory, and DNS all map from the plan onto native Pod fields; package sysctls
+   are applied by the connectivity sidecar in the device's network namespace.
 
 A standalone Node has one Deployment/Pod; `network-mode: container:<primary>` adds application
 containers to the primary's Pod; a component-based node (i.e. a distributed SR-SIM chassis)

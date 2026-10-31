@@ -58,7 +58,9 @@ var (
 //
 //nolint:interfacebloat // one deliberate seam over all Pod-namespace mutation families.
 type LinkOperations interface {
-	// EnsureSysctl applies one package-requested setting in the shared Pod network namespace.
+	// EnsureSysctl applies one package-requested setting in the network namespace the device
+	// process runs in: the shared Pod namespace, or the private device namespace when isolation
+	// is active.
 	EnsureSysctl(name, value string) error
 	ListVethInterfaces(ownerPrefix string) ([]VethInterface, error)
 	EnsureVethPair(leftName, rightName string, mtu int, owner string) error
@@ -864,6 +866,9 @@ type ConnectivityOptions struct {
 	EntropyRoot              string
 	Revision                 string
 	HostNetworkNamespacePath string
+	// DeviceNetnsPath is the bind-mounted private device namespace created by the Pod's
+	// device-netns init container. Empty keeps the legacy shared Pod namespace.
+	DeviceNetnsPath          string
 	ApplicationRuntimeSocket string
 	PodNamespace             string
 	PodName                  string
@@ -1048,6 +1053,13 @@ func RunConnectivityWithOptions(
 	plan clabernetesinternaldeviceplan.Plan,
 	options ConnectivityOptions,
 ) error {
+	if options.DeviceNetnsPath != "" {
+		fmt.Fprintf(
+			os.Stderr,
+			"connectivity: device network namespace isolation is active\n",
+		)
+	}
+
 	var namespace EndpointNamespace
 
 	if hasImportedEndpointActions(plan) || hasHostInterfacePlans(plan) ||
@@ -1060,14 +1072,37 @@ func RunConnectivityWithOptions(
 		namespace = opened
 	}
 
-	return runConnectivity(
+	var deviceNetns *deviceNetworkNamespace
+
+	if options.DeviceNetnsPath != "" {
+		opened, err := openDeviceNetworkNamespace(options.DeviceNetnsPath)
+		if err != nil {
+			if namespace != nil {
+				_ = namespace.Close()
+			}
+
+			return err
+		}
+
+		deviceNetns = opened
+	}
+
+	runErr := runConnectivity(
 		ctx,
 		input,
 		plan,
 		options,
-		newLinkOperations(namespace),
+		newLinkOperationsWithDeviceNetns(namespace, deviceNetns),
 		namespace,
 	)
+	if ctx != nil && ctx.Err() != nil {
+		// Pod termination unmounts the bind-mounted netns file so the dedicated hostPath does
+		// not accumulate mounts. A crash leaves the file in place; that is inert until the next
+		// Pod with the same UID (which never happens).
+		return errors.Join(runErr, CleanupDeviceNetns(options.DeviceNetnsPath))
+	}
+
+	return runErr
 }
 
 // RunConnectivityWithOperations exposes the generic mutation seam for deterministic tests.
@@ -1192,6 +1227,12 @@ func runConnectivity(
 		return err
 	}
 
+	if options.DeviceNetnsPath != "" {
+		if err = validateIsolatedPlan(effectivePlan); err != nil {
+			return err
+		}
+	}
+
 	if err = reconcileSysctls(effectivePlan, operations); err != nil {
 		return err
 	}
@@ -1295,6 +1336,29 @@ func runConnectivity(
 	)
 }
 
+// validateIsolatedPlan rejects Link shapes whose device legs would need to stay in the Pod
+// namespace. Cross-Pod fabric Links and host Links are placed across namespaces; same-Pod and
+// loopback Links are not yet realized inside an isolated device namespace.
+func validateIsolatedPlan(plan clabernetesinternaldeviceplan.Plan) error {
+	for _, intf := range plan.Interfaces {
+		if intf.Connectivity != clabernetesinternaldeviceplan.ConnectivitySamePod &&
+			intf.Connectivity != clabernetesinternaldeviceplan.ConnectivityLoopback {
+			continue
+		}
+
+		return fmt.Errorf(
+			"private device netns does not yet support %s Link %q",
+			intf.Connectivity,
+			intf.LinkID,
+		)
+	}
+
+	return nil
+}
+
+// reconcileSysctls applies the package-declared network sysctls in the namespace the device
+// process runs in; the operations value selects it, so an isolated device gets its own settings
+// while the Pod namespace keeps the sidecar's hardening baseline.
 func reconcileSysctls(plan clabernetesinternaldeviceplan.Plan, operations LinkOperations) error {
 	values := map[string]string{}
 
@@ -1803,6 +1867,12 @@ func applyProjectedConnectivityRevision(
 
 	if err = ValidatePlanCapabilities(revisedPlan); err != nil {
 		return appliedRevision, false, err
+	}
+
+	if options.DeviceNetnsPath != "" {
+		if err = validateIsolatedPlan(revisedPlan); err != nil {
+			return appliedRevision, false, err
+		}
 	}
 
 	if err = reconcileLocalInterfaces(&revisedPlan, operations, options.PodUID); err != nil {

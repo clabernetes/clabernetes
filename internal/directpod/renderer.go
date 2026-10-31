@@ -48,6 +48,11 @@ const (
 	preparationScratchPath           = "/tmp"
 	connectivityStateName            = "clabwire-state"
 	connectivityStatePath            = "/var/run/clabernetes/connectivity"
+	deviceNetnsVolumeName            = "device-netns"
+	deviceNetnsHostPath              = "/var/run/clabernetes/device-netns"
+	deviceNetnsMountPath             = "/var/run/netns"
+	deviceNetnsInitName              = "device-netns-init"
+	deviceNetnsFileName              = "$(C9S_POD_UID).ns"
 	connectivityRevisionVolumeName   = "clabwire-revision"
 	peerDirectoryVolumeName          = "node-peer-directory"
 	connectivityRevisionMountPath    = "/var/run/clabernetes/connectivity-revision"
@@ -88,7 +93,10 @@ const (
 	runtimeFlagReset                = "--reset"
 	runtimeFlagState                = "--state"
 	runtimeFlagConnectivityRevision = "--connectivityRevision"
+	runtimeFlagDeviceNetns          = "--deviceNetns"
 	podAddressFieldPath             = "status.podIP"
+	podUIDEnvironmentName           = "C9S_POD_UID"
+	podUIDFieldPath                 = "metadata.uid"
 )
 
 // Stable direct workload identities consumed by the status reconciler.
@@ -143,6 +151,10 @@ type Options struct {
 	EnableApplicationLogBroker        bool
 	LinkLifecycleMode                 clabernetesinternaldeviceplan.LinkApplyMode
 	LinkLifecyclePlanDigest           string
+	// NetworkIsolation runs device application containers in a sidecar-created private
+	// network namespace while the connectivity sidecar keeps the Pod's transport, management
+	// router, mesh, and Link legs in the Pod namespace.
+	NetworkIsolation bool
 }
 
 // ProbePolicy is explicit, kind-neutral NodeProfile policy for one logical Node. Password
@@ -484,6 +496,19 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 		VolumeSource: k8scorev1.VolumeSource{EmptyDir: &k8scorev1.EmptyDirVolumeSource{}},
 	})
 
+	if options.NetworkIsolation {
+		// A dedicated hostPath is used instead of an emptyDir: the bind-mounted netns file is a
+		// submount that kubelet cannot unlink during emptyDir teardown, which would wedge Pod
+		// deletion. The sidecar unmounts and removes its own file on graceful termination.
+		hostPathType := k8scorev1.HostPathDirectoryOrCreate
+		volumes = append(volumes, k8scorev1.Volume{
+			Name: deviceNetnsVolumeName,
+			VolumeSource: k8scorev1.VolumeSource{HostPath: &k8scorev1.HostPathVolumeSource{
+				Path: deviceNetnsHostPath, Type: &hostPathType,
+			}},
+		})
+	}
+
 	// The peer directory is deliberately a namespace-scoped ConfigMap projection rather than
 	// rendered HostAliases: lab membership changes update the ConfigMaps only, which the
 	// kubelet syncs into running Pods, so adding or removing a node never recreates Pods. The
@@ -627,6 +652,12 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 		return nil, err
 	}
 
+	if options.NetworkIsolation {
+		if err = applyDeviceNetnsToApplicationContainers(containers); err != nil {
+			return nil, err
+		}
+	}
+
 	if hasLifecycle {
 		cacheType := k8scorev1.HostPathDirectoryOrCreate
 		volumes = append(volumes, k8scorev1.Volume{
@@ -713,6 +744,23 @@ func Render(plan clabernetesinternaldeviceplan.Plan,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if options.NetworkIsolation {
+		// The netns must exist before the native-sidecar connectivity helper starts, so the
+		// init container goes immediately ahead of it rather than at the end of the list.
+		index := slices.IndexFunc(initContainers, func(container k8scorev1.Container) bool {
+			return container.Name == connectivityName
+		})
+		if index < 0 {
+			index = len(initContainers)
+		}
+
+		initContainers = slices.Insert(
+			initContainers,
+			index,
+			deviceNetnsInitContainer(options),
+		)
 	}
 
 	if options.StartupGate {
@@ -2567,6 +2615,21 @@ func renderHelpers(
 		},
 	}
 
+	if options.NetworkIsolation {
+		connectivityArgs = append(
+			connectivityArgs,
+			runtimeFlagDeviceNetns,
+			deviceNetnsPath(),
+		)
+
+		hostToContainer := k8scorev1.MountPropagationHostToContainer
+		connectivityMounts = append(connectivityMounts, k8scorev1.VolumeMount{
+			Name:             deviceNetnsVolumeName,
+			MountPath:        deviceNetnsMountPath,
+			MountPropagation: &hostToContainer,
+		})
+	}
+
 	if options.ConnectivityRevisionConfigMapName != "" {
 		connectivityArgs = append(
 			connectivityArgs,
@@ -2586,7 +2649,7 @@ func renderHelpers(
 	}{
 		{name: "C9S_POD_NAMESPACE", fieldPath: "metadata.namespace"},
 		{name: "C9S_POD_NAME", fieldPath: "metadata.name"},
-		{name: "C9S_POD_UID", fieldPath: "metadata.uid"},
+		{name: podUIDEnvironmentName, fieldPath: podUIDFieldPath},
 		{name: "C9S_POD_ADDRESS", fieldPath: podAddressFieldPath},
 	} {
 		connectivityEnvironment = append(connectivityEnvironment, k8scorev1.EnvVar{
@@ -2716,6 +2779,101 @@ func renderHelpers(
 			VolumeMounts: connectivityMounts,
 		},
 	}, nil
+}
+
+// deviceNetnsPath is the container-visible path of the Pod's private device netns file. The
+// Downward API expands C9S_POD_UID in the command and args of the containers that use it.
+func deviceNetnsPath() string {
+	return deviceNetnsMountPath + "/" + deviceNetnsFileName
+}
+
+// deviceNetnsInitContainer creates the Pod's private device network namespace before the
+// sidecar and application containers start. The directory is a hostPath volume mounted with
+// bidirectional propagation here, so the bind-mounted netns file is visible to the sibling
+// containers, which mount the same volume host-to-container.
+func deviceNetnsInitContainer(options Options) k8scorev1.Container {
+	trueValue := true
+	rootUser := int64(0)
+	bidirectional := k8scorev1.MountPropagationBidirectional
+
+	return k8scorev1.Container{
+		Name:    deviceNetnsInitName,
+		Image:   options.PreparationImage,
+		Command: []string{runtimeBinaryPath, runtimeCommandName, "device-netns"},
+		Args:    []string{"--path", deviceNetnsPath()},
+		Env: []k8scorev1.EnvVar{{
+			Name: podUIDEnvironmentName,
+			ValueFrom: &k8scorev1.EnvVarSource{FieldRef: &k8scorev1.ObjectFieldSelector{
+				FieldPath: podUIDFieldPath,
+			}},
+		}},
+		SecurityContext: &k8scorev1.SecurityContext{
+			Privileged: &trueValue,
+			RunAsUser:  &rootUser,
+		},
+		VolumeMounts: []k8scorev1.VolumeMount{{
+			Name:             deviceNetnsVolumeName,
+			MountPath:        deviceNetnsMountPath,
+			MountPropagation: &bidirectional,
+		}},
+	}
+}
+
+// applyDeviceNetnsToApplicationContainers makes every device container launch through the
+// private netns. The launch boundary enters the mounted namespace immediately before exec.
+func applyDeviceNetnsToApplicationContainers(containers []k8scorev1.Container) error {
+	hostToContainer := k8scorev1.MountPropagationHostToContainer
+
+	for index := range containers {
+		container := &containers[index]
+
+		if len(container.Command) < 3 ||
+			container.Command[0] != lifecycleBinaryPath ||
+			container.Command[1] != runtimeCommandName ||
+			container.Command[2] != "launch" {
+			return fmt.Errorf(
+				"application container %q does not use the launch boundary",
+				container.Name,
+			)
+		}
+
+		for _, mount := range container.VolumeMounts {
+			if mount.MountPath == deviceNetnsMountPath {
+				return fmt.Errorf(
+					"application container %q already uses netns mount path %q",
+					container.Name,
+					deviceNetnsMountPath,
+				)
+			}
+		}
+
+		for _, environment := range container.Env {
+			if environment.Name == podUIDEnvironmentName {
+				return fmt.Errorf(
+					"application container %q already declares C9S_POD_UID",
+					container.Name,
+				)
+			}
+		}
+
+		container.Env = append(container.Env, k8scorev1.EnvVar{
+			Name: podUIDEnvironmentName,
+			ValueFrom: &k8scorev1.EnvVarSource{FieldRef: &k8scorev1.ObjectFieldSelector{
+				FieldPath: podUIDFieldPath,
+			}},
+		})
+		container.VolumeMounts = append(container.VolumeMounts, k8scorev1.VolumeMount{
+			Name:             deviceNetnsVolumeName,
+			MountPath:        deviceNetnsMountPath,
+			MountPropagation: &hostToContainer,
+		})
+		slices.SortFunc(container.VolumeMounts, func(left, right k8scorev1.VolumeMount) int {
+			return strings.Compare(left.MountPath, right.MountPath)
+		})
+		container.Command = append(container.Command, runtimeFlagDeviceNetns, deviceNetnsPath())
+	}
+
+	return nil
 }
 
 func hasImportedEndpointLifecycle(plan clabernetesinternaldeviceplan.Plan) bool {

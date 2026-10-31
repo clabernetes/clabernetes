@@ -25,7 +25,7 @@ func startupGate(image string) (k8scorev1.Container, k8scorev1.Volume) {
 			Items: []k8scorev1.DownwardAPIVolumeFile{
 				{
 					Path:     "uid",
-					FieldRef: &k8scorev1.ObjectFieldSelector{FieldPath: "metadata.uid"},
+					FieldRef: &k8scorev1.ObjectFieldSelector{FieldPath: podUIDFieldPath},
 				},
 				{Path: "admitted", FieldRef: &k8scorev1.ObjectFieldSelector{
 					FieldPath: "metadata.annotations['" + StartupAdmittedAnnotation + "']",

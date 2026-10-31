@@ -16,6 +16,7 @@ Typical profile settings include:
 - Kubernetes image pull policy and pull Secrets
 - status probes
 - persistence
+- a network-isolation request for device-side interfaces
 - management overlay address allocation
 
 Device privilege, capabilities, and devices are never profile policy: they come from the imported
@@ -54,6 +55,23 @@ referenced profile take precedence over supported global `Config` defaults; omit
 their built-in defaults or, where available, Config resolution. Service exposure uses the built-in
 `LoadBalancer` default because Config has no exposure-mode field. Set `spec.expose.exposeType` to
 `ClusterIP`, `Headless`, or `None` to override it.
+
+`spec.deployment.networkIsolation` runs the device's data-plane interfaces in a private network
+namespace. `true` isolates the device-side interfaces while the connectivity sidecar keeps
+Kubernetes transport, the management router/mesh, and Link transport legs in the Pod namespace;
+`false` keeps the shared Pod network namespace. The device container must be privileged or carry
+`CAP_SYS_ADMIN`, because the launch boundary enters the private namespace before executing the
+image process. The runtime creates the namespace in a dedicated init container, moves the
+device-side management and Link legs into it, and leaves the sidecar in the Pod namespace. An
+omitted value leaves the field unset, so behaviour depends on the Node kind: kinds in the
+`keysight_ixia-c` family resolve to `true` at profile resolution because their entrypoint claims
+every interface it can see, and all other kinds behave as `false`. Set `false` explicitly on an
+ixia-c Node to opt out. For a Topology, configure the equivalent field at
+`spec.deployment.networkIsolation`; the Topology controller copies an explicit value into the
+generated NodeProfile and leaves it unset otherwise. Same-Pod and loopback Links are not yet
+supported inside an isolated device namespace. Network sysctls declared by the imported
+package apply inside the private device namespace, so they configure the device's network stack
+instead of the Pod's; the sidecar's own hardening of the Pod namespace is unaffected.
 
 The `spec.scheduling.affinity` field accepts the native Kubernetes node affinity, pod affinity, and
 pod anti-affinity structure. A single NodeProfile can be referenced by multiple Nodes, so the
