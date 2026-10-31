@@ -44,8 +44,8 @@ type Adapter struct {
 	// solely from imported package hooks.
 	CertificateRoot string
 	// CheckDeploymentConditions runs the imported package's generic preflight hook. It is enabled
-	// only by the preparation worker after Kubernetes has scheduled the direct Pod onto its target
-	// node, so host CPU, kernel, memory, and device observations describe the actual worker.
+	// by endpoint initialization and post-deploy on the target worker. Planning leaves it disabled
+	// so CPU, kernel, memory, and device observations never describe the planner host.
 	CheckDeploymentConditions bool
 	// PostDeployRetryWindow and PostDeployRetryBackoff bound in-place retries of a failed
 	// imported post-deploy hook. Zero values select the production defaults; tests inject

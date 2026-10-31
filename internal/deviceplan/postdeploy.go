@@ -69,6 +69,7 @@ func (a Adapter) RunPostDeploy(
 		return err
 	}
 
+	a.CheckDeploymentConditions = true
 	state, err := a.rehydrateImportedDeployment(
 		ctx,
 		normalizedInput,
@@ -190,6 +191,8 @@ func (a Adapter) RunDeployEndpoints(
 	if execute == nil {
 		return errors.New("endpoint lifecycle executor is nil")
 	}
+	// Endpoint hooks run in init, before application containers start on the target worker.
+	a.CheckDeploymentConditions = true
 	normalizedInput, err := NormalizeInput(input)
 	if err != nil {
 		return err
@@ -376,12 +379,8 @@ func (a Adapter) rehydrateImportedDeployment(
 		}
 		config.Index = index
 		config.LabDir = filepath.Join(workspace, ArtifactNodeDirectory(nodeInput.ID))
-		if nodeInput.ID == targetNode.ID {
-			config.LabDir = targetLabDir
-		}
-		// Embedded startup configuration must exist as a workspace file here exactly as it did
-		// during planning and preparation; for the target this rewrite is idempotent with the
-		// prepared artifact.
+		// Imported construction can write files even through a recording runtime. Keep those
+		// writes in scratch space so it cannot replace accepted or device-modified artifacts.
 		if embeddedErr := materializeEmbeddedStartupConfig(
 			nodeInput.ID,
 			config,
@@ -446,6 +445,15 @@ func (a Adapter) rehydrateImportedDeployment(
 		return nil, errors.New("post-deploy target could not be reconstructed")
 	}
 
+	if a.CheckDeploymentConditions {
+		if err = recordDeploymentConditions(ctx, []EvaluatedNode{{
+			Input: targetInput, implementation: state.target,
+			recorder: constructionRuntime.recorder,
+		}}, normalizedInput.TopologyName); err != nil {
+			return nil, err
+		}
+	}
+
 	preDeploy := &clabnodes.PreDeployParams{
 		Cert: certificateInfrastructure, TopologyName: normalizedInput.TopologyName,
 	}
@@ -499,6 +507,8 @@ func (a Adapter) rehydrateImportedDeployment(
 	); err != nil {
 		return nil, err
 	}
+	rewriteWorkspacePaths(state.target.Config(),
+		filepath.Join(workspace, ArtifactNodeDirectory(targetNode.ID)), targetLabDir)
 	if err = constructionRuntime.switchToLive(); err != nil {
 		return nil, err
 	}
@@ -508,17 +518,14 @@ func (a Adapter) rehydrateImportedDeployment(
 	return state, nil
 }
 
-// importedDeploymentConstructionRuntime rebuilds one imported Node graph with a side-effect-free
-// recorder and then hands the same graph to the live runtime of the already-running direct
-// container. The recorded construction stream is deliberately not compared to the accepted plan:
-// the plan already binds this input by digest, so re-deriving and diffing the deployment stream
-// inside the Pod duplicated planning work without adding evidence.
+// importedDeploymentConstructionRuntime records runtime calls while hooks rebuild a Node graph
+// in scratch storage, then directs subsequent calls to the live container. Construction still
+// executes imported hooks; it does not compare their recorded operations with the accepted plan.
 type importedDeploymentConstructionRuntime struct {
 	clabruntime.ContainerRuntime
 
 	live       clabruntime.ContainerRuntime
 	recorder   *recordingRuntime
-	replayRoot string
 	liveActive bool
 }
 
@@ -534,7 +541,6 @@ func newImportedDeploymentConstructionRuntime(
 		ContainerRuntime: recorder,
 		live:             live,
 		recorder:         recorder,
-		replayRoot:       replayRoot,
 	}
 }
 
