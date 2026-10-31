@@ -125,14 +125,18 @@ constructor calls:
 
 | today | after |
 | --- | --- |
-| reconstruct the Node graph with a recorder, then compare the recorded container inventory and deployment operations against the accepted plan, then switch to the live runtime | reconstruct the Node graph with a recorder, then switch to the live runtime |
+| reconstruct the Node graph with a recorder, then compare the recorded container inventory and deployment operations against the accepted plan, then switch to the live runtime | reconstruct in scratch space, verify the target container runtime IDs, then switch to the live runtime |
 | readiness container IDs re-derived and diffed against the plan during every hook | removed |
 | `verifyReplayedDeploymentOperations`, `sameReplayedDeploymentOperation`, `replayedDeploymentOperation`, `deploymentReplayError`, `verifyReplayedContainers`, `verifyReplayedReadinessInventory` | deleted |
 
 The accepted plan still binds the hook to its input by digest (`ValidatePlanInputIdentity`), so the
 hook runs against exactly the configuration planning produced. What is given up is the second-order
-check that the rest of the Pod's construction stream matches the plan byte-for-byte; e2e coverage,
-not an in-Pod re-derivation, is the evidence that keeps that true.
+check that the rest of the Pod's construction stream matches the plan byte-for-byte. A small
+inventory check remains at the shared post-deploy/endpoint boundary: the target Node's reconstructed
+container runtime IDs must equal the planned IDs, independent of creation order. Missing, extra,
+or different IDs fail before switching to the live runtime. This uses the already-recorded
+construction inventory; it does not repeat planning, compare operations, or observe actual
+Kubernetes container state.
 
 *Alternative rejected:* typed `Capture`/`When` plan steps plus a c9s interpreter. It is implementable
 for exec-only hooks (save on srl/ceos/frr/linux/sonic_vm) but cannot express hooks that dial the
@@ -168,10 +172,9 @@ it; the controller's existing plan identity check forces regeneration of stale p
 
 ## Risks / Trade-offs
 
-- **Removing the drift comparison weakens one in-Pod check**: a construction stream that no longer
-  matches the accepted plan is no longer fatal at hook time -> the plan still binds its input by
-  digest, and the e2e suites for srl, sros/srsim, ceos, cumulus, and frr plus the per-kind plan
-  conformance remain the gate; a future native hook implementation can re-introduce typed evidence.
+- **Operation-stream drift is no longer checked**: input identity and target container runtime
+  IDs are verified before post-deploy/endpoint hooks, but those checks do not establish equivalence
+  of the construction operations. Vendor e2e and conformance remain the evidence for behavior.
 - **Generated content grows the plan** (bytes that used to be produced in-Pod now persist) -> explicit
   per-plan size bound, reuse of the existing bounded payload transfer path, and garbage collection of
   superseded artifact objects alongside plan ConfigMaps.

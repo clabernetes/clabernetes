@@ -281,7 +281,10 @@ preparation init container MUST NOT construct a node registry, decode kind-speci
 initialize or deploy a kind, or run a kind hook; it SHALL realize a plan that is complete without
 imported evaluation. The in-Pod hook boundary SHALL invoke only the hook the accepted plan declares,
 against the live direct container, and MUST NOT compare the construction stream with the plan's
-deployment stream. Construction SHALL use scratch paths and preserve staged and device-saved files.
+deployment stream. Before post-deploy or endpoint reconstruction switches to the live runtime,
+the target Node's reconstructed container runtime IDs MUST match the accepted plan exactly,
+independent of creation order. This check SHALL NOT claim to observe actual Kubernetes container
+state. Construction SHALL use scratch paths and preserve staged and device-saved files.
 Target-worker deployment requirements SHALL be checked before application startup.
 
 #### Scenario: Preparation stages a plan
@@ -299,9 +302,16 @@ Target-worker deployment requirements SHALL be checked before application startu
 
 #### Scenario: Hook boundary does not compare construction streams
 
-- **WHEN** the hook boundary reconstructs a Node graph that no longer matches the accepted plan
-- **THEN** the boundary still runs the accepted hook, because the plan binds its input by digest and
+- **WHEN** the reconstructed deployment operations differ but the target container runtime IDs
+  match the accepted plan
+- **THEN** the boundary runs the accepted hook without comparing operation streams, while
   construction remains isolated from accepted artifacts
+
+#### Scenario: Hook boundary rejects a different container inventory
+
+- **WHEN** post-deploy or endpoint reconstruction produces a missing, extra, or different container
+  runtime ID for the target Node
+- **THEN** the boundary fails with an invariant diagnostic before invoking any live hook
 
 #### Scenario: Plan is self-sufficient for preparation
 

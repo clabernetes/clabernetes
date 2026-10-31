@@ -37,8 +37,8 @@
       (`verifyReplayedDeploymentOperations`, `sameReplayedDeploymentOperation`,
       `replayedDeploymentOperation`, `deploymentReplayError`, `verifyReplayedContainers`,
       `verifyReplayedReadinessInventory`)
-- [x] 3.2 Prove the hook boundary no longer drift-checks the accepted plan, and keep the
-      plan-append/post-deploy coverage test
+- [x] 3.2 Prove the hook boundary no longer compares deployment operations, retain the compact
+      target-container runtime-ID check, and keep the plan-append/post-deploy coverage test
 - [x] 3.3 Record why hook flattening is out of scope: observation-driven control flow (srl `Ready`),
       direct device I/O in 43 kind packages, and the deny-all planning worker egress
 - [x] 3.4 Update the change's specs and design to the re-scoped contract

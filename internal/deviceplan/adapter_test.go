@@ -1374,10 +1374,7 @@ func TestPackageHostsOperationIsPlannedAsAppendAndPostDeployRunsLive(t *testing.
 	}
 }
 
-// TestPostDeployConstructionDoesNotDriftCheckTheAcceptedPlan proves the hook boundary rebuilds the
-// imported Node graph without comparing it to the plan: the accepted plan already binds this input
-// by digest, and the removed comparison only re-derived the deployment stream inside the Pod.
-func TestPostDeployConstructionDoesNotDriftCheckTheAcceptedPlan(t *testing.T) {
+func TestImportedHookConstructionRejectsContainerIdentityDrift(t *testing.T) {
 	t.Parallel()
 
 	input := singleNodeInput(syntheticKind, "example/future:1")
@@ -1386,54 +1383,52 @@ func TestPostDeployConstructionDoesNotDriftCheckTheAcceptedPlan(t *testing.T) {
 		"kind": syntheticKind, "type": "postdeploy-test", "image": "example/future:1",
 	})
 	adapter := clabernetesinternaldeviceplan.Adapter{
-		Registry: newSyntheticRegistry(t), Revision: "package-post-deploy-drift-v1",
+		Registry: newSyntheticRegistry(t), Revision: "package-container-identity-v1",
+		PostDeployRetryWindow: time.Millisecond, PostDeployRetryBackoff: time.Millisecond,
 	}
-
-	plan, err := adapter.Plan(context.Background(), input)
+	plan, err := adapter.Plan(t.Context(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	artifactRoot := t.TempDir()
-	nodeRoot := filepath.Join(
-		artifactRoot,
-		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
-	)
+	nodeRoot := filepath.Join(artifactRoot,
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID))
 	if err = os.MkdirAll(nodeRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-
-	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
-		input,
-		*plan,
-		plan.Containers[0].ID,
-	)
+	// Input identity still matches, but this plan names a different runtime container.
+	plan.Containers[0].RuntimeID += "-drifted"
+	application, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
+		input, *plan, plan.Containers[0].ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// A construction stream that no longer matches this plan is ignored: the removed verifier
-	// would have failed the Pod instead of running the accepted hook.
-	plan.Containers[0].RuntimeID += "-drifted"
-
-	if err = adapter.RunPostDeploy(
-		context.Background(),
-		input,
-		*plan,
-		plan.Containers[0].ID,
-		t.TempDir(),
-		artifactRoot,
-		"",
-		runtime,
-	); err != nil {
+	endpoint, err := clabernetesinternaldirectruntime.NewImportedEndpointRuntime(
+		input, *plan, plan.Containers[0].ID, "/proc/self/ns/net")
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	marker, err := os.ReadFile( //nolint:gosec // test-controlled path.
-		filepath.Join(nodeRoot, "package-post-deploy-ran"),
-	)
-	if err != nil || string(marker) != "package-owned" {
-		t.Fatalf("package post-deploy marker = %q, %v", marker, err)
+	for name, hook := range map[string]func() error{
+		"post-deploy": func() error {
+			return adapter.RunPostDeploy(t.Context(), input, *plan, plan.Containers[0].ID,
+				t.TempDir(), artifactRoot, "", application)
+		},
+		"endpoints": func() error {
+			return adapter.RunDeployEndpoints(t.Context(), input, *plan, plan.Containers[0].ID,
+				t.TempDir(), artifactRoot, "", endpoint,
+				func(operation func() error) error { return operation() })
+		},
+	} {
+		var planningErr *clabernetesinternaldeviceplan.Error
+		if err = hook(); !errors.As(err, &planningErr) ||
+			planningErr.Behavior != "imported-container-inventory" {
+			t.Fatalf("%s did not reject container identity mismatch: %v", name, err)
+		}
+	}
+	for _, marker := range []string{"package-post-deploy-ran", "package-deploy-endpoints-ran"} {
+		if _, err = os.Stat(filepath.Join(nodeRoot, marker)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("live hook ran before container identity was checked: %s: %v", marker, err)
+		}
 	}
 }
 

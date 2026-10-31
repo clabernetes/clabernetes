@@ -163,8 +163,10 @@ device container (`-c` selects components).
 Imported lifecycle hooks - post-deploy, readiness, save, and endpoint fixup - run inside the Pod
 against the live device container, because their branches depend on what the device reports.
 They are bound to the accepted plan by input digest. The Pod reconstructs the imported Node graph
-with initialization, preparation, and deployment hooks in a scratch directory, without diffing a
-recorded operation stream. Construction cannot overwrite staged files or device-saved configuration;
+with initialization, preparation, and deployment hooks in a scratch directory. Before post-deploy
+or endpoint hooks run live, the target Node's reconstructed container runtime IDs must match the
+plan exactly; deployment operations are not compared. This checks reconstruction consistency, not
+actual Kubernetes container state. Construction cannot overwrite staged files or device-saved configuration;
 paths are rebound to the staged artifacts before the live hook runs. Host deployment requirements
 are checked on the target worker before endpoint initialization permits application startup.
 

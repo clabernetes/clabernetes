@@ -507,6 +507,10 @@ func (a Adapter) rehydrateImportedDeployment(
 	); err != nil {
 		return nil, err
 	}
+	if err = verifyConstructedContainerIDs(targetNode.ID, normalizedPlan,
+		constructionRuntime.recorder.Containers()); err != nil {
+		return nil, err
+	}
 	rewriteWorkspacePaths(state.target.Config(),
 		filepath.Join(workspace, ArtifactNodeDirectory(targetNode.ID)), targetLabDir)
 	if err = constructionRuntime.switchToLive(); err != nil {
@@ -516,6 +520,32 @@ func (a Adapter) rehydrateImportedDeployment(
 	keepWorkspace = true
 
 	return state, nil
+}
+
+// verifyConstructedContainerIDs checks the target inventory before any live hook can run.
+// It does not compare deployment operations or query actual Kubernetes container state.
+func verifyConstructedContainerIDs(nodeID string, plan Plan, containers []RecordedContainer) error {
+	expected := []string{}
+	for _, container := range plan.Containers {
+		if container.NodeID == nodeID {
+			expected = append(expected, container.RuntimeID)
+		}
+	}
+	actual := make([]string, 0, len(containers))
+	for _, container := range containers {
+		actual = append(actual, container.RuntimeID)
+	}
+	slices.Sort(expected)
+	slices.Sort(actual)
+	if !slices.Equal(expected, actual) {
+		return &Error{
+			Code: ErrorInvariant, NodeID: nodeID, Field: "postDeployment.containers",
+			Behavior: "imported-container-inventory",
+			Message:  "constructed container runtime IDs differ from the accepted plan",
+		}
+	}
+
+	return nil
 }
 
 // importedDeploymentConstructionRuntime records runtime calls while hooks rebuild a Node graph

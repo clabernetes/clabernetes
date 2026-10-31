@@ -24,8 +24,9 @@ which imported behavior it supports.
 - **Live hooks retain imported behavior.** Post-deploy, readiness, save, and endpoint hooks depend
   on live device observations and direct device I/O. They remain in the Pod, with the runtime
   facade and CLI shims. Initialization and deployment reconstruct state in scratch space, then
-  hand over to the live runtime without comparing recorded construction streams. Construction
-  must preserve staged and device-saved content; target-worker preflight checks still run.
+  verify the target container runtime IDs before handing over to the live runtime. Recorded
+  deployment operations are not compared. Construction must preserve staged and device-saved
+  content; target-worker preflight checks still run.
 - **Imported-hook coverage guard.** Every imported interface method is classified as exercised,
   refused, or unused. Refusals are attributed to the linked kind implementations and surfaced
   in conformance; native equivalents such as topology exec are not blanket refusals.
