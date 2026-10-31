@@ -57,6 +57,13 @@ manager:
     enabled: false
     targetNamespaces: []
 
+# Client roles for lab users: the clabernetes-lab-viewer and clabernetes-lab-editor ClusterRoles
+# (named after appName). Bind them per lab namespace with a RoleBinding; they are not aggregated
+# into the built-in view/edit roles. Lab users are trusted on the workers their labs run on, see
+# the "Lab access" guide.
+labRoles:
+  enabled: true
+
 # Reusable, network-isolated workers. Each request runs in a fresh process and private scratch.
 # Disable to use the disposable per-node planner Pods during rollout or troubleshooting.
 plannerPool:

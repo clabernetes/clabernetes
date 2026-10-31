@@ -71,7 +71,9 @@ func (r *Reconciler) directConnectivityRevision(
 	desiredPlan clabernetesinternaldeviceplan.Plan,
 	options clabernetesinternaldirectpod.Options,
 ) (directConnectivityDecision, error) {
-	if existing == nil {
+	// A stopped workload has no Pod to apply a Link change to live. Always render it cold from
+	// the current plan, so starting it again boots exactly that plan.
+	if existing == nil || options.Stopped {
 		return directConnectivityDecision{}, nil
 	}
 

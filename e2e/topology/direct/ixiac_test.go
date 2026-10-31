@@ -2,7 +2,6 @@ package direct_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"os/exec"
 	"slices"
 	"strings"
@@ -47,7 +46,7 @@ func TestIxiac(t *testing.T) {
 	)
 
 	waitForDirectNodeReady(t, namespace, ixiacNodeName)
-	waitForNodeCondition(t, namespace, ixiacNodeName, "ConnectivityReady")
+	waitForNodeCondition(t, namespace, ixiacNodeName, "ConnectivityReady", "True")
 
 	device := observeDevicePod(t, namespace, ixiacNodeName)
 	if !strings.Contains(device.image, "ixia-c-one") {
@@ -102,27 +101,6 @@ func TestIxiac(t *testing.T) {
 		device,
 		[]string{"sh", "-c", "cat /proc/sys/net/ipv4/ip_default_ttl"},
 		"42",
-	)
-}
-
-func waitForNodeCondition(t *testing.T, namespace, nodeName, condition string) {
-	t.Helper()
-
-	clabernetestesthelper.KubectlWaitForOutput(
-		t,
-		directNodeReadyTimeout,
-		[]string{
-			"get",
-			"node.c9s.run/" + nodeName,
-			"--namespace",
-			namespace,
-			"-o",
-			fmt.Sprintf(
-				`jsonpath={.status.conditions[?(@.type==%q)].status}`,
-				condition,
-			),
-		},
-		"True",
 	)
 }
 

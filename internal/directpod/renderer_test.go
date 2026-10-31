@@ -2384,6 +2384,73 @@ func TestRenderStartupGatePrecedesPreparation(t *testing.T) {
 	t.Fatal("missing admission volume")
 }
 
+func TestRenderStoppedWorkloadAndRestartTokens(t *testing.T) {
+	t.Parallel()
+
+	options := clabernetesinternaldirectpod.Options{
+		Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+		InputConfigMapName:                "device-a-plan-input-abc",
+		ConnectivityRevisionConfigMapName: "device-a-connectivity",
+		PreparationImage:                  "example/c9s:1",
+		ConnectivityImage:                 "example/c9s:1",
+		EnableContainerStopSignals:        true,
+		Annotations: map[string]string{
+			// The raw request and a spoofed handled set must never reach the template: only
+			// the controller-resolved tokens decide whether the Pod rolls.
+			clabernetesinternaldirectpod.RestartRequestedAnnotation: "user-token",
+			clabernetesinternaldirectpod.RestartTokensAnnotation:    `{"x":"spoofed"}`,
+		},
+	}
+
+	running, err := clabernetesinternaldirectpod.Render(renderablePlan(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if running.Spec.Replicas == nil || *running.Spec.Replicas != 1 {
+		t.Fatalf("running workload replicas = %v, want 1", running.Spec.Replicas)
+	}
+
+	for _, key := range []string{
+		clabernetesinternaldirectpod.RestartRequestedAnnotation,
+		clabernetesinternaldirectpod.RestartTokensAnnotation,
+	} {
+		if _, ok := running.Spec.Template.Annotations[key]; ok {
+			t.Fatalf("template carries unowned %s: %v", key, running.Spec.Template.Annotations)
+		}
+	}
+
+	options.Stopped = true
+	options.RestartTokens = map[string]string{"node-a": "restart-1"}
+
+	stopped, err := clabernetesinternaldirectpod.Render(renderablePlan(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if stopped.Spec.Replicas == nil || *stopped.Spec.Replicas != 0 {
+		t.Fatalf("stopped workload replicas = %v, want 0", stopped.Spec.Replicas)
+	}
+
+	tokens := clabernetesinternaldirectpod.DecodeNodeTokens(
+		stopped.Spec.Template.Annotations[clabernetesinternaldirectpod.RestartTokensAnnotation],
+	)
+	if len(tokens) != 1 || tokens["node-a"] != "restart-1" {
+		t.Fatalf("rendered restart tokens = %v", tokens)
+	}
+
+	// Stopping changes nothing but the replica count, so starting again restores the same Pod.
+	stopped.Spec.Replicas = running.Spec.Replicas
+	delete(stopped.Spec.Template.Annotations, clabernetesinternaldirectpod.RestartTokensAnnotation)
+	if !reflect.DeepEqual(stopped.Spec, running.Spec) {
+		t.Fatal("stopping changed the workload beyond its replica count")
+	}
+
+	if got := clabernetesinternaldirectpod.DecodeNodeTokens("{malformed"); len(got) != 0 {
+		t.Fatalf("malformed token annotation decoded to %v", got)
+	}
+}
+
 func TestRenderIsolatesDeviceContainersWhenRequested(t *testing.T) {
 	t.Parallel()
 

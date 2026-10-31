@@ -2,6 +2,7 @@ title: Guides
 icon: Map
 pages:
   - lab-operations
+  - lab-access
   - expose-configuration
   - management-network
   - file-mounting

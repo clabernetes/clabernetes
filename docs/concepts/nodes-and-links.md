@@ -60,6 +60,9 @@ diagnostic naming the field.
   application restart or wait for a restart timeout. Normal Kubernetes termination grace
   periods still apply. Pod replacement restarts all Nodes sharing that Pod; configuration
   survival follows the [persistent storage policy](/docs/guides/persistence).
+- **Run state:** `runState` (`Running` or `Stopped`) is operational state rather than node
+  definition: it scales the Node's Pod to one or zero and never changes its plan, see
+  [Stopping, starting, and restarting a Node](/docs/guides/lab-operations#stopping-starting-and-restarting-a-node).
 - **Rejected at planning:** `config` (config-engine variables), `env-files`, `runtime`,
   `stages`, and `credentials`, see
   [Differences from containerlab](/docs/concepts/containerlab-differences).

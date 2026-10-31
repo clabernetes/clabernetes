@@ -16,6 +16,7 @@ import (
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetescontrollers "github.com/clabernetes/clabernetes/controllers"
+	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -436,12 +437,47 @@ func (r *Reconciler) reconcileNodes(
 		"node",
 		rendered,
 		existing,
-		emittedObjectConforms[*clabernetesapisv1alpha1.Node],
-		func(existingNode, renderedNode *clabernetesapisv1alpha1.Node) {
-			// the node controller owns the status (allocations/observations) -- carry it over
-			renderedNode.Status = existingNode.Status
-		},
+		emittedNodeConforms,
+		carryOverNode,
 	)
+}
+
+// operationalNodeAnnotations are user-owned requests on emitted Nodes. The compiler never renders
+// them, so a drift update carries them over instead of silently dropping a pending request.
+var operationalNodeAnnotations = []string{ //nolint:gochecknoglobals // immutable lookup list.
+	clabernetesinternaldirectpod.RestartRequestedAnnotation,
+	clabernetesinternaldirectpod.DeviceStateResetAnnotation,
+}
+
+// emittedNodeConforms is emittedObjectConforms with the Node's operational run state left out:
+// the compiler never sets spec.runState, so a stopped (or schema-defaulted Running) Node is not
+// drift and must not be updated back to the compiled value.
+func emittedNodeConforms(existing, rendered *clabernetesapisv1alpha1.Node) bool {
+	normalized := *rendered
+	normalized.Spec.RunState = existing.Spec.RunState
+
+	return emittedObjectConforms(existing, &normalized)
+}
+
+// carryOverNode keeps what the compiler does not own when a drifted Node is updated: the status
+// (allocations/observations of the node controller), the operational run state, and pending
+// operational requests.
+func carryOverNode(existing, rendered *clabernetesapisv1alpha1.Node) {
+	rendered.Status = existing.Status
+	rendered.Spec.RunState = existing.Spec.RunState
+
+	for _, key := range operationalNodeAnnotations {
+		value, ok := existing.Annotations[key]
+		if !ok {
+			continue
+		}
+
+		if rendered.Annotations == nil {
+			rendered.Annotations = map[string]string{}
+		}
+
+		rendered.Annotations[key] = value
+	}
 }
 
 // emittedObjectConforms checks the parts of an emitted object the compiler owns: the spec and

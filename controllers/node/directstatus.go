@@ -25,6 +25,10 @@ import (
 )
 
 const (
+	directStoppedReason      = "Stopped"
+	directStoppingReason     = "Stopping"
+	directRunningReason      = "Running"
+	directStoppedMessage     = "the Node is stopped; its workload is scaled to zero"
 	directPodPendingReason   = "DirectPodPending"
 	directPlanPendingReason  = "PlanPending"
 	directPlanPendingMessage = "direct device plan is being reconciled for the current " +
@@ -317,6 +321,17 @@ func (r *Reconciler) updateDirectStatuses(
 		false,
 	)
 
+	runState, err := r.observeDirectRunState(ctx, primary, deployment, pod)
+	if err != nil {
+		return err
+	}
+	if runState.parked {
+		preparedStatus, preparedReason, preparedMessage = metav1.ConditionUnknown,
+			directStoppedReason, directStoppedMessage
+		connectivityStatus, connectivityReason, connectivityMessage = metav1.ConditionUnknown,
+			directStoppedReason, directStoppedMessage
+	}
+
 	containerPlans := make(map[string]clabernetesinternaldeviceplan.ContainerPlan,
 		len(plan.Containers))
 	for _, container := range plan.Containers {
@@ -371,6 +386,11 @@ func (r *Reconciler) updateDirectStatuses(
 
 		containersStatus := metav1.ConditionUnknown
 		containersReason := directPodPendingReason
+
+		if runState.parked {
+			containersReason = directStoppedReason
+			readinessMessage = directStoppedMessage
+		}
 
 		if pod != nil {
 			containersStatus = metav1.ConditionFalse
@@ -459,6 +479,7 @@ func (r *Reconciler) updateDirectStatuses(
 			nodeProfileResolutionMessage(desiredStatus.AppliedProfile),
 		)
 		setDirectDeviceStateResetCondition(&desiredStatus, member, deployment, preparedStatus)
+		runState.apply(&desiredStatus, member, primary)
 
 		if err = r.updateNodeStatus(ctx, member, desiredStatus); err != nil {
 			return fmt.Errorf("updating direct status for Node %s: %w", memberName, err)
@@ -794,6 +815,133 @@ func setDirectStatusCondition(
 	})
 }
 
+// directRunState is the observed operational state of one shared direct workload.
+type directRunState struct {
+	// stopped mirrors the primary's runState, which governs the whole shared workload.
+	stopped bool
+	// workloadStopped is true once a stopped workload has no Pod left.
+	workloadStopped bool
+	// parked is true when a stopped workload has no current Pod to observe.
+	parked bool
+	// podRestartTokens holds the restart tokens of the observed Pod; nil without a Pod.
+	podRestartTokens map[string]string
+}
+
+func (r *Reconciler) observeDirectRunState(
+	ctx context.Context,
+	primary *clabernetesapisv1alpha1.Node,
+	deployment *k8sappsv1.Deployment,
+	pod *k8scorev1.Pod,
+) (directRunState, error) {
+	state := directRunState{stopped: primary.Spec.IsStopped()}
+	if state.stopped {
+		workloadStopped, err := r.directWorkloadStopped(ctx, primary, deployment)
+		if err != nil {
+			return state, err
+		}
+
+		state.workloadStopped = workloadStopped
+		state.parked = pod == nil
+	}
+
+	if pod != nil {
+		state.podRestartTokens = clabernetesinternaldirectpod.DecodeNodeTokens(
+			pod.GetAnnotations()[clabernetesinternaldirectpod.RestartTokensAnnotation],
+		)
+	}
+
+	return state, nil
+}
+
+// apply projects the run state onto one member's desired status.
+func (s directRunState) apply(
+	desiredStatus *clabernetesapisv1alpha1.NodeStatus,
+	member *clabernetesapisv1alpha1.Node,
+	primary *clabernetesapisv1alpha1.Node,
+) {
+	if s.stopped {
+		// A stopped Node is deliberately not ready, even while its Pod still terminates.
+		desiredStatus.Readiness = clabernetesconstants.NodeStatusNotReady
+	}
+
+	if s.podRestartTokens != nil {
+		// Without a Pod the last observed token stays: no other Pod could have handled one.
+		desiredStatus.ObservedRestartToken = s.podRestartTokens[string(member.GetUID())]
+	}
+
+	setDirectStoppedCondition(desiredStatus, member, primary, s.stopped, s.workloadStopped)
+}
+
+// directWorkloadStopped reports whether a stopped primary's workload is fully scaled down: the
+// Deployment requests zero replicas and no Pod of it remains, terminating Pods included, so a
+// client waiting for Stopped=True knows the device processes are gone.
+func (r *Reconciler) directWorkloadStopped(
+	ctx context.Context,
+	primary *clabernetesapisv1alpha1.Node,
+	deployment *k8sappsv1.Deployment,
+) (bool, error) {
+	if deployment == nil {
+		return true, nil
+	}
+
+	if deployment.Spec.Replicas == nil || *deployment.Spec.Replicas != 0 {
+		return false, nil
+	}
+
+	pods := &k8scorev1.PodList{}
+	if err := r.Client.List(
+		ctx,
+		pods,
+		ctrlruntimeclient.InNamespace(primary.GetNamespace()),
+		ctrlruntimeclient.MatchingLabels(deployment.Spec.Selector.MatchLabels),
+	); err != nil {
+		return false, fmt.Errorf("listing direct device Pods: %w", err)
+	}
+
+	return len(pods.Items) == 0, nil
+}
+
+// setDirectStoppedCondition reports the operational run state of the workload realizing the
+// Node. Grouped Nodes report the state of the shared workload, which their primary governs.
+func setDirectStoppedCondition(
+	desiredStatus *clabernetesapisv1alpha1.NodeStatus,
+	node *clabernetesapisv1alpha1.Node,
+	primary *clabernetesapisv1alpha1.Node,
+	stopped bool,
+	workloadStopped bool,
+) {
+	conditionStatus := metav1.ConditionFalse
+	reason := directRunningReason
+	message := "runState is Running"
+
+	switch {
+	case stopped && workloadStopped:
+		conditionStatus = metav1.ConditionTrue
+		reason = directStoppedReason
+		message = directStoppedMessage
+	case stopped:
+		reason = directStoppingReason
+		message = "runState is Stopped; waiting for the workload Pod to terminate"
+	}
+
+	if stopped && node.GetName() != primary.GetName() {
+		message = fmt.Sprintf(
+			"%s (the shared workload follows primary Node %q)",
+			message,
+			primary.GetName(),
+		)
+	}
+
+	setDirectStatusCondition(
+		desiredStatus,
+		node,
+		clabernetesapisv1alpha1.NodeConditionStopped,
+		conditionStatus,
+		reason,
+		message,
+	)
+}
+
 // setDirectDeviceStateResetCondition reports the device-state reset token projected into the
 // direct workload template for this Node. The token is acknowledged once the workload carrying
 // it completed preparation, which is when the artifact re-seed actually happened.
@@ -872,7 +1020,9 @@ func (r *Reconciler) recordDirectConditionTransitions(
 		}
 
 		eventType := k8scorev1.EventTypeNormal
-		if condition.Status == metav1.ConditionFalse {
+		// Stopped=False means running, which is the normal state rather than a failure.
+		if condition.Status == metav1.ConditionFalse &&
+			condition.Type != clabernetesapisv1alpha1.NodeConditionStopped {
 			eventType = k8scorev1.EventTypeWarning
 		}
 
@@ -901,6 +1051,12 @@ func reportDirectConditionEvent(condition metav1.Condition, prior *metav1.Condit
 		return false
 	case directPodPendingReason, "HelperPending", "PlanPending":
 		return prior != nil && prior.Status == metav1.ConditionTrue
+	case directStoppedReason:
+		// One event for the stop itself; the helper conditions it parks are implied.
+		return condition.Type == clabernetesapisv1alpha1.NodeConditionStopped
+	case directRunningReason:
+		// Every Node starts out Running; only a start after a stop is an operation.
+		return prior != nil
 	default:
 		return true
 	}
@@ -914,7 +1070,8 @@ func isDirectStatusCondition(conditionType string) bool {
 		clabernetesapisv1alpha1.NodeConditionConnectivityReady,
 		clabernetesapisv1alpha1.NodeConditionContainersReady,
 		clabernetesapisv1alpha1.NodeConditionLinkLifecycleAction,
-		clabernetesapisv1alpha1.NodeConditionDeviceStateReset:
+		clabernetesapisv1alpha1.NodeConditionDeviceStateReset,
+		clabernetesapisv1alpha1.NodeConditionStopped:
 		return true
 	default:
 		return false

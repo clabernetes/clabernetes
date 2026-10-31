@@ -26,6 +26,13 @@ spec:
     - jsonPath: .status.readiness
       name: Readiness
       type: string
+    - jsonPath: .spec.runState
+      name: RunState
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Stopped')].status
+      name: Stopped
+      priority: 1
+      type: string
     - jsonPath: .status.conditions[?(@.type=='ContainersReady')].status
       name: Containers
       priority: 1
@@ -592,6 +599,19 @@ spec:
                 - unless-stopped
                 - Unless-stopped
                 type: string
+              runState:
+                default: Running
+                description: |-
+                  RunState is the operational run state of the Node's workload: Running (the default) keeps
+                  one workload Pod, Stopped scales it to zero while keeping the Node, its Services,
+                  PersistentVolumeClaims, and Links. RunState is operational state, not node intent: it never
+                  enters the device plan, the Topology compiler never sets it, and the Topology controller
+                  preserves it on emitted Nodes. For grouped Nodes the primary Node's RunState governs the
+                  shared Pod; secondary Nodes' RunState has no effect.
+                enum:
+                - Running
+                - Stopped
+                type: string
               security-opts:
                 description: |-
                   SecurityOpts is a list of security options (i.e. seccomp or apparmor settings) to apply to
@@ -834,6 +854,13 @@ spec:
                     type: array
                     x-kubernetes-list-type: atomic
                 type: object
+              observedRestartToken:
+                description: |-
+                  ObservedRestartToken is the c9s.run/restart-requested token the current workload Pod was
+                  started with. It equals the Node's annotation once the controller replaced the Pod for
+                  that token; together with readiness it tells a client that a requested restart finished.
+                  It keeps its last value while no workload Pod exists.
+                type: string
               planDigest:
                 description: PlanDigest identifies the immutable direct device plan
                   observed by this status.
