@@ -1,6 +1,6 @@
 //go:build linux
 
-//nolint:err113,gocognit,gocyclo,nestif // single-pass boundary logic with structured one-off diagnostics and protocol literals.
+//nolint:err113,gocognit,gocyclo,maintidx,nestif // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -86,13 +86,27 @@ func (o netlinkOperations) EnsureFabricEndpoint(
 		return result, err
 	}
 
+	if o.deviceNetns != nil {
+		if err = o.deviceNetns.moveDeviceLeg(spec.InterfaceName); err != nil {
+			return result, err
+		}
+
+		if err = o.deviceNetns.ensureLinkUp(spec.InterfaceName); err != nil {
+			return result, err
+		}
+	}
+
 	if _, present, lookupErr := lookupLink(legName); lookupErr != nil || !present {
 		return result, errors.Join(errors.New("fabric sidecar leg is unavailable"), lookupErr)
 	}
 
 	// The device-side stack must materialize checksums in software: the wire captures raw
 	// frames off the veth, and an offloaded transmit leaves them incomplete for the far end.
-	if _, present, lookupErr := lookupLink(spec.InterfaceName); lookupErr == nil && present {
+	if o.deviceNetns != nil {
+		if err = o.deviceNetns.disableTxChecksumOffload(spec.InterfaceName); err != nil {
+			return result, err
+		}
+	} else if _, present, lookupErr := lookupLink(spec.InterfaceName); lookupErr == nil && present {
 		if err = (netlinkOperations{}).DisableTxChecksumOffload(spec.InterfaceName); err != nil {
 			return result, err
 		}
@@ -500,15 +514,34 @@ func (o netlinkOperations) EnsureHostInterface(spec HostInterfaceSpec) error {
 		return err
 	}
 
-	if present {
-		if pod.Attrs().Alias != spec.Owner {
-			return o.adoptHostInterface(spec, pod)
+	if o.deviceNetns != nil && !present {
+		_, isolated, isolatedErr := o.deviceNetns.link(spec.InterfaceName)
+		if isolatedErr != nil {
+			return isolatedErr
 		}
 
-		if pod.Attrs().Flags&net.FlagUp == 0 {
+		if isolated {
+			return o.deviceNetns.ensureLinkUp(spec.InterfaceName)
+		}
+	}
+
+	if present {
+		if pod.Attrs().Alias != spec.Owner {
+			if err = o.adoptHostInterface(spec, pod); err != nil {
+				return err
+			}
+		} else if pod.Attrs().Flags&net.FlagUp == 0 {
 			if err = netlink.LinkSetUp(pod); err != nil {
 				return fmt.Errorf("bringing host Link Pod leg up: %w", err)
 			}
+		}
+
+		if o.deviceNetns != nil {
+			if err = o.deviceNetns.moveDeviceLeg(spec.InterfaceName); err != nil {
+				return err
+			}
+
+			return o.deviceNetns.ensureLinkUp(spec.InterfaceName)
 		}
 
 		return nil
@@ -629,6 +662,14 @@ func (o netlinkOperations) EnsureHostInterface(spec HostInterfaceSpec) error {
 
 	if err = netlink.LinkSetUp(pod); err != nil {
 		return fmt.Errorf("bringing host Link Pod leg up: %w", err)
+	}
+
+	if o.deviceNetns != nil {
+		if err = o.deviceNetns.moveDeviceLeg(spec.InterfaceName); err != nil {
+			return err
+		}
+
+		return o.deviceNetns.ensureLinkUp(spec.InterfaceName)
 	}
 
 	return nil

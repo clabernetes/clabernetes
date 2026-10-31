@@ -1,6 +1,6 @@
 //go:build linux
 
-//nolint:err113,gocognit,gocyclo,mnd,nestif // single-pass boundary logic with structured one-off diagnostics and protocol literals.
+//nolint:err113,funlen,gocognit,gocyclo,mnd,nestif // single-pass boundary logic with structured one-off diagnostics and protocol literals.
 package directruntime
 
 import (
@@ -228,10 +228,22 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 		return err
 	}
 
+	if o.deviceNetns != nil {
+		if err = o.deviceNetns.ensureLoopbackUp(); err != nil {
+			return err
+		}
+	}
+
 	if err := ensureSyntheticPair(
-		spec, managementPrefix, gateway, gatewayMAC, meshMTU,
+		spec, managementPrefix, gateway, gatewayMAC, meshMTU, o.deviceNetns,
 	); err != nil {
 		return err
+	}
+
+	if o.deviceNetns != nil {
+		if err = o.deviceNetns.ensureDeviceDefaultRoute(spec, gateway); err != nil {
+			return err
+		}
 	}
 
 	if err := ensureDeviceDefaultRoute(
@@ -264,7 +276,12 @@ func (o netlinkOperations) EnsureInterposition(spec InterpositionSpec) error {
 
 	// The device leg may already be renamed or adopted by a running device; offload state on it
 	// is best-effort after boot because the rename moves the ethtool identity with the link.
-	if _, present, lookupErr := lookupLink(spec.DeviceInterface); lookupErr == nil && present {
+	if o.deviceNetns != nil {
+		if err := o.deviceNetns.disableTxChecksumOffload(spec.DeviceInterface); err != nil {
+			return err
+		}
+	} else if _, present, lookupErr := lookupLink(spec.DeviceInterface); lookupErr == nil &&
+		present {
 		if err := o.DisableTxChecksumOffload(spec.DeviceInterface); err != nil {
 			return err
 		}
@@ -547,6 +564,7 @@ func ensureSyntheticPair(
 	gateway netip.Addr,
 	gatewayMAC net.HardwareAddr,
 	meshMTU int,
+	deviceNetns *deviceNetworkNamespace,
 ) error {
 	// The router leg is the durable presence marker: unlike the device leg it is never renamed
 	// or adopted by a device (a device may even move the device leg into a namespace of its
@@ -611,7 +629,17 @@ func ensureSyntheticPair(
 		}
 	}
 
-	if err = addressDeviceLeg(spec, created); err != nil {
+	if deviceNetns != nil {
+		// The pair is created in the Pod namespace so the sidecar owns the router leg. The
+		// device-facing end then crosses into the private namespace before it is addressed.
+		if err = deviceNetns.moveDeviceLeg(spec.DeviceInterface); err != nil {
+			return err
+		}
+
+		if err = deviceNetns.addressSyntheticDeviceLeg(spec, created); err != nil {
+			return err
+		}
+	} else if err = addressDeviceLeg(spec, created); err != nil {
 		return err
 	}
 

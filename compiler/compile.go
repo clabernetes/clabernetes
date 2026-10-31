@@ -401,6 +401,7 @@ func compileDeploymentPolicy(
 	deployment *clabernetesapisv1alpha1.Deployment,
 ) Deployment {
 	out := Deployment{
+		NetworkIsolation:   deployment.NetworkIsolation,
 		Resources:          perNodeResources(deployment.Resources),
 		Scheduling:         compileScheduling(&deployment.Scheduling),
 		Persistence:        compilePersistence(&deployment.Persistence),

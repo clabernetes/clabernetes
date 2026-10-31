@@ -36,6 +36,10 @@ type ResolvedProfile struct {
 	// direct workload persistence settings
 	Persistence clabernetesapisv1alpha1.Persistence
 
+	// NetworkIsolation runs device-side interfaces in a private netns created by the Pod's
+	// device-netns init container; the connectivity sidecar remains in the Pod namespace.
+	NetworkIsolation bool
+
 	// status probes
 	StatusProbes clabernetesapisv1alpha1.StatusProbes
 
@@ -43,18 +47,27 @@ type ResolvedProfile struct {
 	Mgmt *clabernetesapisv1alpha1.ManagementPolicy
 }
 
+// ixiaFamily reports whether a Node belongs to the ixia-c family that needs
+// private-netns by default. This is profile realization policy, not planner
+// knowledge; internal/deviceplan/kind_agnostic_test.go carries an explicit
+// function-scoped allowlist entry for it and the reason.
+func ixiaFamily(kind string) bool {
+	return kind == "keysight_ixia-c" || kind == "keysight_ixia-c-one"
+}
+
 // ResolveProfile resolves Config defaults plus at most one explicitly selected NodeProfile.
 func ResolveProfile(
-	_ *clabernetesapisv1alpha1.Node,
+	node *clabernetesapisv1alpha1.Node,
 	profile *clabernetesapisv1alpha1.NodeProfile,
 	configManagerGetter clabernetesconfig.ManagerGetterFunc,
 ) (*ResolvedProfile, error) {
 	configManager := configManagerGetter()
 
 	resolved := &ResolvedProfile{
-		ExposeType:      "LoadBalancer",
-		ImagePullPolicy: configManager.GetApplicationImagePullPolicy(),
-		PullSecrets:     configManager.GetImagePullSecrets(),
+		ExposeType:       "LoadBalancer",
+		ImagePullPolicy:  configManager.GetApplicationImagePullPolicy(),
+		PullSecrets:      configManager.GetImagePullSecrets(),
+		NetworkIsolation: node != nil && ixiaFamily(node.Spec.Kind),
 	}
 
 	if profile == nil {
@@ -62,6 +75,7 @@ func ResolveProfile(
 	}
 
 	applyProfile(resolved, profile)
+
 	resolved.AppliedProfile = &clabernetesapisv1alpha1.AppliedProfileStatus{
 		Name:       profile.GetName(),
 		UID:        profile.GetUID(),
@@ -157,6 +171,10 @@ func applyProfileDeployment(
 ) {
 	if deployment == nil {
 		return
+	}
+
+	if deployment.NetworkIsolation != nil {
+		resolved.NetworkIsolation = *deployment.NetworkIsolation
 	}
 
 	if deployment.Persistence != nil {

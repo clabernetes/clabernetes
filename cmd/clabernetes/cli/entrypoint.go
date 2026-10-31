@@ -65,6 +65,7 @@ const (
 	deviceRuntimeSSHPort              = "sshPort"
 	deviceRuntimeSSHSecret            = "sshPasswordFile"
 	deviceRuntimeHostNetworkNamespace = "hostNetworkNamespace"
+	deviceRuntimeDeviceNetns          = "deviceNetns"
 	deviceRuntimeApplicationSocket    = "applicationRuntimeSocket"
 	deviceRuntimePodNamespace         = "podNamespace"
 	deviceRuntimePodName              = "podName"
@@ -255,6 +256,17 @@ func deviceRuntimeCommand() *cli.Command {
 			},
 
 			{
+				Name:  "device-netns",
+				Usage: "create the Pod's private device network namespace",
+				Flags: []cli.Flag{&cli.StringFlag{Name: "path", Required: true}},
+				Action: func(c *cli.Context) error {
+					return clabernetesinternaldirectruntime.EnsureDeviceNetns(
+						c.String("path"),
+					)
+				},
+			},
+
+			{
 				Name:  "prepare",
 				Usage: "regenerate and verify imported preparation artifacts",
 				Flags: []cli.Flag{
@@ -337,6 +349,7 @@ func deviceRuntimeCommand() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: deviceRuntimePlan, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeContainer, Required: true},
+					&cli.StringFlag{Name: deviceRuntimeDeviceNetns},
 				},
 				Action: func(c *cli.Context) error {
 					planRaw, err := readBoundedFile(c.String(deviceRuntimePlan), 1<<20)
@@ -349,9 +362,10 @@ func deviceRuntimeCommand() *cli.Command {
 						return err
 					}
 
-					return clabernetesinternaldirectruntime.RunLaunch(
+					return clabernetesinternaldirectruntime.RunLaunchWithNetns(
 						plan,
 						c.String(deviceRuntimeContainer),
+						c.String(deviceRuntimeDeviceNetns),
 					)
 				},
 			},
@@ -468,6 +482,7 @@ func deviceRuntimeCommand() *cli.Command {
 					&cli.StringFlag{Name: devicePlanEntropy},
 					&cli.StringFlag{Name: devicePlanRevision},
 					&cli.StringFlag{Name: deviceRuntimeHostNetworkNamespace},
+					&cli.StringFlag{Name: deviceRuntimeDeviceNetns},
 					&cli.StringFlag{Name: deviceRuntimeApplicationSocket},
 					&cli.StringFlag{Name: deviceRuntimePodNamespace},
 					&cli.StringFlag{Name: deviceRuntimePodName},
@@ -489,6 +504,9 @@ func deviceRuntimeCommand() *cli.Command {
 						ctx = context.Background()
 					}
 
+					ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+					defer stop()
+
 					return clabernetesinternaldirectruntime.RunConnectivityWithOptions(
 						ctx,
 						input,
@@ -502,6 +520,7 @@ func deviceRuntimeCommand() *cli.Command {
 							HostNetworkNamespacePath: c.String(
 								deviceRuntimeHostNetworkNamespace,
 							),
+							DeviceNetnsPath: c.String(deviceRuntimeDeviceNetns),
 							ApplicationRuntimeSocket: c.String(
 								deviceRuntimeApplicationSocket,
 							),
