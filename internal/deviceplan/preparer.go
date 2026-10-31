@@ -17,8 +17,7 @@ const (
 	fieldPreparationArtifacts = "preparation.artifacts"
 )
 
-// Preparer reruns deterministic imported initialization/preparation inside a target Pod and
-// stages only artifacts whose path, mode, and digest were accepted by planning.
+// Preparer stages plan-borne content inside a target Pod without evaluating imported code.
 type Preparer struct {
 	// Revision must equal the accepted plan's planner revision.
 	Revision    string
@@ -137,6 +136,11 @@ func (p Preparer) stagePlanArtifacts(
 			return err
 		}
 	}
+	// File IDs are opaque (generated indices sort 10 before 9); only paths establish
+	// ancestry. Finalize descendants before removing write permission from their parents.
+	slices.SortFunc(artifacts, func(left, right FilePlan) int {
+		return strings.Compare(left.ArtifactPath, right.ArtifactPath)
+	})
 	for _, file := range slices.Backward(artifacts) {
 		if file.ArtifactKind != ArtifactDirectory {
 			continue
