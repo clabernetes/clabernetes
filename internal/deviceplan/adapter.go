@@ -237,7 +237,11 @@ func evaluateInWorkspace(
 		return nil, err
 	}
 	if checkDeploymentConditions {
-		if err := recordDeploymentConditions(ctx, result.Nodes); err != nil {
+		if err := recordDeploymentConditions(
+			ctx,
+			result.Nodes,
+			normalized.TopologyName,
+		); err != nil {
 			return nil, err
 		}
 	}
@@ -262,7 +266,11 @@ func evaluateInWorkspace(
 	return result, nil
 }
 
-func recordDeploymentConditions(ctx context.Context, nodes []EvaluatedNode) error {
+func recordDeploymentConditions(
+	ctx context.Context,
+	nodes []EvaluatedNode,
+	topologyName string,
+) error {
 	for index := range nodes {
 		node := &nodes[index]
 		hookErr := invokeImported(
@@ -270,7 +278,13 @@ func recordDeploymentConditions(ctx context.Context, nodes []EvaluatedNode) erro
 			"deployment.conditions",
 			"imported-deployment-conditions",
 			"containerlab deployment-condition hook panicked",
-			func() error { return node.implementation.CheckDeploymentConditions(ctx) },
+			func() error {
+				return withContainerlabContainerName(
+					node.implementation.Config(),
+					topologyName,
+					func() error { return node.implementation.CheckDeploymentConditions(ctx) },
+				)
+			},
 		)
 		if recorderErr := node.recorder.Failure(); recorderErr != nil {
 			return withNodeID(recorderErr, node.Input.ID)
@@ -290,6 +304,29 @@ func recordDeploymentConditions(ctx context.Context, nodes []EvaluatedNode) erro
 	}
 
 	return nil
+}
+
+// withContainerlabContainerName runs an imported deployment-condition hook while the node carries
+// the container name containerlab gives it on its own container runtimes, clab-<lab>-<node>.
+// c9s names a node's container after its Kubernetes Node, a DNS label the API server has already
+// validated. The hook checks that name against the Docker container-name rule instead, which needs
+// at least two characters, so a containerlab node named "a" would fail a rule that only applies to
+// Docker containers. The c9s name is restored before anything else reads the configuration.
+func withContainerlabContainerName(
+	config *clabtypes.NodeConfig,
+	topologyName string,
+	hook func() error,
+) error {
+	if config == nil {
+		return hook()
+	}
+
+	runtimeName := config.LongName
+	config.LongName = fmt.Sprintf("clab-%s-%s", topologyName, config.ShortName)
+
+	defer func() { config.LongName = runtimeName }()
+
+	return hook()
 }
 
 func recordPreparations(

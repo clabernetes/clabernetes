@@ -197,6 +197,44 @@ func TestPreparerRunsImportedDeploymentConditionsOnTargetWorker(t *testing.T) {
 	}
 }
 
+// TestPreparerAcceptsSingleCharacterNodeNames proves containerlab's deployment conditions accept
+// a node named with one character, as containerlab does on Docker. The Docker container-name rule
+// in those conditions needs two characters, while c9s names the container after the Node.
+func TestPreparerAcceptsSingleCharacterNodeNames(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"a", "z", "r1"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			input := singleNodeInput("linux", "alpine:3")
+			input.Nodes[0].Name = name
+			adapter := clabernetesinternaldeviceplan.Adapter{
+				Registry: clabernetesinternaldeviceplan.NewContainerlabRegistry(),
+				Revision: "single-character-name-v1",
+			}
+
+			plan, err := adapter.Plan(context.Background(), input)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
+				context.Background(), input, *plan, t.TempDir(),
+			); err != nil {
+				t.Fatalf("Prepare() for node %q: %v", name, err)
+			}
+
+			for _, container := range plan.Containers {
+				if container.RuntimeID != name {
+					t.Fatalf("container runtime ID = %q, want the Node name %q",
+						container.RuntimeID, name)
+				}
+			}
+		})
+	}
+}
+
 func TestPreparerRejectsSymlinkNodeRoot(t *testing.T) {
 	t.Parallel()
 
