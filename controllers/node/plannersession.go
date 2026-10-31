@@ -1,4 +1,4 @@
-//nolint:err113,funlen,gocognit,gocyclo,maintidx // Attached fail-closed protocol boundary.
+//nolint:err113,gocyclo // Validate the private planner protocol at the controller boundary.
 package node
 
 import (
@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
@@ -50,8 +49,9 @@ type PlannerSessionReconciler struct {
 	Platform            clabernetesinternalocimetadata.Platform
 }
 
-// Reconcile attaches only to running session-labeled Pods. Completion requeues the owning Node
-// through its existing Pod watch; that controller validates and persists the terminal frame.
+// Reconcile runs one private exec session in a disposable worker. The shared pool protocol
+// persists accepted artifacts and a compact cache record before removing the worker. Generated
+// keys and configuration never pass through container stdout or Pod logs.
 func (r *PlannerSessionReconciler) Reconcile(
 	ctx context.Context,
 	request ctrlruntime.Request,
@@ -68,7 +68,7 @@ func (r *PlannerSessionReconciler) Reconcile(
 		return ctrlruntime.Result{}, err
 	}
 	if pod.GetLabels()[plannerSessionLabel] != plannerSessionValue ||
-		pod.Status.Phase != k8scorev1.PodRunning {
+		pod.Status.Phase != k8scorev1.PodRunning || pod.DeletionTimestamp != nil {
 		return ctrlruntime.Result{}, nil
 	}
 	if pod.GetAnnotations()[plannerSessionResult] != "" {
@@ -77,6 +77,15 @@ func (r *PlannerSessionReconciler) Reconcile(
 	node, input, err := r.sessionInput(ctx, pod)
 	if err != nil {
 		return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
+	}
+	_, found, err := (workerOutputStore{Client: r.Client}).Lookup(ctx, node, pod.Name)
+	if err != nil {
+		return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
+	}
+	if found {
+		return ctrlruntime.Result{}, deleteWorkerAttemptArtifacts(
+			ctx, r.Client, pod.Namespace, pod.Name,
+		)
 	}
 	deadlineSeconds, err := strconv.ParseInt(
 		pod.GetAnnotations()[plannerSessionDeadline],
@@ -90,183 +99,32 @@ func (r *PlannerSessionReconciler) Reconcile(
 			errors.New("planner session deadline is invalid"),
 		)
 	}
-	sessionCtx, cancel := context.WithTimeout(ctx, time.Duration(deadlineSeconds)*time.Second)
-	defer cancel()
-	stdinReader, stdinWriter := io.Pipe()
-	stdoutReader, stdoutWriter := io.Pipe()
-	stopPipes := context.AfterFunc(sessionCtx, func() {
-		_ = stdinReader.CloseWithError(sessionCtx.Err())
-		_ = stdoutWriter.CloseWithError(sessionCtx.Err())
-	})
-	defer stopPipes()
-	errorOutput := &boundedSessionWriter{remaining: plannerSessionErrorBytes}
-	streamDone := make(chan error, 1)
-	go func() {
-		streamErr := r.Attach(
-			sessionCtx,
-			pod.GetNamespace(),
-			pod.GetName(),
-			plannerContainerName,
-			stdinReader,
-			stdoutWriter,
-			errorOutput,
-		)
-		_ = stdinReader.CloseWithError(streamErr)
-		_ = stdoutWriter.CloseWithError(streamErr)
-		streamDone <- streamErr
-	}()
-	defer func() {
-		_ = stdinWriter.Close()
-		_ = stdoutReader.Close()
-	}()
-	sessionDigest, err := input.Digest()
+	canonical, err := input.CanonicalJSON()
 	if err != nil {
 		return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
 	}
-	if err = clabernetesinternaldeviceplan.WriteSessionFrame(
-		stdinWriter,
-		clabernetesinternaldeviceplan.SessionFrame{
-			Version:       clabernetesinternaldeviceplan.SessionProtocolVersion,
-			Type:          clabernetesinternaldeviceplan.SessionFrameInitial,
-			SessionDigest: sessionDigest,
-			Sequence:      0,
-			Input:         &input,
-		},
-	); err != nil {
+	policy := PlannerPodInput{
+		Node: node, Name: pod.Name,
+		PlannerRevision: pod.Annotations[plannerRevision], DeadlineSeconds: deadlineSeconds,
+		ImagePullSecrets: pod.Spec.ImagePullSecrets,
+	}
+	for _, volume := range pod.Spec.Volumes {
+		if volume.Name == plannerEntropyName && volume.Secret != nil {
+			policy.EntropySecretName = volume.Secret.SecretName
+		}
+	}
+	worker := &PlannerPool{Client: r.Client, Reader: r.reader(), Execute: r.Attach, Sessions: r}
+	if _, err = worker.runOnPod(ctx, pod, node, policy,
+		PlannerInputArtifact{CanonicalInput: canonical}); err != nil {
 		return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
 	}
-	decoder := clabernetesinternaldeviceplan.NewSessionFrameDecoder(
-		stdoutReader,
-		clabernetesinternaldeviceplan.MaxSessionFrameBytes,
+
+	return ctrlruntime.Result{}, deleteWorkerAttemptArtifacts(
+		ctx,
+		r.Client,
+		pod.Namespace,
+		pod.Name,
 	)
-	expectedSequence := 1
-	servicedRequests := map[string]bool{}
-	var suppliedImages []clabernetesinternaldeviceplan.ImageInput
-	var suppliedCertificates []clabernetesinternaldeviceplan.CertificateInput
-	var certificateRequirements []clabernetesinternaldeviceplan.CertificateRequirement
-	certificateSecret := ""
-	for {
-		frame, frameErr := decoder.Next()
-		if frameErr != nil {
-			if errors.Is(frameErr, io.EOF) {
-				// The worker emits its durable structured diagnostic to the Pod log before
-				// exiting. Leave the terminal Pod for the Node controller to classify and
-				// persist instead of deleting the only copy of that diagnostic here.
-				<-streamDone
-
-				return ctrlruntime.Result{}, nil
-			}
-
-			return ctrlruntime.Result{}, r.failAttempt(ctx, pod, frameErr)
-		}
-		if frame.SessionDigest != sessionDigest {
-			return ctrlruntime.Result{}, r.failAttempt(
-				ctx,
-				pod,
-				errors.New("planner session request differs from its initial input"),
-			)
-		}
-		if frame.Sequence != expectedSequence {
-			return ctrlruntime.Result{}, r.failAttempt(
-				ctx,
-				pod,
-				errors.New("planner session sequence is not monotonic"),
-			)
-		}
-		if err = validateSessionRequestNodes(frame, input); err != nil {
-			return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
-		}
-		switch frame.Type {
-		case clabernetesinternaldeviceplan.SessionFrameImageRequest:
-			if expectedSequence > plannerSessionMaxRequests ||
-				!sessionImagesAddFacts(frame.Images, input.Images, suppliedImages) {
-				return ctrlruntime.Result{}, r.failAttempt(
-					ctx,
-					pod,
-					errors.New("planner image request adds no new metadata fact"),
-				)
-			}
-			if err = guardControllerSessionProgress(frame, servicedRequests); err != nil {
-				return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
-			}
-			response, responseErr := r.resolveImages(ctx, pod, input, frame)
-			if responseErr != nil {
-				return ctrlruntime.Result{}, r.failAttempt(ctx, pod, responseErr)
-			}
-			suppliedImages = append(suppliedImages, response.ImageInputs...)
-			if err = clabernetesinternaldeviceplan.WriteSessionFrame(
-				stdinWriter,
-				response,
-			); err != nil {
-				return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
-			}
-			expectedSequence++
-		case clabernetesinternaldeviceplan.SessionFrameCertificateRequest:
-			if expectedSequence > plannerSessionMaxRequests || len(certificateRequirements) != 0 {
-				return ctrlruntime.Result{}, r.failAttempt(
-					ctx,
-					pod,
-					errors.New("planner certificate request adds no new requirement set"),
-				)
-			}
-			if err = guardControllerSessionProgress(frame, servicedRequests); err != nil {
-				return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
-			}
-			response, responseErr := r.resolveCertificates(ctx, node, input, frame)
-			if responseErr != nil {
-				return ctrlruntime.Result{}, r.failAttempt(ctx, pod, responseErr)
-			}
-			suppliedCertificates = slices.Clone(response.CertificateInputs)
-			certificateRequirements = slices.Clone(frame.Certificates)
-			certificateSecret = response.CertificateSecret
-			if err = clabernetesinternaldeviceplan.WriteSessionFrame(
-				stdinWriter,
-				response,
-			); err != nil {
-				return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
-			}
-			expectedSequence++
-		case clabernetesinternaldeviceplan.SessionFrameResult:
-			if err = validateControllerSessionResult(
-				frame,
-				input,
-				suppliedImages,
-				suppliedCertificates,
-				certificateRequirements,
-				certificateSecret,
-			); err != nil {
-				return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
-			}
-			resultDigest, digestErr := clabernetesinternaldeviceplan.SessionTerminalDigest(frame)
-			if digestErr != nil {
-				return ctrlruntime.Result{}, r.failAttempt(ctx, pod, digestErr)
-			}
-			before := pod.DeepCopy()
-			if pod.Annotations == nil {
-				pod.Annotations = map[string]string{}
-			}
-			pod.Annotations[plannerSessionResult] = resultDigest
-			if err = r.Client.Patch(ctx, pod, ctrlruntimeclient.MergeFrom(before)); err != nil {
-				return ctrlruntime.Result{}, r.failAttempt(ctx, pod, err)
-			}
-			_ = stdinWriter.Close()
-			if streamErr := <-streamDone; streamErr != nil {
-				return ctrlruntime.Result{}, r.failAttempt(
-					ctx,
-					pod,
-					fmt.Errorf("planner session stream failed: %w", streamErr),
-				)
-			}
-
-			return ctrlruntime.Result{}, nil
-		default:
-			return ctrlruntime.Result{}, r.failAttempt(
-				ctx,
-				pod,
-				fmt.Errorf("planner emitted unexpected session frame %q", frame.Type),
-			)
-		}
-	}
 }
 
 func guardControllerSessionProgress(

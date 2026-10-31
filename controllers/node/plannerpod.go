@@ -304,6 +304,9 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 		// longer Pod lifetime lets bounded controller concurrency queue large topologies without
 		// consuming the evaluation timeout before a stream is available.
 		activeDeadline = plannerQueueDeadline
+		// Only exec streams carry planning results. PID 1 stays idle so artifact bytes cannot
+		// enter Pod logs; the session controller removes this worker after persistence.
+		workerArgs = []string{"node-plan-pool"}
 	}
 
 	return &k8scorev1.Pod{
@@ -338,8 +341,6 @@ func RenderPlannerPod(input PlannerPodInput) (*k8scorev1.Pod, error) {
 				Name:            plannerContainerName,
 				Image:           input.Image,
 				ImagePullPolicy: k8scorev1.PullIfNotPresent,
-				Stdin:           input.Session,
-				StdinOnce:       input.Session,
 				Command:         []string{plannerManagerBinary},
 				Args:            workerArgs,
 				Env:             []k8scorev1.EnvVar{{Name: "TMPDIR", Value: plannerScratchPath}},
@@ -370,7 +371,7 @@ func plannerDigestLabelValue(digest string) string {
 	return labelDigest[:kubernetesNameLimit]
 }
 
-const plannerPayloadRootPath = "/var/run/clabernetes/planner/payloads"
+const plannerPayloadRootPath = clabernetesinternaldeviceplan.PlannerPayloadRoot
 
 func renderPlannerPayloadSources(
 	namespace string,

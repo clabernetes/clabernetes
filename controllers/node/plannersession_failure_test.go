@@ -14,7 +14,17 @@ import (
 )
 
 func TestPlannerSessionAttachFailureHonorsCancellation(t *testing.T) {
+	node := planTestNode("router-session")
+	client := ctrlruntimefake.NewClientBuilder().
+		WithScheme(plannerTestScheme(t)).
+		WithObjects(node).
+		Build()
+	entropy, err := (&EntropyReconciler{Client: client, Reader: client}).Resolve(t.Context(), node)
+	if err != nil {
+		t.Fatal(err)
+	}
 	input := validInput()
+	input.EntropyDigest = entropy.Digest
 	canonical, err := input.CanonicalJSON()
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +33,6 @@ func TestPlannerSessionAttachFailureHonorsCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := planTestNode("router-session")
 	inputConfigMap, _, err := (&PlannerInputConfigMapReconciler{}).Render(
 		node, PlannerInputArtifact{CanonicalInput: canonical},
 	)
@@ -34,14 +43,18 @@ func TestPlannerSessionAttachFailureHonorsCancellation(t *testing.T) {
 		Node: node, Name: "router-session-planner", Image: "example/manager:1",
 		InputConfigMapName: inputConfigMap.GetName(), InputDigest: digest,
 		PlannerRevision: "session-v1", MaxInputBytes: 1 << 20,
-		DeadlineSeconds: 1, Session: true,
+		DeadlineSeconds: 1, Session: true, EntropySecretName: entropy.SecretName,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	pod.Status.Phase = k8scorev1.PodRunning
-	client := ctrlruntimefake.NewClientBuilder().WithScheme(plannerTestScheme(t)).
-		WithObjects(node, inputConfigMap, pod).Build()
+	if err = client.Create(t.Context(), inputConfigMap); err != nil {
+		t.Fatal(err)
+	}
+	if err = client.Create(t.Context(), pod); err != nil {
+		t.Fatal(err)
+	}
 	attached := make(chan io.Closer, 1)
 	reconciler := &PlannerSessionReconciler{
 		Client: client, Reader: client,
