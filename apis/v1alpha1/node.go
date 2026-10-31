@@ -25,6 +25,22 @@ const (
 	// NodeConditionDeviceStateReset reports the projected device-state reset token; it becomes
 	// True once the workload carrying the token completed preparation and re-seeded artifacts.
 	NodeConditionDeviceStateReset = "DeviceStateReset"
+	// NodeConditionStopped reports the operational run state of the Node's workload. It is True
+	// once spec.runState is Stopped and no workload Pod remains, False with reason Stopping
+	// while the Pod terminates, and False with reason Running otherwise.
+	NodeConditionStopped = "Stopped"
+)
+
+// NodeRunState is the operational run state requested for a Node's workload.
+// +kubebuilder:validation:Enum=Running;Stopped
+type NodeRunState string
+
+const (
+	// NodeRunStateRunning requests one workload Pod for the Node. It is the default.
+	NodeRunStateRunning NodeRunState = "Running"
+	// NodeRunStateStopped scales the Node's workload to zero Pods while keeping the Node, its
+	// Services, PersistentVolumeClaims, and Links.
+	NodeRunStateStopped NodeRunState = "Stopped"
 )
 
 // +genclient
@@ -43,6 +59,8 @@ const (
 // +kubebuilder:printcolumn:JSONPath=".spec.kind",name=Kind,type=string
 // +kubebuilder:printcolumn:JSONPath=".spec.image",name=Image,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.readiness",name=Readiness,type=string
+// +kubebuilder:printcolumn:JSONPath=".spec.runState",name=RunState,type=string
+// +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='Stopped')].status",name=Stopped,type=string,priority=1
 // +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='ContainersReady')].status",name=Containers,type=string,priority=1
 // +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='Prepared')].status",name=Prepared,type=string,priority=1
 // +kubebuilder:printcolumn:JSONPath=".status.conditions[?(@.type=='ConnectivityReady')].status",name=Connectivity,type=string,priority=1
@@ -94,6 +112,21 @@ type NodeSpec struct {
 	// +listMapKey=port
 	// +optional
 	AppProtocols []NodeAppProtocol `json:"appProtocols,omitempty" yaml:"-"`
+	// RunState is the operational run state of the Node's workload: Running (the default) keeps
+	// one workload Pod, Stopped scales it to zero while keeping the Node, its Services,
+	// PersistentVolumeClaims, and Links. RunState is operational state, not node intent: it never
+	// enters the device plan, the Topology compiler never sets it, and the Topology controller
+	// preserves it on emitted Nodes. For grouped Nodes the primary Node's RunState governs the
+	// shared Pod; secondary Nodes' RunState has no effect.
+	// +kubebuilder:default=Running
+	// +optional
+	RunState NodeRunState `json:"runState,omitempty" yaml:"-"`
+}
+
+// IsStopped reports whether the spec requests a stopped workload. An empty RunState (an object
+// read without schema defaulting) means Running.
+func (s *NodeSpec) IsStopped() bool {
+	return s != nil && s.RunState == NodeRunStateStopped
 }
 
 // NodeAppProtocolName is a Kubernetes qualified name or an empty suppression value.
@@ -150,6 +183,12 @@ type NodeStatus struct {
 	// It contains no credentials or kind-specific configuration.
 	// +optional
 	DirectManagement *NodeDirectManagementStatus `json:"directManagement,omitempty"`
+	// ObservedRestartToken is the c9s.run/restart-requested token the current workload Pod was
+	// started with. It equals the Node's annotation once the controller replaced the Pod for
+	// that token; together with readiness it tells a client that a requested restart finished.
+	// It keeps its last value while no workload Pod exists.
+	// +optional
+	ObservedRestartToken string `json:"observedRestartToken,omitempty"`
 }
 
 // NodeDirectManagementStatus is the controller-allocated direct management identity for one

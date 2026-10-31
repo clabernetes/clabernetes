@@ -10,6 +10,7 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
+	clabernetesinternaldirectruntime "github.com/clabernetes/clabernetes/internal/directruntime"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
 	clabernetesutilkubernetes "github.com/clabernetes/clabernetes/util/kubernetes"
 	k8scorev1 "k8s.io/api/core/v1"
@@ -25,9 +26,10 @@ const (
 
 // FabricServiceName returns the name of the fabric (cross-Pod connectivity) service of the
 // given (containerlab) node -- wire peers resolve the node at
-// `<name>.<namespace>.<dns-suffix>` from the remote connectivity sidecars.
+// `<name>.<namespace>.<dns-suffix>` from the remote connectivity sidecars. The sidecar's packet
+// capture derives the peer Node name from the same function.
 func FabricServiceName(nodeName string) string {
-	return fmt.Sprintf("%s-wire", nodeName)
+	return clabernetesinternaldirectruntime.FabricServiceName(nodeName)
 }
 
 func exposeTypeToServiceType(exposeType string) k8scorev1.ServiceType {

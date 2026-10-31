@@ -60,8 +60,9 @@ func TestRunPacketCaptureWritesPCAPAndSecretFreeAuditForOpaqueFutureKind(t *test
 		context.Background(),
 		plan,
 		PacketCaptureOptions{
-			NodeID: "opaque-node-uid", InterfaceName: "package-a",
-			SnapLength: 128, PacketLimit: 2,
+			PacketCaptureSelector: PacketCaptureSelector{NodeID: "opaque-node-uid"},
+			Interfaces:            []string{"package-a"},
+			SnapLength:            128, PacketLimit: 2,
 		},
 		&capture,
 		&audit,
@@ -143,7 +144,8 @@ func TestRunPacketCaptureDeniesInterfaceOutsideRequestedLogicalNode(t *testing.T
 		context.Background(),
 		plan,
 		PacketCaptureOptions{
-			NodeID: "other-node-uid", InterfaceName: "package-a", PacketLimit: 1,
+			PacketCaptureSelector: PacketCaptureSelector{NodeID: "other-node-uid"},
+			Interfaces:            []string{"package-a"}, PacketLimit: 1,
 		},
 		io.Discard,
 		&audit,
@@ -168,7 +170,8 @@ func TestPacketCaptureRequiresFiniteBound(t *testing.T) {
 	t.Parallel()
 
 	_, err := NormalizePacketCaptureOptions(PacketCaptureOptions{
-		NodeID: "node", InterfaceName: "eth1",
+		PacketCaptureSelector: PacketCaptureSelector{NodeID: "node"},
+		Interfaces:            []string{"eth1"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "requires a packet or duration limit") {
 		t.Fatalf("NormalizePacketCaptureOptions() error = %v", err)
@@ -184,8 +187,9 @@ func TestRunPacketCaptureCompletesAtDurationBound(t *testing.T) {
 		context.Background(),
 		packetCaptureTestPlan(),
 		PacketCaptureOptions{
-			NodeID: "opaque-node-uid", InterfaceName: "package-a",
-			Duration: 5 * time.Millisecond,
+			PacketCaptureSelector: PacketCaptureSelector{NodeID: "opaque-node-uid"},
+			Interfaces:            []string{"package-a"},
+			Duration:              5 * time.Millisecond,
 		},
 		io.Discard,
 		io.Discard,
@@ -227,7 +231,8 @@ func TestRunPacketCaptureAuthorizesLiveInterfaceFromValidatedRevision(t *testing
 		basePlan,
 		revisionPath,
 		PacketCaptureOptions{
-			NodeID: "opaque-node-uid", InterfaceName: "package-a", PacketLimit: 1,
+			PacketCaptureSelector: PacketCaptureSelector{NodeID: "opaque-node-uid"},
+			Interfaces:            []string{"package-a"}, PacketLimit: 1,
 		},
 		io.Discard,
 		io.Discard,

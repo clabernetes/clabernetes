@@ -289,3 +289,135 @@ func TestOptionalRolloutAndDisabledPlannerPool(t *testing.T) {
 		})
 	}
 }
+
+// The lab roles are what clients bind per namespace by name. The editor must operate labs only
+// through c9s resources and Pod streams: no apps, no Pod writes, no Secrets, and every viewer
+// rule.
+func TestLabRolesGrantNoWorkloadWrites(t *testing.T) {
+	t.Parallel()
+
+	roles := goldenLabRoles(t)
+
+	viewer, editor := roles["clabernetes-lab-viewer"], roles["clabernetes-lab-editor"]
+	if viewer == nil || editor == nil || len(roles) != 2 {
+		t.Fatalf("lab roles = %v, want clabernetes-lab-viewer and clabernetes-lab-editor", roles)
+	}
+
+	if viewer.AggregationRule != nil || editor.AggregationRule != nil ||
+		viewer.Labels["rbac.authorization.k8s.io/aggregate-to-view"] != "" ||
+		editor.Labels["rbac.authorization.k8s.io/aggregate-to-edit"] != "" {
+		t.Fatal("lab roles must not aggregate into the built-in roles")
+	}
+
+	for _, rule := range viewer.Rules {
+		if !slices.ContainsFunc(editor.Rules, func(candidate k8srbacv1.PolicyRule) bool {
+			return reflect.DeepEqual(candidate, rule)
+		}) {
+			t.Fatalf("editor lacks viewer rule %#v", rule)
+		}
+
+		if slices.ContainsFunc(rule.Verbs, isWriteVerb) {
+			t.Fatalf("viewer rule writes: %#v", rule)
+		}
+	}
+
+	for _, rule := range editor.Rules {
+		if problem := labEditorRuleProblem(rule); problem != "" {
+			t.Fatalf("editor rule %#v: %s", rule, problem)
+		}
+	}
+
+	for _, want := range []k8srbacv1.PolicyRule{
+		{
+			APIGroups: []string{"c9s.run"},
+			Resources: []string{"topologies", "nodes", "links", "nodeprofiles"},
+			Verbs:     []string{"create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{""}, Resources: []string{"pods/exec", "pods/portforward"},
+			Verbs: []string{"get", "create"},
+		},
+	} {
+		if !slices.ContainsFunc(editor.Rules, func(rule k8srbacv1.PolicyRule) bool {
+			return reflect.DeepEqual(rule, want)
+		}) {
+			t.Fatalf("editor lacks %#v", want)
+		}
+	}
+}
+
+func TestLabRolesCanBeDisabled(t *testing.T) {
+	t.Parallel()
+
+	chartsDir, err := filepath.Abs("../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	disabled := clabernetestesthelper.HelmCommand(
+		t, chartsDir, "template", "./clabernetes", "--set", "labRoles.enabled=false",
+	)
+	if bytes.Contains(disabled, []byte("clabernetes-lab-")) {
+		t.Fatal("disabled lab roles rendered")
+	}
+}
+
+func goldenLabRoles(t *testing.T) map[string]*k8srbacv1.ClusterRole {
+	t.Helper()
+
+	raw, err := os.ReadFile("test-fixtures/golden/lab-roles.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	roles := map[string]*k8srbacv1.ClusterRole{}
+	decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader(raw), 4096)
+
+	for {
+		role := &k8srbacv1.ClusterRole{}
+		if err = decoder.Decode(role); err != nil {
+			if errors.Is(err, io.EOF) {
+				return roles
+			}
+
+			t.Fatal(err)
+		}
+
+		if role.GetName() != "" {
+			roles[role.GetName()] = role
+		}
+	}
+}
+
+func isWriteVerb(verb string) bool {
+	return verb != "get" && verb != "list" && verb != "watch"
+}
+
+// labEditorRuleProblem names what a lab editor rule must never grant.
+func labEditorRuleProblem(rule k8srbacv1.PolicyRule) string {
+	for _, group := range rule.APIGroups {
+		switch group {
+		case "", "c9s.run", "events.k8s.io", "metrics.k8s.io":
+		default:
+			return "grants API group " + group
+		}
+	}
+
+	for _, resource := range rule.Resources {
+		switch resource {
+		case "pods":
+			if slices.ContainsFunc(rule.Verbs, isWriteVerb) {
+				return "writes Pods"
+			}
+		case "namespaces":
+			// Bound per namespace, get reads only the lab's own Namespace.
+			if !slices.Equal(rule.Verbs, []string{"get"}) {
+				return "grants more than get on namespaces"
+			}
+		case "secrets", "*", "pods/attach", "pods/ephemeralcontainers":
+			return "grants " + resource
+		}
+	}
+
+	return ""
+}

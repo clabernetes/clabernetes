@@ -4,6 +4,7 @@ package directpod_test
 import (
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -1055,37 +1056,81 @@ func TestPacketCaptureCommandAuthorizesOnlyPlanOwnedInterface(t *testing.T) {
 	command, err := clabernetesinternaldirectpod.PacketCaptureCommand(
 		plan,
 		clabernetesinternaldirectruntime.PacketCaptureOptions{
-			NodeID: "node-a", InterfaceName: "package-a", PacketLimit: 10,
-			Duration: 5 * time.Second,
+			PacketCaptureSelector: clabernetesinternaldirectruntime.PacketCaptureSelector{
+				NodeID: "node-a",
+			},
+			Interfaces: []string{"package-a", "package-b"}, Format: "pcapng",
+			PacketLimit: 10, Duration: 5 * time.Second,
 		},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for _, expected := range []string{
-		"packet-capture",
-		"/var/run/clabernetes/plan/plan.json",
-		"/var/run/clabernetes/input/input.json",
-		"/var/run/clabernetes/connectivity-revision/revision.json",
-		"node-a", "package-a", "10", "5s",
-	} {
-		if !slices.Contains(command, expected) {
-			t.Fatalf("packet capture command lacks %q: %#v", expected, command)
-		}
+	// The helper defaults its plan, input, and revision to the paths the renderer mounts, so the
+	// command names only the Node, the interfaces, the format, and the bounds.
+	want := []string{
+		"/clabernetes/manager", "node-runtime", "packet-capture",
+		"--nodeID", "node-a",
+		"--interface", "package-a", "--interface", "package-b",
+		"--format", "pcapng", "--snapLength", "262144",
+		"--packetLimit", "10", "--duration", "5s",
 	}
-
-	if slices.Contains(command, "future-package-kind") || command[0] != "/clabernetes/manager" {
-		t.Fatalf("packet capture command contains kind knowledge: %#v", command)
+	if !slices.Equal(command, want) {
+		t.Fatalf("packet capture command = %#v", command)
 	}
 
 	if _, err = clabernetesinternaldirectpod.PacketCaptureCommand(
 		plan,
 		clabernetesinternaldirectruntime.PacketCaptureOptions{
-			NodeID: "node-a", InterfaceName: "eth0", PacketLimit: 1,
+			PacketCaptureSelector: clabernetesinternaldirectruntime.PacketCaptureSelector{
+				NodeID: "node-a",
+			},
+			Interfaces: []string{"eth0"}, PacketLimit: 1,
 		},
 	); err == nil || !strings.Contains(err.Error(), "not uniquely planned") {
 		t.Fatalf("unplanned interface capture error = %v", err)
+	}
+}
+
+func TestRenderMountsPacketCaptureDefaultsIntoConnectivityHelper(t *testing.T) {
+	t.Parallel()
+
+	deployment, err := clabernetesinternaldirectpod.Render(
+		renderablePlan(),
+		clabernetesinternaldirectpod.Options{
+			Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+			InputConfigMapName:                "device-a-plan-input-abc",
+			ConnectivityRevisionConfigMapName: "device-a-connectivity",
+			PreparationImage:                  "example/c9s@sha256:1111",
+			ConnectivityImage:                 "example/c9s@sha256:1111",
+			EnableContainerStopSignals:        true,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mounts := map[string]bool{}
+
+	for _, container := range deployment.Spec.Template.Spec.InitContainers {
+		if container.Name != clabernetesinternaldirectpod.ConnectivityContainerName {
+			continue
+		}
+
+		for _, mount := range container.VolumeMounts {
+			mounts[mount.MountPath] = true
+		}
+	}
+
+	for _, path := range []string{
+		clabernetesinternaldirectruntime.ConnectivityPlanPath,
+		clabernetesinternaldirectruntime.ConnectivityInputPath,
+		clabernetesinternaldirectruntime.ConnectivityRevisionPath,
+	} {
+		if !mounts[filepath.Dir(path)] {
+			t.Fatalf("connectivity helper does not mount %q: %v", path, mounts)
+		}
 	}
 }
 
@@ -2337,6 +2382,73 @@ func TestRenderStartupGatePrecedesPreparation(t *testing.T) {
 		}
 	}
 	t.Fatal("missing admission volume")
+}
+
+func TestRenderStoppedWorkloadAndRestartTokens(t *testing.T) {
+	t.Parallel()
+
+	options := clabernetesinternaldirectpod.Options{
+		Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+		InputConfigMapName:                "device-a-plan-input-abc",
+		ConnectivityRevisionConfigMapName: "device-a-connectivity",
+		PreparationImage:                  "example/c9s:1",
+		ConnectivityImage:                 "example/c9s:1",
+		EnableContainerStopSignals:        true,
+		Annotations: map[string]string{
+			// The raw request and a spoofed handled set must never reach the template: only
+			// the controller-resolved tokens decide whether the Pod rolls.
+			clabernetesinternaldirectpod.RestartRequestedAnnotation: "user-token",
+			clabernetesinternaldirectpod.RestartTokensAnnotation:    `{"x":"spoofed"}`,
+		},
+	}
+
+	running, err := clabernetesinternaldirectpod.Render(renderablePlan(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if running.Spec.Replicas == nil || *running.Spec.Replicas != 1 {
+		t.Fatalf("running workload replicas = %v, want 1", running.Spec.Replicas)
+	}
+
+	for _, key := range []string{
+		clabernetesinternaldirectpod.RestartRequestedAnnotation,
+		clabernetesinternaldirectpod.RestartTokensAnnotation,
+	} {
+		if _, ok := running.Spec.Template.Annotations[key]; ok {
+			t.Fatalf("template carries unowned %s: %v", key, running.Spec.Template.Annotations)
+		}
+	}
+
+	options.Stopped = true
+	options.RestartTokens = map[string]string{"node-a": "restart-1"}
+
+	stopped, err := clabernetesinternaldirectpod.Render(renderablePlan(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if stopped.Spec.Replicas == nil || *stopped.Spec.Replicas != 0 {
+		t.Fatalf("stopped workload replicas = %v, want 0", stopped.Spec.Replicas)
+	}
+
+	tokens := clabernetesinternaldirectpod.DecodeNodeTokens(
+		stopped.Spec.Template.Annotations[clabernetesinternaldirectpod.RestartTokensAnnotation],
+	)
+	if len(tokens) != 1 || tokens["node-a"] != "restart-1" {
+		t.Fatalf("rendered restart tokens = %v", tokens)
+	}
+
+	// Stopping changes nothing but the replica count, so starting again restores the same Pod.
+	stopped.Spec.Replicas = running.Spec.Replicas
+	delete(stopped.Spec.Template.Annotations, clabernetesinternaldirectpod.RestartTokensAnnotation)
+	if !reflect.DeepEqual(stopped.Spec, running.Spec) {
+		t.Fatal("stopping changed the workload beyond its replica count")
+	}
+
+	if got := clabernetesinternaldirectpod.DecodeNodeTokens("{malformed"); len(got) != 0 {
+		t.Fatalf("malformed token annotation decoded to %v", got)
+	}
 }
 
 func TestRenderIsolatesDeviceContainersWhenRequested(t *testing.T) {

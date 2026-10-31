@@ -2602,6 +2602,15 @@
                                 ],
                                 "type": "string"
                             },
+                            "runState": {
+                                "default": "Running",
+                                "description": "RunState is the operational run state of the Node's workload: Running (the default) keeps\none workload Pod, Stopped scales it to zero while keeping the Node, its Services,\nPersistentVolumeClaims, and Links. RunState is operational state, not node intent: it never\nenters the device plan, the Topology compiler never sets it, and the Topology controller\npreserves it on emitted Nodes. For grouped Nodes the primary Node's RunState governs the\nshared Pod; secondary Nodes' RunState has no effect.",
+                                "enum": [
+                                    "Running",
+                                    "Stopped"
+                                ],
+                                "type": "string"
+                            },
                             "security-opts": {
                                 "description": "SecurityOpts is a list of security options (i.e. seccomp or apparmor settings) to apply to\nthe node's container.",
                                 "items": {
@@ -2857,6 +2866,10 @@
                                     }
                                 },
                                 "type": "object"
+                            },
+                            "observedRestartToken": {
+                                "description": "ObservedRestartToken is the c9s.run/restart-requested token the current workload Pod was\nstarted with. It equals the Node's annotation once the controller replaced the Pod for\nthat token; together with readiness it tells a client that a requested restart finished.\nIt keeps its last value while no workload Pod exists.",
+                                "type": "string"
                             },
                             "planDigest": {
                                 "description": "PlanDigest identifies the immutable direct device plan observed by this status.",

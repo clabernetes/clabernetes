@@ -40,7 +40,8 @@ kubectl get nodes.c9s.run
 kubectl get nodes.c9s.run -o wide
 ```
 
-`READINESS` is `ready`, `notready`, or `unknown`. The wide view adds the container,
+`READINESS` is `ready`, `notready`, or `unknown`, and `RUNSTATE` is `Running` or `Stopped`.
+The wide view adds the container,
 preparation, and connectivity conditions, the plan digest, and the applied NodeProfile.
 `kubectl describe` shows every condition:
 
@@ -53,6 +54,7 @@ preparation, and connectivity conditions, the plan digest, and the applied NodeP
 | `ContainersReady` | every application container of the Node runs and passes its probes |
 | `LinkLifecycleAction` | the action taken for the latest Link-only change: `live` or `recreate` (`restart` also recreates the Pod) |
 | `DeviceStateReset` | progress of a device-state reset, see [Persistent storage](/docs/guides/persistence) |
+| `Stopped` | `True` once a stopped Node's Pod is gone; `False` with reason `Stopping` while it terminates, or `Running`, see [Stopping, starting, and restarting a Node](#stopping-starting-and-restarting-a-node) |
 
 A spec change flips readiness to `notready` at once, with `PlanApplied=False` and reason
 `PlanPending`, and readiness returns when the new plan is applied. Wait for a Node with:
@@ -69,6 +71,57 @@ kubectl get events --field-selector involvedObject.kind=Node,involvedObject.name
 
 The status also records the allocated management address under `status.directManagement` and
 the exposed ports under `status.exposedPorts`.
+
+## Stopping, starting, and restarting a Node
+
+A Node's `spec.runState` is `Running` by default. Setting it to `Stopped` scales the Node's
+Deployment to zero; the Node, its Deployment, Services, PersistentVolumeClaim, and Links stay.
+Setting it back to `Running` starts one Pod again:
+
+```bash
+kubectl patch node.c9s.run srl1 --type merge -p '{"spec":{"runState":"Stopped"}}'
+kubectl wait node.c9s.run/srl1 --for=condition=Stopped=True --timeout=5m
+
+kubectl patch node.c9s.run srl1 --type merge -p '{"spec":{"runState":"Running"}}'
+kubectl wait node.c9s.run/srl1 --for=jsonpath='{.status.readiness}'=ready --timeout=10m
+```
+
+While a Node is stopped:
+
+- Its readiness is `notready` and its `Stopped` condition is `True` once no Pod of it remains.
+  The Topology counts it as not ready, so a Topology that was running reports `degraded`.
+- Every Link to it goes carrier-down at its peers, like a pulled cable, and comes back up once
+  the Node runs again. The peers keep running.
+- The Topology and Node controllers keep reconciling. Applying a changed Topology updates the
+  stopped Node, which stays stopped and boots the updated definition when started. The
+  Topology compiler never sets `runState`, so an apply never starts a stopped Node.
+- With persistence enabled, saved device state is kept on the claim and survives the stop.
+
+The Node API is the only control: do not scale the Deployment by hand, the controller reverts
+it. Grouped Nodes (`network-mode: container:<primary>`) share the primary's Pod, so only the
+primary Node's `runState` counts; it stops and starts every Node of the group, and the
+secondaries' `runState` has no effect. Under startup admission (`rollout.batchSize` on the
+Topology or the global `Config`), a stopped Node takes no admission slot and starting it again
+waits for a slot like a new Node.
+
+To restart a Node, annotate it with an opaque token of your choice:
+
+```bash
+TOKEN=$(date +%s%N)
+kubectl annotate node.c9s.run srl1 c9s.run/restart-requested="$TOKEN" --overwrite
+kubectl wait node.c9s.run/srl1 --for=jsonpath='{.status.observedRestartToken}'="$TOKEN" --timeout=10m
+kubectl wait node.c9s.run/srl1 --for=jsonpath='{.status.readiness}'=ready --timeout=10m
+```
+
+The controller replaces the Pod once for every token that differs from the last one it handled,
+and `status.observedRestartToken` reports the token the current Pod was started with. The
+annotation can stay in place, and removing it does not restart the Node again. Restarting a
+grouped Node replaces the shared Pod, which restarts the whole group. A token set on a stopped
+Node is handled when the Node starts. A restart keeps persistent device state; to also discard
+it, use a [device-state reset](/docs/guides/persistence#resetting-a-node-to-its-startup-configuration).
+
+Stopping, starting, and restarting need only `patch` on `nodes.c9s.run`, no rights on
+Deployments or Pods.
 
 ## Link and Topology status
 
@@ -106,25 +159,86 @@ kubectl logs deploy/srl1 -c planner    # preparation: staged and preserved files
 kubectl logs deploy/srl1 -c clabwire   # connectivity: wires, carrier, management mesh
 ```
 
+Device Pods carry the labels `c9s.run/topologyNode` (the Node name) and, for Nodes compiled from
+a Topology, `c9s.run/originalNodeName` (the node name the containerlab definition used), so a
+Pod can be mapped back to its node without reading the Node. A grouped Pod carries the primary
+Node's values:
+
+```bash
+kubectl get pods -l c9s.run/originalNodeName=R1
+```
+
 Chassis cards and grouped nodes are separate application containers. List them with
 `kubectl get pod <pod> -o jsonpath='{.spec.containers[*].name}'` and select one with `-c`.
 
 ## Packet capture
 
-The connectivity sidecar streams a pcap for any interface it realized for a Node. Address the
-Node by its UID and the interface by the name the Link uses:
+The connectivity sidecar streams packets from the lab-link interfaces it realized for a Node.
+Name the Node and one or more of its interfaces:
 
 ```bash
-NODE_UID=$(kubectl get nodes.c9s.run srl1 -o jsonpath='{.metadata.uid}')
 kubectl exec deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
-  --plan /var/run/clabernetes/plan/plan.json \
-  --input /var/run/clabernetes/input/input.json \
-  --connectivityRevision /var/run/clabernetes/connectivity-revision/revision.json \
-  --nodeID "$NODE_UID" --interface e1-1 --duration 30s > e1-1.pcap
+  --nodeName srl1 --interface e1-1 --duration 30s > e1-1.pcap
 ```
 
-`--duration` and `--packetLimit` bound the capture, and the first bound reached ends it. The
-output is a standard pcap file for Wireshark or `tcpdump -r`.
+The output is a pcap file for Wireshark or `tcpdump -r`. For several interfaces in one stream,
+repeat `--interface` and ask for pcapng, which names each interface in its own Interface
+Description Block:
+
+```bash
+kubectl exec deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
+  --nodeName srl1 --interface e1-1 --interface e1-2 --format pcapng --duration 30s > srl1.pcapng
+```
+
+List the interfaces you can capture, with the peer at the other end of each link:
+
+```bash
+kubectl exec deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
+  --nodeName srl1 --list-interfaces
+```
+
+```json
+[{"node":"srl1","interface":"e1-1","alias":"ethernet-1/1","peerNode":"srl2","peerInterface":"e1-1"}]
+```
+
+- `--nodeName` is the Node object name. Nodes that share a Pod are each selected by their own
+  name; `--nodeID <Node UID>` works too. Without either, `--list-interfaces` lists every Node in
+  the Pod.
+- `--interface` takes the interface name or the alias the Link used, such as `ethernet-1/1`
+  for SR Linux `e1-1`. If any requested interface is not a link of that Node, nothing is
+  captured. The management interface is never capturable.
+- `--duration` (at most 1h) and `--packetLimit` (at most 1,000,000, counted across all
+  interfaces) bound the capture; the first bound reached ends it. `--snapLength` defaults to
+  256 KiB and takes 64 B to 1 MiB.
+- Several captures may run on one Pod at once. To capture for longer than an hour, start the
+  next capture before the previous one ends; each call writes a complete stream with its own
+  header.
+- Each capture writes JSON audit records with status `Started`, `Succeeded`, `Failed`, or
+  `Denied` to stderr. Packet data goes only to stdout.
+
+### Stop a capture when the client goes away
+
+Kubernetes does not stop an exec'd process when `kubectl` exits or its connection drops. A
+capture you interrupt with Ctrl+C keeps running in the Pod until its next write fails or its
+bound is reached. Attach stdin and add `--stop-on-stdin-close` so the capture ends as soon as
+the client is gone:
+
+```bash
+kubectl exec -i deploy/srl1 -c clabwire -- /clabernetes/manager node-runtime packet-capture \
+  --nodeName srl1 --interface e1-1 --format pcapng --duration 1h --stop-on-stdin-close \
+  | wireshark -k -i -
+```
+
+- The capture reads stdin and ignores its bytes. When stdin reaches EOF or a read fails, the
+  capture ends like a reached bound: packets already captured are written, the exit status is
+  0, and the final record is `Succeeded` with `reason` `client closed: stdin reached EOF`.
+- Kubernetes closes the process's stdin when the client closes its stdin or the exec
+  connection ends. Both transports deliver it: the websocket protocol `v5.channel.k8s.io`
+  (sends a close signal for stdin; Kubernetes 1.29 or newer) and SPDY.
+- Use the flag only with stdin attached (`kubectl exec -i`). Without `-i`, stdin is empty and
+  the capture would end at once. Without the flag, stdin is not read.
+- When the reader of stdout goes away, the next write fails and the capture ends the same way
+  with `reason` `client closed: writing stdout: ...`, whether or not the flag is set.
 
 ## Network policies
 

@@ -253,6 +253,26 @@ func (c *Controller) admitStartupGroup(ctx context.Context, group startupPodGrou
 	return nil
 }
 
+func (c *Controller) withdrawStartupGroup(ctx context.Context, group startupPodGroup) error {
+	for _, node := range group.members {
+		_, admitted := node.Annotations[clabernetesconstants.AnnotationStartupAdmitted]
+		if !admitted {
+			continue
+		}
+		before := node.DeepCopy()
+		delete(node.Annotations, clabernetesconstants.AnnotationStartupAdmitted)
+		patch := ctrlruntimeclient.MergeFromWithOptions(
+			before, ctrlruntimeclient.MergeFromWithOptimisticLock{},
+		)
+		if err := c.Client.Patch(ctx, node, patch); err != nil {
+			return err
+		}
+		delete(c.startupAdmissions, node.UID)
+	}
+
+	return nil
+}
+
 func startupAdmissionPods(pods []k8scorev1.Pod) map[apimachinerytypes.UID]*k8scorev1.Pod {
 	newest := map[apimachinerytypes.UID]*k8scorev1.Pod{}
 	for i := range pods {
@@ -308,6 +328,15 @@ func (c *Controller) pendingStartupGroups(
 	blocked := false
 	for _, group := range groups {
 		primary := group.primary
+		if primary.Spec.IsStopped() {
+			// A stopped group runs no Pod, so it neither takes nor blocks an admission slot.
+			// Withdrawing its admission makes a later start wait for a slot like a new workload.
+			if err := c.withdrawStartupGroup(ctx, group); err != nil {
+				return nil, false, err
+			}
+
+			continue
+		}
 		pod := newest[primary.UID]
 		// Workloads already created before enabling this policy are adopted without recreation.
 		if !startupAdmissionRequired(primary, size) || pod != nil {

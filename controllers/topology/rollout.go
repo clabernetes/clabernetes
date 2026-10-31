@@ -42,14 +42,10 @@ func (r *Reconciler) advanceStartupBatch(
 	if !complete {
 		return true, nil
 	}
-	var pending []string
-	var admitted []string
-	for primary := range groups {
-		if nodes[primary].Annotations[clabernetesconstants.AnnotationStartupHold] != "" {
-			pending = append(pending, primary)
-		} else {
-			admitted = append(admitted, primary)
-		}
+	pending, admitted, active := classifyStartupGroups(nodes, groups)
+	if !active {
+		// Only stopped groups still hold; nothing can progress until one of them starts.
+		return false, nil
 	}
 	slices.Sort(pending)
 	// Finish any partially committed group before observing the admission barrier.
@@ -79,6 +75,33 @@ func (r *Reconciler) advanceStartupBatch(
 	}
 
 	return true, nil
+}
+
+// classifyStartupGroups splits the running groups into held (pending) and released (admitted)
+// primaries. A stopped group starts no Pod: it neither takes a batch slot nor blocks the batch,
+// and keeps its hold so that starting it later joins the batch order. active reports whether any
+// running group still has a held member.
+func classifyStartupGroups(
+	nodes map[string]*clabernetesapisv1alpha1.Node,
+	groups map[string][]string,
+) (pending, admitted []string, active bool) {
+	for primary, members := range groups {
+		if nodes[primary].Spec.IsStopped() {
+			continue
+		}
+
+		active = active || slices.ContainsFunc(members, func(name string) bool {
+			return nodes[name].Annotations[clabernetesconstants.AnnotationStartupHold] != ""
+		})
+
+		if nodes[primary].Annotations[clabernetesconstants.AnnotationStartupHold] != "" {
+			pending = append(pending, primary)
+		} else {
+			admitted = append(admitted, primary)
+		}
+	}
+
+	return pending, admitted, active
 }
 
 func (r *Reconciler) releaseStartupGroup(
