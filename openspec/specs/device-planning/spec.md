@@ -344,10 +344,13 @@ MUST NOT be placed in a ConfigMap-backed source.
 
 The repository SHALL classify every method of each imported interface the planning boundary relies on
 (`nodes.Node`, `nodes.NodeOverwrites`, and any other interface the boundary type-asserts) as
-`exercised`, `refused`, or `unused`, and each non-`exercised` classification MUST state a reason and
-the affected kinds. Verification SHALL fail when a method is unclassified, and when a method
-classified `exercised` is no longer invoked by the planning boundary. Refused methods SHALL be
-reported as incompatibilities by conformance rather than counting as coverage.
+`exercised`, `refused`, or `unused`, and each non-`exercised` classification MUST state a reason.
+A refusal MUST state how kind reliance is attributed, and the attribution SHALL be derived from the
+linked imported implementation rather than maintained as a kind list, so a kind that begins to rely
+on refused behavior is reported without editing the inventory. Verification SHALL fail when a method
+is unclassified, and when a method classified `exercised` is no longer invoked by the planning
+boundary. Refused methods SHALL be reported as incompatibilities by conformance rather than counting
+as coverage.
 
 #### Scenario: Imported interface gains a method
 
@@ -361,7 +364,14 @@ reported as incompatibilities by conformance rather than counting as coverage.
 
 #### Scenario: Method is refused
 
-- **WHEN** a method is classified `refused` with a reason and affected kinds
-- **THEN** conformance reports those kinds as incompatible for that behavior and does not treat the
+- **WHEN** a kind's implementation declares a method classified `refused`
+- **THEN** conformance reports that kind as incompatible for that behavior and does not treat the
   requirement as satisfied
+
+#### Scenario: A kind begins to rely on refused behavior
+
+- **WHEN** a kind that did not previously declare a refused method starts declaring it, or a new kind
+  that declares it is added to the registry
+- **THEN** conformance reports that kind as incompatible without any inventory edit, because reliance
+  is derived from the linked imported implementation
 

@@ -38,8 +38,8 @@ func TestImportedCoverageInventoryIsComplete(t *testing.T) {
 		summary.Unused,
 	)
 	for _, refusal := range summary.Refusals {
-		t.Logf("refused: %s.%s affects %v -- %s",
-			refusal.Interface, refusal.Method, refusal.Kinds, refusal.Reason)
+		t.Logf("refused: %s.%s (reliance %s) -- %s",
+			refusal.Interface, refusal.Method, refusal.Reliance, refusal.Reason)
 	}
 }
 
@@ -130,8 +130,8 @@ func TestImportedCoverageRejectsStaleClassification(t *testing.T) {
 	}
 }
 
-// TestImportedCoverageRequiresRefusalEvidence proves refusals must name the kinds they affect, so a
-// refusal cannot be used to quietly drop behavior for every kind.
+// TestImportedCoverageRequiresRefusalEvidence proves refusals must state a reason and how kind
+// reliance is derived, so a refusal cannot quietly drop behavior for every kind.
 func TestImportedCoverageRequiresRefusalEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -141,7 +141,7 @@ func TestImportedCoverageRequiresRefusalEvidence(t *testing.T) {
 		if coverage[index].State != CoverageRefused {
 			continue
 		}
-		coverage[index].Kinds = nil
+		coverage[index].Reliance = ""
 		mutated = true
 
 		break
@@ -152,36 +152,10 @@ func TestImportedCoverageRequiresRefusalEvidence(t *testing.T) {
 
 	err := ValidateImportedCoverage(coverage)
 	if err == nil {
-		t.Fatal("verification accepted a refusal without affected kinds")
+		t.Fatal("verification accepted a refusal with no reliance attribution")
 	}
 	if _, ok := errors.AsType[*importedCoverageError](err); !ok {
 		t.Fatalf("verification error has an unexpected type: %T", err)
-	}
-}
-
-// TestRefusedBehaviorsForKind proves refusals are selected by exact kind, prefix family, and the
-// every-kind selector.
-func TestRefusedBehaviorsForKind(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		kind    string
-		methods []string
-	}{
-		{"tailscale", []string{"PreDestroy", "RunExecFromConfig"}},
-		{"vr_sros", []string{"RunExecFromConfig", "PreStop"}},
-		{"srl", []string{"RunExecFromConfig"}},
-		{"linux", []string{"RunExecFromConfig"}},
-	}
-	for _, testCase := range cases {
-		methods := []string{}
-		for _, refusal := range RefusedBehaviorsForKind(testCase.kind) {
-			methods = append(methods, refusal.Method)
-		}
-		if fmt.Sprint(methods) != fmt.Sprint(testCase.methods) {
-			t.Fatalf("refused behaviors for %q are %v, want %v",
-				testCase.kind, methods, testCase.methods)
-		}
 	}
 }
 

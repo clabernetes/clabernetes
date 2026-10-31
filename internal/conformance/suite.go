@@ -186,6 +186,7 @@ func validateSuiteHeader(suite *Suite) error {
 	return nil
 }
 
+//nolint:gocyclo // one linear validation pass; splitting it would obscure the ordering.
 func validateScenario(
 	registry *clabnodes.NodeRegistry,
 	scenario *Scenario,
@@ -274,19 +275,31 @@ func validateScenario(
 	scenario.ResolvedTimeout = resolvedTimeout
 	scenario.ResolvedPollInterval = resolvedPollInterval
 
+	incompatible, err := incompatibleImportedBehaviors(registry, images)
+	if err != nil {
+		return ScenarioInventory{}, fmt.Errorf("%w: %s: %w", errInvalidSuite, field, err)
+	}
+
 	return ScenarioInventory{
 		ID: scenario.ID, Availability: scenario.Availability, Images: images,
-		Incompatible: incompatibleImportedBehaviors(images),
+		Incompatible: incompatible,
 	}, nil
 }
 
 // incompatibleImportedBehaviors reports the refused imported behavior each scenario kind carries,
 // so a compatible-looking scenario never hides a behavior c9s does not realize.
-func incompatibleImportedBehaviors(images []ImageObservation) []KindIncompatibility {
+func incompatibleImportedBehaviors(
+	registry *clabnodes.NodeRegistry,
+	images []ImageObservation,
+) ([]KindIncompatibility, error) {
 	incompatible := []KindIncompatibility{}
 	seen := map[string]bool{}
 	for _, image := range images {
-		for _, refusal := range clabernetesinternaldeviceplan.RefusedBehaviorsForKind(image.Kind) {
+		refusals, err := clabernetesinternaldeviceplan.RefusedBehaviorsForKind(registry, image.Kind)
+		if err != nil {
+			return nil, err
+		}
+		for _, refusal := range refusals {
 			key := image.Kind + "\x00" + refusal.Interface + "." + refusal.Method
 			if seen[key] {
 				continue
@@ -307,7 +320,7 @@ func incompatibleImportedBehaviors(images []ImageObservation) []KindIncompatibil
 		return strings.Compare(left.Behavior, right.Behavior)
 	})
 
-	return incompatible
+	return incompatible, nil
 }
 
 // ImportedCoverageReport returns the planning boundary's imported-interface coverage summary, which
