@@ -62,6 +62,7 @@
       reachability, and namespace-scoped IDs. (SR-SIM 26.7.R1 distributed + multitool
       cross-worker: wire ping, mgmt-mesh ping, SSH; multitool pair: 9500 DF, VLAN full-MTU DF,
       QinQ DF, carrier bounce; two namespaces simultaneously holding wire ID 1.)
-- [ ] 5.4 Update the PR body and explainer site claims (cluster-wide → namespace, carrier
-      wording, VNI-era rationale). (Site index.html edited locally in both languages; PR body
-      update drafted — both held back until the branch commits are pushed.)
+- [x] 5.4 Update the PR body and explainer site claims (cluster-wide → namespace, carrier
+      wording, VNI-era rationale). (The #307 PR body carries the namespace-scoped, carrier, and
+      VNI wording. The explainer site lived outside the repository and is retired. The last
+      in-repo carrier claim, the fabric wire receive-loop comment, now uses the agreed wording.)

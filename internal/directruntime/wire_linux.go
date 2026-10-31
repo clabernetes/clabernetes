@@ -589,7 +589,8 @@ func (w *fabricWire) transmitFrame(link *fabricWireLink, frame []byte) {
 }
 
 // receiveLoop drains the shared UDP socket and dispatches control and data messages. One
-// socket carries both, so the carrier signal can never disagree with the path it describes.
+// socket carries both, so the carrier signal cannot diverge from the datapath in endpoint or
+// route.
 func (w *fabricWire) receiveLoop() {
 	defer w.workers.Done()
 
