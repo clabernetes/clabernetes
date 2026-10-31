@@ -143,9 +143,10 @@ For every supported kind, device planning SHALL derive a management-interpositio
 pinned containerlab dependency and carry it in the runtime-neutral plan. The profile SHALL declare
 at least: the interface name and MAC behavior the device expects for its management port, the
 management gateway inputs for generated configuration, the inbound port translations for the
-Pod-address path, and the management mesh membership — the mesh tunnel identifier, the peer-discovery
-transport name through which the sidecar resolves the current peer set, and the deterministic
-gateway link-layer identity — all supplied to planning as controller-allocated data.
+Pod-address path, and the management mesh membership — the mesh tunnel identifier and the
+deterministic gateway link-layer identity — all supplied to planning as controller-allocated
+data. The profile MUST NOT carry a peer-discovery transport name: the peer set reaches the
+sidecar through the published peer directory, not through the plan.
 
 Consumers of the profile (renderer, sidecar, controllers) MUST NOT contain kind- or
 vendor-conditional behavior; all vendor variance SHALL be expressed through profile data, and
@@ -178,9 +179,9 @@ planning and SHALL be tracked as an upstream containerlab contribution.
 #### Scenario: Mesh membership is planned data
 
 - **WHEN** a namespace-owning Node with an allocated management identity is planned
-- **THEN** its interposition profile carries the controller-allocated mesh tunnel identifier, the
-  peer-discovery transport name, and the deterministic gateway identity, and planning rejects incomplete or
-  invalid mesh input before any workload is created
+- **THEN** its interposition profile carries the controller-allocated mesh tunnel identifier and
+  the deterministic gateway identity, and planning rejects incomplete or invalid mesh input
+  before any workload is created
 
 ### Requirement: Management artifacts render from allocated identities at plan time
 

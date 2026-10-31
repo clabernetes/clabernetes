@@ -180,10 +180,21 @@ and gateway convention. The runtime MUST NOT use the Pod address as a management
 Pod's connectivity sidecar SHALL interpose a synthetic management interface carrying the allocated
 address before any device container starts, and management configuration SHALL render at plan time
 through each kind's own imported templates using the allocated address, prefix, and sidecar
-gateway. The interposed management interface SHALL be a member of its namespace's management L2
+gateway. The interposed management interface SHALL be a member of its namespace's management
 mesh, so the allocated identity is reachable from every peer device in the namespace by
-address, and the sidecar SHALL maintain mesh peer state on the same reconciliation tick that
-re-asserts its other owned state.
+address. The sidecar SHALL realize the mesh as a routed overlay: the synthetic interface is one
+pair whose far end is the sidecar's router leg, the router leg answers peer ARP with the gateway
+identity, and peer-bound traffic is forwarded to the peer's tunnel endpoint through per-peer
+static state derived from the mounted peer directory. The sidecar SHALL converge that peer state
+when the directory changes and on a periodic resync, and SHALL re-assert the rest of its owned
+mesh state on the same reconciliation tick that re-asserts its other owned state. Management
+traffic crossing the mesh SHALL be subject to the path's size: a TCP handshake advertising a
+segment larger than the mesh carries is clamped on the routed forward path, and an oversized
+packet with fragmentation forbidden receives a fragmentation-needed response from the local
+gateway. The interposed interface SHALL carry a default route via the sidecar gateway, as a
+container runtime installs one, so a device that derives its management routing from the
+kernel's, or that forwards a nested guest's traffic through the interface, reaches
+destinations beyond the management subnet through the Pod's own network identity.
 
 #### Scenario: Imported hook dials the management address
 
@@ -216,6 +227,22 @@ re-asserts its other owned state.
   Pod
 - **THEN** the dial reaches this device over the management mesh without translation, and the
   reply returns the same way
+
+#### Scenario: Device stack reaches beyond the management subnet
+
+- **WHEN** a device that derives its management routing from the kernel's (SR-SIM, SR Linux)
+  boots, or a device forwards a nested guest's management traffic through the interposed
+  interface (vrnetlab)
+- **THEN** the interposed interface's default route names the sidecar gateway, the device's
+  management stack installs or uses that gateway, and traffic to a cluster address leaves
+  through the Pod's own network identity and its reply reaches the device
+
+#### Scenario: Device sends an oversized management packet
+
+- **WHEN** a device sends a peer-bound management packet larger than the mesh path carries with
+  fragmentation forbidden
+- **THEN** the device receives fragmentation-needed from its gateway naming the mesh path size,
+  and a handshake advertising a larger segment is clamped so both peers send segments that fit
 
 ### Requirement: Sidecar interposition preserves the Kubernetes underlay
 
