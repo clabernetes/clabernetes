@@ -155,7 +155,10 @@ device or loop on its output, and a per-kind split would put kind identity back 
    source scan.
 
 The inventory is reported by conformance, so a `refused` method appears as a reported incompatibility
-rather than a silent pass; kinds gated by e2e must be `exercised`.
+rather than a silent pass; kinds gated by e2e must be `exercised`. The guard does not analyze
+transitive calls inside imported hook bodies. Imported-only and unused classifications require
+source review on dependency updates; a focused Linux post-deploy test covers the known
+`ExecFunction` -> `GetContainerStatus`/`GetNSPath` path without claiming complete call-graph coverage.
 
 ### D6: Sequencing is guard, then plan-borne bytes, then replay deletion
 

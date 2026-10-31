@@ -1,20 +1,77 @@
 package deviceplan
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	clabnodes "github.com/srl-labs/containerlab/nodes"
+	clabruntime "github.com/srl-labs/containerlab/runtime"
+	clabtypes "github.com/srl-labs/containerlab/types"
 )
 
 // resolvedImportedMethodSite is one parsed planning call site an inventory entry names.
 type resolvedImportedMethodSite struct {
 	file     string
 	function string
+}
+
+func TestImportedLinuxPostDeployReachesNamespaceOverrides(t *testing.T) {
+	t.Parallel()
+
+	node, err := NewContainerlabRegistry().NewNodeOfKind("linux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := &coverageNamespaceRuntime{}
+	if err = node.Init(&clabtypes.NodeConfig{ShortName: "coverage", LongName: "coverage"},
+		clabnodes.WithRuntime(runtime)); err != nil {
+		t.Fatal(err)
+	}
+	if err = node.PostDeploy(t.Context(), &clabnodes.PostDeployParams{}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(runtime.calls, []string{"GetContainerStatus", "GetNSPath"}) {
+		t.Fatalf("imported namespace calls = %v", runtime.calls)
+	}
+	for _, entry := range ImportedCoverage() {
+		if slices.Contains(runtime.calls, entry.Method) &&
+			(entry.State != CoverageExercised || entry.Reach != ReachImported) {
+			t.Errorf("reachable imported method %s.%s is classified %s/%s",
+				entry.Interface, entry.Method, entry.State, entry.Reach)
+		}
+	}
+}
+
+var errCoverageNamespaceObserved = errors.New("namespace observation complete")
+
+type coverageNamespaceRuntime struct {
+	clabruntime.ContainerRuntime
+
+	calls []string
+}
+
+func (r *coverageNamespaceRuntime) GetContainerStatus(
+	context.Context,
+	string,
+) clabruntime.ContainerStatus {
+	r.calls = append(r.calls, "GetContainerStatus")
+
+	return clabruntime.Running
+}
+
+func (r *coverageNamespaceRuntime) GetNSPath(context.Context, string) (string, error) {
+	r.calls = append(r.calls, "GetNSPath")
+
+	// Stop before entering a namespace; this test only observes imported method dispatch.
+	return "", errCoverageNamespaceObserved
 }
 
 // TestImportedCoverageInventoryIsComplete proves the committed inventory classifies exactly the

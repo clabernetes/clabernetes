@@ -7,12 +7,15 @@ and gated by `internal/conformance` (`TestSuiteReportsRefusedImportedBehaviorPer
 `TestImportedCoverageReportCoversTheImportedInterface`).
 
 Counts: **64 methods** of `nodes.Node`, `nodes.NodeOverwrites`, and the container-name surface:
-**40 exercised** (19 direct, 21 imported-only), **2 refused**, **22 unused**.
+**44 exercised** (19 direct, 25 imported-only), **2 refused**, **18 unused**.
 
 Review correction: topology `exec` is implemented by native post-start actions in
 `mapper.go:appendExecActions`; the imported `RunExecFromConfig` method is unused, not refused.
 The groups below record the original work list, not the final runtime architecture. Host preflight
 checks run on the target worker, and observation-dependent hooks retain scratch construction.
+`GetContainerStatus` and `GetNSPath`, including their `NodeOverwrites` entries, are exercised through
+`ExecFunction` by retained live hooks. A regression invokes the pinned Linux post-deploy hook and
+observes both calls without entering a network namespace.
 
 ## Refused behavior that needs a decision
 
@@ -53,10 +56,12 @@ Group B -- becomes an ordered plan step (task 3):
 
 `DeleteNetnsSymlink`, `Delete`, `Stop`, `Start`, `AddLinkToContainer`, `AdoptEndpoint`,
 `ReleaseEndpoint`, `GetLinkEndpointType`, `ParkEndpoints`, `RestoreEndpoints`, `GetState`,
-`GetSSHConfig`, `GetContainerStatus`, `GetNSPath`, `ComputeDiff`, `GetReconcilePlan`, `Reconcile`,
-`NodeOverwrites.PullImage`, `NodeOverwrites.GetContainerStatus`, `NodeOverwrites.RunExec`,
-`NodeOverwrites.GetNSPath`.
+`GetSSHConfig`, `ComputeDiff`, `GetReconcilePlan`, `Reconcile`, `NodeOverwrites.PullImage`,
+`NodeOverwrites.RunExec`.
 
-Each carries a reason in the inventory. Group 4 deletes the in-Pod runtime facade and shims; any
-method in this list that turns out to be reachable from a retained path must move to group A or B
-instead of being deleted from the plan vocabulary silently.
+Each carries a reason in the inventory. The runtime facade and shims remain for live hooks.
+The guard verifies interface completeness, direct c9s call sites, and declarations of refused
+methods. It does not analyze transitive calls inside imported hook bodies. Imported-only and
+unused classifications still require source review when updating containerlab; the focused Linux
+regression covers the known namespace path, not every kind or branch. A selector-only source scan
+would also need receiver and reachability analysis to establish which calls matter.

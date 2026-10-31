@@ -15,7 +15,8 @@ import (
 // operation, so registry-driven planning and conformance cannot notice it: containerlab 0.80 added
 // PreDestroy to nodes.Node and c9s neither calls nor reports it. Every method must therefore be
 // classified explicitly, and verification fails when the imported interface and this inventory
-// disagree in either direction.
+// disagree in either direction. Imported-only and unused classifications are reviewed claims:
+// the guard checks direct c9s call sites, not transitive calls inside imported hook bodies.
 
 // Imported interface identities. They are the keys of the inventory below.
 const (
@@ -34,8 +35,6 @@ const (
 		"which c9s performs itself"
 	importedReasonReconcileEngine  = "containerlab's reconcile engine is not run by c9s"
 	importedReasonDeploymentChecks = "reached inside imported deployment-condition checks"
-	importedReasonStopPathsNotRun  = "reached only by imported stop, start, delete, link, and " +
-		"exec paths c9s does not run"
 )
 
 // importedContainerNamer is the imported surface the planning boundary reads to learn the runtime
@@ -550,7 +549,7 @@ var importedMethodCoverage = []ImportedMethodCoverage{
 			"the tailscale kind logs out of the tailnet there",
 	},
 
-	// nodes.Node: not reached by any imported path the boundary executes.
+	// nodes.Node: remaining imported helpers and paths the boundary does not execute.
 	{
 		Interface: importedInterfaceNode, Method: "RunExecFromConfig", State: CoverageUnused,
 		Reason: "c9s maps topology exec commands into native post-start exec actions",
@@ -605,12 +604,12 @@ var importedMethodCoverage = []ImportedMethodCoverage{
 		Reason: "only the imported SSH configuration file path reads it, which c9s does not run",
 	},
 	{
-		Interface: importedInterfaceNode, Method: "GetContainerStatus", State: CoverageUnused,
-		Reason: importedReasonStopPathsNotRun,
+		Interface: importedInterfaceNode, Method: "GetContainerStatus", State: CoverageExercised,
+		Reach: ReachImported, Reason: "reached through ExecFunction in retained live hooks",
 	},
 	{
-		Interface: importedInterfaceNode, Method: "GetNSPath", State: CoverageUnused,
-		Reason: "c9s owns device namespace handles",
+		Interface: importedInterfaceNode, Method: "GetNSPath", State: CoverageExercised,
+		Reach: ReachImported, Reason: "reached through ExecFunction in retained live hooks",
 	},
 	{
 		Interface: importedInterfaceNode, Method: "ComputeDiff", State: CoverageUnused,
@@ -688,16 +687,17 @@ var importedMethodCoverage = []ImportedMethodCoverage{
 	},
 	{
 		Interface: importedInterfaceNodeOverride, Method: "GetContainerStatus",
-		State:  CoverageUnused,
-		Reason: importedReasonStopPathsNotRun,
+		State: CoverageExercised, Reach: ReachImported,
+		Reason: "reached through imported ExecFunction before entering a device namespace",
 	},
 	{
 		Interface: importedInterfaceNodeOverride, Method: "RunExec", State: CoverageUnused,
 		Reason: "reached only through the imported exec-from-config path, which c9s does not run",
 	},
 	{
-		Interface: importedInterfaceNodeOverride, Method: "GetNSPath", State: CoverageUnused,
-		Reason: "reached only by imported link and exec paths c9s does not run",
+		Interface: importedInterfaceNodeOverride, Method: "GetNSPath", State: CoverageExercised,
+		Reach:  ReachImported,
+		Reason: "reached through imported ExecFunction before entering a device namespace",
 	},
 
 	// container-namer: the container name planning reads from a kind.
