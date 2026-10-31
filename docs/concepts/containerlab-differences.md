@@ -124,7 +124,13 @@ diagnostic. Nothing is silently dropped.
   silently regenerated. Live lifecycle hooks still reconstruct imported state in scratch space;
   that construction cannot replace staged or device-saved files. Generated content, including
   extended attributes, is limited to 512 KiB per artifact and 4 MiB per plan. Larger generated
-  outputs would require an artifact store beyond Kubernetes objects.
+  outputs would require an artifact store beyond Kubernetes objects. Each distinct content and
+  extended-attribute identity uses an immutable object owned by its Node; equal artifacts within
+  that Node can share an object, but different Nodes do not. Generated content currently uses
+  Secrets. For example, 200 Nodes with three distinct artifacts each require 600 artifact Secrets,
+  in addition to other control-plane objects. Byte limits and garbage collection do not remove
+  the API, watch/cache, and etcd costs of that object count. Superseded artifacts are collected
+  after the accepted workload stops referencing them.
 - **Runtime binaries use a bounded worker cache.** The preparation container alone mounts
   `/var/lib/clabernetes/runtime-binary-cache`, which retains four content-verified binary
   versions (at most 256 MiB each). When this cache and the Pod's storage share a filesystem

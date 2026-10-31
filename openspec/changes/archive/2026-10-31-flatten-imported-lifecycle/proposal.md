@@ -68,3 +68,12 @@ and artifact integrity.
   execution today.
 - No API/CRD change, no chart or RBAC change, no containerlab version bump. Existing e2e suites remain acceptance gates; regression tests cover the new artifact and
   transport boundaries.
+
+## Operational notes for merge
+
+Generated content currently creates immutable Secrets per distinct content/attribute identity and
+owning Node. Equal artifacts within one Node can reuse an object; different Nodes do not share
+objects. For example, 200 Nodes with three distinct generated artifacts each add 600 Secrets.
+The 512 KiB per-artifact and 4 MiB per-plan byte bounds and superseded-object garbage collection
+do not eliminate object-count costs in API traffic, watches, cache memory, or etcd. The 200-Node
+e2e checks establish functional behavior at that scale, not a control-plane capacity ceiling.

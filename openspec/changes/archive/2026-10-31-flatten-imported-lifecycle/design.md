@@ -178,9 +178,12 @@ it; the controller's existing plan identity check forces regeneration of stale p
 - **Operation-stream drift is no longer checked**: input identity and target container runtime
   IDs are verified before post-deploy/endpoint hooks, but those checks do not establish equivalence
   of the construction operations. Vendor e2e and conformance remain the evidence for behavior.
-- **Generated content grows the plan** (bytes that used to be produced in-Pod now persist) -> explicit
-  per-plan size bound, reuse of the existing bounded payload transfer path, and garbage collection of
-  superseded artifact objects alongside plan ConfigMaps.
+- **Generated content adds Kubernetes objects**: storage is per distinct content/attribute identity
+  and owning Node, with no deduplication across Nodes. A 200-Node lab with three distinct generated
+  artifacts per Node adds 600 Secrets. Immutable content, the 512 KiB/artifact and 4 MiB/plan byte
+  limits, and garbage collection bound retention but do not eliminate API traffic, informer cache
+  memory, watch events, or etcd pressure. Larger deployments may need bundled artifacts or an
+  external artifact store after measurement identifies the bottleneck.
 - **Sensitive generated files could leak into a ConfigMap** -> the plan artifact kind is chosen from
   the producing hook's declared sensitivity, and a test asserts certificate/key sources never render
   as ConfigMap payloads.
@@ -227,9 +230,9 @@ sidecar path, `make lint`, `make verify-generated` (plan schema/status), `make c
   content sensitive). Preparation reads them from the projected payload mount, verifies the digest,
   and stages them, so it has no registry, entropy, or evaluation path left.
 - Extended-attribute values cannot be reproduced from a digest, so a value travels with the
-  artifact and is stored beside its content (`xattr-<base64url name>`). Directory artifacts that
-  carry only metadata are supported the same way, with an identity derived from the attribute
-  digests rather than from content.
+  artifact and is stored beside its content (`xattr-<sha256 of name>`). Content identity includes
+  both the content digest and attribute names/digests. Directories and symlinks with extended
+  attributes use the same mechanism; entries without content or attributes need no object.
 - Resolver DNS is resolved once in the manager (`/etc/resolv.conf`) and rides the planning input as
   `ManagementInput.ResolverServers`. The completion applies only to package-visible configuration:
   container DNS policy still comes from the declared topology, captured before completion.
