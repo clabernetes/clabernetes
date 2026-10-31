@@ -111,7 +111,7 @@ func testPlannerPoolScale(t *testing.T, linked bool, batchSize int, standalone b
 		poolSetGlobalBatchSize(t, managerNamespace, batchSize)
 		// The manager reads the global rollout policy through its Config cache, so the patched
 		// policy is not necessarily active when the scale manifest is applied. Prove it is active
-		// with a warmed-up pair of Nodes first: admission is what the scale assertion below checks,
+		// with a warm-up Node first: admission is what the scale assertion below checks,
 		// and asserting it against a policy the manager has not observed is a setup race, not a
 		// product finding.
 		poolWarmGlobalAdmissionPolicy(t)
