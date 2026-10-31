@@ -60,6 +60,7 @@ type Reconciler struct {
 
 	// exposed for testing purposes
 	PlanConfigMapReconciler                 *PlanConfigMapReconciler
+	PlanArtifactReconciler                  *PlanArtifactReconciler
 	ConnectivityRevisionConfigMapReconciler *ConnectivityRevisionConfigMapReconciler
 	ServiceReconciler                       *ServiceReconciler
 	PersistentVolumeClaimReconciler         *PersistentVolumeClaimReconciler
@@ -72,8 +73,11 @@ type Reconciler struct {
 
 	// DirectRuntimeImage is the c9s manager image containing only the generic package adapter and
 	// helpers. DirectCompatibility is injectable so tests do not invent a kind inventory.
-	DirectRuntimeImage        string
-	DirectCompatibility       func() (clabernetesinternaldeviceplan.Compatibility, error)
+	DirectRuntimeImage  string
+	DirectCompatibility func() (clabernetesinternaldeviceplan.Compatibility, error)
+	// DirectResolverServers resolves the resolver set generated configuration completes against.
+	// It is injectable so tests do not depend on the executing host's resolv.conf.
+	DirectResolverServers     func() ([]string, error)
 	DirectPlatform            clabernetesinternalocimetadata.Platform
 	directInitializationError error
 }
@@ -98,6 +102,7 @@ func NewReconciler(
 			configManagerGetter,
 		),
 		PlanConfigMapReconciler: &PlanConfigMapReconciler{Client: client},
+		PlanArtifactReconciler:  &PlanArtifactReconciler{Client: client},
 		ConnectivityRevisionConfigMapReconciler: &ConnectivityRevisionConfigMapReconciler{
 			Client: client,
 		},

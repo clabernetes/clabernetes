@@ -2388,7 +2388,17 @@ func renderPayloadSources(
 	planned := map[string]clabernetesinternaldeviceplan.FilePlan{}
 
 	for _, file := range plan.Files {
-		if file.SourceKind != clabernetesinternaldeviceplan.FileSourcePayload {
+		// Generated plan artifacts are mounted exactly like declared payloads: the controller
+		// persists their bytes as digest-named objects, so the mounted source is the plan's
+		// content rather than something the Pod regenerates. Symbolic links and plain directories
+		// carry no object: preparation realizes them from plan metadata alone.
+		if file.SourceKind == clabernetesinternaldeviceplan.FileSourcePlanArtifact &&
+			(file.ArtifactKind == clabernetesinternaldeviceplan.ArtifactSymlink ||
+				clabernetesinternaldeviceplan.PlanArtifactIdentity(file) == "") {
+			continue
+		}
+		if file.SourceKind != clabernetesinternaldeviceplan.FileSourcePayload &&
+			file.SourceKind != clabernetesinternaldeviceplan.FileSourcePlanArtifact {
 			continue
 		}
 
@@ -2415,7 +2425,8 @@ func renderPayloadSources(
 
 		file, exists := planned[payload.ID]
 		if !exists || file.NodeID != payload.NodeID || file.Destination != payload.Destination ||
-			file.Mode != payload.Mode || file.Digest != payload.Digest {
+			file.Mode != payload.Mode ||
+			clabernetesinternaldeviceplan.PlanArtifactIdentity(file) != payload.Digest {
 			return nil, nil, fmt.Errorf(
 				"payload input %q differs from the accepted file plan",
 				payload.ID,
@@ -2443,18 +2454,33 @@ func renderPayloadSources(
 		// The non-root preparation helper must be able to read the source. It applies the
 		// requested destination mode when staging the verified artifact.
 		mode := int32(0o444)
-		item := k8scorev1.KeyToPath{Key: key, Path: "source", Mode: &mode}
+		items := []k8scorev1.KeyToPath{}
+		if file.ArtifactKind != clabernetesinternaldeviceplan.ArtifactDirectory {
+			items = append(items, k8scorev1.KeyToPath{Key: key, Path: "source", Mode: &mode})
+		}
+		if file.SourceKind == clabernetesinternaldeviceplan.FileSourcePlanArtifact {
+			// Generated artifacts carry their extended-attribute values beside the content so
+			// preparation applies them without an imported hook.
+			for _, attribute := range file.ExtendedAttributes {
+				attributeKey := clabernetesinternaldeviceplan.PlanArtifactAttributeKey(
+					attribute.Name,
+				)
+				items = append(items, k8scorev1.KeyToPath{
+					Key: attributeKey, Path: attributeKey, Mode: &mode,
+				})
+			}
+		}
 
 		volume := k8scorev1.Volume{Name: dnsName("payload", payload.ID)}
 		if payload.Kind == clabernetesinternaldeviceplan.PayloadConfigMap {
 			volume.ConfigMap = &k8scorev1.ConfigMapVolumeSource{
 				LocalObjectReference: k8scorev1.LocalObjectReference{Name: objectName},
-				Items:                []k8scorev1.KeyToPath{item},
+				Items:                items,
 			}
 		} else {
 			volume.Secret = &k8scorev1.SecretVolumeSource{
 				SecretName: objectName,
-				Items:      []k8scorev1.KeyToPath{item},
+				Items:      items,
 			}
 		}
 
@@ -2537,20 +2563,6 @@ func renderHelpers(
 			runtimeFlagReset,
 			nodeID+"="+options.DeviceStateResets[nodeID],
 		)
-	}
-
-	if options.CertificateSecretName != "" {
-		preparationMounts = append(preparationMounts, k8scorev1.VolumeMount{
-			Name: certificateVolumeName, MountPath: certificateRootPath, ReadOnly: true,
-		})
-		preparationArgs = append(preparationArgs, "--certificates", certificateRootPath)
-	}
-
-	if options.EntropySecretName != "" {
-		preparationMounts = append(preparationMounts, k8scorev1.VolumeMount{
-			Name: entropyVolumeName, MountPath: entropyRootPath, ReadOnly: true,
-		})
-		preparationArgs = append(preparationArgs, "--entropy", entropyRootPath)
 	}
 
 	if hasLifecycle {

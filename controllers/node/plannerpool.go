@@ -124,6 +124,13 @@ func (p *PlannerPool) run(
 		return frame, (workerOutputStore{Client: p.Client}).Persist(ctx, node, policy.Name,
 			plannerWorkerPlan, frame, sensitive)
 	}
+	if err = (&PlanArtifactReconciler{Client: p.Client}).Ensure(
+		ctx,
+		node,
+		result.Artifacts,
+	); err != nil {
+		return nil, err
+	}
 	if result.CertificateSecret != "" {
 		secret := &k8scorev1.Secret{}
 		key := ctrlruntimeclient.ObjectKey{

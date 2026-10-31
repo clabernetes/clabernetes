@@ -1,9 +1,26 @@
 package deviceplan
 
-import "encoding/json"
+import (
+	"encoding/base64"
+	"encoding/json"
+	"slices"
+	"strings"
+)
 
 // SchemaVersion identifies both normalized planning inputs and device plans.
-const SchemaVersion = "v1alpha1"
+//
+// v1alpha2 carries generated artifact bytes as plan-borne content: plans reference digest-named
+// artifacts that preparation stages directly instead of re-running imported generation.
+const SchemaVersion = "v1alpha2"
+
+// Generated artifact size bounds. One artifact becomes one digest-named Kubernetes object, so a
+// single artifact must fit object limits and the whole plan must stay bounded.
+const (
+	// MaxPlanArtifactBytes is the maximum size of one generated plan artifact.
+	MaxPlanArtifactBytes = 512 << 10
+	// MaxPlanArtifactsBytes is the maximum total size of a plan's generated artifacts.
+	MaxPlanArtifactsBytes = 4 << 20
+)
 
 // ErrorCode is a stable machine-readable planning failure class.
 type ErrorCode string
@@ -131,6 +148,11 @@ type ManagementInput struct {
 	IPv6Gateway   string `json:"ipv6Gateway,omitempty"`
 	//nolint:modernize // the accepted schema freezes this tag and its serialization.
 	DNS DNSConfig `json:"dns,omitempty"`
+	// ResolverServers is the controller-resolved resolver set that completes generated
+	// configuration whose topology declares no DNS. It never changes container DNS policy: it is
+	// applied to package-visible configuration only, exactly as containerlab fills node DNS from
+	// the host resolv.conf.
+	ResolverServers []string `json:"resolverServers,omitempty"`
 	// InboundPorts are additional controller-declared inbound destination ports (i.e. the
 	// auto-expose default set) translated to the Node's interposed management address when the
 	// port is not already claimed by a planned container port in the Pod.
@@ -308,11 +330,62 @@ type FileSourceKind string
 
 // Supported artifact sources.
 const (
-	FileSourcePayload     FileSourceKind = "Payload"
-	FileSourceGenerator   FileSourceKind = "Generator"
-	FileSourceCertificate FileSourceKind = "Certificate"
-	FileSourceEmpty       FileSourceKind = "Empty"
+	// FileSourcePayload is a declared payload the controller resolved from a Kubernetes object or
+	// URL and mounted beside the plan.
+	FileSourcePayload FileSourceKind = "Payload"
+	// FileSourcePlanArtifact is content generated during planning. Its bytes travel beside the plan
+	// as an ArtifactContent and are persisted as a digest-named object; preparation stages them
+	// without evaluating imported code.
+	FileSourcePlanArtifact FileSourceKind = "PlanArtifact"
+	// FileSourceEmpty is a planned placeholder with no content.
+	FileSourceEmpty FileSourceKind = "Empty"
 )
+
+// ArtifactContent is the byte payload of one generated plan artifact. The plan document stays
+// identity-only, so bytes travel beside it and are persisted as a digest-named object. Directory
+// and symbolic-link artifacts carry no bytes.
+type ArtifactContent struct {
+	NodeID       string `json:"nodeID"`
+	ArtifactPath string `json:"artifactPath"`
+	Digest       string `json:"digest"`
+	Sensitive    bool   `json:"sensitive,omitempty"`
+	Data         []byte `json:"data"`
+	// ExtendedAttributes carries the values the plan records only as digests, so preparation can
+	// apply them without re-running the emitting hook.
+	ExtendedAttributes []ArtifactExtendedAttribute `json:"extendedAttributes,omitempty"`
+}
+
+// ArtifactExtendedAttribute is one generated extended-attribute value. The plan records its name
+// and digest; the value travels with the artifact content.
+type ArtifactExtendedAttribute struct {
+	Name  string `json:"name"`
+	Value []byte `json:"value"`
+}
+
+// PlanArtifactContentKey is the artifact-object data key that holds generated content.
+const PlanArtifactContentKey = "content"
+
+// PlanArtifactIdentity returns the stable content identity of one generated artifact. Regular
+// artifacts use their content digest; a directory artifact is identified by its extended-attribute
+// metadata, which is the only content it can carry.
+func PlanArtifactIdentity(file FilePlan) string {
+	if file.ArtifactKind != ArtifactDirectory || len(file.ExtendedAttributes) == 0 {
+		return file.Digest
+	}
+	attributes := make([]string, 0, len(file.ExtendedAttributes))
+	for _, attribute := range file.ExtendedAttributes {
+		attributes = append(attributes, attribute.Name+"\x00"+attribute.Digest)
+	}
+	slices.Sort(attributes)
+
+	return Digest([]byte(strings.Join(attributes, "\x00")))
+}
+
+// PlanArtifactAttributeKey returns the artifact-object data key that holds one extended-attribute
+// value. The name is encoded so any attribute name maps to a valid Kubernetes object key.
+func PlanArtifactAttributeKey(name string) string {
+	return "xattr-" + base64.RawURLEncoding.EncodeToString([]byte(name))
+}
 
 // ArtifactKind distinguishes generic filesystem entries emitted by imported preparation.
 type ArtifactKind string
@@ -563,6 +636,11 @@ type ManagementPlan struct {
 	Routes            []Route                     `json:"routes,omitempty"`
 	//nolint:modernize // the accepted schema freezes this tag and its serialization.
 	DNS DNSConfig `json:"dns,omitempty"`
+	// ResolverServers is the controller-resolved resolver set that completes generated
+	// configuration whose topology declares no DNS. It never changes container DNS policy: it is
+	// applied to package-visible configuration only, exactly as containerlab fills node DNS from
+	// the host resolv.conf.
+	ResolverServers []string `json:"resolverServers,omitempty"`
 	// Interposition is the sidecar interposition contract; it is present exactly when
 	// InterfaceSelector is Interposed.
 	Interposition *ManagementInterposition `json:"interposition,omitempty"`

@@ -7,7 +7,7 @@ import (
 	clabtypes "github.com/srl-labs/containerlab/types"
 )
 
-func TestCompleteRuntimeManagementRehydratesInterfaceAndDNSOnly(t *testing.T) {
+func TestCompleteManagementInterfacesRestoresPackageDefaultOnly(t *testing.T) {
 	t.Parallel()
 
 	plans := []ManagementPlan{
@@ -16,37 +16,44 @@ func TestCompleteRuntimeManagementRehydratesInterfaceAndDNSOnly(t *testing.T) {
 	}
 	explicit := []ManagementInput{{NodeID: "node-a", IPv4: "192.0.2.10/24"}}
 
-	completed := completeRuntimeManagement(explicit, plans, []string{"10.96.0.10"})
+	completed := completeManagementInterfaces(explicit, plans)
 
 	want := []ManagementInput{
-		{
-			NodeID:        "node-a",
-			InterfaceName: "pkg-mgmt0",
-			IPv4:          "192.0.2.10/24",
-			DNS:           DNSConfig{Servers: []string{"10.96.0.10"}},
-		},
+		{NodeID: "node-a", InterfaceName: "pkg-mgmt0", IPv4: "192.0.2.10/24"},
 	}
 	if !reflect.DeepEqual(completed, want) {
 		t.Fatalf("completed management = %#v, want %#v", completed, want)
 	}
 
-	// Nodes the controller left without an input never receive a synthesized identity: the
-	// allocation boundary is the controller, and planning fails closed instead.
+	// Nodes the controller left without an input never receive a synthesized identity, and no
+	// resolver value is invented at rehydration time.
 	if len(completed) != len(explicit) {
-		t.Fatalf("runtime completion synthesized identities: %#v", completed)
+		t.Fatalf("completion synthesized identities: %#v", completed)
+	}
+	if len(completed[0].ResolverServers) != 0 || len(completed[0].DNS.Servers) != 0 {
+		t.Fatalf("completion invented resolver configuration: %#v", completed[0])
 	}
 }
 
-func TestCompleteRuntimeManagementPreservesControllerDNS(t *testing.T) {
+func TestApplyResolverServersCompletesPackageConfigurationOnly(t *testing.T) {
 	t.Parallel()
 
-	explicit := []ManagementInput{
-		{NodeID: "node-a", IPv4: "192.0.2.10/24", DNS: DNSConfig{Servers: []string{"192.0.2.53"}}},
+	declared := &clabtypes.NodeConfig{DNS: &clabtypes.DNSConfig{Servers: []string{"192.0.2.53"}}}
+	applyResolverServers(declared, []string{"10.96.0.10"})
+	if !reflect.DeepEqual(declared.DNS.Servers, []string{"192.0.2.53"}) {
+		t.Fatalf("declared resolver configuration was overwritten: %#v", declared.DNS)
 	}
 
-	completed := completeRuntimeManagement(explicit, nil, []string{"10.96.0.10"})
-	if !reflect.DeepEqual(completed[0].DNS.Servers, []string{"192.0.2.53"}) {
-		t.Fatalf("controller DNS was overwritten: %#v", completed[0].DNS)
+	empty := &clabtypes.NodeConfig{}
+	applyResolverServers(empty, []string{"10.96.0.10"})
+	if !reflect.DeepEqual(empty.DNS.Servers, []string{"10.96.0.10"}) {
+		t.Fatalf("resolver completion was not applied: %#v", empty.DNS)
+	}
+
+	member := &clabtypes.NodeConfig{NetworkMode: "container:owner"}
+	applyResolverServers(member, []string{"10.96.0.10"})
+	if member.DNS != nil {
+		t.Fatalf("container-network-mode member received its own resolver: %#v", member.DNS)
 	}
 }
 

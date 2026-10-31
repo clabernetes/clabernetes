@@ -3,6 +3,7 @@ package node //nolint:testpackage // tests exercise the controller's cold-artifa
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -207,6 +208,7 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 		desiredInput,
 		desiredPlan,
 		directConnectivityRenderOptions(node),
+		desiredInput.Payloads,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -240,6 +242,7 @@ func TestDirectLiveConnectivityRevisionRetainsOnlyUnchangedDeploymentPolicy(t *t
 		desiredInput,
 		desiredPlan,
 		changedPolicy,
+		desiredInput.Payloads,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -364,6 +367,7 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 		desiredInput,
 		desiredPlan,
 		directConnectivityRenderOptions(node),
+		desiredInput.Payloads,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -527,4 +531,125 @@ func mustCanonicalInput(t *testing.T, input clabernetesinternaldeviceplan.Input)
 	}
 
 	return raw
+}
+
+// TestDirectLiveConnectivityRendersTheColdPlansArtifacts proves a retained Pod is compared against
+// the artifacts it is actually mounted with. An interface change regenerates package configuration,
+// so the desired plan's artifact digests differ from the running Pod's; using them for the cold
+// comparison would silently force a rollout instead of a live update.
+func TestDirectLiveConnectivityRendersTheColdPlansArtifacts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	node := planInputTestNode("router", "node-uid-a", "package-kind", "example/device:1")
+	baseInput, basePlan := directConnectivityTestPlan(t, node)
+	desiredInput, desiredPlan := directConnectivityTestPlan(t, node)
+	addDirectConnectivityTestLoopback(
+		t,
+		&desiredInput,
+		&desiredPlan,
+		clabernetesinternaldeviceplan.LinkApplyLive,
+	)
+
+	addArtifact := func(plan *clabernetesinternaldeviceplan.Plan, content string) string {
+		digest := clabernetesinternaldeviceplan.Digest([]byte(content))
+		plan.Files = append(plan.Files, clabernetesinternaldeviceplan.FilePlan{
+			ID: "generated/topology", NodeID: plan.Nodes[0].ID,
+			SourceKind:      clabernetesinternaldeviceplan.FileSourcePlanArtifact,
+			ArtifactKind:    clabernetesinternaldeviceplan.ArtifactRegular,
+			SourceReference: "generated/topology", ArtifactPath: "generated/topology.yml",
+			Digest: digest, Mode: 0o644, Sensitive: true,
+		})
+		plan.Actions = append(plan.Actions, clabernetesinternaldeviceplan.Action{
+			ID:     "prepare/generated-topology",
+			Phase:  clabernetesinternaldeviceplan.PhasePrepare,
+			Target: clabernetesinternaldeviceplan.ActionTarget{NodeID: plan.Nodes[0].ID},
+			Kind:   clabernetesinternaldeviceplan.ActionFile,
+			File:   &clabernetesinternaldeviceplan.FileAction{FileID: "generated/topology"},
+		})
+
+		return digest
+	}
+	addArtifact(&basePlan, "cold topology\n")
+	addArtifact(&desiredPlan, "rewired topology\n")
+
+	scheme := planTestScheme(t)
+	if err := k8sappsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(node).Build()
+	planConfigMap, _, err := (&PlanConfigMapReconciler{Client: client}).Ensure(
+		ctx,
+		node,
+		PlanArtifact{
+			Plan:             mustCanonicalPlan(t, basePlan),
+			NormalizedInputs: mustCanonicalInput(t, baseInput),
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputConfigMap, _, err := (&PlannerInputConfigMapReconciler{Client: client}).Ensure(
+		ctx, node, PlannerInputArtifact{CanonicalInput: mustCanonicalInput(t, baseInput)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseRevision, err := clabernetesinternaldirectruntime.NewConnectivityRevision(
+		baseInput, basePlan, baseInput, basePlan,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisionConfigMap, err := (&ConnectivityRevisionConfigMapReconciler{Client: client}).Ensure(
+		ctx, node, baseRevision,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	declaredPayloads := []clabernetesinternaldeviceplan.PayloadInput{}
+	coldPayloads, err := PlanArtifactReferences(node, basePlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	desiredPayloads, err := PlanArtifactReferences(node, desiredPlan)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	options := directConnectivityRenderOptions(node)
+	options.PlanConfigMapName = planConfigMap.GetName()
+	options.InputConfigMapName = inputConfigMap.GetName()
+	options.ConnectivityRevisionConfigMapName = revisionConfigMap.GetName()
+	options.Payloads = append(slices.Clone(declaredPayloads), coldPayloads...)
+
+	existing, err := clabernetesinternaldirectpod.Render(basePlan, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = client.Create(ctx, existing); err != nil {
+		t.Fatal(err)
+	}
+
+	desiredOptions := options
+	desiredOptions.Payloads = append(slices.Clone(declaredPayloads), desiredPayloads...)
+
+	reconciler := &Reconciler{Client: client}
+	decision, err := reconciler.directConnectivityRevision(
+		ctx,
+		node,
+		existing,
+		desiredInput,
+		desiredPlan,
+		desiredOptions,
+		declaredPayloads,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decision.RetainPod {
+		t.Fatalf("live transition rolled the Pod: %#v", decision)
+	}
 }

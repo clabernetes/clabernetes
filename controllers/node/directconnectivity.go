@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
@@ -70,6 +71,7 @@ func (r *Reconciler) directConnectivityRevision(
 	desiredInput clabernetesinternaldeviceplan.Input,
 	desiredPlan clabernetesinternaldeviceplan.Plan,
 	options clabernetesinternaldirectpod.Options,
+	declaredPayloads []clabernetesinternaldeviceplan.PayloadInput,
 ) (directConnectivityDecision, error) {
 	// A stopped workload has no Pod to apply a Link change to live. Always render it cold from
 	// the current plan, so starting it again boots exactly that plan.
@@ -139,7 +141,16 @@ func (r *Reconciler) directConnectivityRevision(
 	options.InputConfigMapName = cold.References.InputConfigMapName
 	options.ConnectivityRevisionConfigMapName = cold.References.ConnectivityRevisionConfigMapName
 
-	coldRendered, err := clabernetesinternaldirectpod.Render(cold.Plan, options)
+	// The running Pod is mounted with the accepted plan's artifacts, not the desired plan's: an
+	// interface change can regenerate package configuration, so the cold comparison must use the
+	// cold plan's own digest-named sources.
+	coldArtifacts, err := PlanArtifactReferences(node, cold.Plan)
+	if err != nil {
+		return directConnectivityDecision{}, err
+	}
+	coldOptions := options
+	coldOptions.Payloads = append(slices.Clone(declaredPayloads), coldArtifacts...)
+	coldRendered, err := clabernetesinternaldirectpod.Render(cold.Plan, coldOptions)
 	if err != nil || !directDeploymentConforms(existing, coldRendered) {
 		return directConnectivityDecision{}, nil //nolint:nilerr // an unrenderable cold plan deliberately falls back to the recreate path.
 	}

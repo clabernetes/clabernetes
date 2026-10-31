@@ -2343,8 +2343,7 @@ func ValidatePlanCapabilities(plan clabernetesinternaldeviceplan.Plan) error {
 
 	files := make(map[string]clabernetesinternaldeviceplan.FilePlan, len(normalized.Files))
 	for _, file := range normalized.Files {
-		if file.SourceKind != clabernetesinternaldeviceplan.FileSourceGenerator &&
-			file.SourceKind != clabernetesinternaldeviceplan.FileSourceCertificate &&
+		if file.SourceKind != clabernetesinternaldeviceplan.FileSourcePlanArtifact &&
 			file.SourceKind != clabernetesinternaldeviceplan.FileSourcePayload {
 			return fmt.Errorf("direct file source %q is not yet implemented", file.SourceKind)
 		}

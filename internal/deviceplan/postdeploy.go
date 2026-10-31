@@ -48,10 +48,9 @@ func (a Adapter) RunPostDeploy(
 	if err = ValidatePlanInputIdentity(normalizedInput, normalizedPlan); err != nil {
 		return err
 	}
-	normalizedInput.Management = completeRuntimeManagement(
+	normalizedInput.Management = completeManagementInterfaces(
 		normalizedInput.Management,
 		normalizedPlan.Management,
-		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
@@ -202,10 +201,9 @@ func (a Adapter) RunDeployEndpoints(
 	if err = ValidatePlanInputIdentity(normalizedInput, normalizedPlan); err != nil {
 		return err
 	}
-	normalizedInput.Management = completeRuntimeManagement(
+	normalizedInput.Management = completeManagementInterfaces(
 		normalizedInput.Management,
 		normalizedPlan.Management,
-		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
@@ -328,7 +326,6 @@ func (a Adapter) rehydrateImportedDeployment(
 		normalizedInput.Images,
 		managementForNode(normalizedInput.Management, targetNode.ID),
 		filepath.Join(workspace, "runtime-replay"),
-		LoadRuntimeArtifactDigests(artifactRoot, targetNode.ID),
 	)
 
 	registry := a.Registry
@@ -575,10 +572,6 @@ type importedDeploymentReplayRuntime struct {
 	recorder   *recordingRuntime
 	replayRoot string
 	liveActive bool
-	// runtimeArtifactDigests are the preparation-recorded digests of generator files rendered
-	// with the Pod's runtime management identity; the replay renders with the same identity, so
-	// these are accepted wherever the plan digest is.
-	runtimeArtifactDigests map[string]string
 }
 
 func newImportedDeploymentReplayRuntime(
@@ -586,16 +579,14 @@ func newImportedDeploymentReplayRuntime(
 	images []ImageInput,
 	management *ManagementInput,
 	replayRoot string,
-	runtimeArtifactDigests map[string]string,
 ) *importedDeploymentReplayRuntime {
 	recorder := newRecordingRuntime(images, management, replayRoot)
 
 	return &importedDeploymentReplayRuntime{
-		ContainerRuntime:       recorder,
-		live:                   live,
-		recorder:               recorder,
-		replayRoot:             replayRoot,
-		runtimeArtifactDigests: runtimeArtifactDigests,
+		ContainerRuntime: recorder,
+		live:             live,
+		recorder:         recorder,
+		replayRoot:       replayRoot,
 	}
 }
 
@@ -620,7 +611,6 @@ func (r *importedDeploymentReplayRuntime) completeDeployment(
 		plan,
 		node,
 		target,
-		r.runtimeArtifactDigests,
 	); err != nil {
 		return err
 	}
@@ -678,19 +668,6 @@ type replayedDeploymentOperation struct {
 	destination string
 	writeMode   FileWriteMode
 	digest      string
-	// alternateDigest is the preparation-recorded runtime-management render of the same
-	// generator file; a replay performed with the runtime identity legitimately produces it.
-	alternateDigest string
-}
-
-// runtimeGeneratorDigest returns the runtime-rendered digest accepted for a prepared artifact,
-// or empty for every other file source.
-func runtimeGeneratorDigest(file FilePlan, runtimeArtifactDigests map[string]string) string {
-	if file.SourceKind != FileSourceGenerator && file.SourceKind != FileSourceCertificate {
-		return ""
-	}
-
-	return runtimeArtifactDigests[file.ArtifactPath]
 }
 
 func verifyReplayedDeploymentOperations(
@@ -699,7 +676,6 @@ func verifyReplayedDeploymentOperations(
 	plan Plan,
 	node NodePlan,
 	target ContainerPlan,
-	runtimeArtifactDigests map[string]string,
 ) error {
 	postDeployOrder := -1
 	for _, action := range plan.Actions {
@@ -750,7 +726,6 @@ func verifyReplayedDeploymentOperations(
 			operation.destination = action.File.Destination
 			operation.writeMode = action.File.WriteMode
 			operation.digest = file.Digest
-			operation.alternateDigest = runtimeGeneratorDigest(file, runtimeArtifactDigests)
 		case ActionWriteStdin:
 			if action.WriteStdin == nil {
 				return deploymentReplayError(node.ID, "stdin payload is incomplete")
@@ -760,7 +735,6 @@ func verifyReplayedDeploymentOperations(
 				return deploymentReplayError(node.ID, "stdin source is absent from the plan")
 			}
 			operation.digest = file.Digest
-			operation.alternateDigest = runtimeGeneratorDigest(file, runtimeArtifactDigests)
 		default:
 			return deploymentReplayError(node.ID, "operation kind differs from the accepted plan")
 		}
@@ -846,9 +820,7 @@ func sameReplayedDeploymentOperation(
 			return false
 		}
 
-		return left.digest == right.digest ||
-			left.digest == right.alternateDigest ||
-			right.digest == left.alternateDigest
+		return left.digest == right.digest
 	}
 
 	return true
