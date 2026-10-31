@@ -41,6 +41,91 @@ func testNodeProfile(
 	return profile
 }
 
+func TestResolveProfileNetworkIsolation(t *testing.T) {
+	t.Parallel()
+
+	ixiaNode := func() *clabernetesapisv1alpha1.Node {
+		node := testProfileNode("ixia", nil)
+		node.Spec.Kind = "keysight_ixia-c-one"
+
+		return node
+	}
+	linuxNode := func() *clabernetesapisv1alpha1.Node {
+		node := testProfileNode("linux", nil)
+		node.Spec.Kind = "linux"
+
+		return node
+	}
+	enabled := true
+	disabled := false
+	profileWithIsolation := func(value *bool) *clabernetesapisv1alpha1.NodeProfile {
+		return testNodeProfile("isolation", func(spec *clabernetesapisv1alpha1.NodeProfileSpec) {
+			spec.Deployment = &clabernetesapisv1alpha1.NodeProfileDeployment{
+				NetworkIsolation: value,
+			}
+		})
+	}
+
+	tests := []struct {
+		name     string
+		node     *clabernetesapisv1alpha1.Node
+		profile  *clabernetesapisv1alpha1.NodeProfile
+		expected bool
+	}{
+		{
+			name:     "ixia kind without profile defaults to enabled",
+			node:     ixiaNode(),
+			expected: true,
+		},
+		{
+			name:     "ixia kind with omitted profile value defaults to enabled",
+			node:     ixiaNode(),
+			profile:  profileWithIsolation(nil),
+			expected: true,
+		},
+		{
+			name:     "explicit false overrides ixia default",
+			node:     ixiaNode(),
+			profile:  profileWithIsolation(&disabled),
+			expected: false,
+		},
+		{
+			name:     "linux kind defaults to disabled",
+			node:     linuxNode(),
+			expected: false,
+		},
+		{
+			name:     "explicit true applies to any kind",
+			node:     linuxNode(),
+			profile:  profileWithIsolation(&enabled),
+			expected: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			resolved, err := clabernetescontrollersnode.ResolveProfile(
+				test.node,
+				test.profile,
+				clabernetesconfig.GetFakeManager,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if resolved.NetworkIsolation != test.expected {
+				t.Fatalf(
+					"network isolation = %t, want %t",
+					resolved.NetworkIsolation,
+					test.expected,
+				)
+			}
+		})
+	}
+}
+
 func TestResolveProfileDefaults(t *testing.T) {
 	resolved, err := clabernetescontrollersnode.ResolveProfile(
 		testProfileNode("srl1", nil),

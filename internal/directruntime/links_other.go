@@ -9,7 +9,14 @@ import (
 
 type unsupportedLinkOperations struct{}
 
-func newLinkOperations(EndpointNamespace) LinkOperations {
+func newLinkOperations(networkNamespace EndpointNamespace) LinkOperations {
+	return newLinkOperationsWithDeviceNetns(networkNamespace, nil)
+}
+
+func newLinkOperationsWithDeviceNetns(
+	EndpointNamespace,
+	*deviceNetworkNamespace,
+) LinkOperations {
 	return unsupportedLinkOperations{}
 }
 

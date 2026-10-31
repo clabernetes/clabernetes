@@ -38,6 +38,14 @@ func (unsupportedLaunchOperations) Hostname() (string, error) {
 	return "", fmt.Errorf("application container hostnames require Linux")
 }
 
+func (unsupportedLaunchOperations) EnterDeviceNetns(path string) error {
+	if path == "" {
+		return nil
+	}
+
+	return fmt.Errorf("private device network namespaces require Linux")
+}
+
 func (unsupportedLaunchOperations) LimitOpenFiles(uint64) error {
 	return fmt.Errorf("open-file limits require Linux")
 }

@@ -26,9 +26,10 @@ type peerAddressResolver interface {
 }
 
 type netlinkOperations struct {
-	resolver  peerAddressResolver
-	namespace EndpointNamespace
-	neighbors *meshNeighborInventory
+	resolver    peerAddressResolver
+	namespace   EndpointNamespace
+	neighbors   *meshNeighborInventory
+	deviceNetns *deviceNetworkNamespace
 }
 
 const vethLinkType = "veth"
@@ -38,6 +39,13 @@ const managementAddressReadyTimeout = 5 * time.Second
 var errVethOwnership = errors.New("veth ownership invariant failed")
 
 func newLinkOperations(networkNamespace EndpointNamespace) LinkOperations {
+	return newLinkOperationsWithDeviceNetns(networkNamespace, nil)
+}
+
+func newLinkOperationsWithDeviceNetns(
+	networkNamespace EndpointNamespace,
+	deviceNetns *deviceNetworkNamespace,
+) LinkOperations {
 	resolver := peerAddressResolver(net.DefaultResolver)
 	if networkNamespace != nil {
 		resolver = &net.Resolver{
@@ -47,24 +55,35 @@ func newLinkOperations(networkNamespace EndpointNamespace) LinkOperations {
 	}
 
 	return netlinkOperations{
-		resolver:  resolver,
-		namespace: networkNamespace,
-		neighbors: newMeshNeighborInventory(),
+		resolver:    resolver,
+		namespace:   networkNamespace,
+		neighbors:   newMeshNeighborInventory(),
+		deviceNetns: deviceNetns,
 	}
 }
 
 func (o netlinkOperations) Close() error {
-	return o.neighbors.close()
+	return errors.Join(o.neighbors.close(), o.deviceNetns.Close())
 }
 
-func (netlinkOperations) EnsureSysctl(name, value string) error {
+func (o netlinkOperations) EnsureSysctl(name, value string) error {
 	if !validLinuxSysctlName(name) {
 		return errors.New("sysctl name is invalid")
 	}
 
-	parts := strings.Split(name, ".")
+	if o.deviceNetns != nil {
+		// Package settings are device intent: under isolation the only consumer lives in the
+		// private namespace, so the write must land there and not in the Pod namespace.
+		return o.deviceNetns.applySysctl(name, value)
+	}
 
-	path := filepath.Join(append([]string{"/proc/sys"}, parts...)...)
+	return writeNetSysctl(name, value)
+}
+
+// writeNetSysctl applies one already validated setting in the calling thread's network
+// namespace.
+func writeNetSysctl(name, value string) error {
+	path := netSysctlPath(name)
 
 	// Re-assertion is the common case; a write costs a kernel round trip the read avoids.
 	if current, err := os.ReadFile(path); err == nil && //nolint:gosec // fixed sysctl tree.
@@ -77,6 +96,11 @@ func (netlinkOperations) EnsureSysctl(name, value string) error {
 	}
 
 	return nil
+}
+
+// netSysctlPath maps a validated dotted sysctl name onto its procfs file.
+func netSysctlPath(name string) string {
+	return filepath.Join(append([]string{"/proc/sys"}, strings.Split(name, ".")...)...)
 }
 
 func (netlinkOperations) ListVethInterfaces(ownerPrefix string) ([]VethInterface, error) {

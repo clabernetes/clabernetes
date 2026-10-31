@@ -1,0 +1,26 @@
+---
+apiVersion: c9s.run/v1alpha1
+kind: NodeProfile
+metadata:
+  name: ixia-pull
+spec:
+  expose:
+    disableAutoExpose: true
+  imagePull:
+    pullSecrets:
+      - ixia-regcred
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: ixia-c-one
+spec:
+  kind: keysight_ixia-c-one
+  image: ghcr.io/open-traffic-generator/ixia-c-one:1.61.0-9
+  privileged: true
+  # A plan-declared network sysctl is device intent: under isolation it must reach the private
+  # device namespace, whose fresh default for this key is the kernel-wide value.
+  sysctls:
+    net.ipv4.ip_default_ttl: "42"
+  profileRef:
+    name: ixia-pull
