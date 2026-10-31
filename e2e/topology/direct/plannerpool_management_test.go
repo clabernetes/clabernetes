@@ -3,6 +3,7 @@ package direct_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -89,11 +90,7 @@ func poolMixedConfigureSRSimDNS(t *testing.T, namespace string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := strings.TrimSpace(string(poolKubectl(t, "get", "service", "kube-dns",
-		"-n", "kube-system", "-o", "jsonpath={.spec.clusterIP}")))
-	if address, parseErr := netip.ParseAddr(server); parseErr != nil || !address.Is4() {
-		t.Fatalf("mixed-vendor DNS test needs an IPv4 cluster DNS Service: %q", server)
-	}
+	server := clusterDNSServiceIP(t)
 	command := strings.NewReplacer(
 		"__DNS_SERVER__", server,
 		"__DNS_DOMAIN__", namespace+".svc.cluster.local",
@@ -269,4 +266,45 @@ func poolMixedConfigureAddedNodePort(t *testing.T, namespace string) {
 			`set / interface ethernet-1/6 subinterface 0 ipv4 address 10.210.14.1/30\n` +
 			`set / network-instance default interface ethernet-1/6.0\ncommit now\nquit\n' | sr_cli`,
 	}, "committed")
+}
+
+// clusterDNSServiceIP returns the cluster DNS Service address. Clusters name that Service
+// differently (KinD publishes kube-dns, managed distributions publish coredns), so the selector
+// asks for the well-known labels and only falls back to the conventional name.
+func clusterDNSServiceIP(t *testing.T) string {
+	t.Helper()
+
+	queries := [][]string{
+		{
+			"get", "service", "-n", "kube-system", "-l", "k8s-app=kube-dns",
+			"-o", "jsonpath={.items[0].spec.clusterIP}",
+		},
+		{
+			"get", "service", "-n", "kube-system", "-l", "k8s-app=coredns",
+			"-o", "jsonpath={.items[0].spec.clusterIP}",
+		},
+		{
+			"get", "service", "kube-dns", "-n", "kube-system",
+			"-o", "jsonpath={.spec.clusterIP}",
+		},
+	}
+	var diagnostics strings.Builder
+	for _, query := range queries {
+		cmd := exec.CommandContext(t.Context(), "kubectl", query...) //nolint:gosec // fixed query.
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Fprintf(&diagnostics, "%v: %v: %s; ", query, err, output)
+
+			continue
+		}
+		if server := strings.TrimSpace(string(output)); server != "" {
+			if address, parseErr := netip.ParseAddr(server); parseErr == nil && address.Is4() {
+				return server
+			}
+		}
+	}
+
+	t.Fatalf("mixed-vendor DNS test needs an IPv4 cluster DNS Service: %s", diagnostics.String())
+
+	return ""
 }
