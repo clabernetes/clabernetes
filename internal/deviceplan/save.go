@@ -46,10 +46,9 @@ func (a Adapter) RunSave(
 		return err
 	}
 
-	normalizedInput.Management = completeRuntimeManagement(
+	normalizedInput.Management = completeManagementInterfaces(
 		normalizedInput.Management,
 		normalizedPlan.Management,
-		a.PodDNSServers,
 	)
 
 	finishEntropy, err := a.beginEntropy(normalizedInput)
@@ -106,7 +105,12 @@ func (a Adapter) RunSave(
 
 	config.Index = nodeIndex
 
-	config.LabDir = targetLabDir
+	workspace, err := os.MkdirTemp("", "clabernetes-save-")
+	if err != nil {
+		return fmt.Errorf("creating save workspace: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(workspace) }()
+	config.LabDir = workspace
 	if err = materializeEmbeddedStartupConfig(targetInput.ID, config); err != nil {
 		return err
 	}
@@ -148,6 +152,9 @@ func (a Adapter) RunSave(
 	if err = importedRuntimeBoundaryFailure(runtime, targetInput.ID); err != nil {
 		return err
 	}
+
+	// Initialization may generate files; only the live save hook may write device state.
+	rewriteWorkspacePaths(implementation.Config(), workspace, targetLabDir)
 
 	var result *clabnodes.SaveConfigResult
 

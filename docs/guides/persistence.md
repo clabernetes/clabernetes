@@ -104,10 +104,11 @@ spec:
 
 The PVC backs the node's plan-owned artifact volume: the generated startup configuration and
 every directory the imported kind mounts from its lab directory, including files the device
-itself writes there, such as its saved configuration.
+itself writes there, such as its saved configuration. Generated content is plan-borne, so the
+bytes that reach the volume are the ones planning accepted rather than a boot-time re-render.
 
-On every Pod start, preparation regenerates and verifies the planned artifacts, then decides
-per file what to publish:
+On every Pod start, preparation verifies the plan's staged content and then decides per file
+what to publish:
 
 - **A file the device has modified since it was last staged is left in place.** Saving your
   configuration on the node (for example `tools system configuration save` on SR Linux) makes

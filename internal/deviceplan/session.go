@@ -18,10 +18,12 @@ import (
 
 const (
 	// SessionProtocolVersion identifies the full-duplex planner protocol.
-	SessionProtocolVersion  = "v1alpha1"
-	sessionFramePrefix      = "C9S_DEVICE_SESSION_V1:"
-	sessionCachePrefix      = "C9S_DEVICE_SESSION_CACHE_V1:"
-	defaultMaxSessionBytes  = 8 << 20
+	SessionProtocolVersion = "v1alpha1"
+	sessionFramePrefix     = "C9S_DEVICE_SESSION_V1:"
+	sessionCachePrefix     = "C9S_DEVICE_SESSION_CACHE_V1:"
+	// MaxSessionFrameBytes includes bounded input, plan, and artifact content, plus JSON and
+	// base64 framing. Artifact []byte fields are also base64-encoded inside the JSON.
+	MaxSessionFrameBytes    = 16 << 20
 	defaultMaxSessionRounds = 8
 	sessionScannerBuffer    = 64 << 10
 	sessionDirectoryMode    = 0o700
@@ -60,10 +62,13 @@ type SessionFrame struct {
 
 // SessionResult is the complete cacheable outcome of one planner conversation.
 type SessionResult struct {
-	SessionDigest     string                   `json:"-"`
-	TerminalDigest    string                   `json:"-"`
-	Input             Input                    `json:"input"`
-	Plan              Plan                     `json:"plan"`
+	SessionDigest  string `json:"-"`
+	TerminalDigest string `json:"-"`
+	Input          Input  `json:"input"`
+	Plan           Plan   `json:"plan"`
+	// Artifacts carries the bytes of the plan's generated artifacts. They travel beside the plan
+	// and are persisted as digest-named objects, so the compact cached result omits them.
+	Artifacts         []ArtifactContent        `json:"artifacts,omitempty"`
 	Certificates      []CertificateRequirement `json:"certificates,omitempty"`
 	CertificateSecret string                   `json:"certificateSecret,omitempty"`
 }
@@ -292,6 +297,10 @@ func DecodeSessionResult(raw []byte, maxBytes int) (SessionResult, error) {
 			nil,
 		)
 	}
+	artifacts, err := NormalizeSessionArtifacts(normalizedPlan, frame.Result.Artifacts)
+	if err != nil {
+		return SessionResult{}, err
+	}
 	terminalDigest, err := SessionTerminalDigest(frame)
 	if err != nil {
 		return SessionResult{}, err
@@ -300,7 +309,8 @@ func DecodeSessionResult(raw []byte, maxBytes int) (SessionResult, error) {
 	return SessionResult{
 		SessionDigest:  frame.SessionDigest,
 		TerminalDigest: terminalDigest,
-		Input:          normalizedInput, Plan: normalizedPlan, Certificates: certificates,
+		Input:          normalizedInput, Plan: normalizedPlan, Artifacts: artifacts,
+		Certificates:      certificates,
 		CertificateSecret: frame.Result.CertificateSecret,
 	}, nil
 }
@@ -314,7 +324,7 @@ type SessionFrameDecoder struct {
 // NewSessionFrameDecoder returns a bounded decoder for an attached worker stream.
 func NewSessionFrameDecoder(input io.Reader, maxBytes int) *SessionFrameDecoder {
 	if maxBytes == 0 {
-		maxBytes = defaultMaxSessionBytes
+		maxBytes = MaxSessionFrameBytes
 	}
 	scanner := bufio.NewScanner(input)
 	scanner.Buffer(make([]byte, sessionScannerBuffer), maxBytes)
@@ -333,7 +343,7 @@ func (d *SessionFrameDecoder) Next() (SessionFrame, error) {
 	for d.scanner.Scan() {
 		line := d.scanner.Text()
 		if FrameKind([]byte(line)) == WorkerFrameError {
-			diagnostic, err := DecodeWorkerError([]byte(line), defaultMaxSessionBytes)
+			diagnostic, err := DecodeWorkerError([]byte(line), MaxSessionFrameBytes)
 			if err != nil {
 				return SessionFrame{}, err
 			}
@@ -583,7 +593,7 @@ func (w SessionWorker) Run(ctx context.Context) (runErr error) {
 
 			continue
 		}
-		plan, planErr := w.Adapter.Plan(ctx, current)
+		plan, artifacts, planErr := w.Adapter.PlanArtifacts(ctx, current)
 		if planErr != nil {
 			return planErr
 		}
@@ -592,7 +602,8 @@ func (w SessionWorker) Run(ctx context.Context) (runErr error) {
 			Version: SessionProtocolVersion, Type: SessionFrameResult,
 			SessionDigest: initialDigest, Sequence: sequence,
 			Result: &SessionResult{
-				Input: current, Plan: *plan, Certificates: certificateRequirements,
+				Input: current, Plan: *plan, Artifacts: artifacts,
+				Certificates:      certificateRequirements,
 				CertificateSecret: certificateSecret,
 			},
 		})

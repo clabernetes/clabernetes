@@ -14,6 +14,10 @@ func TestWorkerProducesOnlyCanonicalPlan(t *testing.T) {
 	t.Parallel()
 
 	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Type = "no-artifact-test"
+	input.Nodes[0].Definition = mustJSON(t, map[string]any{
+		"kind": syntheticKind, "type": "no-artifact-test", "image": "example/future:1",
+	})
 
 	raw, err := input.CanonicalJSON()
 	if err != nil {

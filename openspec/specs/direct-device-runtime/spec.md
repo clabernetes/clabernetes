@@ -2,9 +2,7 @@
 
 ## Purpose
 Define Kubernetes-native realization of network devices as directly managed application containers without an inner container runtime or containerlab executable.
-
 ## Requirements
-
 ### Requirement: Device containers are first-class Pod containers
 
 Every network-device image SHALL run as an application container in a c9s-managed Pod created from its device plan. A device Pod MUST NOT contain or access dockerd, a Docker socket used to launch devices, the containerlab executable, or any helper capable of launching a nested network-device container. The kubelet and cluster CRI SHALL own device image pulling, start, stop, restart, logs, resource accounting, and container status.
@@ -64,17 +62,27 @@ A component-based Node SHALL remain one logical c9s Node while every planned com
 
 ### Requirement: Preparation helpers do not become a runtime
 
-c9s MAY use init containers, sidecars, CNI components, or node agents to stage files, apply lifecycle actions, reconcile connectivity, and report status. Helpers MUST use the finite containers declared by the device plan, MUST NOT create or supervise nested device containers, and MUST expose failure through Pod or Node conditions and events.
+c9s MAY use init containers, sidecars, CNI components, or node agents to stage files, apply lifecycle actions, reconcile connectivity, and report status. Helpers MUST use the finite containers declared by the device plan, MUST NOT create or supervise nested device containers, MUST NOT evaluate imported containerlab code, and MUST expose failure through Pod or Node conditions and events.
 
 #### Scenario: Prepare kind-specific files
 
 - **WHEN** a plan requires generated configuration, certificates, licenses, or downloaded payloads before boot
-- **THEN** a c9s preparation component stages and verifies them before the affected application container starts
+- **THEN** a c9s preparation component stages and verifies the planned artifacts without generating them, and the affected application container starts from those staged artifacts
 
 #### Scenario: Helper fails
 
 - **WHEN** preparation or a required lifecycle action fails
 - **THEN** the device does not report ready and Kubernetes-visible status identifies the failed helper and operation
+
+#### Scenario: Preparation has no imported code path
+
+- **WHEN** the preparation helper is inspected or exercised
+- **THEN** it contains no node registry, kind initialization, kind hook, or entropy session, and it cannot execute containerlab behavior
+
+#### Scenario: Lifecycle hook fails
+
+- **WHEN** an imported lifecycle hook fails inside a helper
+- **THEN** the failure names the operation, its phase, and the affected logical Node, and the device does not report ready
 
 ### Requirement: Kubernetes realizes container policy natively
 
@@ -111,7 +119,7 @@ The runtime SHALL preserve planned management IPv4 and IPv6 intent, DNS, hostnam
 
 ### Requirement: Lifecycle observation uses Kubernetes and plan-defined probes
 
-Node readiness SHALL derive from application-container status, required component status, completed preparation and connectivity, and plan/profile-defined startup and readiness probes. Docker inspection and Docker health status MUST NOT be used. Save, events, packet capture, and post-start commands SHALL target direct containers and interfaces.
+Node readiness SHALL derive from application-container status, required component status, completed preparation and connectivity, and plan/profile-defined startup and readiness probes. Docker inspection and Docker health status MUST NOT be used. Save, events, packet capture, post-start commands, and imported post-deploy, readiness, and endpoint behavior SHALL be executed against direct containers and interfaces through the accepted plan's declared action. The lifecycle boundary MUST NOT re-derive the plan's deployment stream, and MUST NOT replay or diff imported operations to decide whether to run the accepted hook.
 
 #### Scenario: Device starts successfully
 
@@ -127,3 +135,19 @@ Node readiness SHALL derive from application-container status, required componen
 
 - **WHEN** a user requests exec, save, event inspection, or packet capture for a compatible Node
 - **THEN** c9s addresses the direct application container or planned interface without invoking containerlab or Docker
+
+#### Scenario: Post-deploy behavior runs the accepted hook
+
+- **WHEN** a plan declares post-deploy behavior for a kind
+- **THEN** the lifecycle boundary invokes that hook against the live direct container without re-deriving the plan's deployment stream
+
+#### Scenario: Save behavior runs the accepted hook
+
+- **WHEN** a user or policy saves device state for a kind whose save behavior came from an imported hook
+- **THEN** the boundary invokes the save hook against the live direct container
+
+#### Scenario: Readiness observes the running device
+
+- **WHEN** a plan's readiness behavior depends on device output
+- **THEN** the readiness boundary observes the live device through the imported check and reports readiness only when it succeeds, without replaying construction operations
+

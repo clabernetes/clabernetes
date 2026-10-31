@@ -268,14 +268,12 @@ func deviceRuntimeCommand() *cli.Command {
 
 			{
 				Name:  "prepare",
-				Usage: "regenerate and verify imported preparation artifacts",
+				Usage: "stage and verify the accepted plan's artifacts",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: deviceRuntimePlan, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeInput, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeArtifacts, Required: true},
 					&cli.StringFlag{Name: deviceRuntimePayloads, Required: true},
-					&cli.StringFlag{Name: devicePlanCertificates},
-					&cli.StringFlag{Name: devicePlanEntropy},
 					&cli.StringFlag{Name: devicePlanRevision, Required: true},
 					&cli.StringFlag{Name: deviceRuntimeBinary},
 					&cli.StringFlag{Name: deviceRuntimeBinaryCache},
@@ -321,13 +319,7 @@ func deviceRuntimeCommand() *cli.Command {
 					}
 
 					err = (clabernetesinternaldeviceplan.Preparer{
-						Adapter: clabernetesinternaldeviceplan.Adapter{
-							Revision:        c.String(devicePlanRevision),
-							CertificateRoot: c.String(devicePlanCertificates),
-							EntropyRoot:     c.String(devicePlanEntropy),
-							PodDNSServers: clabernetesinternaldirectruntime.
-								RuntimePodDNSServers(),
-						},
+						Revision:          c.String(devicePlanRevision),
 						PayloadRoot:       c.String(deviceRuntimePayloads),
 						PersistentNodeIDs: persistentNodeIDs,
 						ResetTokens:       resetTokens,

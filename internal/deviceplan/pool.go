@@ -15,6 +15,8 @@ import (
 const (
 	// PoolScratchRoot is the only writable volume in a reusable planner worker.
 	PoolScratchRoot = "/var/run/clabernetes/planner/scratch"
+	// PlannerPayloadRoot is the read-only payload projection in disposable workers.
+	PlannerPayloadRoot = "/var/run/clabernetes/planner/payloads"
 	// MaxPoolPayloadBytes bounds the total material transferred for one request.
 	MaxPoolPayloadBytes   = 64 << 20
 	maxPoolBootstrapBytes = 96 << 20
@@ -26,6 +28,9 @@ type PoolBootstrap struct {
 	Input    Input             `json:"input"`
 	Payloads map[string][]byte `json:"payloads,omitempty"`
 	Entropy  []byte            `json:"entropy,omitempty"`
+	// ProjectedPayloads uses the disposable worker's existing mounts. Payloads are verified
+	// by the adapter when consumed; they need not fit the pool's aggregate transfer limit.
+	ProjectedPayloads bool `json:"projectedPayloads,omitempty"`
 }
 
 // WritePoolBootstrap writes a length-delimited envelope before the ordinary session protocol.
@@ -74,7 +79,7 @@ func stagePoolBootstrap(root string, bootstrap PoolBootstrap) error {
 		Digest(bootstrap.Entropy) != input.EntropyDigest {
 		return errors.New("planner request entropy differs from its input")
 	}
-	for _, directory := range []string{"entropy", "payloads", "certificates", "tmp"} {
+	for _, directory := range []string{"entropy", "certificates", "tmp"} {
 		if err = os.MkdirAll(filepath.Join(root, directory), 0o700); err != nil {
 			return err
 		}
@@ -83,10 +88,25 @@ func stagePoolBootstrap(root string, bootstrap PoolBootstrap) error {
 	if err = os.WriteFile(seedPath, bootstrap.Entropy, 0o600); err != nil {
 		return err
 	}
+	if bootstrap.ProjectedPayloads {
+		if len(bootstrap.Payloads) != 0 {
+			return errors.New("projected planner request also contains transferred payloads")
+		}
+
+		return nil
+	}
+
+	return stagePoolPayloads(root, input.Payloads, bootstrap.Payloads)
+}
+
+func stagePoolPayloads(root string, payloads []PayloadInput, contents map[string][]byte) error {
+	if err := os.MkdirAll(filepath.Join(root, "payloads"), 0o700); err != nil {
+		return err
+	}
 	total := 0
 	seen := map[string]bool{}
-	for _, payload := range input.Payloads {
-		content, found := bootstrap.Payloads[payload.ID]
+	for _, payload := range payloads {
+		content, found := contents[payload.ID]
 		if !found || Digest(content) != payload.Digest {
 			return fmt.Errorf("planner payload %q differs from its input", payload.ID)
 		}
@@ -95,15 +115,15 @@ func stagePoolBootstrap(root string, bootstrap PoolBootstrap) error {
 			return errors.New("planner payloads exceed the 64 MiB request limit")
 		}
 		directory := filepath.Join(root, "payloads", ArtifactNodeDirectory(payload.ID))
-		if err = os.MkdirAll(directory, 0o700); err != nil {
+		if err := os.MkdirAll(directory, 0o700); err != nil {
 			return err
 		}
-		if err = os.WriteFile(filepath.Join(directory, "source"), content, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(directory, "source"), content, 0o600); err != nil {
 			return err
 		}
 		seen[payload.ID] = true
 	}
-	if len(seen) != len(bootstrap.Payloads) {
+	if len(seen) != len(contents) {
 		return errors.New("planner request contains undeclared payloads")
 	}
 

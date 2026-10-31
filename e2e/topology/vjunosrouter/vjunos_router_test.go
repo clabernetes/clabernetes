@@ -16,7 +16,7 @@ import (
 
 const bootTimeout = 20 * time.Minute
 
-const defaultImage = " ghcr.io/clab-labs/juniper_vjunos-router:boxen-25.2R1.9"
+const defaultImage = "ghcr.io/clab-labs/juniper_vjunos-router:boxen-25.2R1.9"
 
 // Junos requires a PTY; SSH_ASKPASS keeps authentication noninteractive.
 const sshScript = `helper=$(mktemp)

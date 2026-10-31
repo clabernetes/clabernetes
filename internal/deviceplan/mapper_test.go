@@ -87,7 +87,7 @@ func TestPlanAutomaticallyMapsGenericBehaviorForNewRegistryKind(t *testing.T) {
 
 	if got, want := len(first.Files), 4; got != want ||
 		!containsFileSource(first.Files, clabernetesinternaldeviceplan.FileSourcePayload) ||
-		!containsFileSource(first.Files, clabernetesinternaldeviceplan.FileSourceGenerator) ||
+		!containsFileSource(first.Files, clabernetesinternaldeviceplan.FileSourcePlanArtifact) ||
 		!containsArtifactKind(first.Files, clabernetesinternaldeviceplan.ArtifactDirectory) {
 		t.Fatalf("generic file plans = %#v", first.Files)
 	}
@@ -213,6 +213,42 @@ func TestPlanPreservesImportedDeploymentOperationOrder(t *testing.T) {
 	}
 }
 
+// planArtifactRenderPayloads builds the payload inputs the controller derives for a plan's
+// generated artifacts, so rendering tests mount the same digest-named sources production does.
+func planArtifactRenderPayloads(
+	t *testing.T,
+	namespace string,
+	plan clabernetesinternaldeviceplan.Plan,
+) []clabernetesinternaldeviceplan.PayloadInput {
+	t.Helper()
+
+	payloads := []clabernetesinternaldeviceplan.PayloadInput{}
+	for _, file := range plan.Files {
+		if file.SourceKind != clabernetesinternaldeviceplan.FileSourcePlanArtifact ||
+			file.ArtifactKind == clabernetesinternaldeviceplan.ArtifactSymlink {
+			continue
+		}
+		identity := clabernetesinternaldeviceplan.PlanArtifactIdentity(file)
+		if identity == "" {
+			continue
+		}
+		kind := clabernetesinternaldeviceplan.PayloadConfigMap
+		if file.Sensitive {
+			kind = clabernetesinternaldeviceplan.PayloadSecret
+		}
+		payloads = append(payloads, clabernetesinternaldeviceplan.PayloadInput{
+			ID: file.SourceReference, NodeID: file.NodeID, Kind: kind,
+			Reference:   namespace + "/artifact:" + clabernetesinternaldeviceplan.PlanArtifactContentKey,
+			Digest:      identity,
+			Destination: file.Destination,
+			Mode:        file.Mode,
+			Sensitive:   file.Sensitive,
+		})
+	}
+
+	return payloads
+}
+
 func TestNewRegistryKindLifecycleFlowsThroughGenericDirectPodRenderer(t *testing.T) {
 	t.Parallel()
 
@@ -238,6 +274,7 @@ func TestNewRegistryKindLifecycleFlowsThroughGenericDirectPodRenderer(t *testing
 			Name: input.Nodes[0].Name, Namespace: "future-lab",
 			PlanConfigMapName: "future-plan", InputConfigMapName: "future-input",
 			PreparationImage: "example/c9s:1", ConnectivityImage: "example/c9s:1",
+			Payloads: planArtifactRenderPayloads(t, "future-lab", *plan),
 		},
 	)
 	if err != nil {
@@ -319,6 +356,7 @@ func TestGeneratedSymlinkFlowsThroughGenericDirectPodRenderer(t *testing.T) {
 			Name: input.Nodes[0].Name, Namespace: "future-lab",
 			PlanConfigMapName: "future-plan", InputConfigMapName: "future-input",
 			PreparationImage: "example/c9s:1", ConnectivityImage: "example/c9s:1",
+			Payloads: planArtifactRenderPayloads(t, "future-lab", *plan),
 		},
 	)
 	if err != nil {
@@ -391,7 +429,7 @@ func TestPlanMapsImportedPreparationFromExplicitPayloadWithoutFieldDispatch(t *t
 	}
 
 	if !containsFileSource(plan.Files, clabernetesinternaldeviceplan.FileSourcePayload) ||
-		!containsFileSource(plan.Files, clabernetesinternaldeviceplan.FileSourceGenerator) {
+		!containsFileSource(plan.Files, clabernetesinternaldeviceplan.FileSourcePlanArtifact) {
 		t.Fatalf("payload-driven preparation plan = %#v", plan.Files)
 	}
 

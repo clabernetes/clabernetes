@@ -15,7 +15,10 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apimachineryfields "k8s.io/apimachinery/pkg/fields"
 	apimachinerywatch "k8s.io/apimachinery/pkg/watch"
+	clientgocache "k8s.io/client-go/tools/cache"
+	clientgowatch "k8s.io/client-go/tools/watch"
 )
 
 var (
@@ -223,38 +226,38 @@ func (m *manager) load(config *clabernetesapisv1alpha1.Config) {
 }
 
 func (m *manager) watchConfig() {
-	listOptions := metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("metadata.name=%s", clabernetesconstants.Clabernetes),
-		Watch:         true,
-	}
+	// Kubernetes closes watch streams periodically. The informer-backed watch resumes and
+	// relists after expired resource versions, including changes missed during disconnection.
+	lw := clientgocache.NewListWatchFromClient(
+		m.kubeClabernetesClient.C9sV1alpha1().RESTClient(), "configs", m.namespace,
+		apimachineryfields.OneTermEqualSelector("metadata.name", clabernetesconstants.Clabernetes),
+	)
+	_, err := clientgowatch.UntilWithSync(m.ctx, lw, &clabernetesapisv1alpha1.Config{}, nil,
+		func(event apimachinerywatch.Event) (bool, error) {
+			switch event.Type {
+			case apimachinerywatch.Added, apimachinerywatch.Modified:
+				m.logger.Info("processing global config add or modification event")
 
-	watch, err := m.kubeClabernetesClient.C9sV1alpha1().
-		Configs(m.namespace).
-		Watch(m.ctx, listOptions)
-	if err != nil {
-		m.logger.Criticalf("failed watching clabernetes config, err: %s", err)
-	}
+				configMap, ok := event.Object.(*clabernetesapisv1alpha1.Config)
+				if !ok {
+					m.logger.Warn("failed casting event object to config, this is probably a bug")
 
-	for event := range watch.ResultChan() {
-		switch event.Type {
-		case apimachinerywatch.Added, apimachinerywatch.Modified:
-			m.logger.Info("processing global config add or modification event")
+					return false, nil
+				}
 
-			configMap, ok := event.Object.(*clabernetesapisv1alpha1.Config)
-			if !ok {
-				m.logger.Warn("failed casting event object to config, this is probably a bug")
+				m.load(configMap)
+			case apimachinerywatch.Deleted:
+				m.logger.Warn(
+					"global config was *deleted*, will continue with empty config...",
+				)
 
-				continue
+				m.load(&clabernetesapisv1alpha1.Config{})
+			case apimachinerywatch.Bookmark, apimachinerywatch.Error:
 			}
 
-			m.load(configMap)
-		case apimachinerywatch.Deleted:
-			m.logger.Warn(
-				"global config was *deleted*, will continue with empty config...",
-			)
-
-			m.load(&clabernetesapisv1alpha1.Config{})
-		case apimachinerywatch.Bookmark, apimachinerywatch.Error:
-		}
+			return false, nil
+		})
+	if err != nil && m.ctx.Err() == nil {
+		m.logger.Criticalf("global config watch stopped, err: %s", err)
 	}
 }

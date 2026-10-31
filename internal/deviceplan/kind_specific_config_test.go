@@ -137,7 +137,7 @@ func TestKindSpecificConfigReachesNokiaSrsimKind(t *testing.T) {
 	// a container environment variable: the classic template is what the plan must carry.
 	found := false
 	for _, file := range plan.Files {
-		if file.SourceKind == clabernetesinternaldeviceplan.FileSourceGenerator {
+		if file.SourceKind == clabernetesinternaldeviceplan.FileSourcePlanArtifact {
 			found = true
 		}
 	}

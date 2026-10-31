@@ -91,8 +91,8 @@ func TestPlannerReconcilerCreatesDenyPolicyBeforePodAndValidatesResult(t *testin
 		t.Fatal(err)
 	}
 	if pod.GetLabels()[plannerSessionLabel] != plannerSessionValue ||
-		!pod.Spec.Containers[0].Stdin || !pod.Spec.Containers[0].StdinOnce ||
-		!slices.Contains(pod.Spec.Containers[0].Args, "--session") ||
+		pod.Spec.Containers[0].Stdin || pod.Spec.Containers[0].StdinOnce ||
+		!slices.Equal(pod.Spec.Containers[0].Args, []string{"node-plan-pool"}) ||
 		pod.GetAnnotations()[plannerSessionDeadline] != "60" ||
 		pod.Spec.ActiveDeadlineSeconds == nil ||
 		*pod.Spec.ActiveDeadlineSeconds != plannerQueueDeadline {

@@ -87,7 +87,6 @@ func (p *PlannerPool) releaseGeneration() uint64 {
 	return p.releases
 }
 
-//nolint:gocyclo // Validate and persist one complete request at the stream boundary.
 func (p *PlannerPool) run(
 	ctx context.Context,
 	node *clabernetesapisv1alpha1.Node,
@@ -99,13 +98,28 @@ func (p *PlannerPool) run(
 		return nil, err
 	}
 	defer p.release(pod)
+
+	return p.runOnPod(ctx, pod, node, policy, artifact)
+}
+
+// runOnPod shares the private exec protocol and durable result handling with disposable workers.
+//
+//nolint:gocyclo // Validate and persist one complete request at the stream boundary.
+func (p *PlannerPool) runOnPod(
+	ctx context.Context,
+	pod *k8scorev1.Pod,
+	node *clabernetesapisv1alpha1.Node,
+	policy PlannerPodInput,
+	artifact PlannerInputArtifact,
+) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(policy.DeadlineSeconds)*time.Second)
 	defer cancel()
 	input, err := clabernetesinternaldeviceplan.DecodeInput(artifact.CanonicalInput)
 	if err != nil {
 		return nil, err
 	}
-	bootstrap, sensitive, err := p.material(ctx, node, input, policy.EntropySecretName)
+	bootstrap, sensitive, err := p.material(ctx, node, input, policy.EntropySecretName,
+		pod.Labels[plannerSessionLabel] == plannerSessionValue)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +137,14 @@ func (p *PlannerPool) run(
 
 		return frame, (workerOutputStore{Client: p.Client}).Persist(ctx, node, policy.Name,
 			plannerWorkerPlan, frame, sensitive)
+	}
+	if err = (&PlanArtifactReconciler{Client: p.Client}).Ensure(
+		ctx,
+		node,
+		result.Plan,
+		result.Artifacts,
+	); err != nil {
+		return nil, err
 	}
 	if result.CertificateSecret != "" {
 		secret := &k8scorev1.Secret{}
@@ -165,10 +187,12 @@ func (p *PlannerPool) run(
 
 func (p *PlannerPool) material(ctx context.Context, node *clabernetesapisv1alpha1.Node,
 	input clabernetesinternaldeviceplan.Input, entropyName string,
+	projectedPayloads bool,
 ) (clabernetesinternaldeviceplan.PoolBootstrap, [][]byte, error) {
 	bootstrap := clabernetesinternaldeviceplan.PoolBootstrap{
-		Input:    input,
-		Payloads: map[string][]byte{},
+		Input:             input,
+		Payloads:          map[string][]byte{},
+		ProjectedPayloads: projectedPayloads,
 	}
 	entropy := &k8scorev1.Secret{}
 	entropyKey := ctrlruntimeclient.ObjectKey{Namespace: node.Namespace, Name: entropyName}
@@ -182,12 +206,22 @@ func (p *PlannerPool) material(ctx context.Context, node *clabernetesapisv1alpha
 	sensitive := [][]byte{bootstrap.Entropy}
 	total := 0
 	for _, payload := range input.Payloads {
+		// Disposable workers already mount these sources. Only private values are needed
+		// here for cache redaction; public URL payloads must not be downloaded twice.
+		if projectedPayloads && !payload.Sensitive {
+			continue
+		}
 		content, err := p.payload(ctx, node.Namespace, payload)
 		if err != nil {
 			return bootstrap, nil, err
 		}
 		if clabernetesinternaldeviceplan.Digest(content) != payload.Digest {
 			return bootstrap, nil, errors.New("planner payload changed before execution")
+		}
+		if projectedPayloads {
+			sensitive = append(sensitive, content)
+
+			continue
 		}
 		total += len(content)
 		if total > clabernetesinternaldeviceplan.MaxPoolPayloadBytes {
@@ -297,7 +331,7 @@ func (p *PlannerPool) converse(ctx context.Context, worker *k8scorev1.Pod,
 	}
 	decoder := clabernetesinternaldeviceplan.NewSessionFrameDecoder(
 		stdoutReader,
-		DefaultMaxInputBytes+DefaultMaxPlanBytes,
+		clabernetesinternaldeviceplan.MaxSessionFrameBytes,
 	)
 	seen := map[string]bool{}
 	var images []clabernetesinternaldeviceplan.ImageInput

@@ -116,6 +116,21 @@ diagnostic. Nothing is silently dropped.
 - **No arbitrary host binds.** Files come from ConfigMaps, Secrets, digest-pinned URLs, generated
   artifacts, and PVC-backed persistence; the preparation init container stages and
   digest-verifies everything before the device starts. Arbitrary host paths are rejected.
+- **Staged content is fixed at plan time.** containerlab generates a node's files on the host
+  right before it creates the container, so the same topology can render differently on a machine
+  whose environment changed. c9s generates them during planning, persists the bytes as digest-named
+  objects owned by the Node, and stages exactly those bytes in the Pod: preparation re-runs no
+  imported code, and a file whose digest differs from the plan is rejected or preserved rather than
+  silently regenerated. Live lifecycle hooks still reconstruct imported state in scratch space;
+  that construction cannot replace staged or device-saved files. Generated content, including
+  extended attributes, is limited to 512 KiB per artifact and 4 MiB per plan. Larger generated
+  outputs would require an artifact store beyond Kubernetes objects. Each distinct content and
+  extended-attribute identity uses an immutable object owned by its Node; equal artifacts within
+  that Node can share an object, but different Nodes do not. Generated content currently uses
+  Secrets. For example, 200 Nodes with three distinct artifacts each require 600 artifact Secrets,
+  in addition to other control-plane objects. Byte limits and garbage collection do not remove
+  the API, watch/cache, and etcd costs of that object count. Superseded artifacts are collected
+  after the accepted workload stops referencing them.
 - **Runtime binaries use a bounded worker cache.** The preparation container alone mounts
   `/var/lib/clabernetes/runtime-binary-cache`, which retains four content-verified binary
   versions (at most 256 MiB each). When this cache and the Pod's storage share a filesystem

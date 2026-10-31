@@ -109,6 +109,11 @@ func runPoolProcess(ctx context.Context, input *os.File, output, stderr io.Write
 	if err = stagePoolBootstrap(root, bootstrap); err != nil {
 		return err
 	}
+	payloadRoot := filepath.Join(root, "payloads")
+	if bootstrap.ProjectedPayloads {
+		// Preserve the real mount root: payload confinement rejects symlinks outside it.
+		payloadRoot = PlannerPayloadRoot
+	}
 	//nolint:gosec // Re-exec the current binary with fixed arguments and no shell.
 	command := exec.CommandContext(
 		ctx,
@@ -122,7 +127,7 @@ func runPoolProcess(ctx context.Context, input *os.File, output, stderr io.Write
 		"--maxInputBytes",
 		"8388608",
 		"--payloads",
-		filepath.Join(root, "payloads"),
+		payloadRoot,
 		"--entropy",
 		filepath.Join(root, "entropy"),
 		"--certificates",

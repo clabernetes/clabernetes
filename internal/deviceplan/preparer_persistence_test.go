@@ -27,17 +27,11 @@ func preparePersistenceFixture(
 		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
+	preparer := testPreparer(adapter, payloadRoot)
+	preparer.PersistentNodeIDs = map[string]bool{"node-a": true}
 
-	preparer := clabernetesinternaldeviceplan.Preparer{
-		Adapter:           adapter,
-		PersistentNodeIDs: map[string]bool{"node-a": true},
-	}
-
-	return input, *plan, preparer, t.TempDir()
+	return input, plan, preparer, t.TempDir()
 }
 
 func persistenceArtifactPath(root string) string {

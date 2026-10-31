@@ -109,8 +109,19 @@ func (n *syntheticImportedNode) Init(
 	)
 
 	generatedDir := filepath.Join(config.LabDir, "generated")
+	if config.NodeType == "no-artifact-test" {
+		return nil
+	}
 	if err := os.MkdirAll(generatedDir, 0o750); err != nil {
 		return err
+	}
+
+	if config.NodeType == "oversized-artifact-test" {
+		return os.WriteFile( //nolint:gosec // test fixture permissions.
+			filepath.Join(generatedDir, "oversized.conf"),
+			bytes.Repeat([]byte("x"), clabernetesinternaldeviceplan.MaxPlanArtifactBytes+1),
+			0o640,
+		)
 	}
 
 	if err := os.WriteFile( //nolint:gosec // test fixture permissions.
@@ -676,13 +687,9 @@ func TestPackageRequestedCertificatesFlowWithoutKindMapping(t *testing.T) {
 
 	adapter.CertificateRoot = root
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !containsFileSource(plan.Files, clabernetesinternaldeviceplan.FileSourceCertificate) {
-		t.Fatalf("certificate-backed files = %#v", plan.Files)
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
+	if !containsFileSource(plan.Files, clabernetesinternaldeviceplan.FileSourcePlanArtifact) {
+		t.Fatalf("generated files = %#v", plan.Files)
 	}
 
 	canonical, err := plan.CanonicalJSON()
@@ -695,9 +702,9 @@ func TestPackageRequestedCertificatesFlowWithoutKindMapping(t *testing.T) {
 	}
 
 	artifactRoot := filepath.Join(t.TempDir(), "artifacts")
-	if err = (clabernetesinternaldeviceplan.Preparer{
-		Adapter: adapter,
-	}).Prepare(context.Background(), input, *plan, artifactRoot); err != nil {
+	if err = testPreparer(adapter, payloadRoot).Prepare(
+		context.Background(), input, plan, artifactRoot,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -747,10 +754,7 @@ func TestPackageGeneratedDirectoryMetadataFlowsWithoutKindMapping(t *testing.T) 
 		Registry: newSyntheticRegistry(t), Revision: "directory-metadata-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
 
 	attributeName := "user.containerlab-package-test"
 	attributeValue := []byte("opaque-package-metadata")
@@ -774,12 +778,13 @@ func TestPackageGeneratedDirectoryMetadataFlowsWithoutKindMapping(t *testing.T) 
 	}
 
 	artifactRoot := t.TempDir()
-	if err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
+	err := testPreparer(adapter, payloadRoot).Prepare(
 		context.Background(),
 		input,
-		*plan,
+		plan,
 		artifactRoot,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -824,11 +829,7 @@ func TestPackageGeneratedOwnershipFlowsWithoutKindMapping(t *testing.T) {
 		Registry: newSyntheticRegistry(t), Revision: "artifact-ownership-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
 	found := false
 
 	for _, file := range plan.Files {
@@ -844,12 +845,13 @@ func TestPackageGeneratedOwnershipFlowsWithoutKindMapping(t *testing.T) {
 	}
 
 	artifactRoot := t.TempDir()
-	if err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
+	err := testPreparer(adapter, payloadRoot).Prepare(
 		context.Background(),
 		input,
-		*plan,
+		plan,
 		artifactRoot,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -1125,6 +1127,123 @@ func TestPackageOwnedPostDeployRunsForNewRegistryKindWithoutC9sRegistration(t *t
 	}
 }
 
+func TestImportedHooksCheckTargetWorkerRequirements(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Type = "condition-failure-test"
+	input.Nodes[0].Definition = mustJSON(t, map[string]string{
+		"kind": syntheticKind, "type": "condition-failure-test", "image": "example/future:1",
+	})
+	adapter := clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t),
+		Revision: "host-check",
+	}
+	plan, err := adapter.Plan(t.Context(), input)
+	if err != nil {
+		t.Fatalf("planning must not check the planner host: %v", err)
+	}
+	artifactRoot := t.TempDir()
+	if err = os.MkdirAll(filepath.Join(artifactRoot, clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
+		input,
+		*plan,
+		plan.Containers[0].ID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = adapter.RunPostDeploy(
+		t.Context(),
+		input,
+		*plan,
+		plan.Containers[0].ID,
+		t.TempDir(),
+		artifactRoot,
+		"",
+		runtime,
+	)
+	var planningErr *clabernetesinternaldeviceplan.Error
+	if !errors.As(err, &planningErr) || planningErr.Behavior != "imported-deployment-conditions" {
+		t.Fatalf("target host preflight error = %v", err)
+	}
+
+	endpointRuntime, err := clabernetesinternaldirectruntime.NewImportedEndpointRuntime(
+		input, *plan, plan.Containers[0].ID, "/proc/self/ns/net",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = adapter.RunDeployEndpoints(t.Context(), input, *plan, plan.Containers[0].ID,
+		t.TempDir(), artifactRoot, "", endpointRuntime,
+		func(operation func() error) error { return operation() })
+	if !errors.As(err, &planningErr) || planningErr.Behavior != "imported-deployment-conditions" {
+		t.Fatalf("endpoint initialization did not gate startup on host requirements: %v", err)
+	}
+}
+
+func TestImportedConstructionPreservesStagedDeviceContent(t *testing.T) {
+	t.Parallel()
+
+	for _, nodeType := range []string{"postdeploy-test", "save-test"} {
+		t.Run(nodeType, func(t *testing.T) {
+			t.Parallel()
+			input := singleNodeInput(syntheticKind, "example/future:1")
+			input.Nodes[0].Type = nodeType
+			input.Nodes[0].Definition = mustJSON(t, map[string]string{
+				"kind": syntheticKind, "type": nodeType, "image": "example/future:1",
+			})
+			adapter := clabernetesinternaldeviceplan.Adapter{
+				Registry: newSyntheticRegistry(t),
+				Revision: "preserve-content",
+			}
+			plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
+			root := t.TempDir()
+			if err := testPreparer(adapter, payloadRoot).Prepare(t.Context(), input, plan, root); err != nil {
+				t.Fatal(err)
+			}
+			file := filepath.Join(
+				root,
+				clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
+				"generated",
+				"imported.conf",
+			)
+			if err := os.WriteFile(file, []byte("saved by device"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
+				input,
+				plan,
+				plan.Containers[0].ID,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if nodeType == "save-test" {
+				err = adapter.RunSave(
+					t.Context(),
+					input,
+					plan,
+					plan.Containers[0].ID,
+					root,
+					runtime,
+				)
+			} else {
+				err = adapter.RunPostDeploy(t.Context(), input, plan, plan.Containers[0].ID, t.TempDir(), root, "", runtime)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			content, err := os.ReadFile(file) //nolint:gosec // test-owned artifact path.
+			if err != nil || string(content) != "saved by device" {
+				t.Fatalf("construction overwrote staged device content: %q, %v", content, err)
+			}
+		})
+	}
+}
+
 func TestPackagePostDeployHookRetriesInPlaceWhileApplianceInitializes(t *testing.T) {
 	t.Parallel()
 
@@ -1184,142 +1303,7 @@ func TestPackagePostDeployHookRetriesInPlaceWhileApplianceInitializes(t *testing
 	}
 }
 
-func TestPackageDeploymentReplayRejectsOperationDrift(t *testing.T) {
-	t.Parallel()
-
-	input := singleNodeInput(syntheticKind, "example/future:1")
-	input.Nodes[0].Type = "deployment-replay-test"
-	input.Nodes[0].Definition = mustJSON(t, map[string]string{
-		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
-	})
-	adapter := clabernetesinternaldeviceplan.Adapter{
-		Registry: newSyntheticRegistry(t), Revision: "package-deployment-drift-v1",
-	}
-
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for index := range plan.Actions {
-		action := &plan.Actions[index]
-		if action.Phase == clabernetesinternaldeviceplan.PhasePostStart &&
-			action.Kind == clabernetesinternaldeviceplan.ActionExec && action.Exec != nil {
-			action.Exec.Command = []string{"/bin/true"}
-
-			break
-		}
-	}
-
-	artifactRoot := t.TempDir()
-	if err = os.MkdirAll(filepath.Join(
-		artifactRoot,
-		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
-	), 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
-		input,
-		*plan,
-		plan.Containers[0].ID,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = adapter.RunPostDeploy(
-		context.Background(),
-		input,
-		*plan,
-		plan.Containers[0].ID,
-		t.TempDir(),
-		artifactRoot,
-		"",
-		runtime,
-	)
-
-	var replayErr *clabernetesinternaldeviceplan.Error
-	if !errors.As(err, &replayErr) ||
-		replayErr.Code != clabernetesinternaldeviceplan.ErrorInvariant ||
-		replayErr.NodeID != input.Nodes[0].ID || replayErr.Field != "deployment.replay" ||
-		replayErr.Behavior != "imported-deploy" {
-		t.Fatalf("deployment replay drift error = %#v, %v", replayErr, err)
-	}
-}
-
-func TestPackageDeploymentReplayRejectsComponentInventoryDrift(t *testing.T) {
-	t.Parallel()
-
-	input := singleNodeInput(syntheticKind, "example/future:1")
-	input.Nodes[0].Type = "multi-container-test"
-	input.Nodes[0].Definition = mustJSON(t, map[string]string{
-		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
-	})
-	input.Images = append(input.Images, clabernetesinternaldeviceplan.ImageInput{
-		NodeID:          input.Nodes[0].ID,
-		ComponentID:     "component-a",
-		SourceReference: "example/future-component:1",
-		DigestReference: "example/future-component@sha256:" + strings.Repeat("b", 64),
-		Platform: clabernetesinternaldeviceplan.Platform{
-			OS: "linux", Architecture: "amd64",
-		},
-	})
-	adapter := clabernetesinternaldeviceplan.Adapter{
-		Registry: newSyntheticRegistry(t), Revision: "package-component-drift-v1",
-	}
-
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	primaryID := plan.Nodes[0].ContainerIDs[0]
-	if len(plan.Nodes[0].ContainerIDs) != 2 {
-		t.Fatalf("component inventory = %#v", plan.Nodes[0].ContainerIDs)
-	}
-
-	componentID := plan.Nodes[0].ContainerIDs[1]
-	plan.Nodes[0].ReadinessContainerIDs = []string{componentID}
-
-	artifactRoot := t.TempDir()
-	if err = os.MkdirAll(filepath.Join(
-		artifactRoot,
-		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
-	), 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	runtime, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
-		input,
-		*plan,
-		primaryID,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = adapter.RunPostDeploy(
-		context.Background(),
-		input,
-		*plan,
-		primaryID,
-		t.TempDir(),
-		artifactRoot,
-		"",
-		runtime,
-	)
-
-	var replayErr *clabernetesinternaldeviceplan.Error
-	if !errors.As(err, &replayErr) ||
-		replayErr.Code != clabernetesinternaldeviceplan.ErrorInvariant ||
-		replayErr.NodeID != input.Nodes[0].ID || replayErr.Field != "deployment.replay" ||
-		replayErr.Behavior != "imported-deploy" {
-		t.Fatalf("component replay drift error = %#v, %v", replayErr, err)
-	}
-}
-
-func TestPackageDeploymentOperationsAreVerifiedWithoutReexecution(t *testing.T) {
+func TestPackageHostsOperationIsPlannedAsAppendAndPostDeployRunsLive(t *testing.T) {
 	t.Parallel()
 
 	input := singleNodeInput(syntheticKind, "example/future:1")
@@ -1387,6 +1371,64 @@ func TestPackageDeploymentOperationsAreVerifiedWithoutReexecution(t *testing.T) 
 	) //nolint:gosec // test-controlled path.
 	if err != nil || string(marker) != "package-owned" {
 		t.Fatalf("package post-deploy marker = %q, %v", marker, err)
+	}
+}
+
+func TestImportedHookConstructionRejectsContainerIdentityDrift(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Type = "postdeploy-test"
+	input.Nodes[0].Definition = mustJSON(t, map[string]string{
+		"kind": syntheticKind, "type": "postdeploy-test", "image": "example/future:1",
+	})
+	adapter := clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "package-container-identity-v1",
+		PostDeployRetryWindow: time.Millisecond, PostDeployRetryBackoff: time.Millisecond,
+	}
+	plan, err := adapter.Plan(t.Context(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifactRoot := t.TempDir()
+	nodeRoot := filepath.Join(artifactRoot,
+		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID))
+	if err = os.MkdirAll(nodeRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Input identity still matches, but this plan names a different runtime container.
+	plan.Containers[0].RuntimeID += "-drifted"
+	application, err := clabernetesinternaldirectruntime.NewImportedApplicationRuntime(
+		input, *plan, plan.Containers[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := clabernetesinternaldirectruntime.NewImportedEndpointRuntime(
+		input, *plan, plan.Containers[0].ID, "/proc/self/ns/net")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, hook := range map[string]func() error{
+		"post-deploy": func() error {
+			return adapter.RunPostDeploy(t.Context(), input, *plan, plan.Containers[0].ID,
+				t.TempDir(), artifactRoot, "", application)
+		},
+		"endpoints": func() error {
+			return adapter.RunDeployEndpoints(t.Context(), input, *plan, plan.Containers[0].ID,
+				t.TempDir(), artifactRoot, "", endpoint,
+				func(operation func() error) error { return operation() })
+		},
+	} {
+		var planningErr *clabernetesinternaldeviceplan.Error
+		if err = hook(); !errors.As(err, &planningErr) ||
+			planningErr.Behavior != "imported-container-inventory" {
+			t.Fatalf("%s did not reject container identity mismatch: %v", name, err)
+		}
+	}
+	for _, marker := range []string{"package-post-deploy-ran", "package-deploy-endpoints-ran"} {
+		if _, err = os.Stat(filepath.Join(nodeRoot, marker)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("live hook ran before container identity was checked: %s: %v", marker, err)
+		}
 	}
 }
 

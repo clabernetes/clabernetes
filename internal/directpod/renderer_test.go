@@ -751,8 +751,8 @@ func TestRenderProjectsOpaqueEntropyIntoImportedHookBoundaries(t *testing.T) {
 		pod.Containers,
 		"example/component@sha256:"+strings.Repeat("b", 64),
 	)
-	if !slices.Contains(preparation.Args, "--entropy") ||
-		!hasReadOnlyMount(preparation, "/var/run/clabernetes/entropy") ||
+	if slices.Contains(preparation.Args, "--entropy") ||
+		hasReadOnlyMount(preparation, "/var/run/clabernetes/entropy") ||
 		!slices.Contains(connectivity.Args, "--entropy") ||
 		!hasReadOnlyMount(connectivity, "/var/run/clabernetes/entropy") || root == nil ||
 		root.ReadinessProbe == nil || root.ReadinessProbe.Exec == nil ||
@@ -1167,25 +1167,21 @@ func TestRenderProjectsCertificateMaterialOnlyIntoPreparationHelper(t *testing.T
 		t.Fatalf("certificate Secret volume = %#v", pod.Volumes)
 	}
 
-	for index, container := range append(pod.InitContainers, pod.Containers...) {
-		foundMount := false
-
+	for _, container := range append(pod.InitContainers, pod.Containers...) {
 		for _, mount := range container.VolumeMounts {
-			if mount.MountPath == "/var/run/clabernetes/certificates" {
-				foundMount = true
-
-				if !mount.ReadOnly {
-					t.Fatal("certificate material is mounted writable")
-				}
+			if mount.MountPath != "/var/run/clabernetes/certificates" {
+				continue
 			}
-		}
-
-		if (index == 0) != foundMount {
-			t.Fatalf("certificate mount leaked beyond preparation helper: %#v", container)
+			if !mount.ReadOnly {
+				t.Fatal("certificate material is mounted writable")
+			}
+			if container.Name == "planner" {
+				t.Fatalf("preparation helper mounted certificate material: %#v", container)
+			}
 		}
 	}
 
-	if !slices.Contains(pod.InitContainers[0].Args, "--certificates") {
+	if slices.Contains(pod.InitContainers[0].Args, "--certificates") {
 		t.Fatalf("preparation arguments = %#v", pod.InitContainers[0].Args)
 	}
 }
@@ -1404,7 +1400,7 @@ func TestRenderMapsGenericPostStartActionsIntoTargetApplicationContainer(t *test
 	plan := renderablePlan()
 	plan.Files = []clabernetesinternaldeviceplan.FilePlan{{
 		ID: "generated/config", NodeID: "node-a",
-		SourceKind:      clabernetesinternaldeviceplan.FileSourceGenerator,
+		SourceKind:      clabernetesinternaldeviceplan.FileSourcePlanArtifact,
 		SourceReference: "imported-hook", ArtifactPath: "generated/config",
 		Digest: "sha256:" + strings.Repeat("c", 64), Mode: 0o600,
 	}}
@@ -1444,6 +1440,14 @@ func TestRenderMapsGenericPostStartActionsIntoTargetApplicationContainer(t *test
 			InputConfigMapName: "device-a-plan-input-abc",
 			PreparationImage:   "example/c9s:1", ConnectivityImage: "example/c9s:1",
 			EnableContainerStopSignals: true,
+			Payloads: []clabernetesinternaldeviceplan.PayloadInput{{
+				ID: "imported-hook", NodeID: "node-a",
+				Kind:      clabernetesinternaldeviceplan.PayloadSecret,
+				Reference: "lab-a/artifact:" + clabernetesinternaldeviceplan.PlanArtifactContentKey,
+				Digest:    "sha256:" + strings.Repeat("c", 64),
+				Mode:      0o600,
+				Sensitive: true,
+			}},
 		},
 	)
 	if err != nil {
