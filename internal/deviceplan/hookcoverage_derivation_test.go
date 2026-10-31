@@ -20,15 +20,15 @@ func TestRefusedBehaviorsAreDerivedFromTheImportedImplementation(t *testing.T) {
 		kind    string
 		methods []string
 	}{
-		// tailscale declares PreDestroy itself; every kind carries the topology-level refusal.
-		{"tailscale", []string{"nodes.Node.PreDestroy", "nodes.Node.RunExecFromConfig"}},
+		// tailscale declares PreDestroy itself.
+		{"tailscale", []string{"nodes.Node.PreDestroy"}},
 		// VM-backed kinds inherit the pre-stop contract through their embedded VM node.
-		{"vr-cisco_xrv", []string{"nodes.Node.RunExecFromConfig", "nodes.NodeOverwrites.PreStop"}},
+		{"vr-cisco_xrv", []string{"nodes.NodeOverwrites.PreStop"}},
 		// A container-based SR-SIM node declares neither refused method.
-		{"nokia_srsim", []string{"nodes.Node.RunExecFromConfig"}},
+		{"nokia_srsim", nil},
 		// A plain container kind declares neither refused method.
-		{"linux", []string{"nodes.Node.RunExecFromConfig"}},
-		{"srl", []string{"nodes.Node.RunExecFromConfig"}},
+		{"linux", nil},
+		{"srl", nil},
 	}
 	for _, testCase := range cases {
 		refusals, err := clabernetesinternaldeviceplan.RefusedBehaviorsForKind(

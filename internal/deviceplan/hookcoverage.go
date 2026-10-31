@@ -104,9 +104,6 @@ const (
 	// the linked imported implementation, so a new kind, or a kind that starts overriding the
 	// method, is reported as incompatible without a hand-maintained kind list.
 	RelianceKindDeclaration CoverageReliance = "kind-declaration"
-	// RelianceAnyKind attributes a refusal to every kind because the trigger is topology input
-	// rather than a kind method.
-	RelianceAnyKind CoverageReliance = "any-kind"
 )
 
 // ImportedInterfaceMethods enumerates the imported interfaces the planning boundary consumes. The
@@ -143,12 +140,7 @@ func ImportedInterfaceMethods() []ImportedMethod {
 
 // ImportedCoverage returns the committed classification inventory.
 func ImportedCoverage() []ImportedMethodCoverage {
-	coverage := make([]ImportedMethodCoverage, len(importedMethodCoverage))
-	for index, entry := range importedMethodCoverage {
-		coverage[index] = entry
-	}
-
-	return coverage
+	return slices.Clone(importedMethodCoverage)
 }
 
 // RefusedBehaviorsForKind returns the refused imported behaviors one kind relies on. Attribution is
@@ -159,54 +151,20 @@ func RefusedBehaviorsForKind(
 	kind string,
 ) ([]ImportedMethodCoverage, error) {
 	refused := []ImportedMethodCoverage{}
-	lazy := &lazyImportedKind{registry: registry, kind: kind}
+	if registry == nil {
+		registry = NewContainerlabRegistry()
+	}
+	implementation, err := registry.NewNodeOfKind(kind)
+	if err != nil {
+		return nil, fmt.Errorf("deriving refused imported behavior for kind %q: %w", kind, err)
+	}
 	for _, entry := range importedMethodCoverage {
-		if entry.State != CoverageRefused {
-			continue
-		}
-		relies, err := lazy.relies(entry)
-		if err != nil {
-			return nil, err
-		}
-		if relies {
+		if entry.State == CoverageRefused && kindDeclaresMethod(implementation, entry.Method) {
 			refused = append(refused, entry)
 		}
 	}
 
 	return refused, nil
-}
-
-// lazyImportedKind constructs one imported kind at most once, and only when a refusal needs a
-// declaration check rather than a topology-level attribution.
-type lazyImportedKind struct {
-	registry       *clabnodes.NodeRegistry
-	kind           string
-	implementation clabnodes.Node
-}
-
-// relies decides whether the kind relies on one refused behavior.
-func (l *lazyImportedKind) relies(entry ImportedMethodCoverage) (bool, error) {
-	if entry.Reliance == RelianceAnyKind {
-		return true, nil
-	}
-	if entry.Reliance != RelianceKindDeclaration {
-		return false, nil
-	}
-	if l.implementation == nil {
-		registry := l.registry
-		if registry == nil {
-			registry = NewContainerlabRegistry()
-		}
-		constructed, err := registry.NewNodeOfKind(l.kind)
-		if err != nil {
-			return false, fmt.Errorf(
-				"deriving refused imported behavior for kind %q: %w", l.kind, err,
-			)
-		}
-		l.implementation = constructed
-	}
-
-	return kindDeclaresMethod(l.implementation, entry.Method), nil
 }
 
 // kindDeclaresMethod reports whether any type in a kind's implementation chain declares the method
@@ -228,7 +186,6 @@ func kindDeclaresMethod(implementation clabnodes.Node, method string) bool {
 		genericFile,
 		genericLine,
 		map[reflect.Type]bool{},
-		0,
 	)
 }
 
@@ -240,10 +197,8 @@ func typeDeclaresMethod(
 	genericFile string,
 	genericLine int,
 	visited map[reflect.Type]bool,
-	depth int,
 ) bool {
-	const maxEmbedDepth = 8
-	if typ == nil || visited[typ] || depth > maxEmbedDepth {
+	if typ == nil || visited[typ] {
 		return false
 	}
 	visited[typ] = true
@@ -256,12 +211,12 @@ func typeDeclaresMethod(
 	switch typ.Kind() { //nolint:exhaustive // other kinds cannot declare embedded methods.
 	case reflect.Pointer:
 		return typeDeclaresMethod(
-			typ.Elem(), method, genericFile, genericLine, visited, depth+1,
+			typ.Elem(), method, genericFile, genericLine, visited,
 		)
 	case reflect.Struct:
 		for field := range typ.Fields() {
 			if field.Anonymous && typeDeclaresMethod(
-				field.Type, method, genericFile, genericLine, visited, depth+1,
+				field.Type, method, genericFile, genericLine, visited,
 			) {
 				return true
 			}
@@ -397,7 +352,7 @@ func validateImportedCoverageEntry(
 		if strings.TrimSpace(entry.Reason) == "" {
 			return []string{"refused imported method " + identity + " requires a reason"}
 		}
-		if entry.Reliance != RelianceKindDeclaration && entry.Reliance != RelianceAnyKind {
+		if entry.Reliance != RelianceKindDeclaration {
 			return []string{"refused imported method " + identity +
 				" requires a reliance attribution"}
 		}
@@ -594,14 +549,12 @@ var importedMethodCoverage = []ImportedMethodCoverage{
 		Reason: "c9s has no node-destroy boundary, so imported destroy-time cleanup never runs; " +
 			"the tailscale kind logs out of the tailnet there",
 	},
-	{
-		Interface: importedInterfaceNode, Method: "RunExecFromConfig", State: CoverageRefused,
-		Reliance: RelianceAnyKind,
-		Reason: "topology exec commands are carried in the vocabulary but c9s runs no " +
-			"exec-from-config path, so declared commands never execute",
-	},
 
 	// nodes.Node: not reached by any imported path the boundary executes.
+	{
+		Interface: importedInterfaceNode, Method: "RunExecFromConfig", State: CoverageUnused,
+		Reason: "c9s maps topology exec commands into native post-start exec actions",
+	},
 	{
 		Interface: importedInterfaceNode, Method: "DeleteNetnsSymlink", State: CoverageUnused,
 		Reason: "c9s owns the device network namespace and creates no containerlab namespace " +

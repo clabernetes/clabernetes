@@ -244,15 +244,47 @@ func importedSiteFunction(file *ast.File, name string) *ast.FuncDecl {
 func importedSiteInvokes(function *ast.FuncDecl, method string) bool {
 	found := false
 	ast.Inspect(function.Body, func(node ast.Node) bool {
-		selector, ok := node.(*ast.SelectorExpr)
-		if ok && selector.Sel.Name == method {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if selector, direct := call.Fun.(*ast.SelectorExpr); direct && selector.Sel.Name == method {
 			found = true
-
-			return false
+		}
+		// Imported checks may pass the method as a callback to the panic boundary.
+		if helper, named := call.Fun.(*ast.Ident); named && helper.Name == "invokeImported" {
+			for _, argument := range call.Args {
+				if selector, callback := argument.(*ast.SelectorExpr); callback &&
+					selector.Sel.Name == method {
+					found = true
+				}
+			}
 		}
 
-		return true
+		return !found
 	})
 
 	return found
+}
+
+func TestImportedCoverageRequiresInvocationOrBoundaryCallback(t *testing.T) {
+	t.Parallel()
+
+	for _, example := range []struct {
+		body string
+		want bool
+	}{
+		{"node.CheckInterfaceName()", true},
+		{"invokeImported(node.CheckInterfaceName)", true},
+		{"_ = node.CheckInterfaceName", false},
+	} {
+		file, err := parser.ParseFile(token.NewFileSet(), "example.go",
+			"package example; func check() {"+example.body+"}", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := importedSiteInvokes(importedSiteFunction(file, "check"), "CheckInterfaceName"); got != example.want {
+			t.Fatalf("invocation check for %q = %v, want %v", example.body, got, example.want)
+		}
+	}
 }
