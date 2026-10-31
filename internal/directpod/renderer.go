@@ -34,9 +34,9 @@ import (
 
 const (
 	planVolumeName                   = "node-plan"
-	planMountPath                    = "/var/run/clabernetes/plan"
+	planMountPath                    = clabernetesinternaldirectruntime.ConnectivityPlanRoot
 	inputVolumeName                  = "node-plan-input"
-	inputMountPath                   = "/var/run/clabernetes/input"
+	inputMountPath                   = clabernetesinternaldirectruntime.ConnectivityInputRoot
 	artifactRootPath                 = "/var/run/clabernetes/artifacts"
 	payloadRootPath                  = "/var/run/clabernetes/payloads"
 	certificateVolumeName            = "node-certificates"
@@ -55,7 +55,7 @@ const (
 	deviceNetnsFileName              = "$(C9S_POD_UID).ns"
 	connectivityRevisionVolumeName   = "clabwire-revision"
 	peerDirectoryVolumeName          = "node-peer-directory"
-	connectivityRevisionMountPath    = "/var/run/clabernetes/connectivity-revision"
+	connectivityRevisionMountPath    = clabernetesinternaldirectruntime.ConnectivityRevisionRoot
 	hostNetworkNamespaceName         = "worker-host-network-namespace"
 	hostNetworkNamespaceSourcePath   = "/proc/1/ns"
 	hostNetworkNamespaceMountPath    = "/var/run/clabernetes/host-network-namespaces"
@@ -1812,8 +1812,9 @@ func ApplicationSaveCommand(
 	}, nil
 }
 
-// PacketCaptureCommand returns the fixed connectivity-helper command for a finite capture of one
-// interface owned by the requested opaque logical Node in the accepted plan.
+// PacketCaptureCommand returns the fixed connectivity-helper command for a finite capture of
+// interfaces owned by the requested opaque logical Node in the accepted plan. The helper
+// defaults its plan, input, and connectivity revision to the paths this renderer mounts.
 func PacketCaptureCommand(
 	plan clabernetesinternaldeviceplan.Plan,
 	options clabernetesinternaldirectruntime.PacketCaptureOptions,
@@ -1825,31 +1826,32 @@ func PacketCaptureCommand(
 		return nil, err
 	}
 
-	if _, err = clabernetesinternaldirectruntime.PacketCaptureTarget(
+	if _, _, err = clabernetesinternaldirectruntime.PacketCaptureTargets(
 		plan,
-		normalizedOptions.NodeID,
-		normalizedOptions.InterfaceName,
+		normalizedOptions.PacketCaptureSelector,
+		normalizedOptions.Interfaces,
 	); err != nil {
 		return nil, err
 	}
 
-	command := []string{
-		runtimeBinaryPath,
-		runtimeCommandName,
-		"packet-capture",
-		runtimeFlagPlan,
-		planMountPath + "/plan.json",
-		runtimeFlagInput,
-		inputMountPath + "/input.json",
-		"--connectivityRevision",
-		connectivityRevisionMountPath + "/revision.json",
-		"--nodeID",
-		normalizedOptions.NodeID,
-		"--interface",
-		normalizedOptions.InterfaceName,
+	command := []string{runtimeBinaryPath, runtimeCommandName, "packet-capture"}
+	if normalizedOptions.NodeID != "" {
+		command = append(command, "--nodeID", normalizedOptions.NodeID)
+	} else {
+		command = append(command, "--nodeName", normalizedOptions.NodeName)
+	}
+
+	for _, name := range normalizedOptions.Interfaces {
+		command = append(command, "--interface", name)
+	}
+
+	command = append(
+		command,
+		"--format",
+		normalizedOptions.Format,
 		"--snapLength",
 		strconv.Itoa(normalizedOptions.SnapLength),
-	}
+	)
 	if normalizedOptions.PacketLimit != 0 {
 		command = append(command, "--packetLimit", strconv.Itoa(normalizedOptions.PacketLimit))
 	}
