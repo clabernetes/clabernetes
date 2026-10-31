@@ -66,7 +66,8 @@ func (transportFilterOperations) EnsureTransportFilterAccepts(spec TransportFilt
 		}
 	}
 
-	return nil
+	// A device may program the classic x_tables table, which netlink-nftables cannot enumerate.
+	return ensureLegacyTransportAccepts(accepts)
 }
 
 // transportAccept is one destination port of one transport protocol to keep accepted.
