@@ -182,9 +182,9 @@ func poolKubectlRetry(t *testing.T, attempts int, args ...string) []byte {
 		}
 		lastErr = err
 		if !transientKubectlError(output) {
-			clabernetestesthelper.Execute(t, cmd)
+			t.Fatalf("kubectl %v failed: %v: %s", args, err, output)
 
-			return output
+			return nil
 		}
 		time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
 	}
