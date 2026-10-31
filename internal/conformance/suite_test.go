@@ -83,6 +83,70 @@ scenarios:
 	}
 }
 
+func TestSuiteReportsRefusedImportedBehaviorPerKind(t *testing.T) {
+	registry := clabernetesinternaldeviceplan.NewContainerlabRegistry()
+
+	suitePath := writeSuite(t, `
+schemaVersion: v1alpha1
+scenarios:
+  - id: refused-behavior
+    availability: restricted
+    manifest: |
+      apiVersion: c9s.run/v1alpha1
+      kind: Node
+      metadata:
+        name: tailnet
+      spec:
+        kind: tailscale
+        image: registry.invalid/tailscale:1
+    management:
+      - name: management
+        nodes: [tailnet]
+        target: deployment/probe
+        command: [probe]
+    dataplane:
+      - name: dataplane
+        nodes: [tailnet]
+        target: deployment/probe
+        command: [probe]
+`)
+
+	_, inventories, err := clabernetesinternalconformance.LoadSuite(suitePath, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	behavior := "nodes.Node.PreDestroy"
+	found := false
+	for _, incompatible := range inventories[0].Incompatible {
+		if incompatible.Kind != "tailscale" || incompatible.Behavior != behavior {
+			continue
+		}
+		found = true
+		if incompatible.Reason == "" {
+			t.Fatal("refused behavior is reported without a reason")
+		}
+	}
+	if !found {
+		t.Fatalf("inventory does not report %s for kind tailscale: %#v",
+			behavior, inventories[0].Incompatible)
+	}
+}
+
+func TestImportedCoverageReportCoversTheImportedInterface(t *testing.T) {
+	summary := clabernetesinternalconformance.ImportedCoverageReport()
+
+	if summary.Total == 0 || summary.Unclassified != nil {
+		t.Fatalf("coverage summary is incomplete: %#v", summary)
+	}
+	if summary.Exercised+summary.Refused+summary.Unused != summary.Total {
+		t.Fatalf("coverage summary states do not add up: %#v", summary)
+	}
+	if summary.Refused == 0 {
+		t.Fatal("coverage summary records no refused imported behavior")
+	}
+}
+
 func TestSuiteRejectsUnknownFieldsAndUnrepresentableTopology(t *testing.T) {
 	registry := clabernetesinternaldeviceplan.NewContainerlabRegistry()
 	kind := registry.GetRegisteredNodeKindNames()[0]

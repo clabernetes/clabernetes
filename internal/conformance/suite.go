@@ -81,6 +81,17 @@ type ScenarioInventory struct {
 	ID           string             `json:"id"`
 	Availability string             `json:"availability"`
 	Images       []ImageObservation `json:"images"`
+	// Incompatible lists imported behavior the scenario's kinds cannot rely on because the
+	// planning boundary deliberately does not run it. It is reported, not failed: a scenario may
+	// not exercise the behavior at all.
+	Incompatible []KindIncompatibility `json:"incompatible,omitempty"`
+}
+
+// KindIncompatibility names one refused imported behavior affecting one kind.
+type KindIncompatibility struct {
+	Kind     string `json:"kind"`
+	Behavior string `json:"behavior"`
+	Reason   string `json:"reason"`
 }
 
 // LoadSuite strictly decodes and validates an external suite against the live imported registry.
@@ -130,6 +141,14 @@ func (s *Suite) Validate(registry *clabnodes.NodeRegistry) ([]ScenarioInventory,
 
 	if registry == nil {
 		registry = clabernetesinternaldeviceplan.NewContainerlabRegistry()
+	}
+
+	// An imported interface method c9s neither exercises nor refuses is a coverage gap, so the
+	// coverage inventory gates the suite rather than being reported alongside it.
+	if err = clabernetesinternaldeviceplan.ValidateImportedCoverage(
+		clabernetesinternaldeviceplan.ImportedCoverage(),
+	); err != nil {
+		return nil, fmt.Errorf("%w: %w", errInvalidSuite, err)
 	}
 
 	seenIDs := map[string]bool{}
@@ -257,7 +276,46 @@ func validateScenario(
 
 	return ScenarioInventory{
 		ID: scenario.ID, Availability: scenario.Availability, Images: images,
+		Incompatible: incompatibleImportedBehaviors(images),
 	}, nil
+}
+
+// incompatibleImportedBehaviors reports the refused imported behavior each scenario kind carries,
+// so a compatible-looking scenario never hides a behavior c9s does not realize.
+func incompatibleImportedBehaviors(images []ImageObservation) []KindIncompatibility {
+	incompatible := []KindIncompatibility{}
+	seen := map[string]bool{}
+	for _, image := range images {
+		for _, refusal := range clabernetesinternaldeviceplan.RefusedBehaviorsForKind(image.Kind) {
+			key := image.Kind + "\x00" + refusal.Interface + "." + refusal.Method
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			incompatible = append(incompatible, KindIncompatibility{
+				Kind:     image.Kind,
+				Behavior: refusal.Interface + "." + refusal.Method,
+				Reason:   refusal.Reason,
+			})
+		}
+	}
+	slices.SortFunc(incompatible, func(left, right KindIncompatibility) int {
+		if left.Kind != right.Kind {
+			return strings.Compare(left.Kind, right.Kind)
+		}
+
+		return strings.Compare(left.Behavior, right.Behavior)
+	})
+
+	return incompatible
+}
+
+// ImportedCoverageReport returns the planning boundary's imported-interface coverage summary, which
+// conformance reports so a refusal or an unreachable method is visible in test output.
+func ImportedCoverageReport() clabernetesinternaldeviceplan.ImportedCoverageSummary {
+	return clabernetesinternaldeviceplan.SummarizeImportedCoverage(
+		clabernetesinternaldeviceplan.ImportedCoverage(),
+	)
 }
 
 func validateRegistryImages(
