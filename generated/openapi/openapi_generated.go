@@ -930,6 +930,13 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Deployment(
 				Description: "Deployment holds portable policy compiled into direct Node workloads.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"networkIsolation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NetworkIsolation runs direct device Pods with their data-plane interfaces in a private network namespace while keeping sidecar infra (c9s0/c9sr0/c9sm0/fabric) in the Pod namespace. False keeps the legacy shared Pod namespace. Device containers must be privileged or carry CAP_SYS_ADMIN. Omitted leaves emitted profiles unset; the Node controller applies the ixia-c family default at resolve time.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"resources": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Resources is a mapping of nodeName (or \"default\") to kubernetes resource requirements -- any value set here overrides the \"global\" config resource definitions. If a key \"default\" is set, those resource values will be preferred over *all global settings* for this topology -- meaning, the \"global\" resource settings will never be looked up for this topology, and any kind/type that is *not* in this resources map will have the \"default\" resources from this mapping applied.",
@@ -2556,9 +2563,16 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileDeployment(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "NodeProfileDeployment holds portable direct workload persistence policy.",
+				Description: "NodeProfileDeployment holds portable direct workload policy.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
+					"networkIsolation": {
+						SchemaProps: spec.SchemaProps{
+							Description: "NetworkIsolation runs the device's data-plane interfaces in a private network namespace while keeping sidecar-owned infra (c9s0/c9sr0/c9sm0/fabric) in the Pod namespace. False keeps the legacy shared Pod network namespace. The device container must be privileged or carry CAP_SYS_ADMIN so the launch boundary can enter the private namespace. Omitted leaves the field unset so ResolveProfile can apply the ixia-c family default; an explicit value always wins.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 					"persistence": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Persistence enables persistence of the containerlab working directory.",

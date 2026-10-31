@@ -2405,3 +2405,164 @@ func TestRenderStoppedWorkloadAndRestartTokens(t *testing.T) {
 		t.Fatalf("malformed token annotation decoded to %v", got)
 	}
 }
+
+func TestRenderIsolatesDeviceContainersWhenRequested(t *testing.T) {
+	t.Parallel()
+
+	options := clabernetesinternaldirectpod.Options{
+		Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+		InputConfigMapName:                "device-a-plan-input-abc",
+		ConnectivityRevisionConfigMapName: "device-a-connectivity",
+		PreparationImage:                  "example/c9s@sha256:1111",
+		ConnectivityImage:                 "example/c9s@sha256:1111",
+		EnableContainerStopSignals:        true,
+		NetworkIsolation:                  true,
+	}
+
+	deployment, err := clabernetesinternaldirectpod.Render(renderablePlan(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	spec := deployment.Spec.Template.Spec
+
+	var netnsVolume *k8scorev1.Volume
+	for index := range spec.Volumes {
+		if spec.Volumes[index].Name == "device-netns" {
+			netnsVolume = &spec.Volumes[index]
+		}
+	}
+	if netnsVolume == nil || netnsVolume.HostPath == nil ||
+		netnsVolume.HostPath.Path != "/var/run/clabernetes/device-netns" {
+		t.Fatalf("device netns volume = %#v", netnsVolume)
+	}
+
+	var netnsInit *k8scorev1.Container
+	for index := range spec.InitContainers {
+		if spec.InitContainers[index].Name == "device-netns-init" {
+			netnsInit = &spec.InitContainers[index]
+		}
+	}
+	if netnsInit == nil {
+		t.Fatal("device netns init container is absent")
+	}
+	if netnsInit.SecurityContext == nil || netnsInit.SecurityContext.Privileged == nil ||
+		!*netnsInit.SecurityContext.Privileged {
+		t.Fatal("device netns init container is not privileged")
+	}
+	if len(netnsInit.VolumeMounts) != 1 ||
+		netnsInit.VolumeMounts[0].MountPropagation == nil ||
+		*netnsInit.VolumeMounts[0].MountPropagation != k8scorev1.MountPropagationBidirectional {
+		t.Fatalf("device netns init mounts = %#v", netnsInit.VolumeMounts)
+	}
+
+	netnsInitIndex := slices.IndexFunc(spec.InitContainers,
+		func(container k8scorev1.Container) bool {
+			return container.Name == "device-netns-init"
+		})
+	sidecarIndex := slices.IndexFunc(spec.InitContainers,
+		func(container k8scorev1.Container) bool {
+			return container.Name == clabernetesinternaldirectpod.ConnectivityContainerName
+		})
+	if netnsInitIndex < 0 || sidecarIndex < 0 || netnsInitIndex > sidecarIndex {
+		t.Fatalf(
+			"device netns init index %d must precede connectivity index %d",
+			netnsInitIndex,
+			sidecarIndex,
+		)
+	}
+
+	sidecar := containerByName(
+		t,
+		spec.InitContainers,
+		clabernetesinternaldirectpod.ConnectivityContainerName,
+	)
+	if !slices.Contains(sidecar.Args, "--deviceNetns") ||
+		!slices.Contains(sidecar.Args, "/var/run/netns/$(C9S_POD_UID).ns") {
+		t.Fatalf("connectivity args = %#v", sidecar.Args)
+	}
+	assertHostToContainerMount(t, sidecar.VolumeMounts)
+
+	for _, container := range spec.Containers {
+		if !slices.Contains(container.Command, "--deviceNetns") ||
+			!slices.Contains(container.Command, "/var/run/netns/$(C9S_POD_UID).ns") {
+			t.Fatalf("application container %q command = %#v", container.Name, container.Command)
+		}
+		assertHostToContainerMount(t, container.VolumeMounts)
+		if !hasDownwardEnvironment(container, "C9S_POD_UID", "metadata.uid") {
+			t.Fatalf("application container %q has no Pod UID identity", container.Name)
+		}
+	}
+}
+
+func TestRenderKeepsSharedNamespaceWhenIsolationIsNotRequested(t *testing.T) {
+	t.Parallel()
+
+	options := clabernetesinternaldirectpod.Options{
+		Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+		InputConfigMapName:                "device-a-plan-input-abc",
+		ConnectivityRevisionConfigMapName: "device-a-connectivity",
+		PreparationImage:                  "example/c9s@sha256:1111",
+		ConnectivityImage:                 "example/c9s@sha256:1111",
+		EnableContainerStopSignals:        true,
+	}
+
+	deployment, err := clabernetesinternaldirectpod.Render(renderablePlan(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, volume := range deployment.Spec.Template.Spec.Volumes {
+		if volume.Name == "device-netns" {
+			t.Fatalf("unrequested isolation volume = %#v", volume)
+		}
+	}
+	for _, container := range deployment.Spec.Template.Spec.InitContainers {
+		if container.Name == "device-netns-init" {
+			t.Fatalf("unrequested isolation init container = %#v", container)
+		}
+	}
+	for _, container := range deployment.Spec.Template.Spec.Containers {
+		if slices.Contains(container.Args, "--deviceNetns") ||
+			slices.Contains(container.Command, "--deviceNetns") {
+			t.Fatalf("unrequested isolation argument on %q", container.Name)
+		}
+	}
+}
+
+func assertHostToContainerMount(t *testing.T, mounts []k8scorev1.VolumeMount) {
+	t.Helper()
+
+	for _, mount := range mounts {
+		if mount.Name != "device-netns" {
+			continue
+		}
+
+		if mount.MountPath != "/var/run/netns" || mount.MountPropagation == nil ||
+			*mount.MountPropagation != k8scorev1.MountPropagationHostToContainer {
+			t.Fatalf("device netns mount = %#v", mount)
+		}
+
+		return
+	}
+
+	t.Fatal("device netns mount is absent")
+}
+
+func containerByName(
+	t *testing.T,
+	containers []k8scorev1.Container,
+	name string,
+) *k8scorev1.Container {
+	t.Helper()
+
+	for index := range containers {
+		if containers[index].Name == name {
+			return &containers[index]
+		}
+	}
+
+	t.Fatalf("container %q is absent", name)
+
+	return nil
+}

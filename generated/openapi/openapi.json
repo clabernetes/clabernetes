@@ -921,6 +921,10 @@
                             "deployment": {
                                 "description": "Deployment holds device workload settings.",
                                 "properties": {
+                                    "networkIsolation": {
+                                        "description": "NetworkIsolation runs the device's data-plane interfaces in a private\nnetwork namespace while keeping sidecar-owned infra\n(c9s0/c9sr0/c9sm0/fabric) in the Pod namespace. False keeps the legacy\nshared Pod network namespace. The device container must be privileged or\ncarry CAP_SYS_ADMIN so the launch boundary can enter the private\nnamespace. Omitted leaves the field unset so ResolveProfile can apply the\nixia-c family default; an explicit value always wins.",
+                                        "type": "boolean"
+                                    },
                                     "persistence": {
                                         "description": "Persistence enables persistence of the containerlab working directory.",
                                         "properties": {
@@ -3066,6 +3070,10 @@
                                         },
                                         "description": "FilesFromURL is a mapping of FileFromURL that define a URL at which to fetch a file, and path\nin a device pod that the file should be staged at. This is useful for configs that are\nlarger than the ConfigMap (etcd) 1Mb size limit.",
                                         "type": "object"
+                                    },
+                                    "networkIsolation": {
+                                        "description": "NetworkIsolation runs direct device Pods with their data-plane interfaces\nin a private network namespace while keeping sidecar infra\n(c9s0/c9sr0/c9sm0/fabric) in the Pod namespace. False keeps the legacy\nshared Pod namespace. Device containers must be privileged or carry\nCAP_SYS_ADMIN. Omitted leaves emitted profiles unset; the Node controller\napplies the ixia-c family default at resolve time.",
+                                        "type": "boolean"
                                     },
                                     "persistence": {
                                         "description": "Persistence holds direct device artifact persistence policy.",

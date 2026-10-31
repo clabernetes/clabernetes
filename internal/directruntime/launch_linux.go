@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
+	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
 )
 
@@ -165,6 +167,32 @@ func (linuxLaunchOperations) LimitOpenFiles(limit uint64) error {
 	}
 
 	return unix.Setrlimit(unix.RLIMIT_NOFILE, &unix.Rlimit{Cur: limit, Max: limit})
+}
+
+// EnterDeviceNetns enters the bind-mounted private netns and leaves the goroutine locked to
+// that OS thread. Exec immediately follows, so the image process starts in the same namespace;
+// the thread is deliberately never unlocked.
+func (linuxLaunchOperations) EnterDeviceNetns(path string) error {
+	if path == "" {
+		return nil
+	}
+
+	handle, err := netns.GetFromPath(path)
+	if err != nil {
+		return fmt.Errorf("opening device network namespace %q: %w", path, err)
+	}
+
+	defer handle.Close() //nolint:errcheck // the namespace remains referenced by the thread.
+
+	runtime.LockOSThread()
+
+	if err = unix.Setns(int(handle), unix.CLONE_NEWNET); err != nil {
+		runtime.UnlockOSThread()
+
+		return fmt.Errorf("entering device network namespace %q: %w", path, err)
+	}
+
+	return nil
 }
 
 func (linuxLaunchOperations) Exec(argv []string) error {
