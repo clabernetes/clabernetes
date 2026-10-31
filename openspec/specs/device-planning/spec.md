@@ -280,7 +280,9 @@ observation-dependent lifecycle behavior, inside the accepted Node's own in-Pod 
 preparation init container MUST NOT construct a node registry, decode kind-specific configuration,
 initialize or deploy a kind, or run a kind hook; it SHALL realize a plan that is complete without
 imported evaluation. The in-Pod hook boundary SHALL invoke only the hook the accepted plan declares,
-against the live direct container, and MUST NOT re-derive or verify the plan's deployment stream.
+against the live direct container, and MUST NOT compare the construction stream with the plan's
+deployment stream. Construction SHALL use scratch paths and preserve staged and device-saved files.
+Target-worker deployment requirements SHALL be checked before application startup.
 
 #### Scenario: Preparation stages a plan
 
@@ -292,14 +294,14 @@ against the live direct container, and MUST NOT re-derive or verify the plan's d
 
 - **WHEN** a Node's lifecycle boundary runs imported post-deploy, readiness, save, or endpoint
   behavior
-- **THEN** it reconstructs the imported Node graph without side effects and invokes that hook against
-  the live direct container
+- **THEN** it reconstructs the imported Node graph in scratch space without modifying staged or
+  device-saved content, then invokes that hook against the live direct container
 
-#### Scenario: Hook boundary does not replay the deployment
+#### Scenario: Hook boundary does not compare construction streams
 
 - **WHEN** the hook boundary reconstructs a Node graph that no longer matches the accepted plan
 - **THEN** the boundary still runs the accepted hook, because the plan binds its input by digest and
-  the removed comparison added no evidence
+  construction remains isolated from accepted artifacts
 
 #### Scenario: Plan is self-sufficient for preparation
 

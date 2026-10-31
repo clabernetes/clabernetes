@@ -7,14 +7,18 @@ and gated by `internal/conformance` (`TestSuiteReportsRefusedImportedBehaviorPer
 `TestImportedCoverageReportCoversTheImportedInterface`).
 
 Counts: **64 methods** of `nodes.Node`, `nodes.NodeOverwrites`, and the container-name surface:
-**40 exercised** (19 direct, 21 imported-only), **3 refused**, **21 unused**.
+**40 exercised** (19 direct, 21 imported-only), **2 refused**, **22 unused**.
+
+Review correction: topology `exec` is implemented by native post-start actions in
+`mapper.go:appendExecActions`; the imported `RunExecFromConfig` method is unused, not refused.
+The groups below record the original work list, not the final runtime architecture. Host preflight
+checks run on the target worker, and observation-dependent hooks retain scratch construction.
 
 ## Refused behavior that needs a decision
 
 | imported behavior | kinds | consequence |
 | --- | --- | --- |
 | `nodes.Node.PreDestroy` | `tailscale` | no node-destroy boundary exists, so the tailnet logout never runs |
-| `nodes.Node.RunExecFromConfig` | all | topology `exec` commands are carried in the vocabulary but never run |
 | `nodes.NodeOverwrites.PreStop` | `vr_*` and the VM-backed kinds that embed `VRNode` | the pre-stop vrnetlab qcow alias is never prepared, so VM kinds may fail qcow rediscovery after a c9s restart |
 
 None of these is fixed by flattening. They are recorded so that "compatible" is never reported for a

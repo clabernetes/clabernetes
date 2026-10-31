@@ -30,40 +30,39 @@ Two concrete defects motivate the change:
   does not hold for methods c9s never calls.
 
 Constraints: no containerlab removal or kind porting in this change; no CRD/API change; the pinned
-containerlab version stays 0.81.0; existing e2e suites are the acceptance gate; the planning worker
-remains the only place imported code executes.
+containerlab version stays 0.81.0; existing e2e suites are the acceptance gate; generation remains isolated in planning; observation-dependent hooks retain the live device boundary.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Imported kind code executes in exactly one place: the planning worker.
-- Preparation and sidecars apply plan data only, with no registry, entropy, or adapter access.
-- Files a package generates reach the Pod as content-addressed plan artifacts with digest, mode, and
-  size guarantees, and keep the existing device-modified-file preservation semantics.
-- Observation-dependent hooks become typed, deterministic, testable plan steps evaluated by c9s.
-- Every imported interface method is classified as exercised or refused, and any operation a hook
-  emits is either preserved as a plan step or explicitly declared a no-op.
-- Delete the in-Pod runtime facade, runtime-CLI shims, replay, and drift validation.
+- Preparation stages and verifies accepted content without evaluating imported code.
+- Generated files retain digest, mode, ownership, xattr, size, and device-modification protections.
+- Host deployment requirements are checked on the target worker before application startup.
+- Observation-dependent hooks retain their imported implementation; scratch construction cannot
+  overwrite accepted artifacts or device-saved configuration.
+- Every imported interface method is classified as exercised, refused, or unused, with derived
+  per-kind attribution for unsupported behavior.
+- Remove redundant construction-stream comparisons and preparation-time rendering.
+- Generated private material travels over private exec streams and is persisted only in Secrets.
 
 **Non-Goals:**
 
 - Removing the containerlab dependency or porting kind knowledge into c9s.
-- Changing the planner worker, its session protocol, its sandbox, or its pool.
+- Changing the planner sandbox or pool capacity. Disposable and pooled workers share private exec
+  result handling; disposable workers retain their projected payloads.
 - Changing Pod shape, CRDs, RBAC, charts, exposure, connectivity, or management mesh behavior.
 - Improving or re-designing kind behavior; this change must be behavior-preserving apart from the
   two documented exceptions below.
 
 ## Decisions
 
-### D1: Planning is the single imported-code execution site
+### D1: Preparation applies accepted content
 
-Preparation and the sidecars MUST NOT construct a registry, decode kind-specific config, evaluate
-kind hooks, or access entropy. They read the plan, stage its content, verify digests, and apply
-ordered steps.
-
-*Alternative rejected:* keep prep re-execution but seal it harder. It preserves the double render and
-needs the same registry/entropy surface inside the Pod for no new evidence.
+Preparation MUST NOT construct a registry or evaluate imported hooks. It reads the plan, stages
+its content, and verifies digests and metadata. Post-deploy, readiness, save, and endpoint hooks
+remain at the live boundary under D4; imported construction uses scratch paths until the live hook
+runs. The initial single-execution-site goal is superseded by this scoped contract.
 
 ### D2: Generated content travels as content-addressed plan artifacts
 
@@ -104,7 +103,7 @@ mechanism whose only justification is the value we can resolve one layer up.
 *Alternative rejected:* placeholder tokens inside planned bytes. Package templates cannot emit our
 token, and it turns a typed identity question into string surgery over vendor configuration.
 
-### D4: Observation-dependent hooks stay at the in-Pod hook boundary, without replay
+### D4: Observation-dependent hooks stay at the in-Pod boundary without stream comparison
 
 Flattening post-deploy, readiness, save, and endpoint hooks into plan steps was evaluated and
 rejected on evidence:
@@ -120,8 +119,9 @@ rejected on evidence:
   protocol knowledge in c9s) or a native reimplementation of each hook, which is the separate
   kind-ownership change.
 
-The hooks therefore stay where they are - in the Pod, against the live container - and this change
-removes the *replay* around them instead:
+The hooks stay in the Pod against the live container. Initialization, preparation, and deployment
+still reconstruct their state in scratch space; this change removes stream comparison, not those
+constructor calls:
 
 | today | after |
 | --- | --- |
@@ -194,8 +194,8 @@ it; the controller's existing plan identity check forces regeneration of stale p
    classifications, including `PreDestroy`.
 2. Persist generated artifacts and remove package evaluation, entropy, and runtime-identity re-render
    from preparation; bump `SchemaVersion`.
-3. Flatten post-deploy, readiness, save, and endpoint hooks into steps; delete the facade, the
-   `docker`/`podman` shims, replay validation, and the `runtime-artifact-digests` record.
+3. Keep observation-dependent hooks, the facade, and CLI shims. Isolate construction in scratch
+   space and remove construction-stream comparison and the `runtime-artifact-digests` record.
 4. Update `docs/architecture.mdx`, `docs/concepts/containerlab-differences.md`, and the spec text that
    describes in-Pod hook execution.
 
