@@ -348,12 +348,6 @@ func firstSubjectValue(values []string) string {
 	return values[0]
 }
 
-func nodeHasCertificateInput(inputs []CertificateInput, nodeID string) bool {
-	return slices.ContainsFunc(inputs, func(input CertificateInput) bool {
-		return input.NodeID == nodeID
-	})
-}
-
 // discoverCertificateRequests lets imported preparation expose any certificate mutations, then
 // asks containerlab's own generic issuer for a public request when the resulting package config
 // enables issuance. A future hook can therefore request a certificate without c9s recognizing its

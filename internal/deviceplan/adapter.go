@@ -74,17 +74,15 @@ type EvaluatedNode struct {
 	ReadinessRuntimeIDs []string
 	LinkApplyMode       LinkApplyMode
 	PrivilegedByDefault bool
-	CertificateBacked   bool
 	// DeclaredDNS is the topology-declared resolver configuration, captured before the
 	// controller-resolved resolver completion so container DNS policy is unchanged by it.
-	DeclaredDNS          DNSConfig
-	RuntimeCalls         []string
-	preparationArtifacts map[string]GeneratedArtifact
-	implementation       clabnodes.Node
-	definition           *clabtypes.NodeDefinition
-	recorder             *recordingRuntime
-	scratchLabDir        string
-	stableLabDir         string
+	DeclaredDNS    DNSConfig
+	RuntimeCalls   []string
+	implementation clabnodes.Node
+	definition     *clabtypes.NodeDefinition
+	recorder       *recordingRuntime
+	scratchLabDir  string
+	stableLabDir   string
 }
 
 // EvaluatedInterface is one explicit endpoint after imported interface-name normalization.
@@ -105,7 +103,6 @@ type GeneratedArtifact struct {
 	UID                *int64
 	GID                *int64
 	ExtendedAttributes []generatedExtendedAttribute
-	SourceReference    string
 	// Data holds the bytes of a regular artifact so they can travel beside the plan. Directories
 	// and symbolic links carry no bytes.
 	Data []byte
@@ -246,9 +243,6 @@ func evaluateInWorkspace(
 		normalized.TopologyName,
 		certificateInfrastructure,
 	); err != nil {
-		return nil, err
-	}
-	if err := capturePreparationArtifacts(result.Nodes); err != nil {
 		return nil, err
 	}
 	if err := recordDeployments(ctx, result.Nodes, certificateInfrastructure); err != nil {
@@ -541,7 +535,6 @@ func evaluateNode(
 		Interfaces:          interfaces,
 		LinkApplyMode:       linkMode,
 		PrivilegedByDefault: entry.PrivilegedByDefault(),
-		CertificateBacked:   nodeHasCertificateInput(input.Certificates, nodeInput.ID),
 		DeclaredDNS:         declaredDNS,
 		RuntimeCalls:        recorder.Calls(),
 		implementation:      implementation,
@@ -882,39 +875,10 @@ func finalizeEvaluations(nodes []EvaluatedNode) error {
 		if err != nil {
 			return withNodeID(err, node.Input.ID)
 		}
-		for artifactIndex := range artifacts {
-			artifact := &artifacts[artifactIndex]
-			artifact.SourceReference = "containerlab/imported-lifecycle"
-			if prepared, exists := node.preparationArtifacts[artifact.Path]; exists &&
-				prepared.Digest == artifact.Digest && prepared.Mode == artifact.Mode &&
-				prepared.Kind == artifact.Kind && prepared.LinkTarget == artifact.LinkTarget &&
-				reflect.DeepEqual(prepared.UID, artifact.UID) &&
-				reflect.DeepEqual(prepared.GID, artifact.GID) &&
-				reflect.DeepEqual(prepared.ExtendedAttributes, artifact.ExtendedAttributes) {
-				artifact.SourceReference = "containerlab/imported-prepare"
-			}
-		}
 		node.GeneratedArtifacts = artifacts
 		node.Config = node.implementation.Config()
 		rewriteWorkspacePaths(node.Config, node.scratchLabDir, node.stableLabDir)
 		node.RuntimeCalls = node.recorder.Calls()
-	}
-
-	return nil
-}
-
-func capturePreparationArtifacts(nodes []EvaluatedNode) error {
-	for index := range nodes {
-		node := &nodes[index]
-		artifacts, err := scanGeneratedArtifacts(node.scratchLabDir)
-		if err != nil {
-			return withNodeID(err, node.Input.ID)
-		}
-		node.preparationArtifacts = make(map[string]GeneratedArtifact, len(artifacts))
-		for _, artifact := range artifacts {
-			artifact.SourceReference = "containerlab/imported-prepare"
-			node.preparationArtifacts[artifact.Path] = artifact
-		}
 	}
 
 	return nil
