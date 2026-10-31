@@ -293,9 +293,12 @@ func waitForPoolMixedReady(
 		assertPoolMixedPodReady(t, pod)
 		result[pod.Labels["c9s.run/direct-workload"]] = pod
 	}
-	if len(result) != len(names) || len(result["sros"].Spec.Containers) != 2 {
+	// The SR-SIM Node contributes its component containers plus the netns-owning container, so the
+	// supported contract is "at least two device containers" - the same contract the SR-SIM suite
+	// asserts. Requiring an exact count rots every time the component layout gains a container.
+	if len(result) != len(names) || len(result["sros"].Spec.Containers) < 2 {
 		t.Fatalf(
-			"expected %d workloads including two SR-SIM component containers: %+v",
+			"expected %d workloads including at least two SR-SIM component containers: %+v",
 			len(names),
 			result,
 		)

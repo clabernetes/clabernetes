@@ -231,7 +231,6 @@ func runLifecycle(
 			}
 			if err = (clabernetesinternaldeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
-				PodDNSServers: RuntimePodDNSServers(),
 			}).RunPostDeploy(
 				ctx,
 				input,
@@ -274,7 +273,6 @@ func runLifecycle(
 			}
 			if err = (clabernetesinternaldeviceplan.Adapter{
 				Revision: revision, EntropyRoot: entropyRoot,
-				PodDNSServers: RuntimePodDNSServers(),
 			}).RunSave(
 				ctx,
 				input,
@@ -560,7 +558,7 @@ func readLifecycleFile(
 			errors.New("cannot read bounded lifecycle source")
 	}
 	digest := clabernetesinternaldeviceplan.Digest(content)
-	if digest != file.Digest && !runtimeGeneratorContent(file, digest, artifactRoot) &&
+	if digest != file.Digest &&
 		!clabernetesinternaldeviceplan.PreservedDeviceArtifact(
 			artifactRoot,
 			file.NodeID,
@@ -590,20 +588,4 @@ func savePersistenceWarning(persistentNodeIDs []string, nodeID string) string {
 			" the saved configuration will not survive Pod replacement",
 		nodeID,
 	)
-}
-
-func runtimeGeneratorContent(
-	file clabernetesinternaldeviceplan.FilePlan,
-	digest,
-	artifactRoot string,
-) bool {
-	if file.SourceKind != clabernetesinternaldeviceplan.FileSourceGenerator &&
-		file.SourceKind != clabernetesinternaldeviceplan.FileSourceCertificate {
-		return false
-	}
-
-	return clabernetesinternaldeviceplan.LoadRuntimeArtifactDigests(
-		artifactRoot,
-		file.NodeID,
-	)[file.ArtifactPath] == digest
 }

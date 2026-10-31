@@ -37,6 +37,61 @@ func TestPlannerPool200GlobalBatchedLinkedNodes(t *testing.T) {
 	testPlannerPoolScale(t, true, 100, true)
 }
 
+// poolWarmGlobalAdmissionPolicy blocks until the manager admits a Node under the patched global
+// rollout policy, so a scale run never asserts admission against a policy the cache has not seen.
+func poolWarmGlobalAdmissionPolicy(t *testing.T) {
+	t.Helper()
+
+	namespace := clabernetestesthelper.NewTestNamespace("planner-pool-admission-warmup")
+	clabernetestesthelper.KubectlCreateNamespace(t, namespace)
+	defer clabernetestesthelper.KubectlDeleteNamespace(t, namespace)
+	poolApply(t, namespace, `apiVersion: c9s.run/v1alpha1
+kind: NodeProfile
+metadata:
+  name: warmup
+spec:
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+  expose:
+    exposeType: ClusterIP
+    disableAutoExpose: true
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: warmup-a
+spec:
+  kind: linux
+  image: docker.io/library/busybox:1.37.0-musl
+  entrypoint: sleep
+  cmd: "2147483647"
+  profileRef:
+    name: warmup
+`)
+	started := time.Now()
+	deadline := started.Add(2 * time.Minute)
+	for {
+		var node clabernetesapisv1alpha1.Node
+		raw := poolKubectlRetry(t, 3, "get", "node.c9s.run/warmup-a", "-n", namespace, "-o", "json")
+		if err := json.Unmarshal(raw, &node); err != nil {
+			t.Fatal(err)
+		}
+		if node.Status.PlanDigest != "" &&
+			node.Annotations[clabernetesconstants.AnnotationStartupAdmitted] == string(node.UID) {
+			t.Logf("global admission policy is active; warm-up planned after %s",
+				time.Since(started).Round(time.Second))
+
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("global rollout policy was not observed by the manager: %+v", node.Status)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
 //nolint:gocognit,gocyclo // Keep the benchmark setup, timing and validation in one opt-in scenario.
 func testPlannerPoolScale(t *testing.T, linked bool, batchSize int, standalone bool) {
 	t.Helper()
@@ -54,6 +109,12 @@ func testPlannerPoolScale(t *testing.T, linked bool, batchSize int, standalone b
 	}
 	if standalone {
 		poolSetGlobalBatchSize(t, managerNamespace, batchSize)
+		// The manager reads the global rollout policy through its Config cache, so the patched
+		// policy is not necessarily active when the scale manifest is applied. Prove it is active
+		// with a warmed-up pair of Nodes first: admission is what the scale assertion below checks,
+		// and asserting it against a policy the manager has not observed is a setup race, not a
+		// product finding.
+		poolWarmGlobalAdmissionPolicy(t)
 	}
 	namespace := clabernetestesthelper.NewTestNamespace("planner-pool-200")
 	clabernetestesthelper.KubectlCreateNamespace(t, namespace)
@@ -106,7 +167,9 @@ spec:
 	allPlanned := time.Duration(0)
 	for {
 		var nodes clabernetesapisv1alpha1.NodeList
-		raw := poolKubectl(t, "get", "nodes.c9s.run", "-n", namespace, "-o", "json")
+		// A 200-Node list is large enough that the API server occasionally resets the response
+		// connection; a transport hiccup must not be reported as a scale finding.
+		raw := poolKubectlRetry(t, 5, "get", "nodes.c9s.run", "-n", namespace, "-o", "json")
 		if err := json.Unmarshal(raw, &nodes); err != nil {
 			t.Fatal(err)
 		}

@@ -46,10 +46,9 @@ func (a Adapter) RunSave(
 		return err
 	}
 
-	normalizedInput.Management = completeRuntimeManagement(
+	normalizedInput.Management = completeManagementInterfaces(
 		normalizedInput.Management,
 		normalizedPlan.Management,
-		a.PodDNSServers,
 	)
 
 	finishEntropy, err := a.beginEntropy(normalizedInput)

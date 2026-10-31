@@ -54,6 +54,9 @@ func (r *Reconciler) initializeDirectDependencies() {
 	r.DirectCompatibility = func() (clabernetesinternaldeviceplan.Compatibility, error) {
 		return clabernetesinternaldeviceplan.LiveCompatibility(nil)
 	}
+	if r.DirectResolverServers == nil {
+		r.DirectResolverServers = managerResolverServers
+	}
 	r.DirectPlatform = clabernetesinternalocimetadata.Platform{
 		OS:           runtime.GOOS,
 		Architecture: runtime.GOARCH,
@@ -75,6 +78,7 @@ func (r *Reconciler) reconcileDirect(
 		r.CertificateReconciler == nil ||
 		r.EntropyReconciler == nil ||
 		r.PlanConfigMapReconciler == nil ||
+		r.PlanArtifactReconciler == nil ||
 		r.ConnectivityRevisionConfigMapReconciler == nil ||
 		r.PersistentVolumeClaimReconciler == nil ||
 		r.ServiceReconciler == nil || r.namespaceResourcesReconciler == nil ||
@@ -166,6 +170,13 @@ func (r *Reconciler) reconcileDirect(
 	if err != nil {
 		return err
 	}
+	// Generated package configuration completes against the controller-resolved resolver set, so
+	// preparation stages planned bytes instead of rendering with the Pod's own resolver.
+	resolverServers, err := r.resolverServers()
+	if err != nil {
+		return err
+	}
+	management = withResolverServers(management, resolverServers)
 	if !r.peerDirectoryAsync {
 		if err = r.refreshDirectPeerDirectory(
 			ctx,
@@ -320,6 +331,28 @@ func (r *Reconciler) reconcileDirect(
 	if err = clabernetesinternaldirectpod.ValidatePlan(*planningResult.Plan); err != nil {
 		return err
 	}
+	if err = r.PlanArtifactReconciler.Verify(ctx, node, *planningResult.Plan); err != nil {
+		if errors.Is(err, ErrPlanArtifactMissing) {
+			// The generated artifacts a cached plan references were removed; drop the cached
+			// result so the next reconcile plans and persists them again.
+			if deleteErr := deletePlannerSessionOutput(
+				ctx,
+				r.Client,
+				node.GetNamespace(),
+				planningResult.PodName,
+			); deleteErr != nil {
+				return deleteErr
+			}
+
+			return nil
+		}
+
+		return err
+	}
+	artifactPayloads, err := PlanArtifactReferences(node, *planningResult.Plan)
+	if err != nil {
+		return err
+	}
 	canonicalPlan, err := planningResult.Plan.CanonicalJSON()
 	if err != nil {
 		return err
@@ -403,7 +436,10 @@ func (r *Reconciler) reconcileDirect(
 		Affinity:                   profile.Affinity.DeepCopy(),
 		PrimaryContainerResources:  primaryContainerResources,
 		ApplicationImagePullPolicy: profile.ImagePullPolicy,
-		Payloads:                   planInput.Payloads,
+		Payloads: append(
+			slices.Clone(planInput.Payloads),
+			artifactPayloads...,
+		),
 		PersistentVolumeClaims:     persistentVolumeClaims,
 		DeviceStateResets:          deviceStateResets,
 		EnableContainerStopSignals: r.configManagerGetter().GetContainerStopSignals(),
@@ -428,6 +464,7 @@ func (r *Reconciler) reconcileDirect(
 		planInput,
 		*planningResult.Plan,
 		renderOptions,
+		planInput.Payloads,
 	)
 	if err != nil {
 		return err
@@ -594,6 +631,28 @@ func (r *Reconciler) reconcileDirect(
 		ctx,
 		node,
 		keepPlanConfigMapName,
+	); err != nil {
+		return err
+	}
+
+	keepArtifactNames, err := PlanArtifactObjectNames(node, statusPlan)
+	if err != nil {
+		return err
+	}
+	// The desired plan's artifacts are retained alongside the applied plan's: a retained Pod keeps
+	// running the accepted plan, and the next reconcile must not have to plan again merely because
+	// the interface-derived configuration regenerated.
+	desiredArtifactNames, err := PlanArtifactObjectNames(node, *planningResult.Plan)
+	if err != nil {
+		return err
+	}
+	for name := range desiredArtifactNames {
+		keepArtifactNames[name] = true
+	}
+	if err = r.PlanArtifactReconciler.GarbageCollect(
+		ctx,
+		node,
+		keepArtifactNames,
 	); err != nil {
 		return err
 	}

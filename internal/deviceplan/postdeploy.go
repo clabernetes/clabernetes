@@ -48,10 +48,9 @@ func (a Adapter) RunPostDeploy(
 	if err = ValidatePlanInputIdentity(normalizedInput, normalizedPlan); err != nil {
 		return err
 	}
-	normalizedInput.Management = completeRuntimeManagement(
+	normalizedInput.Management = completeManagementInterfaces(
 		normalizedInput.Management,
 		normalizedPlan.Management,
-		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
@@ -202,10 +201,9 @@ func (a Adapter) RunDeployEndpoints(
 	if err = ValidatePlanInputIdentity(normalizedInput, normalizedPlan); err != nil {
 		return err
 	}
-	normalizedInput.Management = completeRuntimeManagement(
+	normalizedInput.Management = completeManagementInterfaces(
 		normalizedInput.Management,
 		normalizedPlan.Management,
-		a.PodDNSServers,
 	)
 	finishEntropy, err := a.beginEntropy(normalizedInput)
 	if err != nil {
@@ -323,12 +321,11 @@ func (a Adapter) rehydrateImportedDeployment(
 	if err = requireRealDirectory(targetLabDir, "post-deploy Node artifact root"); err != nil {
 		return nil, err
 	}
-	replayRuntime := newImportedDeploymentReplayRuntime(
+	constructionRuntime := newImportedDeploymentConstructionRuntime(
 		runtime,
 		normalizedInput.Images,
 		managementForNode(normalizedInput.Management, targetNode.ID),
 		filepath.Join(workspace, "runtime-replay"),
-		LoadRuntimeArtifactDigests(artifactRoot, targetNode.ID),
 	)
 
 	registry := a.Registry
@@ -349,7 +346,7 @@ func (a Adapter) rehydrateImportedDeployment(
 
 	state := &importedDeploymentState{
 		implementations: make(map[string]clabnodes.Node, len(normalizedInput.Nodes)*2),
-		runtime:         replayRuntime,
+		runtime:         constructionRuntime,
 		cleanup:         func() { _ = os.RemoveAll(workspace) },
 	}
 	for index, nodeInput := range normalizedInput.Nodes {
@@ -414,11 +411,11 @@ func (a Adapter) rehydrateImportedDeployment(
 			"imported-post-deploy-init",
 			"containerlab post-deployment initialization panicked",
 			"initializing imported post-deploy hook",
-			replayRuntime,
+			constructionRuntime,
 			func() error {
 				return implementation.Init(
 					config,
-					clabnodes.WithRuntime(replayRuntime),
+					clabnodes.WithRuntime(constructionRuntime),
 					clabnodes.WithMgmtNet(managementNetwork),
 				)
 			},
@@ -458,19 +455,19 @@ func (a Adapter) rehydrateImportedDeployment(
 		"imported-pre-deploy",
 		"containerlab target preparation panicked",
 		"rehydrating imported target preparation",
-		replayRuntime,
+		constructionRuntime,
 		func() error { return state.target.PreDeploy(ctx, preDeploy) },
 	); err != nil {
 		return nil, err
 	}
-	replayRuntime.beginDeployment()
+	constructionRuntime.beginDeployment()
 	if err = runImportedRuntimeHook(
 		targetNode.ID,
 		"postDeployment.images",
 		"imported-image-pull",
 		"containerlab target image hook panicked",
 		"rehydrating imported target image lifecycle",
-		replayRuntime,
+		constructionRuntime,
 		func() error { return state.target.PullImage(ctx) },
 	); err != nil {
 		return nil, err
@@ -481,7 +478,7 @@ func (a Adapter) rehydrateImportedDeployment(
 		behaviorImportedDeploy,
 		"containerlab target deployment hook panicked",
 		"rehydrating imported target deployment",
-		replayRuntime,
+		constructionRuntime,
 		func() error {
 			return state.target.Deploy(
 				ctx,
@@ -497,32 +494,12 @@ func (a Adapter) rehydrateImportedDeployment(
 		"imported-runtime-info",
 		"containerlab target runtime-information hook panicked",
 		"rehydrating imported target runtime information",
-		replayRuntime,
+		constructionRuntime,
 		func() error { return state.target.UpdateConfigWithRuntimeInfo(ctx) },
 	); err != nil {
 		return nil, err
 	}
-	readinessRuntimeIDs, err := importedContainerInventory(
-		ctx,
-		targetNode.ID,
-		state.target,
-		replayRuntime.recorder,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err = verifyReplayedReadinessInventory(
-		readinessRuntimeIDs,
-		normalizedPlan,
-		targetNode,
-	); err != nil {
-		return nil, err
-	}
-	if err = replayRuntime.completeDeployment(
-		normalizedPlan,
-		targetNode,
-		targetContainer,
-	); err != nil {
+	if err = constructionRuntime.switchToLive(); err != nil {
 		return nil, err
 	}
 
@@ -531,97 +508,44 @@ func (a Adapter) rehydrateImportedDeployment(
 	return state, nil
 }
 
-func verifyReplayedReadinessInventory(
-	runtimeIDs []string,
-	plan Plan,
-	node NodePlan,
-) error {
-	expected := make(map[string]bool, len(node.ReadinessContainerIDs))
-	readinessContainerIDs := make(map[string]bool, len(node.ReadinessContainerIDs))
-	for _, containerID := range node.ReadinessContainerIDs {
-		readinessContainerIDs[containerID] = true
-	}
-	for _, container := range plan.Containers {
-		if container.NodeID == node.ID && readinessContainerIDs[container.ID] {
-			expected[container.RuntimeID] = true
-		}
-	}
-	if len(expected) != len(node.ReadinessContainerIDs) || len(runtimeIDs) != len(expected) {
-		return deploymentReplayError(
-			node.ID,
-			"component readiness inventory differs from the accepted plan",
-		)
-	}
-	for _, runtimeID := range runtimeIDs {
-		if !expected[runtimeID] {
-			return deploymentReplayError(
-				node.ID,
-				"component readiness inventory differs from the accepted plan",
-			)
-		}
-	}
-
-	return nil
-}
-
-// importedDeploymentReplayRuntime first delegates to the side-effect-free planning recorder and
-// switches to the supplied live runtime only after the reconstructed Deploy operation stream has
-// matched the accepted plan. Embedding the generic interface keeps this boundary independent of
-// containerlab kinds and of future methods added to concrete runtime implementations.
-type importedDeploymentReplayRuntime struct {
+// importedDeploymentConstructionRuntime rebuilds one imported Node graph with a side-effect-free
+// recorder and then hands the same graph to the live runtime of the already-running direct
+// container. The recorded construction stream is deliberately not compared to the accepted plan:
+// the plan already binds this input by digest, so re-deriving and diffing the deployment stream
+// inside the Pod duplicated planning work without adding evidence.
+type importedDeploymentConstructionRuntime struct {
 	clabruntime.ContainerRuntime
 
 	live       clabruntime.ContainerRuntime
 	recorder   *recordingRuntime
 	replayRoot string
 	liveActive bool
-	// runtimeArtifactDigests are the preparation-recorded digests of generator files rendered
-	// with the Pod's runtime management identity; the replay renders with the same identity, so
-	// these are accepted wherever the plan digest is.
-	runtimeArtifactDigests map[string]string
 }
 
-func newImportedDeploymentReplayRuntime(
+func newImportedDeploymentConstructionRuntime(
 	live clabruntime.ContainerRuntime,
 	images []ImageInput,
 	management *ManagementInput,
 	replayRoot string,
-	runtimeArtifactDigests map[string]string,
-) *importedDeploymentReplayRuntime {
+) *importedDeploymentConstructionRuntime {
 	recorder := newRecordingRuntime(images, management, replayRoot)
 
-	return &importedDeploymentReplayRuntime{
-		ContainerRuntime:       recorder,
-		live:                   live,
-		recorder:               recorder,
-		replayRoot:             replayRoot,
-		runtimeArtifactDigests: runtimeArtifactDigests,
+	return &importedDeploymentConstructionRuntime{
+		ContainerRuntime: recorder,
+		live:             live,
+		recorder:         recorder,
+		replayRoot:       replayRoot,
 	}
 }
 
-func (r *importedDeploymentReplayRuntime) beginDeployment() {
+func (r *importedDeploymentConstructionRuntime) beginDeployment() {
 	r.recorder.BeginMutationRecording()
 }
 
-func (r *importedDeploymentReplayRuntime) completeDeployment(
-	plan Plan,
-	node NodePlan,
-	target ContainerPlan,
-) error {
+// switchToLive completes construction: every later package call, including the hook this boundary
+// exists for, reaches the direct application container.
+func (r *importedDeploymentConstructionRuntime) switchToLive() error {
 	if err := r.recorder.Failure(); err != nil {
-		return withNodeID(err, node.ID)
-	}
-	if err := verifyReplayedContainers(r.recorder.Containers(), plan, node.ID); err != nil {
-		return err
-	}
-	if err := verifyReplayedDeploymentOperations(
-		r.recorder,
-		r.replayRoot,
-		plan,
-		node,
-		target,
-		r.runtimeArtifactDigests,
-	); err != nil {
 		return err
 	}
 	r.ContainerRuntime = r.live
@@ -630,235 +554,17 @@ func (r *importedDeploymentReplayRuntime) completeDeployment(
 	return nil
 }
 
-func (r *importedDeploymentReplayRuntime) BoundaryFailure() error {
+// BoundaryFailure reports the first generic runtime capability the construction recorder or the
+// live boundary could not realize.
+func (r *importedDeploymentConstructionRuntime) BoundaryFailure() error {
+	if err := r.recorder.Failure(); err != nil {
+		return err
+	}
 	if !r.liveActive {
-		return r.recorder.Failure()
-	}
-	auditor, ok := r.live.(importedRuntimeBoundaryAuditor)
-	if !ok {
 		return nil
 	}
 
-	return auditor.BoundaryFailure()
-}
-
-func verifyReplayedContainers(
-	recorded []RecordedContainer,
-	plan Plan,
-	nodeID string,
-) error {
-	expected := map[string]bool{}
-	for _, container := range plan.Containers {
-		if container.NodeID == nodeID {
-			expected[container.RuntimeID] = false
-		}
-	}
-	if len(recorded) != len(expected) {
-		return deploymentReplayError(nodeID, "container count differs from the accepted plan")
-	}
-	for _, container := range recorded {
-		started, exists := expected[container.RuntimeID]
-		if !exists || started || !container.Started {
-			return deploymentReplayError(
-				nodeID,
-				"container lifecycle differs from the accepted plan",
-			)
-		}
-		expected[container.RuntimeID] = true
-	}
-
-	return nil
-}
-
-type replayedDeploymentOperation struct {
-	kind        ActionKind
-	runtimeID   string
-	command     []string
-	wait        bool
-	destination string
-	writeMode   FileWriteMode
-	digest      string
-	// alternateDigest is the preparation-recorded runtime-management render of the same
-	// generator file; a replay performed with the runtime identity legitimately produces it.
-	alternateDigest string
-}
-
-// runtimeGeneratorDigest returns the runtime-rendered digest accepted for a prepared artifact,
-// or empty for every other file source.
-func runtimeGeneratorDigest(file FilePlan, runtimeArtifactDigests map[string]string) string {
-	if file.SourceKind != FileSourceGenerator && file.SourceKind != FileSourceCertificate {
-		return ""
-	}
-
-	return runtimeArtifactDigests[file.ArtifactPath]
-}
-
-func verifyReplayedDeploymentOperations(
-	recorder *recordingRuntime,
-	replayRoot string,
-	plan Plan,
-	node NodePlan,
-	target ContainerPlan,
-	runtimeArtifactDigests map[string]string,
-) error {
-	postDeployOrder := -1
-	for _, action := range plan.Actions {
-		if action.Phase == PhasePostStart && action.Kind == ActionImportedPostDeploy &&
-			action.Target.NodeID == node.ID && action.Target.ContainerID == target.ID {
-			postDeployOrder = action.Order
-
-			break
-		}
-	}
-	if postDeployOrder < 0 {
-		return deploymentReplayError(node.ID, "imported post-deployment boundary is absent")
-	}
-	files := make(map[string]FilePlan, len(plan.Files))
-	for _, file := range plan.Files {
-		files[file.ID] = file
-	}
-	containers := make(map[string]ContainerPlan, len(plan.Containers))
-	for _, container := range plan.Containers {
-		containers[container.ID] = container
-	}
-	expected := make(map[int]replayedDeploymentOperation, postDeployOrder)
-	for _, action := range plan.Actions {
-		if action.Phase != PhasePostStart || action.Target.NodeID != node.ID ||
-			action.Order >= postDeployOrder {
-			continue
-		}
-		container, exists := containers[action.Target.ContainerID]
-		if !exists {
-			return deploymentReplayError(node.ID, "operation target is absent from the plan")
-		}
-		operation := replayedDeploymentOperation{kind: action.Kind, runtimeID: container.RuntimeID}
-		switch action.Kind {
-		case ActionExec:
-			if action.Exec == nil {
-				return deploymentReplayError(node.ID, "exec payload is incomplete")
-			}
-			operation.command = slices.Clone(action.Exec.Command)
-			operation.wait = action.Exec.Wait
-		case ActionFile:
-			if action.File == nil {
-				return deploymentReplayError(node.ID, "file payload is incomplete")
-			}
-			file, exists := files[action.File.FileID]
-			if !exists {
-				return deploymentReplayError(node.ID, "file source is absent from the plan")
-			}
-			operation.destination = action.File.Destination
-			operation.writeMode = action.File.WriteMode
-			operation.digest = file.Digest
-			operation.alternateDigest = runtimeGeneratorDigest(file, runtimeArtifactDigests)
-		case ActionWriteStdin:
-			if action.WriteStdin == nil {
-				return deploymentReplayError(node.ID, "stdin payload is incomplete")
-			}
-			file, exists := files[action.WriteStdin.FileID]
-			if !exists {
-				return deploymentReplayError(node.ID, "stdin source is absent from the plan")
-			}
-			operation.digest = file.Digest
-			operation.alternateDigest = runtimeGeneratorDigest(file, runtimeArtifactDigests)
-		default:
-			return deploymentReplayError(node.ID, "operation kind differs from the accepted plan")
-		}
-		if _, exists := expected[action.Order]; exists {
-			return deploymentReplayError(node.ID, "operation order is duplicated")
-		}
-		expected[action.Order] = operation
-	}
-	if len(expected) != postDeployOrder {
-		return deploymentReplayError(node.ID, "operation order is incomplete")
-	}
-
-	artifacts, err := scanGeneratedArtifacts(replayRoot)
-	if err != nil {
-		return withNodeID(err, node.ID)
-	}
-	digests := make(map[string]string, len(artifacts))
-	for _, artifact := range artifacts {
-		digests[artifact.Path] = artifact.Digest
-	}
-	actual := make(map[int]replayedDeploymentOperation, postDeployOrder)
-	appendOperation := func(order int, operation replayedDeploymentOperation) error {
-		if order < 0 || order >= postDeployOrder {
-			return deploymentReplayError(node.ID, "operation order is outside the accepted plan")
-		}
-		if _, exists := actual[order]; exists {
-			return deploymentReplayError(node.ID, "operation order is duplicated")
-		}
-		actual[order] = operation
-
-		return nil
-	}
-	for _, operation := range recorder.Execs() {
-		if err = appendOperation(operation.Order, replayedDeploymentOperation{
-			kind: ActionExec, runtimeID: operation.RuntimeID,
-			command: operation.Command, wait: operation.Wait,
-		}); err != nil {
-			return err
-		}
-	}
-	for _, operation := range recorder.Copies() {
-		if err = appendOperation(operation.Order, replayedDeploymentOperation{
-			kind: ActionFile, runtimeID: operation.RuntimeID,
-			destination: operation.Destination, writeMode: operation.WriteMode,
-			digest: digests[operation.ArtifactPath],
-		}); err != nil {
-			return err
-		}
-	}
-	for _, operation := range recorder.Stdins() {
-		if err = appendOperation(operation.Order, replayedDeploymentOperation{
-			kind: ActionWriteStdin, runtimeID: operation.RuntimeID,
-			digest: digests[operation.ArtifactPath],
-		}); err != nil {
-			return err
-		}
-	}
-	if len(actual) != len(expected) {
-		return deploymentReplayError(node.ID, "operation count differs from the accepted plan")
-	}
-	for order := range postDeployOrder {
-		want, wantExists := expected[order]
-		got, gotExists := actual[order]
-		if !wantExists || !gotExists || !sameReplayedDeploymentOperation(got, want) {
-			return deploymentReplayError(node.ID, "operation stream differs from the accepted plan")
-		}
-	}
-
-	return nil
-}
-
-func sameReplayedDeploymentOperation(
-	left,
-	right replayedDeploymentOperation,
-) bool {
-	if left.kind != right.kind || left.runtimeID != right.runtimeID ||
-		!slices.Equal(left.command, right.command) || left.wait != right.wait ||
-		left.destination != right.destination || left.writeMode != right.writeMode {
-		return false
-	}
-	if left.kind == ActionFile || left.kind == ActionWriteStdin {
-		if left.digest == "" || right.digest == "" {
-			return false
-		}
-
-		return left.digest == right.digest ||
-			left.digest == right.alternateDigest ||
-			right.digest == left.alternateDigest
-	}
-
-	return true
-}
-
-func deploymentReplayError(nodeID, message string) error {
-	return &Error{
-		Code: ErrorInvariant, NodeID: nodeID, Field: "deployment.replay",
-		Behavior: behaviorImportedDeploy, Message: message,
-	}
+	return importedRuntimeBoundaryFailure(r.live, "")
 }
 
 type importedRuntimeBoundaryAuditor interface {

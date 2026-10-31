@@ -16,7 +16,87 @@ import (
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
 
-func TestPreparerRegeneratesOnlyAcceptedPreparationArtifacts(t *testing.T) {
+// planProjectedArtifacts plans one input and projects its generated artifact bytes exactly where the
+// controller mounts the digest-named artifact objects, returning the plan and the payload root.
+func planProjectedArtifacts(
+	t *testing.T,
+	adapter clabernetesinternaldeviceplan.Adapter,
+	input clabernetesinternaldeviceplan.Input,
+) (clabernetesinternaldeviceplan.Plan, string) {
+	t.Helper()
+
+	plan, artifacts, err := adapter.PlanArtifacts(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payloadRoot := t.TempDir()
+	projectPlanArtifacts(t, *plan, artifacts, payloadRoot)
+
+	return *plan, payloadRoot
+}
+
+// projectPlanArtifacts writes artifact bytes under the preparation payload root.
+func projectPlanArtifacts(
+	t *testing.T,
+	plan clabernetesinternaldeviceplan.Plan,
+	artifacts []clabernetesinternaldeviceplan.ArtifactContent,
+	payloadRoot string,
+) {
+	t.Helper()
+
+	references := map[string]string{}
+	for _, file := range plan.Files {
+		if file.SourceKind == clabernetesinternaldeviceplan.FileSourcePlanArtifact {
+			references[file.NodeID+"\x00"+file.ArtifactPath] = file.SourceReference
+		}
+	}
+	for _, artifact := range artifacts {
+		reference := references[artifact.NodeID+"\x00"+artifact.ArtifactPath]
+		if reference == "" {
+			t.Fatalf("generated artifact %q has no plan reference", artifact.ArtifactPath)
+		}
+		directory := filepath.Join(
+			payloadRoot,
+			clabernetesinternaldeviceplan.ArtifactNodeDirectory(reference),
+		)
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(
+			filepath.Join(directory, "source"),
+			artifact.Data,
+			0o600,
+		); err != nil {
+			t.Fatal(err)
+		}
+		for _, attribute := range artifact.ExtendedAttributes {
+			if err := os.WriteFile(
+				filepath.Join(
+					directory,
+					clabernetesinternaldeviceplan.PlanArtifactAttributeKey(attribute.Name),
+				),
+				attribute.Value,
+				0o600,
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// testPreparer builds a preparation boundary whose revision matches the planned one.
+func testPreparer(
+	adapter clabernetesinternaldeviceplan.Adapter,
+	payloadRoot string,
+) clabernetesinternaldeviceplan.Preparer {
+	return clabernetesinternaldeviceplan.Preparer{
+		Revision:    adapter.Revision,
+		PayloadRoot: payloadRoot,
+	}
+}
+
+func TestPreparerStagesOnlyAcceptedPlanArtifacts(t *testing.T) {
 	t.Parallel()
 
 	input := singleNodeInput(syntheticKind, "example/future:1")
@@ -24,33 +104,26 @@ func TestPreparerRegeneratesOnlyAcceptedPreparationArtifacts(t *testing.T) {
 		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
 	uid, gid := int64(os.Getuid()), int64(os.Getgid())
 	root := t.TempDir()
 
-	preparer := clabernetesinternaldeviceplan.Preparer{Adapter: adapter}
-	if err = preparer.Prepare(context.Background(), input, *plan, root); err != nil {
+	preparer := testPreparer(adapter, payloadRoot)
+	if err := preparer.Prepare(context.Background(), input, plan, root); err != nil {
 		t.Fatal(err)
 	}
-	// A second run must safely replace the same generated file.
-	if err = preparer.Prepare(context.Background(), input, *plan, root); err != nil {
+	// A second run must safely replace the same staged file.
+	if err := preparer.Prepare(context.Background(), input, plan, root); err != nil {
 		t.Fatal(err)
 	}
 
 	nodeDirectory := clabernetesinternaldeviceplan.ArtifactNodeDirectory("node-a")
-
-	//nolint:gosec // test-controlled path.
-	content, err := os.ReadFile(
+	content, err := os.ReadFile( //nolint:gosec // test-controlled path.
 		filepath.Join(root, nodeDirectory, "generated", "imported.conf"),
-	) //nolint:gosec // test-controlled path.
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if got, want := string(content), "generated\n"; got != want {
 		t.Fatalf("prepared content = %q, want %q", got, want)
 	}
@@ -59,16 +132,126 @@ func TestPreparerRegeneratesOnlyAcceptedPreparationArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || int64(stat.Uid) != uid || int64(stat.Gid) != gid {
 		t.Fatalf("prepared ownership = %#v, want %d:%d", info.Sys(), uid, gid)
 	}
-
-	if _, err = os.Stat(filepath.Join(root, nodeDirectory, ".clabernetes-runtime-hosts")); !os.IsNotExist(
-		err,
-	) {
+	if _, err = os.Stat(
+		filepath.Join(root, nodeDirectory, ".clabernetes-runtime-hosts"),
+	); !os.IsNotExist(err) {
 		t.Fatalf("runtime post-deploy artifact was created during preparation: %v", err)
+	}
+}
+
+// TestPreparerStagesPlanBytesWithoutImportedEvaluation proves preparation publishes exactly the
+// accepted bytes: a projected source that differs from the plan digest fails closed instead of
+// being regenerated locally.
+func TestPreparerStagesPlanBytesWithoutImportedEvaluation(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	adapter := clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
+	}
+
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
+	for _, file := range plan.Files {
+		if file.SourceKind != clabernetesinternaldeviceplan.FileSourcePlanArtifact ||
+			file.ArtifactKind != clabernetesinternaldeviceplan.ArtifactRegular {
+			continue
+		}
+		source := filepath.Join(
+			payloadRoot,
+			clabernetesinternaldeviceplan.ArtifactNodeDirectory(file.SourceReference),
+			"source",
+		)
+		if err := os.Chmod(source, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(source, []byte("tampered\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		break
+	}
+
+	err := testPreparer(adapter, payloadRoot).Prepare(
+		context.Background(), input, plan, t.TempDir(),
+	)
+
+	var planningErr *clabernetesinternaldeviceplan.Error
+	if !errors.As(err, &planningErr) ||
+		planningErr.Code != clabernetesinternaldeviceplan.ErrorInvariant ||
+		planningErr.Behavior != "artifact-generation" {
+		t.Fatalf("Prepare() error = %#v, want artifact-generation Invariant", err)
+	}
+}
+
+// TestPlanArtifactBytesAreDeterministic proves repeated planning of identical input produces
+// byte-identical generated artifacts, which is what lets preparation stage plan content.
+func TestPlanArtifactBytesAreDeterministic(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	adapter := clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
+	}
+
+	first, firstArtifacts, err := adapter.PlanArtifacts(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, secondArtifacts, err := adapter.PlanArtifacts(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstArtifacts) == 0 {
+		t.Fatal("synthetic kind generated no artifact content")
+	}
+	if len(firstArtifacts) != len(secondArtifacts) {
+		t.Fatalf("artifact count = %d, want %d", len(secondArtifacts), len(firstArtifacts))
+	}
+	for index := range firstArtifacts {
+		if firstArtifacts[index].ArtifactPath != secondArtifacts[index].ArtifactPath ||
+			firstArtifacts[index].Digest != secondArtifacts[index].Digest ||
+			!bytes.Equal(firstArtifacts[index].Data, secondArtifacts[index].Data) {
+			t.Fatalf("artifact %d is not deterministic: %#v", index, secondArtifacts[index])
+		}
+	}
+	firstCanonical, err := first.CanonicalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondCanonical, err := second.CanonicalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(firstCanonical, secondCanonical) {
+		t.Fatal("repeated planning produced different plan documents")
+	}
+}
+
+// TestPlanArtifactSizeBoundFailsClosed proves a plan whose generated content exceeds the declared
+// artifact bound fails planning instead of producing a partial plan.
+func TestPlanArtifactSizeBoundFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	input := singleNodeInput(syntheticKind, "example/future:1")
+	input.Nodes[0].Type = "oversized-artifact-test"
+	input.Nodes[0].Definition = mustJSON(t, map[string]any{
+		"kind": syntheticKind, "type": "oversized-artifact-test", "image": "example/future:1",
+	})
+	adapter := clabernetesinternaldeviceplan.Adapter{
+		Registry: newSyntheticRegistry(t), Revision: "artifact-bound-v1",
+	}
+
+	_, _, err := adapter.PlanArtifacts(context.Background(), input)
+
+	var planningErr *clabernetesinternaldeviceplan.Error
+	if !errors.As(err, &planningErr) ||
+		planningErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported ||
+		planningErr.Behavior != "generated-artifact-size" {
+		t.Fatalf("PlanArtifacts() error = %#v, want generated-artifact-size Unsupported", err)
 	}
 }
 
@@ -82,14 +265,9 @@ func TestPreparerTreatsNodeIdentityAsOpaque(t *testing.T) {
 		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	root := t.TempDir()
-	if err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
-		context.Background(), input, *plan, root,
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
+	if err := testPreparer(adapter, payloadRoot).Prepare(
+		context.Background(), input, plan, t.TempDir(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -97,10 +275,6 @@ func TestPreparerTreatsNodeIdentityAsOpaque(t *testing.T) {
 	directory := clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID)
 	if strings.Contains(directory, "/") || strings.Contains(directory, "..") {
 		t.Fatalf("artifact Node directory is path-like: %q", directory)
-	}
-
-	if _, err = os.Stat(filepath.Join(root, directory, "generated", "imported.conf")); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -116,32 +290,24 @@ func TestPreparerPreservesGenericGeneratedSymlink(t *testing.T) {
 		Registry: newSyntheticRegistry(t), Revision: "symlink-artifact-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
 	foundLink := false
-
 	for _, file := range plan.Files {
 		if file.ArtifactKind == clabernetesinternaldeviceplan.ArtifactSymlink &&
 			file.LinkTarget == "target" {
 			foundLink = true
 		}
 	}
-
 	if !foundLink {
 		t.Fatalf("package symbolic link is absent from the generic plan: %#v", plan.Files)
 	}
 
+	preparer := testPreparer(adapter, payloadRoot)
 	root := t.TempDir()
-
-	preparer := clabernetesinternaldeviceplan.Preparer{Adapter: adapter}
-	if err = preparer.Prepare(context.Background(), input, *plan, root); err != nil {
+	if err := preparer.Prepare(context.Background(), input, plan, root); err != nil {
 		t.Fatal(err)
 	}
-
-	if err = preparer.Prepare(context.Background(), input, *plan, root); err != nil {
+	if err := preparer.Prepare(context.Background(), input, plan, root); err != nil {
 		t.Fatal(err)
 	}
 
@@ -150,56 +316,22 @@ func TestPreparerPreservesGenericGeneratedSymlink(t *testing.T) {
 		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 		"generated",
 	)
-
 	target, err := os.Readlink(filepath.Join(generated, "alias"))
 	if err != nil || target != "target" {
 		t.Fatalf("staged package symlink = %q, %v", target, err)
 	}
-
-	//nolint:gosec // test-controlled path.
-	content, err := os.ReadFile(
+	content, err := os.ReadFile( //nolint:gosec // test-controlled path.
 		filepath.Join(generated, "alias", "value"),
-	) //nolint:gosec // test-controlled path.
+	)
 	if err != nil || string(content) != "package-target\n" {
 		t.Fatalf("staged package symlink target = %q, %v", content, err)
 	}
 }
 
-func TestPreparerRunsImportedDeploymentConditionsOnTargetWorker(t *testing.T) {
-	t.Parallel()
-
-	input := singleNodeInput(syntheticKind, "example/future:1")
-	input.Nodes[0].Type = "condition-failure-test"
-	input.Nodes[0].Definition = mustJSON(t, map[string]any{
-		"kind": syntheticKind, "type": "condition-failure-test", "image": "example/future:1",
-	})
-	adapter := clabernetesinternaldeviceplan.Adapter{
-		Registry: newSyntheticRegistry(t), Revision: "target-worker-condition-v1",
-	}
-
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatalf("controller-side planning unexpectedly ran target-worker condition: %v", err)
-	}
-
-	err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
-		context.Background(),
-		input,
-		*plan,
-		t.TempDir(),
-	)
-
-	var planningErr *clabernetesinternaldeviceplan.Error
-	if !errors.As(err, &planningErr) ||
-		planningErr.Behavior != "imported-deployment-conditions" ||
-		planningErr.Field != "deployment.conditions" {
-		t.Fatalf("Prepare() condition error = %#v", err)
-	}
-}
-
-// TestPreparerAcceptsSingleCharacterNodeNames proves containerlab's deployment conditions accept
-// a node named with one character, as containerlab does on Docker. The Docker container-name rule
-// in those conditions needs two characters, while c9s names the container after the Node.
+// TestPreparerAcceptsSingleCharacterNodeNames keeps containerlab's single-character node-name
+// regression covered at the boundary that still runs deployment conditions: planning. Preparation
+// stages plan content and never evaluates imported code, so names are proved here through the
+// accepted plan's container identities.
 func TestPreparerAcceptsSingleCharacterNodeNames(t *testing.T) {
 	t.Parallel()
 
@@ -214,13 +346,9 @@ func TestPreparerAcceptsSingleCharacterNodeNames(t *testing.T) {
 				Revision: "single-character-name-v1",
 			}
 
-			plan, err := adapter.Plan(context.Background(), input)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
-				context.Background(), input, *plan, t.TempDir(),
+			plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
+			if err := testPreparer(adapter, payloadRoot).Prepare(
+				context.Background(), input, plan, t.TempDir(),
 			); err != nil {
 				t.Fatalf("Prepare() for node %q: %v", name, err)
 			}
@@ -243,31 +371,23 @@ func TestPreparerRejectsSymlinkNodeRoot(t *testing.T) {
 		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
 	root := t.TempDir()
-
 	escape := t.TempDir()
-	if err = os.Symlink(
+	if err := os.Symlink(
 		escape,
 		filepath.Join(root, clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID)),
 	); err != nil {
 		t.Fatal(err)
 	}
 
-	err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
-		context.Background(), input, *plan, root,
-	)
+	err := testPreparer(adapter, payloadRoot).Prepare(context.Background(), input, plan, root)
 
 	var planningErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &planningErr) ||
 		planningErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported {
 		t.Fatalf("Prepare() error = %#v, want Unsupported", err)
 	}
-
 	if _, statErr := os.Stat(filepath.Join(escape, "generated", "imported.conf")); !os.IsNotExist(
 		statErr,
 	) {
@@ -283,72 +403,29 @@ func TestPreparerRejectsSymlinkArtifactParent(t *testing.T) {
 		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
 	root := t.TempDir()
-
 	nodeRoot := filepath.Join(
 		root,
 		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Nodes[0].ID),
 	)
-	if err = os.MkdirAll(nodeRoot, 0o700); err != nil {
+	if err := os.MkdirAll(nodeRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-
 	escape := t.TempDir()
-	if err = os.Symlink(escape, filepath.Join(nodeRoot, "generated")); err != nil {
+	if err := os.Symlink(escape, filepath.Join(nodeRoot, "generated")); err != nil {
 		t.Fatal(err)
 	}
 
-	err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
-		context.Background(), input, *plan, root,
-	)
+	err := testPreparer(adapter, payloadRoot).Prepare(context.Background(), input, plan, root)
 
 	var planningErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &planningErr) ||
 		planningErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported {
 		t.Fatalf("Prepare() error = %#v, want Unsupported", err)
 	}
-
 	if _, statErr := os.Stat(filepath.Join(escape, "imported.conf")); !os.IsNotExist(statErr) {
 		t.Fatalf("preparation escaped through artifact-parent symlink: %v", statErr)
-	}
-}
-
-func TestPreparerRejectsArtifactDigestDrift(t *testing.T) {
-	t.Parallel()
-
-	input := singleNodeInput(syntheticKind, "example/future:1")
-	adapter := clabernetesinternaldeviceplan.Adapter{
-		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
-	}
-
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for index := range plan.Files {
-		if plan.Files[index].SourceReference == "containerlab/imported-prepare" &&
-			plan.Files[index].ArtifactKind == clabernetesinternaldeviceplan.ArtifactRegular {
-			plan.Files[index].Digest = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-
-			break
-		}
-	}
-
-	err = (clabernetesinternaldeviceplan.Preparer{Adapter: adapter}).Prepare(
-		context.Background(), input, *plan, t.TempDir(),
-	)
-
-	var planningErr *clabernetesinternaldeviceplan.Error
-	if !errors.As(err, &planningErr) ||
-		planningErr.Code != clabernetesinternaldeviceplan.ErrorInvariant ||
-		planningErr.Behavior != "artifact-generation" {
-		t.Fatalf("Prepare() error = %#v, want artifact-generation Invariant", err)
 	}
 }
 
@@ -368,29 +445,22 @@ func TestPreparerStagesDigestVerifiedMountedPayload(t *testing.T) {
 		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	payloadRoot := t.TempDir()
-
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
 	sourceRoot := filepath.Join(
 		payloadRoot,
 		clabernetesinternaldeviceplan.ArtifactNodeDirectory(input.Payloads[0].ID),
 	)
-	if err = os.MkdirAll(sourceRoot, 0o700); err != nil {
+	if err := os.MkdirAll(sourceRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-
-	if err = os.WriteFile(filepath.Join(sourceRoot, "source"), content, 0o444); err != nil { //nolint:gosec // test fixture permissions.
+	if err := os.WriteFile(filepath.Join(sourceRoot, "source"), content, 0o444); err != nil { //nolint:gosec // test fixture.
 		t.Fatal(err)
 	}
 
 	artifactRoot := t.TempDir()
-	if err = (clabernetesinternaldeviceplan.Preparer{
-		Adapter: adapter, PayloadRoot: payloadRoot,
-	}).Prepare(context.Background(), input, *plan, artifactRoot); err != nil {
+	if err := testPreparer(adapter, payloadRoot).Prepare(
+		context.Background(), input, plan, artifactRoot,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -426,14 +496,11 @@ func TestPreparerRejectsURLPayloadDigestDrift(t *testing.T) {
 		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
+	preparer := testPreparer(adapter, payloadRoot)
+	preparer.HTTPClient = server.Client()
 
-	err = (clabernetesinternaldeviceplan.Preparer{
-		Adapter: adapter, PayloadRoot: t.TempDir(), HTTPClient: server.Client(),
-	}).Prepare(context.Background(), input, *plan, t.TempDir())
+	err := preparer.Prepare(context.Background(), input, plan, t.TempDir())
 
 	var planningErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &planningErr) ||
@@ -484,84 +551,15 @@ func TestPreparerReadsIdenticalGroupedPayloadSourceOnce(t *testing.T) {
 		Registry: newSyntheticRegistry(t), Revision: "preparer-v1",
 	}
 
-	plan, err := adapter.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err = (clabernetesinternaldeviceplan.Preparer{
-		Adapter: adapter, PayloadRoot: t.TempDir(), HTTPClient: server.Client(),
-	}).Prepare(context.Background(), input, *plan, t.TempDir()); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := requests.Load(); got != 1 {
-		t.Fatalf("identical grouped payload source reads = %d, want 1", got)
-	}
-}
-
-func TestPreparerStagesPlanRenderedManagementIdentity(t *testing.T) {
-	t.Parallel()
-
-	input := singleNodeInput(syntheticKind, "example/future:1")
-	input.Nodes[0].Type = "management-render-test"
-	input.Nodes[0].Definition = mustJSON(t, map[string]any{
-		"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
-	})
-	// The controller-allocated identity is complete at plan time; the generator renders it
-	// during planning and preparation stages those exact bytes.
-	input.Management = []clabernetesinternaldeviceplan.ManagementInput{{
-		NodeID: "node-a", IPv4: "10.244.9.9/24", IPv4Gateway: "10.244.9.1",
-	}}
-	planning := clabernetesinternaldeviceplan.Adapter{
-		Registry: newSyntheticRegistry(t), Revision: "runtime-render-v1",
-	}
-
-	plan, err := planning.Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	root := t.TempDir()
-
-	runtime := planning
-	runtime.PodDNSServers = []string{"10.96.0.10"}
-
-	if err = (clabernetesinternaldeviceplan.Preparer{Adapter: runtime}).Prepare(
-		context.Background(),
-		input,
-		*plan,
-		root,
+	plan, payloadRoot := planProjectedArtifacts(t, adapter, input)
+	preparer := testPreparer(adapter, payloadRoot)
+	preparer.HTTPClient = server.Client()
+	if err := preparer.Prepare(
+		context.Background(), input, plan, t.TempDir(),
 	); err != nil {
 		t.Fatal(err)
 	}
-
-	nodeDirectory := clabernetesinternaldeviceplan.ArtifactNodeDirectory("node-a")
-
-	//nolint:gosec // test-controlled path.
-	content, err := os.ReadFile(
-		filepath.Join(root, nodeDirectory, "generated", "mgmt.conf"),
-	) //nolint:gosec // test-controlled path.
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got, want := string(content), "mgmt 10.244.9.9/24 gw 10.244.9.1\n"; got != want {
-		t.Fatalf("plan-rendered content = %q, want %q", got, want)
-	}
-
-	// A runtime Pod identity no longer exists, so no management divergence is recorded: the
-	// DNS completion did not influence this generator and the staged bytes are the plan bytes.
-	digests := clabernetesinternaldeviceplan.LoadRuntimeArtifactDigests(root, "node-a")
-	if len(digests) != 0 {
-		t.Fatalf("unexpected runtime artifact divergence: %#v", digests)
-	}
-
-	//nolint:gosec // test-controlled path.
-	untouched, err := os.ReadFile(
-		filepath.Join(root, nodeDirectory, "generated", "imported.conf"),
-	) //nolint:gosec // test-controlled path.
-	if err != nil || string(untouched) != "generated\n" {
-		t.Fatalf("identity-independent content changed: %q err=%v", untouched, err)
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("identical grouped payload source reads = %d, want 1", got)
 	}
 }

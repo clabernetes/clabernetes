@@ -27,6 +27,10 @@ import (
 
 const maxGeneratedSymlinkTargetBytes = 4096
 
+// maxPlanArtifactAttributeNameBytes bounds a generated extended-attribute name so its artifact
+// object key stays within Kubernetes object-key limits.
+const maxPlanArtifactAttributeNameBytes = 128
+
 // Adapter evaluates explicit inputs against the pinned containerlab registry through generic
 // containerlab interfaces. It contains no kind-name dispatch.
 type Adapter struct {
@@ -43,17 +47,6 @@ type Adapter struct {
 	// digests are explicit normalized inputs. Kind-specific issuance requests still originate
 	// solely from imported package hooks.
 	CertificateRoot string
-	// PodAddress is the runtime-discovered management identity of the direct Pod executing this
-	// boundary. In-Pod lifecycle boundaries set it so every logical Node the controller left
-	// unaddressed carries the Pod address — matching containerlab's always-addressed management
-	// model — after the immutable input identity was validated. Planning leaves it empty because
-	// the address exists only at runtime.
-	// PodGateway is the Pod's own default gateway, completing the runtime management identity
-	// for packages that consume a management gateway.
-	// PodDNSServers are the Pod's own resolver addresses, completing the runtime management
-	// identity the same way containerlab fills every node's DNS configuration from the host
-	// resolv.conf when the topology declares none.
-	PodDNSServers []string
 	// CheckDeploymentConditions runs the imported package's generic preflight hook. It is enabled
 	// only by the preparation worker after Kubernetes has scheduled the direct Pod onto its target
 	// node, so host CPU, kernel, memory, and device observations describe the actual worker.
@@ -75,17 +68,20 @@ type Evaluation struct {
 // EvaluatedNode is an in-memory, non-serialized snapshot of one imported kind initialization.
 // Config may contain upstream defaults and must be mapped into c9s plan types before persistence.
 type EvaluatedNode struct {
-	Input                NodeInput
-	Config               *clabtypes.NodeConfig
-	Containers           []RecordedContainer
-	GeneratedArtifacts   []GeneratedArtifact
-	Images               []ImageReference
-	MissingImages        []string
-	Interfaces           []EvaluatedInterface
-	ReadinessRuntimeIDs  []string
-	LinkApplyMode        LinkApplyMode
-	PrivilegedByDefault  bool
-	CertificateBacked    bool
+	Input               NodeInput
+	Config              *clabtypes.NodeConfig
+	Containers          []RecordedContainer
+	GeneratedArtifacts  []GeneratedArtifact
+	Images              []ImageReference
+	MissingImages       []string
+	Interfaces          []EvaluatedInterface
+	ReadinessRuntimeIDs []string
+	LinkApplyMode       LinkApplyMode
+	PrivilegedByDefault bool
+	CertificateBacked   bool
+	// DeclaredDNS is the topology-declared resolver configuration, captured before the
+	// controller-resolved resolver completion so container DNS policy is unchanged by it.
+	DeclaredDNS          DNSConfig
 	RuntimeCalls         []string
 	preparationArtifacts map[string]GeneratedArtifact
 	implementation       clabnodes.Node
@@ -114,6 +110,9 @@ type GeneratedArtifact struct {
 	GID                *int64
 	ExtendedAttributes []generatedExtendedAttribute
 	SourceReference    string
+	// Data holds the bytes of a regular artifact so they can travel beside the plan. Directories
+	// and symbolic links carry no bytes.
+	Data []byte
 }
 
 type generatedExtendedAttribute struct {
@@ -439,6 +438,7 @@ func evaluateNode(
 		return nil, err
 	}
 	management := managementForNode(input.Management, nodeInput.ID)
+	declaredDNS := mapDNS(config.DNS)
 	applyManagementInput(config, management)
 
 	recorder := newRecordingRuntime(input.Images, management, scratchLabDir)
@@ -546,6 +546,7 @@ func evaluateNode(
 		LinkApplyMode:       linkMode,
 		PrivilegedByDefault: entry.PrivilegedByDefault(),
 		CertificateBacked:   nodeHasCertificateInput(input.Certificates, nodeInput.ID),
+		DeclaredDNS:         declaredDNS,
 		RuntimeCalls:        recorder.Calls(),
 		implementation:      implementation,
 		definition:          definition,
@@ -948,6 +949,7 @@ func scanGeneratedArtifacts(root string) ([]GeneratedArtifact, error) {
 		)
 	}
 	artifacts := []GeneratedArtifact{}
+	total := 0
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -1009,12 +1011,30 @@ func scanGeneratedArtifacts(root string) ([]GeneratedArtifact, error) {
 				Message:  "imported preparation generated a non-regular artifact",
 			}
 		}
+		if info.Size() > MaxPlanArtifactBytes {
+			return &Error{
+				Code: ErrorUnsupported, Field: fieldWorkspace,
+				Behavior: "generated-artifact-size",
+				Message: "imported preparation generated an artifact larger than " +
+					"the plan artifact bound",
+			}
+		}
 		content, err := os.ReadFile(path) //nolint:gosec // path is confined under planner scratch.
 		if err != nil {
 			return err
 		}
+		total += len(content)
+		if total > MaxPlanArtifactsBytes {
+			return &Error{
+				Code: ErrorUnsupported, Field: fieldWorkspace,
+				Behavior: "generated-artifacts-size",
+				Message: "imported preparation generated artifacts larger than " +
+					"the plan artifact total bound",
+			}
+		}
 		artifact.Digest = Digest(content)
 		artifact.Kind = ArtifactRegular
+		artifact.Data = content
 		artifacts = append(artifacts, artifact)
 
 		return nil
@@ -1607,14 +1627,12 @@ func nodeConfigFromDefinition(
 	return config, nil
 }
 
-// completeRuntimeManagement rehydrates runtime-only management facts: the package-declared
-// interface identity recorded at planning and the Pod resolver's DNS servers. Management
-// addresses and gateways are controller-allocated and complete at plan time; runtime completion
-// MUST NOT synthesize an identity.
-func completeRuntimeManagement(
+// completeManagementInterfaces restores the package-declared management interface name recorded at
+// planning when the controller allocation omitted it. Planning supplies every other management and
+// resolver input, so no runtime identity participates here.
+func completeManagementInterfaces(
 	values []ManagementInput,
 	plans []ManagementPlan,
-	podDNSServers []string,
 ) []ManagementInput {
 	interfaces := map[string]string{}
 	for _, plan := range plans {
@@ -1628,11 +1646,6 @@ func completeRuntimeManagement(
 		// even when the controller allocation omitted it.
 		if result[index].InterfaceName == "" {
 			result[index].InterfaceName = interfaces[result[index].NodeID]
-		}
-		// The Pod resolver completes entries whose controller allocation declared no resolver,
-		// exactly as containerlab fills node DNS from the host resolv.conf.
-		if len(result[index].DNS.Servers) == 0 {
-			result[index].DNS.Servers = slices.Clone(podDNSServers)
 		}
 	}
 
@@ -1665,6 +1678,23 @@ func applyManagementInput(config *clabtypes.NodeConfig, input *ManagementInput) 
 	config.MgmtIPv6Address, config.MgmtIPv6PrefixLength = splitManagementAddress(input.IPv6)
 	config.MgmtIPv6Gateway = input.IPv6Gateway
 	applyManagementDNS(config, input.DNS)
+	applyResolverServers(config, input.ResolverServers)
+}
+
+// applyResolverServers completes package-visible resolver configuration from the
+// controller-resolved set. Declared topology DNS always wins, and the completion never reaches the
+// container DNS policy: only generated package configuration observes it.
+func applyResolverServers(config *clabtypes.NodeConfig, servers []string) {
+	if len(servers) == 0 || strings.HasPrefix(config.NetworkMode, "container") {
+		return
+	}
+	if config.DNS == nil {
+		config.DNS = &clabtypes.DNSConfig{}
+	}
+	if len(config.DNS.Servers) != 0 {
+		return
+	}
+	config.DNS.Servers = slices.Clone(servers)
 }
 
 // applyManagementDNS realizes the runtime resolver identity with containerlab's own precedence:

@@ -369,6 +369,7 @@ func TestDirectConnectivityRevisionRendersStoppedWorkloadCold(t *testing.T) {
 		clabernetesinternaldeviceplan.Input{},
 		clabernetesinternaldeviceplan.Plan{},
 		clabernetesinternaldirectpod.Options{Stopped: true},
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
