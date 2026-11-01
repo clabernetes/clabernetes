@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 1
 
       - name: install oras
-        uses: oras-project/setup-oras@v2.0.1
+        uses: oras-project/setup-oras@v2.0.3
         with:
           version: 1.3.3
 
