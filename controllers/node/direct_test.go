@@ -1326,6 +1326,14 @@ func TestDirectSecondaryPrunesOnlyItsObsoleteStandaloneWorkload(t *testing.T) {
 		},
 		OwnerReferences: []metav1.OwnerReference{owner},
 	}}
+	oldArtifact := &k8scorev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		Name: "c9s-artifact-secondary-old", Namespace: secondary.GetNamespace(),
+		Labels: map[string]string{
+			clabernetesconstants.LabelComponent: planArtifactComponentLabel,
+			planOwnerUIDLabel:                   string(secondary.GetUID()),
+		},
+		OwnerReferences: []metav1.OwnerReference{owner},
+	}}
 
 	scheme := plannerTestScheme(t)
 	if err := k8sappsv1.AddToScheme(scheme); err != nil {
@@ -1334,7 +1342,7 @@ func TestDirectSecondaryPrunesOnlyItsObsoleteStandaloneWorkload(t *testing.T) {
 
 	client := ctrlruntimefake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(primary, secondary, deployment, claim, service, oldPlan).
+		WithObjects(primary, secondary, deployment, claim, service, oldPlan, oldArtifact).
 		Build()
 	reconciler := NewReconciler(
 		&claberneteslogging.FakeInstance{}, client, client, "clabernetes",
@@ -1346,7 +1354,7 @@ func TestDirectSecondaryPrunesOnlyItsObsoleteStandaloneWorkload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, object := range []ctrlruntimeclient.Object{deployment, oldPlan} {
+	for _, object := range []ctrlruntimeclient.Object{deployment, oldPlan, oldArtifact} {
 		err := client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(object), object)
 		if !apimachineryerrors.IsNotFound(err) {
 			t.Fatalf("obsolete standalone object %T was not pruned: %v", object, err)

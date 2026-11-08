@@ -1,7 +1,10 @@
 package direct_test
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -354,9 +357,10 @@ func TestLinuxDataplaneDirect(t *testing.T) {
 	waitForWorkerArtifactCollection(t, namespace)
 }
 
-// startDeviceCarrierWatch starts a sub-second carrier sampler inside the device container and
-// returns a function that waits for its verdict: WIRE-CARRIER-LOST as soon as the interface
-// loses carrier, or WIRE-CARRIER-HELD when it never does within the watch window.
+// startDeviceCarrierWatch subscribes to netlink link events inside the device container. The
+// readiness handshake ensures deletion cannot outrun the subscription, and event delivery avoids
+// missing a carrier-down interval between polling samples. The returned function waits for the
+// verdict: WIRE-CARRIER-LOST or WIRE-CARRIER-HELD after the two-minute watch window.
 func startDeviceCarrierWatch(
 	t *testing.T,
 	namespace string,
@@ -365,30 +369,52 @@ func startDeviceCarrierWatch(
 ) func() string {
 	t.Helper()
 
-	script := "for i in $(seq 1 1200); do " +
-		"[ \"$(cat /sys/class/net/" + interfaceName + "/carrier 2>/dev/null)\" = \"0\" ] && " +
-		"echo WIRE-CARRIER-LOST && exit 0; sleep 0.1; done; echo WIRE-CARRIER-HELD"
-
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	t.Cleanup(cancel)
 	cmd := exec.CommandContext( //nolint:gosec
-		t.Context(),
+		ctx,
 		"kubectl",
 		"exec", "--namespace", namespace, device.podName, "-c", device.containerName,
 		"--",
-		"sh", "-c", script,
+		"sh", "-c", "echo WIRE-WATCH-READY; exec ip monitor link dev "+interfaceName,
 	)
 
-	var output strings.Builder
-
-	cmd.Stdout = &output
-	cmd.Stderr = &output
+	streamReader, streamWriter := io.Pipe()
+	cmd.Stdout = streamWriter
+	cmd.Stderr = streamWriter
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("starting carrier watch in %q: %v", device.podName, err)
 	}
 
+	reader := bufio.NewReader(streamReader)
+	var output strings.Builder
+	line, err := reader.ReadString('\n')
+	output.WriteString(line)
+	if err != nil || strings.TrimSpace(line) != "WIRE-WATCH-READY" {
+		cancel()
+		_ = cmd.Wait()
+		t.Fatalf("carrier watch in %q did not become ready: %v: %s", device.podName, err, output.String())
+	}
+
 	return func() string {
-		if err := cmd.Wait(); err != nil {
-			t.Logf("carrier watch in %q exited with %v", device.podName, err)
+		verdict := "WIRE-CARRIER-HELD"
+		for {
+			line, readErr := reader.ReadString('\n')
+			output.WriteString(line)
+			if strings.Contains(line, "NO-CARRIER") {
+				verdict = "WIRE-CARRIER-LOST"
+
+				break
+			}
+			if readErr != nil {
+				break
+			}
+		}
+		output.WriteString(verdict + "\n")
+		cancel()
+		if waitErr := cmd.Wait(); waitErr != nil && ctx.Err() == nil {
+			t.Logf("carrier watch in %q exited with %v", device.podName, waitErr)
 		}
 
 		return output.String()

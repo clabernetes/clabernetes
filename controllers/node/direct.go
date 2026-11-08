@@ -727,6 +727,9 @@ func (r *Reconciler) reconcileDirectSecondary(
 	if err := r.PlanConfigMapReconciler.GarbageCollect(ctx, node); err != nil {
 		return err
 	}
+	if err := r.PlanArtifactReconciler.GarbageCollect(ctx, node, nil); err != nil {
+		return err
+	}
 
 	return r.ConnectivityRevisionConfigMapReconciler.GarbageCollect(ctx, node, "")
 }

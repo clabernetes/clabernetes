@@ -194,9 +194,9 @@ type PlannerIdentity struct {
 	Revision string `json:"revision"`
 }
 
-// NodePlan maps one logical Node to its directly visible application containers. ContainerIDs is
-// ordered: the first entry is the logical Node's primary application container and any remaining
-// entries are imported components.
+// NodePlan maps one logical Node to its directly visible application containers. ContainerIDs
+// preserves the package's creation order; PrimaryContainerID separately identifies the container
+// the package declares as its runtime identity.
 type NodePlan struct {
 	ID                    string   `json:"id"`
 	Name                  string   `json:"name"`
@@ -337,8 +337,9 @@ const (
 	ArtifactDirectory ArtifactKind = "Directory"
 )
 
-// ExtendedAttribute identifies non-byte filesystem metadata without serializing its value.
-// Preparation reruns the imported hook, verifies the digest, and applies the regenerated value.
+// ExtendedAttribute identifies non-byte filesystem metadata without embedding its value in the
+// plan. The value travels beside the plan artifact; preparation verifies its digest before
+// applying it.
 type ExtendedAttribute struct {
 	Name   string `json:"name"`
 	Digest string `json:"digest"`
