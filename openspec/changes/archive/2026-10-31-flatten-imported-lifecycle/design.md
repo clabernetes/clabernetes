@@ -238,13 +238,19 @@ sidecar path, `make lint`, `make verify-generated` (plan schema/status), `make c
   container DNS policy still comes from the declared topology, captured before completion.
 - A plan whose generated artifact object is missing invalidates the cached planning result, so a
   later reconcile plans and persists it again instead of applying against absent bytes.
+- When a formerly standalone Node becomes a grouped secondary, the same ownership-safe garbage
+  collection removes its obsolete plan and generated artifacts while retaining independently owned
+  group resources and objects owned by other Node UIDs.
 - The non-session planning worker (`Worker`) now refuses plans that carry generated artifacts: the
   bare plan frame cannot deliver bytes, and it must not look like a complete result.
 
 ## Validation Evidence
 
-- Unit: `make test` and `make test-race` green (1193 tests, 15 skipped); `make lint` 0 issues.
-- Cluster: the full e2e matrix was run against an existing cluster with every opt-in gate enabled
+- Unit: `make test` and `make test-race` green (1273 tests, 15 skipped); `make lint` 0 issues.
+- Final product/test revision: the GitHub Actions unit, lint, build, basic topology, directly managed
+  runtime, planner-pool, startup-admission, and SR-SIM checks all pass. Remote-cluster reruns passed
+  all 14 directly managed runtime tests and the isolated SR-SIM test.
+- Earlier cluster: the full e2e matrix was run against an existing cluster with every opt-in gate enabled
   (cEOS, Cumulus, vJunos-router, VM-backed vrnetlab kinds, planner-pool reuse/scale/mixed-vendor,
   per-host startup admission, and an environment-owned conformance bundle).
 - Enabling those suites exposed four harness defects, which were fixed in the tests rather than

@@ -130,7 +130,9 @@ diagnostic. Nothing is silently dropped.
   Secrets. For example, 200 Nodes with three distinct artifacts each require 600 artifact Secrets,
   in addition to other control-plane objects. Byte limits and garbage collection do not remove
   the API, watch/cache, and etcd costs of that object count. Superseded artifacts are collected
-  after the accepted workload stops referencing them.
+  after the accepted workload stops referencing them. A Node that becomes a grouped secondary
+  also loses its former standalone plan artifacts, while independently owned group resources
+  and artifacts owned by other Nodes remain intact.
 - **Runtime binaries use a bounded worker cache.** The preparation container alone mounts
   `/var/lib/clabernetes/runtime-binary-cache`, which retains four content-verified binary
   versions (at most 256 MiB each). When this cache and the Pod's storage share a filesystem

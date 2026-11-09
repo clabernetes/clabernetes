@@ -52,7 +52,10 @@ Content a package generates during planning SHALL reach the Pod as content-addre
 carrying the planned path, mode, ownership, extended attributes, digest, and bytes. A plan MUST
 declare the total generated-artifact size and MUST fail planning when that bound is exceeded.
 Artifact material a package treats as sensitive SHALL be delivered through a Secret-backed source and
-MUST NOT be placed in a ConfigMap-backed source.
+MUST NOT be placed in a ConfigMap-backed source. Generated artifact objects SHALL use the same
+Node-UID ownership protections during garbage collection and SHALL be collected when neither the
+applied nor desired plan references them, including when a formerly standalone Node becomes a
+grouped secondary.
 
 #### Scenario: Generated configuration is planned
 
@@ -71,6 +74,13 @@ MUST NOT be placed in a ConfigMap-backed source.
 - **WHEN** a generated file derives from certificate or key material
 - **THEN** its plan artifact uses the Secret-backed source and no byte of it appears in a
   ConfigMap-backed artifact or payload
+
+#### Scenario: Standalone Node becomes a grouped secondary
+
+- **WHEN** a Node with generated artifacts stops owning a standalone workload and becomes a grouped
+  secondary
+- **THEN** its obsolete standalone plan and generated artifacts are removed, independently owned
+  group resources remain intact, and objects owned by other Node UIDs are not collected
 
 #### Scenario: Device modified a planned file
 

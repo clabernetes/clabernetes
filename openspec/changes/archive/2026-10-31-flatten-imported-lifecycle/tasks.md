@@ -63,3 +63,14 @@
 - [x] 5.4 Update `docs/architecture.mdx`, `docs/concepts/containerlab-differences.md`, and
       `docs/guides/persistence.md` to describe plan-borne generation and the no-replay hook boundary
 - [x] 5.5 Run `make check-docs` and `make build-docs`
+
+## 6. Review follow-ups and final reliability
+
+- [x] 6.1 Collect generated artifacts when a formerly standalone Node becomes a grouped secondary,
+      with a regression that preserves independently owned group resources and other Node UIDs
+- [x] 6.2 Observe endpoint-carrier loss with netlink events instead of polling that can miss a
+      sub-100 ms outage; synchronize watcher startup before deleting the endpoint Pod
+- [x] 6.3 Dump SR-SIM workload diagnostics on failure and centralize pinned Helm installation in
+      `install-test-tools` for identical local and CI chart rendering
+- [x] 6.4 Pass the remote directly managed runtime and SR-SIM suites, then rerun the complete
+      GitHub Actions workflow to green, including unit, lint, and image builds

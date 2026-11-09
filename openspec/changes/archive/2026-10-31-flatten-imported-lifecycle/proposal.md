@@ -75,5 +75,8 @@ Generated content currently creates immutable Secrets per distinct content/attri
 owning Node. Equal artifacts within one Node can reuse an object; different Nodes do not share
 objects. For example, 200 Nodes with three distinct generated artifacts each add 600 Secrets.
 The 512 KiB per-artifact and 4 MiB per-plan byte bounds and superseded-object garbage collection
-do not eliminate object-count costs in API traffic, watches, cache memory, or etcd. The 200-Node
-e2e checks establish functional behavior at that scale, not a control-plane capacity ceiling.
+do not eliminate object-count costs in API traffic, watches, cache memory, or etcd. Garbage
+collection also removes a former standalone Node's generated artifacts when it becomes a grouped
+secondary, without collecting other Nodes' objects or independently owned group resources. The
+200-Node e2e checks establish functional behavior at that scale, not a control-plane capacity
+ceiling.
