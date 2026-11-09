@@ -36,7 +36,7 @@ func TestRunLifecycleExecutesTypedActionsInsideTargetFilesystem(t *testing.T) {
 	plan := lifecycleTestPlan()
 	plan.Files = []clabernetesinternaldeviceplan.FilePlan{{
 		ID: "generated/startup", NodeID: "node-a",
-		SourceKind:      clabernetesinternaldeviceplan.FileSourceGenerator,
+		SourceKind:      clabernetesinternaldeviceplan.FileSourcePlanArtifact,
 		SourceReference: "imported-hook", ArtifactPath: "generated/startup.cfg",
 		Digest: clabernetesinternaldeviceplan.Digest(content), Mode: 0o600,
 	}}
@@ -244,7 +244,7 @@ func TestRunLifecycleAppendsWithoutReplacingExistingContent(t *testing.T) {
 	plan := lifecycleTestPlan()
 	plan.Files = []clabernetesinternaldeviceplan.FilePlan{{
 		ID: "generated/addition", NodeID: "node-a",
-		SourceKind:      clabernetesinternaldeviceplan.FileSourceGenerator,
+		SourceKind:      clabernetesinternaldeviceplan.FileSourcePlanArtifact,
 		SourceReference: "imported-hook", ArtifactPath: "addition",
 		Digest: clabernetesinternaldeviceplan.Digest(addition), Mode: 0o600,
 	}}

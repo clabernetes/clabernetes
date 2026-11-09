@@ -3,7 +3,10 @@ package deviceplan
 import "encoding/json"
 
 // SchemaVersion identifies both normalized planning inputs and device plans.
-const SchemaVersion = "v1alpha1"
+//
+// v1alpha2 carries generated artifact bytes as plan-borne content: plans reference digest-named
+// artifacts that preparation stages directly instead of re-running imported generation.
+const SchemaVersion = "v1alpha2"
 
 // ErrorCode is a stable machine-readable planning failure class.
 type ErrorCode string
@@ -131,6 +134,11 @@ type ManagementInput struct {
 	IPv6Gateway   string `json:"ipv6Gateway,omitempty"`
 	//nolint:modernize // the accepted schema freezes this tag and its serialization.
 	DNS DNSConfig `json:"dns,omitempty"`
+	// ResolverServers is the controller-resolved resolver set that completes generated
+	// configuration whose topology declares no DNS. It never changes container DNS policy: it is
+	// applied to package-visible configuration only, exactly as containerlab fills node DNS from
+	// the host resolv.conf.
+	ResolverServers []string `json:"resolverServers,omitempty"`
 	// InboundPorts are additional controller-declared inbound destination ports (i.e. the
 	// auto-expose default set) translated to the Node's interposed management address when the
 	// port is not already claimed by a planned container port in the Pod.
@@ -186,9 +194,9 @@ type PlannerIdentity struct {
 	Revision string `json:"revision"`
 }
 
-// NodePlan maps one logical Node to its directly visible application containers. ContainerIDs is
-// ordered: the first entry is the logical Node's primary application container and any remaining
-// entries are imported components.
+// NodePlan maps one logical Node to its directly visible application containers. ContainerIDs
+// preserves the package's creation order; PrimaryContainerID separately identifies the container
+// the package declares as its runtime identity.
 type NodePlan struct {
 	ID                    string   `json:"id"`
 	Name                  string   `json:"name"`
@@ -308,10 +316,15 @@ type FileSourceKind string
 
 // Supported artifact sources.
 const (
-	FileSourcePayload     FileSourceKind = "Payload"
-	FileSourceGenerator   FileSourceKind = "Generator"
-	FileSourceCertificate FileSourceKind = "Certificate"
-	FileSourceEmpty       FileSourceKind = "Empty"
+	// FileSourcePayload is a declared payload the controller resolved from a Kubernetes object or
+	// URL and mounted beside the plan.
+	FileSourcePayload FileSourceKind = "Payload"
+	// FileSourcePlanArtifact is content generated during planning. Its bytes travel beside the plan
+	// as an ArtifactContent and are persisted as a digest-named object; preparation stages them
+	// without evaluating imported code.
+	FileSourcePlanArtifact FileSourceKind = "PlanArtifact"
+	// FileSourceEmpty is a planned placeholder with no content.
+	FileSourceEmpty FileSourceKind = "Empty"
 )
 
 // ArtifactKind distinguishes generic filesystem entries emitted by imported preparation.
@@ -324,8 +337,9 @@ const (
 	ArtifactDirectory ArtifactKind = "Directory"
 )
 
-// ExtendedAttribute identifies non-byte filesystem metadata without serializing its value.
-// Preparation reruns the imported hook, verifies the digest, and applies the regenerated value.
+// ExtendedAttribute identifies non-byte filesystem metadata without embedding its value in the
+// plan. The value travels beside the plan artifact; preparation verifies its digest before
+// applying it.
 type ExtendedAttribute struct {
 	Name   string `json:"name"`
 	Digest string `json:"digest"`
@@ -563,6 +577,11 @@ type ManagementPlan struct {
 	Routes            []Route                     `json:"routes,omitempty"`
 	//nolint:modernize // the accepted schema freezes this tag and its serialization.
 	DNS DNSConfig `json:"dns,omitempty"`
+	// ResolverServers is the controller-resolved resolver set that completes generated
+	// configuration whose topology declares no DNS. It never changes container DNS policy: it is
+	// applied to package-visible configuration only, exactly as containerlab fills node DNS from
+	// the host resolv.conf.
+	ResolverServers []string `json:"resolverServers,omitempty"`
 	// Interposition is the sidecar interposition contract; it is present exactly when
 	// InterfaceSelector is Interposed.
 	Interposition *ManagementInterposition `json:"interposition,omitempty"`

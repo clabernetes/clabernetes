@@ -82,6 +82,62 @@ Start with the narrowest relevant check, then expand in proportion to the change
 - Match the suites enabled in `.github/workflows/e2e.yaml` when investigating CI failures. The Make targets inherit `SRSIM_LICENSE`; they do **not** read the local license file automatically. CI injects the license contents from its `SRSIM_LICENSE` secret. The SR-SIM test mounts those contents at `/opt/nokia/sros/license.txt` inside the workload as well.
 - For SR-SIM, also set `SRSIM_IMAGE` to the image used by the relevant CI run and prepare GHCR Docker authentication. The test reads the `ghcr.io` entry from `${DOCKER_CONFIG}/config.json`, or `~/.docker/config.json` when `DOCKER_CONFIG` is unset, to create its test namespace's image-pull Secret. CI handles image pulling/loading separately from the Make test target; verify image availability for the selected cluster.
 - A missing license skips SR-SIM, even if Make exits successfully. If CI enables that suite, a local run without it is incomplete validation. Report the exact command, context, tested revision, passed/failed/skipped counts, skipped suites and reasons, and any deviations from the standard recipe. Distinguish local results from GitHub Actions status; do not call CI resolved based only on a local exit code or a rerun that has not completed.
+- When the user asks to run **all** e2e tests, run the full matrix in [Full e2e matrix](#full-e2e-matrix-every-gated-suite) instead of only the suites in `.github/workflows/e2e.yaml`. Several suites are opt-in through environment gates and skip silently otherwise, so a run that reports skips is incomplete for that request. When investigating a CI failure, match the workflow matrix instead.
+
+### Full e2e matrix (every gated suite)
+
+`e2e/topology/basic` and `e2e/topology/direct` always run; `e2e/topology/srsim` runs whenever
+`SRSIM_LICENSE` is set and skips without it. Every other suite is opt-in, so read the gate from the test
+when in doubt with `grep -rn "t.Skip(" e2e/`:
+
+| gate | enables | image variables (default) |
+| --- | --- | --- |
+| `CEOS_E2E=1` | `e2e/topology/ceos` | `CEOS_IMAGE` (`ghcr.io/clab-labs/ceos:4.33.1F`) |
+| `CUMULUS_E2E=1` | `e2e/topology/cumulus` | image named by `examples/basic/cumulus-multitool.yaml` |
+| `VJUNOS_ROUTER_E2E=1` | both `e2e/topology/vjunosrouter` tests | `VJUNOS_ROUTER_IMAGE` (`ghcr.io/clab-labs/juniper_vjunos-router:boxen-25.2R1.9`) |
+| `VR_E2E=1` | `e2e/topology/vr` VM-backed kinds | `VR_<KIND>_IMAGE` (`ghcr.io/clab-labs/vr-*`) |
+| `PLANNER_POOL_E2E=1` + `PLANNER_POOL_NAMESPACE=<manager namespace>` | planner-pool reuse and recovery | — |
+| `PLANNER_POOL_SCALE_E2E=1` | four 200-Node scale variants | `SRL_IMAGE`, `CEOS_IMAGE`, `SRSIM_IMAGE` |
+| `PLANNER_POOL_MIXED_E2E=1` | mixed-vendor SR Linux + cEOS + SR-SIM lifecycle | same, plus `SRSIM_LICENSE` |
+| `STARTUP_HOST_E2E=1` + `STARTUP_HOST_E2E_NODE=<worker node name>` | per-host startup admission | — |
+| `C9S_DIRECT_CONFORMANCE_SUITE=<bundle path>` | `e2e/conformance` | images named by the bundle |
+
+`e2e/conformance` needs an environment-owned bundle; the repository must not commit one (see
+`e2e/conformance/README.md`). Author it outside the repository: `schemaVersion: v1alpha1` with at least
+one scenario whose `manifest` holds ordinary c9s resources, and with both `management` and `dataplane`
+observations covering every c9s Node the manifest derives (`nodes` lists are derived Node names, not
+kinds). Observations run `kubectl exec <target> [-c <container>] -- <command>`, so the manifest must also
+include that target workload as a plain Kubernetes object; a probe Deployment keeps it out of the derived
+image inventory. Record in the bundle comment what the observations do and do not prove.
+
+Recipe for a remote cluster (all gates, packages serialized):
+
+```bash
+SRSIM_LICENSE="$(cat /opt/nokia/sros/license.txt)"; export SRSIM_LICENSE
+export SRSIM_IMAGE=ghcr.io/clabernetes/nokia_srsim:26.7.R1
+export CEOS_E2E=1 CUMULUS_E2E=1 VR_E2E=1
+export VJUNOS_ROUTER_E2E=1 VJUNOS_ROUTER_IMAGE=ghcr.io/clab-labs/juniper_vjunos-router:boxen-25.2R1.9
+export PLANNER_POOL_E2E=1 PLANNER_POOL_NAMESPACE=<manager namespace>
+export PLANNER_POOL_SCALE_E2E=1 PLANNER_POOL_MIXED_E2E=1
+export STARTUP_HOST_E2E=1 STARTUP_HOST_E2E_NODE=<worker node name>
+export C9S_DIRECT_CONFORMANCE_SUITE=<bundle path>
+export E2E_INSTALL_NAMESPACE=<existing c9s namespace> E2E_INSTALL_RELEASE=<existing c9s release>
+export E2E_TEST_TIMEOUT=300m E2E_TEST_ARGS='-p 1'
+make test-e2e CLUSTER=existing
+```
+
+- `-p 1` runs test packages serially. The scale and mixed suites drive hundreds of Pods plus multi-CPU
+  VMs; cross-package parallelism produces load-induced timeouts (a 120-second Node-creation wait, a
+  missed sub-second carrier transition) that look like product failures. Budget roughly two hours.
+- Before starting, confirm every gate image is pullable with the same GHCR credentials the tests create
+  Secrets from (`docker manifest inspect <image>`), and confirm the cluster can absorb 200 lightweight
+  Pods plus the VM-backed suites.
+- Treat a full-matrix failure as a lead, not a verdict. Re-run the affected test alone against the
+  already-installed release (`E2E_TEST_PACKAGES=./e2e/topology/<pkg> E2E_TEST_ARGS='-run=^Test...$' PATH="$PWD/build/e2e/bin:$PATH" make e2e-run`) before concluding anything. If the harness is wrong - an
+  exact container count, a KinD-only object name, a config-cache race, an unretried transport error -
+  fix the test rather than reporting a product defect.
+- Delete leftover `e2e-*` namespaces before a full run and after an interrupted one; suites clean up only
+  when they finish.
 
 ## OpenSpec workflows
 

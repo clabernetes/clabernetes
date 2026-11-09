@@ -59,6 +59,22 @@ func TestPoolBootstrapRejectsUnboundMaterial(t *testing.T) {
 	}
 }
 
+func TestDisposableBootstrapUsesProjectedPayloads(t *testing.T) {
+	bootstrap := testPoolBootstrap()
+	bootstrap.ProjectedPayloads = true
+	if err := stagePoolBootstrap(t.TempDir(), bootstrap); err == nil {
+		t.Fatal("accepted ambiguous transferred and projected payloads")
+	}
+	bootstrap.Payloads = nil
+	root := t.TempDir()
+	if err := stagePoolBootstrap(root, bootstrap); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "payloads")); !os.IsNotExist(err) {
+		t.Fatalf("disposable payloads must use the existing mount directly: %v", err)
+	}
+}
+
 func testPoolBootstrap() PoolBootstrap {
 	seed := bytes.Repeat([]byte{42}, EntropySeedBytes)
 	content := []byte("private startup config")

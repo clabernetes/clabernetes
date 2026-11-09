@@ -109,7 +109,7 @@ func NewController(
 		session: &PlannerSessionReconciler{
 			Client: baseController.Client,
 			Reader: clabernetes.GetCtrlRuntimeMgr().GetAPIReader(),
-			Attach: newPlannerSessionAttacher(
+			Attach: newPlannerPoolExecutor(
 				clabernetes.GetKubeConfig(),
 				clabernetes.GetKubeClient(),
 			),
@@ -171,52 +171,6 @@ func newPlannerPoolExecutor(
 			ctx,
 			clientgoremotecommand.StreamOptions{Stdin: input, Stdout: output, Stderr: stderr},
 		)
-	}
-}
-
-func newPlannerSessionAttacher(
-	config *clientgorest.Config,
-	client *kubernetes.Clientset,
-) PlannerSessionAttacher {
-	return func(
-		ctx context.Context,
-		namespace,
-		podName,
-		containerName string,
-		input io.Reader,
-		output,
-		stderr io.Writer,
-	) error {
-		if config == nil || client == nil || namespace == "" || podName == "" ||
-			containerName == "" || input == nil || output == nil || stderr == nil {
-			return errors.New("planner session attach identity is incomplete")
-		}
-		request := client.CoreV1().RESTClient().Post().
-			Namespace(namespace).
-			Resource("pods").
-			Name(podName).
-			SubResource("attach").
-			VersionedParams(&k8scorev1.PodAttachOptions{
-				Container: containerName,
-				Stdin:     true,
-				Stdout:    true,
-				Stderr:    true,
-			}, clientgoscheme.ParameterCodec)
-		executor, err := clientgoremotecommand.NewSPDYExecutor(
-			config,
-			http.MethodPost,
-			request.URL(),
-		)
-		if err != nil {
-			return fmt.Errorf("creating planner session attacher: %w", err)
-		}
-		if err = executor.StreamWithContext(ctx, clientgoremotecommand.StreamOptions{
-			Stdin: input, Stdout: output, Stderr: stderr,
-		}); err != nil {
-			return fmt.Errorf("attaching planner session: %w", err)
-		}
-
-		return nil
 	}
 }
 

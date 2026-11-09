@@ -52,9 +52,17 @@ func (w Worker) Run(ctx context.Context) (runErr error) {
 		return err
 	}
 
-	plan, err := w.Adapter.Plan(ctx, input)
+	plan, artifacts, err := w.Adapter.PlanArtifacts(ctx, input)
 	if err != nil {
 		return err
+	}
+	if len(artifacts) != 0 {
+		// Generated artifact bytes travel beside a plan over the session protocol; a bare plan
+		// frame cannot deliver them and must never look like a complete result.
+		return &Error{
+			Code: ErrorUnsupported, Field: "worker.output",
+			Message: "generated plan artifacts require the planner session worker",
+		}
 	}
 
 	framed, err := EncodeWorkerOutput(*plan)

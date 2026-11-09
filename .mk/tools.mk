@@ -158,4 +158,4 @@ install-gotestsum: ## go install pinned gotestsum (version from .github/vars.env
 install-lint-tools: install-gofumpt install-gci install-golines install-golangci-lint ## Install everything `make lint` needs (gofumpt, gci, golines, golangci-lint)
 
 .PHONY: install-test-tools
-install-test-tools: install-gotestsum ## Install everything `make test`/`make test-e2e` needs (gotestsum)
+install-test-tools: install-gotestsum install-helm ## Install everything `make test`/`make test-e2e` needs (gotestsum, Helm)

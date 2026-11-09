@@ -650,32 +650,12 @@ func validatePlan(plan Plan) error {
 			return planningError(ErrorInvalidInput, field, "file plan is incomplete", nil)
 		}
 
-		if artifactKind == ArtifactSymlink { //nolint:gocritic // each guard names one divergence class.
-			if (file.SourceKind != FileSourceGenerator &&
-				file.SourceKind != FileSourceCertificate) || file.LinkTarget == "" ||
-				len(file.LinkTarget) > maxGeneratedSymlinkTargetBytes ||
-				strings.ContainsRune(file.LinkTarget, 0) || file.Mode != 0 {
-				return planningError(
-					ErrorInvalidInput,
-					field,
-					"symbolic-link plan is incomplete",
-					nil,
-				)
-			}
-		} else if artifactKind == ArtifactDirectory {
-			if (file.SourceKind != FileSourceGenerator &&
-				file.SourceKind != FileSourceCertificate) || file.LinkTarget != "" ||
-				file.Digest != "" || file.Destination != "" {
-				return planningError(ErrorInvalidInput, field, "directory plan is incomplete", nil)
-			}
-		} else if file.LinkTarget != "" {
-			return planningError(ErrorInvalidInput, field,
-				"regular artifact has a link target", nil)
+		if err := validateFileArtifactShape(file, artifactKind, field); err != nil {
+			return err
 		}
 
 		if len(file.ExtendedAttributes) > 128 ||
-			(len(file.ExtendedAttributes) != 0 && file.SourceKind != FileSourceGenerator &&
-				file.SourceKind != FileSourceCertificate) {
+			(len(file.ExtendedAttributes) != 0 && file.SourceKind != FileSourcePlanArtifact) {
 			return planningError(ErrorInvalidInput, field, "artifact metadata is invalid", nil)
 		}
 
@@ -1083,6 +1063,39 @@ func validateActionPayload(
 	return nil
 }
 
+// validateFileArtifactShape checks the artifact-kind-specific field contract of one file plan.
+func validateFileArtifactShape(file FilePlan, artifactKind ArtifactKind, field string) error {
+	switch artifactKind {
+	case ArtifactSymlink:
+		if file.SourceKind != FileSourcePlanArtifact || file.LinkTarget == "" ||
+			len(file.LinkTarget) > maxGeneratedSymlinkTargetBytes ||
+			strings.ContainsRune(file.LinkTarget, 0) || file.Mode != 0 {
+			return planningError(
+				ErrorInvalidInput,
+				field,
+				"symbolic-link plan is incomplete",
+				nil,
+			)
+		}
+	case ArtifactDirectory:
+		if file.SourceKind != FileSourcePlanArtifact || file.LinkTarget != "" ||
+			file.Digest != "" || file.Destination != "" {
+			return planningError(ErrorInvalidInput, field, "directory plan is incomplete", nil)
+		}
+	default:
+		if file.LinkTarget != "" {
+			return planningError(ErrorInvalidInput, field,
+				"regular artifact has a link target", nil)
+		}
+		if file.SourceKind == FileSourcePlanArtifact && file.Digest == "" {
+			return planningError(ErrorInvalidInput, field,
+				"generated artifact has no content digest", nil)
+		}
+	}
+
+	return nil
+}
+
 func validPayloadKind(kind PayloadKind) bool {
 	return slices.Contains(
 		[]PayloadKind{PayloadConfigMap, PayloadSecret, PayloadURL, PayloadInline},
@@ -1094,8 +1107,7 @@ func validFileSourceKind(kind FileSourceKind) bool {
 	return slices.Contains(
 		[]FileSourceKind{
 			FileSourcePayload,
-			FileSourceGenerator,
-			FileSourceCertificate,
+			FileSourcePlanArtifact,
 			FileSourceEmpty,
 		},
 		kind,

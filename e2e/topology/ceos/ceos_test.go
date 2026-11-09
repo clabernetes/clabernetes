@@ -74,6 +74,8 @@ func TestCEOSBootsAndReachesLinux(t *testing.T) {
 	testLinkChanges(t, namespace)
 }
 
+// Use documentation subnets for data links: common 10.0.x.x Pod addresses can otherwise
+// collide with a device address in the shared network namespace.
 func applyTopology(t *testing.T, namespace, ceosImage string) {
 	t.Helper()
 
@@ -97,14 +99,14 @@ spec:
             image: ghcr.io/srl-labs/network-multitool:latest
             exec:
               - >-
-                ash -c 'ip l set dev eth1 up && ip addr add dev eth1 10.0.1.1/30'
+                ash -c 'ip l set dev eth1 up && ip addr add dev eth1 192.0.2.1/30'
           ceos1:
             kind: arista_ceos
             image: %s
             startup-config: |
               interface Ethernet1
                  no switchport
-                 ip address 10.0.1.2/30
+                 ip address 192.0.2.2/30
               end
         links:
           - type: veth
@@ -148,7 +150,7 @@ func assertManagementAllocation(t *testing.T, namespace string) {
 
 func waitForDatapath(t *testing.T, namespace string) {
 	t.Helper()
-	waitForDatapathAddress(t, namespace, "10.0.1.2")
+	waitForDatapathAddress(t, namespace, "192.0.2.2")
 }
 
 func waitForDatapathAddress(t *testing.T, namespace, address string) {
@@ -278,15 +280,15 @@ spec:
 		"-p",
 		"15",
 		"-c",
-		"configure\ninterface Ethernet2\nip address 10.0.2.2/30\nno shutdown\nend",
+		"configure\ninterface Ethernet2\nip address 198.51.100.2/30\nno shutdown\nend",
 	)
 	// The Linux peer receives its connectivity revision independently of cEOS's Pod replacement.
 	runKubectl(t, "exec", "-n", namespace, "deployment/l1", "-c",
 		clabernetestesthelper.DirectDeviceContainerName(t, namespace, "l1"), "--",
 		"sh", "-c", "for i in $(seq 1 60); do "+
-			"if ip link set eth2 up && ip address replace 10.0.2.1/30 dev eth2; then exit 0; fi; "+
+			"if ip link set eth2 up && ip address replace 198.51.100.1/30 dev eth2; then exit 0; fi; "+
 			"sleep 2; done; exit 1")
-	waitForDatapathAddress(t, namespace, "10.0.2.2")
+	waitForDatapathAddress(t, namespace, "198.51.100.2")
 	waitForDatapath(t, namespace)
 	before = ceosPod(t, namespace)
 	runKubectl(t, "delete", "link", "ceos-extra", "-n", namespace)

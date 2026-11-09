@@ -64,6 +64,12 @@ func runScenario(
 		inventory.Availability,
 		inventory.Images,
 	)
+	for _, incompatible := range inventory.Incompatible {
+		// Refused imported behavior is reported per kind instead of counting as covered: the
+		// scenario may pass without exercising it.
+		t.Logf("kind %s cannot rely on %s: %s",
+			incompatible.Kind, incompatible.Behavior, incompatible.Reason)
+	}
 	applyManifest(t, namespace, scenario.Manifest)
 
 	for _, image := range inventory.Images {
