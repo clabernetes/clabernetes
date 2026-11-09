@@ -42,8 +42,8 @@ type recordingRuntime struct {
 	allowMissingImages   bool
 	missingImages        map[string]bool
 	failure              error
+	lastFailure          error
 	namespaceFailureID   string
-	namespaceFailureCall int
 }
 
 // RecordedContainer is one generic container creation observed through containerlab's runtime
@@ -150,15 +150,17 @@ func (r *recordingRuntime) tolerateNamespacePathFailure(runtimeID string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	planningErr, ok := errors.AsType[*Error](r.failure)
-	if !ok || planningErr.Behavior != RuntimeBehaviorGetNSPath ||
-		r.namespaceFailureID != runtimeID || r.namespaceFailureCall != len(r.calls) {
+	firstErr, firstOK := errors.AsType[*Error](r.failure)
+	lastErr, lastOK := errors.AsType[*Error](r.lastFailure)
+	if !firstOK || firstErr.Behavior != RuntimeBehaviorGetNSPath ||
+		!lastOK || lastErr.Behavior != RuntimeBehaviorGetNSPath ||
+		r.namespaceFailureID != runtimeID {
 		return false
 	}
 
 	r.failure = nil
+	r.lastFailure = nil
 	r.namespaceFailureID = ""
-	r.namespaceFailureCall = 0
 
 	return true
 }
@@ -221,18 +223,7 @@ func (r *recordingRuntime) blocked(operation string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.calls = append(r.calls, operation)
-
-	err := &Error{
-		Code:     ErrorSideEffect,
-		Behavior: operation,
-		Message:  forbiddenRuntimeBoundaryMessage,
-	}
-	if r.failure == nil {
-		r.failure = err
-	}
-
-	return err
+	return r.blockedLocked(operation)
 }
 
 func (r *recordingRuntime) Init(...clabruntime.RuntimeOption) error {
@@ -451,10 +442,7 @@ func (r *recordingRuntime) GetNSPath(_ context.Context, runtimeID string) (strin
 
 	const operation = RuntimeBehaviorGetNSPath
 	r.calls = append(r.calls, operation)
-	if r.failure == nil {
-		r.namespaceFailureID = runtimeID
-		r.namespaceFailureCall = len(r.calls)
-	}
+	r.namespaceFailureID = runtimeID
 
 	// Deployment mutation recording cannot supply a live runtime namespace. The adapter may
 	// explicitly tolerate this audited failure for an internal holder's redundant symlink;
@@ -894,6 +882,7 @@ func (r *recordingRuntime) failLocked(err error) error {
 	if r.failure == nil {
 		r.failure = err
 	}
+	r.lastFailure = err
 
 	return err
 }

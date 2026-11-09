@@ -17,7 +17,8 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 		name            string
 		runtimeID       string
 		swallow         bool
-		laterCall       bool
+		forbiddenLater  bool
+		benignLater     bool
 		unjoinedSibling bool
 		wantAccept      bool
 	}{
@@ -25,7 +26,8 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 		{name: "holder runtime ID lookup", runtimeID: "holder-runtime", wantAccept: true},
 		{name: "foreign lookup stays fail closed", runtimeID: "application"},
 		{name: "swallowed lookup stays fail closed", runtimeID: "holder", swallow: true},
-		{name: "continued forbidden calls stay fail closed", runtimeID: "holder", laterCall: true},
+		{name: "continued forbidden calls stay fail closed", runtimeID: "holder", forbiddenLater: true},
+		{name: "benign trailing calls", runtimeID: "holder", benignLater: true, wantAccept: true},
 		{
 			name: "unjoined sibling holder stays fail closed", runtimeID: "unjoined-runtime",
 			unjoinedSibling: true,
@@ -42,7 +44,10 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 			if err == nil || recorder.Failure() == nil {
 				t.Fatal("namespace observation was not retained by the recorder")
 			}
-			if test.laterCall {
+			if test.benignLater {
+				_ = recorder.Mgmt()
+			}
+			if test.forbiddenLater {
 				if laterErr := recorder.CreateNet(context.Background()); laterErr == nil {
 					t.Fatal("continued forbidden runtime call unexpectedly succeeded")
 				}

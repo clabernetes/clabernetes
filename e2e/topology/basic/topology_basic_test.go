@@ -267,10 +267,7 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 	consecutive := 0
 
 	for {
-		podName, containerName, targetErr := getDevicePodTarget(t, namespace, sourceNode)
-		if targetErr != nil {
-			t.Fatalf("resolving device Pod target for %s: %v", sourceNode, targetErr)
-		}
+		podName, containerName := devicePodTargetForProbe(t, namespace, sourceNode)
 		if podName == "" {
 			lastOutput = []byte("device Pod for " + sourceNode + " is not observable yet")
 
@@ -350,6 +347,17 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 		case <-time.After(wait):
 		}
 	}
+}
+
+func devicePodTargetForProbe(t *testing.T, namespace, sourceNode string) (string, string) {
+	t.Helper()
+
+	podName, containerName, targetErr := getDevicePodTarget(t, namespace, sourceNode)
+	if errors.Is(targetErr, errDefaultContainerMismatch) {
+		t.Fatalf("resolving device Pod target for %s: %v", sourceNode, targetErr)
+	}
+
+	return podName, containerName
 }
 
 // dumpSRLinuxDNSDiagnostics logs the management resolver chain of one SR Linux node so a CI-only
