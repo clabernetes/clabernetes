@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	clabernetestesthelpersuite "github.com/clabernetes/clabernetes/testhelper/suite"
 )
@@ -457,7 +456,7 @@ func getDevicePodTarget(t *testing.T, namespace, nodeName string) (string, strin
 			continue
 		}
 
-		primaryContainer := pod.Metadata.Annotations[clabernetesinternaldirectpod.KubectlDefaultContainerAnnotation]
+		primaryContainer := pod.Metadata.Annotations[clabernetestesthelper.DefaultDeviceContainerAnnotation]
 		for _, container := range pod.Spec.Containers {
 			if primaryContainer != "" && container.Name == primaryContainer {
 				return pod.Metadata.Name, container.Name, nil

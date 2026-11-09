@@ -4,7 +4,7 @@ description: Intentional semantic differences between a containerlab host and th
 icon: GitCompareArrows
 ---
 
-c9s consumes unmodified kind behavior from containerlab 0.81.0, but a Kubernetes cluster is
+c9s consumes unmodified kind behavior from containerlab 0.83.0, but a Kubernetes cluster is
 not a Docker host. The differences below are deliberate: each one preserves the *lab*
 semantics while replacing a Docker-host mechanism with its Kubernetes-native equivalent.
 Everything else that cannot be represented fails at compile or planning time with a clear
@@ -12,6 +12,12 @@ diagnostic. Nothing is silently dropped.
 
 ## Networking
 
+- **Internal namespace holders share the Pod network namespace.** Containerlab's SR Linux
+  holder container and its application are both planned into the same Pod, with the application
+  kept as the primary and readiness container. Planning does not create containerlab's host-side
+  `/run/netns` symlink for the holder: that Docker discovery link is redundant when every
+  application shares one Pod namespace. During live endpoint work, holder observations use the
+  accepted plan's namespace relationship.
 - **Cross-node wires are sidecar-realized.** The transport is an implementation detail: each
   endpoint feeds a sidecar-to-sidecar wire keyed by the Link's allocated wire id, which
   carries any link MTU without underlay coordination and propagates carrier state between the

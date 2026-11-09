@@ -5,9 +5,11 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
-
-	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 )
+
+// DefaultDeviceContainerAnnotation mirrors directpod.KubectlDefaultContainerAnnotation without
+// making this public test helper depend on an internal package.
+const DefaultDeviceContainerAnnotation = "kubectl.kubernetes.io/default-container"
 
 // DirectDeviceContainerName resolves the primary direct device container of one logical Node's
 // workload so tests can exec against the actual device process.
@@ -26,7 +28,7 @@ func DirectDeviceContainerName(t *testing.T, namespace, workload string) string 
 		"-o",
 		fmt.Sprintf(
 			"jsonpath={.items[0].metadata.annotations['%s']}",
-			clabernetesinternaldirectpod.KubectlDefaultContainerAnnotation,
+			DefaultDeviceContainerAnnotation,
 		),
 	)
 
