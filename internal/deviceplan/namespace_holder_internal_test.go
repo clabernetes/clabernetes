@@ -20,7 +20,8 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 		laterCall  bool
 		wantAccept bool
 	}{
-		{name: "holder lookup", runtimeID: "holder", wantAccept: true},
+		{name: "holder short-name lookup", runtimeID: "holder", wantAccept: true},
+		{name: "holder runtime ID lookup", runtimeID: "holder-runtime", wantAccept: true},
 		{name: "foreign lookup stays fail closed", runtimeID: "application"},
 		{name: "swallowed lookup stays fail closed", runtimeID: "holder", swallow: true},
 		{name: "continued forbidden calls stay fail closed", runtimeID: "holder", laterCall: true},
@@ -63,7 +64,7 @@ func recordInternalNamespacePair(t *testing.T, recorder *recordingRuntime) {
 
 	for _, config := range []*clabtypes.NodeConfig{
 		{
-			ShortName: "holder", LongName: "holder",
+			ShortName: "holder", LongName: "holder-runtime",
 			Labels: map[string]string{clabconstants.InternalNode: "true"},
 		},
 		{ShortName: "application", LongName: "application", NetworkMode: "container:holder"},
