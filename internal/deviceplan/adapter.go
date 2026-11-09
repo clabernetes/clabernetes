@@ -744,29 +744,35 @@ func tolerateRedundantDirectPodNamespaceLink(err error, recorder *recordingRunti
 	}
 
 	containers := recorder.Containers()
-	holders := map[string]bool{}
+	holders := map[string][]string{}
 	for _, container := range containers {
 		if container.Config == nil || !container.Started ||
 			container.Config.Labels[clabconstants.InternalNode] != "true" {
 			continue
 		}
-		holders[container.RuntimeID] = true
-		holders[container.Config.ShortName] = true
+		aliases := []string{container.RuntimeID}
+		if container.Config.ShortName != "" && container.Config.ShortName != container.RuntimeID {
+			aliases = append(aliases, container.Config.ShortName)
+		}
+		for _, alias := range aliases {
+			holders[alias] = aliases
+		}
 	}
 
-	joined := false
+	joined := map[string]bool{}
 	for _, container := range containers {
 		if container.Config == nil || !container.Started {
 			continue
 		}
 		target, shared := strings.CutPrefix(container.Config.NetworkMode, "container:")
-		joined = joined || shared && holders[target]
-	}
-	if !joined {
-		return false
+		if shared {
+			for _, runtimeID := range holders[target] {
+				joined[runtimeID] = true
+			}
+		}
 	}
 
-	for runtimeID := range holders {
+	for runtimeID := range joined {
 		if recorder.tolerateNamespacePathFailure(runtimeID) {
 			return true
 		}

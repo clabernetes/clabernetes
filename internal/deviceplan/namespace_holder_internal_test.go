@@ -14,24 +14,29 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
-		name       string
-		runtimeID  string
-		swallow    bool
-		laterCall  bool
-		wantAccept bool
+		name            string
+		runtimeID       string
+		swallow         bool
+		laterCall       bool
+		unjoinedSibling bool
+		wantAccept      bool
 	}{
 		{name: "holder short-name lookup", runtimeID: "holder", wantAccept: true},
 		{name: "holder runtime ID lookup", runtimeID: "holder-runtime", wantAccept: true},
 		{name: "foreign lookup stays fail closed", runtimeID: "application"},
 		{name: "swallowed lookup stays fail closed", runtimeID: "holder", swallow: true},
 		{name: "continued forbidden calls stay fail closed", runtimeID: "holder", laterCall: true},
+		{
+			name: "unjoined sibling holder stays fail closed", runtimeID: "unjoined-runtime",
+			unjoinedSibling: true,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			recorder := newRecordingRuntime(nil, nil, t.TempDir())
 			recorder.BeginMutationRecording()
-			recordInternalNamespacePair(t, recorder)
+			recordInternalNamespacePair(t, recorder, test.unjoinedSibling)
 
 			_, err := recorder.GetNSPath(context.Background(), test.runtimeID)
 			if err == nil || recorder.Failure() == nil {
@@ -59,16 +64,28 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 	}
 }
 
-func recordInternalNamespacePair(t *testing.T, recorder *recordingRuntime) {
+func recordInternalNamespacePair(
+	t *testing.T,
+	recorder *recordingRuntime,
+	unjoinedSibling bool,
+) {
 	t.Helper()
 
-	for _, config := range []*clabtypes.NodeConfig{
+	configs := []*clabtypes.NodeConfig{
 		{
 			ShortName: "holder", LongName: "holder-runtime",
 			Labels: map[string]string{clabconstants.InternalNode: "true"},
 		},
 		{ShortName: "application", LongName: "application", NetworkMode: "container:holder"},
-	} {
+	}
+	if unjoinedSibling {
+		configs = append(configs, &clabtypes.NodeConfig{
+			ShortName: "unjoined", LongName: "unjoined-runtime",
+			Labels: map[string]string{clabconstants.InternalNode: "true"},
+		})
+	}
+
+	for _, config := range configs {
 		runtimeID, err := recorder.CreateContainer(context.Background(), config)
 		if err != nil {
 			t.Fatal(err)
