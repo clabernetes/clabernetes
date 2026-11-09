@@ -151,8 +151,7 @@ func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) 
 					t.Fatalf("generic internal namespace-holder planning regressed: %v", planErr)
 				}
 				if !errors.As(planErr, &planningErr) ||
-					(planningErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported &&
-						planningErr.Code != clabernetesinternaldeviceplan.ErrorSideEffect) ||
+					planningErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported ||
 					planningErr.NodeID != input.Nodes[0].ID || planningErr.Field == "" ||
 					planningErr.Behavior == "" {
 					t.Fatalf("generic planning failed without a capability diagnostic: %v", planErr)

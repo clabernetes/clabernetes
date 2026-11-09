@@ -17,6 +17,7 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 		name            string
 		runtimeID       string
 		swallow         bool
+		swallowForeign  bool
 		forbiddenLater  bool
 		benignLater     bool
 		unjoinedSibling bool
@@ -26,6 +27,7 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 		{name: "holder runtime ID lookup", runtimeID: "holder-runtime", wantAccept: true},
 		{name: "foreign lookup stays fail closed", runtimeID: "application"},
 		{name: "swallowed lookup stays fail closed", runtimeID: "holder", swallow: true},
+		{name: "foreign lookup swallowed before holder", runtimeID: "holder", swallowForeign: true},
 		{name: "continued forbidden calls stay fail closed", runtimeID: "holder", forbiddenLater: true},
 		{name: "benign trailing calls", runtimeID: "holder", benignLater: true, wantAccept: true},
 		{
@@ -39,6 +41,10 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 			recorder := newRecordingRuntime(nil, nil, t.TempDir())
 			recorder.BeginMutationRecording()
 			recordInternalNamespacePair(t, recorder, test.unjoinedSibling)
+
+			if test.swallowForeign {
+				_, _ = recorder.GetNSPath(context.Background(), "application")
+			}
 
 			_, err := recorder.GetNSPath(context.Background(), test.runtimeID)
 			if err == nil || recorder.Failure() == nil {

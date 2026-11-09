@@ -150,10 +150,12 @@ func (r *recordingRuntime) tolerateNamespacePathFailure(runtimeID string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	firstErr, firstOK := errors.AsType[*Error](r.failure)
-	lastErr, lastOK := errors.AsType[*Error](r.lastFailure)
-	if !firstOK || firstErr.Behavior != RuntimeBehaviorGetNSPath ||
-		!lastOK || lastErr.Behavior != RuntimeBehaviorGetNSPath ||
+	if r.failure == nil || !errors.Is(r.failure, r.lastFailure) {
+		return false
+	}
+
+	planningErr, ok := errors.AsType[*Error](r.failure)
+	if !ok || planningErr.Behavior != RuntimeBehaviorGetNSPath ||
 		r.namespaceFailureID != runtimeID {
 		return false
 	}
