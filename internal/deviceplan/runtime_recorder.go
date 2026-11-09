@@ -3,6 +3,7 @@ package deviceplan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -18,6 +19,8 @@ import (
 	clabruntime "github.com/srl-labs/containerlab/runtime"
 	clabtypes "github.com/srl-labs/containerlab/types"
 )
+
+const forbiddenRuntimeBoundaryMessage = "imported code reached a forbidden runtime boundary"
 
 var _ clabruntime.ContainerRuntime = (*recordingRuntime)(nil)
 
@@ -39,6 +42,8 @@ type recordingRuntime struct {
 	allowMissingImages   bool
 	missingImages        map[string]bool
 	failure              error
+	lastFailure          error
+	namespaceFailureID   string
 }
 
 // RecordedContainer is one generic container creation observed through containerlab's runtime
@@ -138,6 +143,30 @@ func (r *recordingRuntime) Failure() error {
 	return r.failure
 }
 
+// tolerateNamespacePathFailure clears a recorded runtime.GetNSPath failure only when it was
+// raised for the requested internal namespace holder. Every other recorder failure remains
+// fail-closed, including an upstream deployment hook swallowing the returned error.
+func (r *recordingRuntime) tolerateNamespacePathFailure(runtimeID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.failure == nil || !errors.Is(r.failure, r.lastFailure) {
+		return false
+	}
+
+	planningErr, ok := errors.AsType[*Error](r.failure)
+	if !ok || planningErr.Behavior != RuntimeBehaviorGetNSPath ||
+		r.namespaceFailureID != runtimeID {
+		return false
+	}
+
+	r.failure = nil
+	r.lastFailure = nil
+	r.namespaceFailureID = ""
+
+	return true
+}
+
 func (r *recordingRuntime) BeginMutationRecording() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -196,18 +225,7 @@ func (r *recordingRuntime) blocked(operation string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.calls = append(r.calls, operation)
-
-	err := &Error{
-		Code:     ErrorSideEffect,
-		Behavior: operation,
-		Message:  "imported code reached a forbidden runtime boundary",
-	}
-	if r.failure == nil {
-		r.failure = err
-	}
-
-	return err
+	return r.blockedLocked(operation)
 }
 
 func (r *recordingRuntime) Init(...clabruntime.RuntimeOption) error {
@@ -416,8 +434,25 @@ func (r *recordingRuntime) ListContainers(
 	return result, nil
 }
 
-func (r *recordingRuntime) GetNSPath(context.Context, string) (string, error) {
-	return "", r.blocked("runtime.GetNSPath")
+func (r *recordingRuntime) GetNSPath(_ context.Context, runtimeID string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.recordingMutations {
+		return "", r.blockedLocked("runtime.GetNSPath")
+	}
+
+	const operation = RuntimeBehaviorGetNSPath
+	r.calls = append(r.calls, operation)
+	r.namespaceFailureID = runtimeID
+
+	// Deployment mutation recording cannot supply a live runtime namespace. The adapter may
+	// explicitly tolerate this audited failure for an internal holder's redundant symlink;
+	// every other namespace observation remains fail-closed.
+	return "", r.failLocked(&Error{
+		Code: ErrorSideEffect, Behavior: operation,
+		Message: forbiddenRuntimeBoundaryMessage,
+	})
 }
 
 func (r *recordingRuntime) LogNonRunningContainerOutput(context.Context, string) {
@@ -841,7 +876,7 @@ func (r *recordingRuntime) blockedLocked(operation string) error {
 
 	return r.failLocked(&Error{
 		Code: ErrorSideEffect, Behavior: operation,
-		Message: "imported code reached a forbidden runtime boundary",
+		Message: forbiddenRuntimeBoundaryMessage,
 	})
 }
 
@@ -849,6 +884,7 @@ func (r *recordingRuntime) failLocked(err error) error {
 	if r.failure == nil {
 		r.failure = err
 	}
+	r.lastFailure = err
 
 	return err
 }

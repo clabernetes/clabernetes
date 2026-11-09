@@ -37,6 +37,10 @@ const (
 	plannerIdentity = "clabernetes"
 )
 
+// RuntimeBehaviorGetNSPath identifies container-runtime network namespace inspection in a
+// structured planning diagnostic.
+const RuntimeBehaviorGetNSPath = "runtime.GetNSPath"
+
 // Error is a stable, structured planning diagnostic. It contains identities and field paths but
 // never rejected values, payload content, credentials, or other secret material.
 type Error struct {

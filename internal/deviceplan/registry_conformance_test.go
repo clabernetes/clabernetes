@@ -11,6 +11,7 @@ import (
 	"time"
 
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabconstants "github.com/srl-labs/containerlab/constants"
 )
 
 func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) {
@@ -146,9 +147,11 @@ func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) 
 			}).Plan(planContext, planningInput)
 			if planErr != nil {
 				var planningErr *clabernetesinternaldeviceplan.Error
+				if errors.As(planErr, &planningErr) && planningErr.Behavior == clabernetesinternaldeviceplan.RuntimeBehaviorGetNSPath {
+					t.Fatalf("generic internal namespace-holder planning regressed: %v", planErr)
+				}
 				if !errors.As(planErr, &planningErr) ||
-					(planningErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported &&
-						planningErr.Code != clabernetesinternaldeviceplan.ErrorSideEffect) ||
+					planningErr.Code != clabernetesinternaldeviceplan.ErrorUnsupported ||
 					planningErr.NodeID != input.Nodes[0].ID || planningErr.Field == "" ||
 					planningErr.Behavior == "" {
 					t.Fatalf("generic planning failed without a capability diagnostic: %v", planErr)
@@ -165,6 +168,33 @@ func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) 
 
 			if plan == nil || len(plan.Nodes) != 1 || len(plan.Containers) == 0 {
 				t.Fatalf("generic planning returned no direct application plan: %#v", plan)
+			}
+
+			namespaceHolders := map[string]bool{}
+			for _, container := range plan.Containers {
+				for _, label := range container.Labels {
+					if label.Name == clabconstants.InternalNode && label.Value == "true" {
+						namespaceHolders[container.ID] = true
+						if container.NamespaceOwnerID != container.ID {
+							t.Fatalf("internal namespace holder does not own its namespace: %#v",
+								container)
+						}
+					}
+				}
+			}
+			if len(namespaceHolders) != 0 {
+				primaryJoined := false
+				for _, container := range plan.Containers {
+					if container.ID == plan.Nodes[0].PrimaryContainerID &&
+						container.NamespaceOwnerID != container.ID &&
+						namespaceHolders[container.NamespaceOwnerID] {
+						primaryJoined = true
+					}
+				}
+				if !primaryJoined {
+					t.Fatalf("primary application does not join its internal namespace holder: %#v",
+						plan.Containers)
+				}
 			}
 
 			if len(plan.Management) != 1 || plan.Management[0].NodeID != "registry-node" ||

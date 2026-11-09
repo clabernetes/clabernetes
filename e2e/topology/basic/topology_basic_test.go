@@ -2,6 +2,7 @@ package basic_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,10 @@ import (
 
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	clabernetestesthelpersuite "github.com/clabernetes/clabernetes/testhelper/suite"
+)
+
+var errDefaultContainerMismatch = errors.New(
+	"default-container annotation does not match any container",
 )
 
 func TestMain(m *testing.M) {
@@ -262,8 +267,8 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 	consecutive := 0
 
 	for {
-		podName, containerName, targetErr := getDevicePodTarget(t, namespace, sourceNode)
-		if targetErr != nil || podName == "" {
+		podName, containerName := devicePodTargetForProbe(t, namespace, sourceNode)
+		if podName == "" {
 			lastOutput = []byte("device Pod for " + sourceNode + " is not observable yet")
 
 			select {
@@ -342,6 +347,17 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 		case <-time.After(wait):
 		}
 	}
+}
+
+func devicePodTargetForProbe(t *testing.T, namespace, sourceNode string) (string, string) {
+	t.Helper()
+
+	podName, containerName, targetErr := getDevicePodTarget(t, namespace, sourceNode)
+	if errors.Is(targetErr, errDefaultContainerMismatch) {
+		t.Fatalf("resolving device Pod target for %s: %v", sourceNode, targetErr)
+	}
+
+	return podName, containerName
 }
 
 // dumpSRLinuxDNSDiagnostics logs the management resolver chain of one SR Linux node so a CI-only
@@ -432,7 +448,8 @@ func getDevicePodTarget(t *testing.T, namespace, nodeName string) (string, strin
 	var podList struct {
 		Items []struct {
 			Metadata struct {
-				Name string `json:"name"`
+				Name        string            `json:"name"`
+				Annotations map[string]string `json:"annotations"`
 			} `json:"metadata"`
 			Spec struct {
 				Containers []struct {
@@ -455,10 +472,17 @@ func getDevicePodTarget(t *testing.T, namespace, nodeName string) (string, strin
 			continue
 		}
 
+		primaryContainer := pod.Metadata.Annotations[clabernetestesthelper.DefaultDeviceContainerAnnotation]
 		for _, container := range pod.Spec.Containers {
-			if strings.HasPrefix(container.Name, "node-") {
+			if primaryContainer != "" && container.Name == primaryContainer {
 				return pod.Metadata.Name, container.Name, nil
 			}
+		}
+		if primaryContainer != "" {
+			return "", "", fmt.Errorf(
+				"pod %q: %w: %q",
+				pod.Metadata.Name, errDefaultContainerMismatch, primaryContainer,
+			)
 		}
 	}
 

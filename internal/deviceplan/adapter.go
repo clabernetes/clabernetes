@@ -677,7 +677,7 @@ func recordDeployments(
 			"containerlab deployment hook panicked",
 			func() error { return node.implementation.Deploy(ctx, params) },
 		)
-		if err != nil {
+		if err != nil && !tolerateRedundantDirectPodNamespaceLink(err, node.recorder) {
 			if planningErr, ok := errors.AsType[*Error](err); ok {
 				return planningErr
 			}
@@ -730,6 +730,55 @@ func recordDeployments(
 	}
 
 	return nil
+}
+
+// tolerateRedundantDirectPodNamespaceLink accepts only the audited holder namespace lookup
+// needed for containerlab's host-side symlink. The internal holder and its application share one
+// network namespace in a direct Pod, so that symlink has no c9s representation. A foreign target
+// or a swallowed recorder failure remains fatal.
+func tolerateRedundantDirectPodNamespaceLink(err error, recorder *recordingRuntime) bool {
+	planningErr, ok := errors.AsType[*Error](err)
+	if !ok || planningErr.Code != ErrorSideEffect ||
+		planningErr.Behavior != RuntimeBehaviorGetNSPath {
+		return false
+	}
+
+	containers := recorder.Containers()
+	holders := map[string][]string{}
+	for _, container := range containers {
+		if container.Config == nil || !container.Started ||
+			container.Config.Labels[clabconstants.InternalNode] != "true" {
+			continue
+		}
+		aliases := []string{container.RuntimeID}
+		if container.Config.ShortName != "" && container.Config.ShortName != container.RuntimeID {
+			aliases = append(aliases, container.Config.ShortName)
+		}
+		for _, alias := range aliases {
+			holders[alias] = aliases
+		}
+	}
+
+	joined := map[string]bool{}
+	for _, container := range containers {
+		if container.Config == nil || !container.Started {
+			continue
+		}
+		target, shared := strings.CutPrefix(container.Config.NetworkMode, "container:")
+		if shared {
+			for _, runtimeID := range holders[target] {
+				joined[runtimeID] = true
+			}
+		}
+	}
+
+	for runtimeID := range joined {
+		if recorder.tolerateNamespacePathFailure(runtimeID) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func importedContainerInventory(
@@ -813,7 +862,12 @@ func invokeImported(
 		}
 	}()
 
-	return withImportedEntropy(nodeID, behavior, operation)
+	err = withImportedEntropy(nodeID, behavior, operation)
+	if err == nil {
+		return nil
+	}
+
+	return withErrorAttribution(err, nodeID, field)
 }
 
 func importedPanicCause(recovered any) error {
@@ -1761,12 +1815,19 @@ func mapLinkApplyMode(mode clabnodes.LinkApplyMode) LinkApplyMode {
 }
 
 func withNodeID(err error, nodeID string) error {
+	return withErrorAttribution(err, nodeID, "")
+}
+
+func withErrorAttribution(err error, nodeID, field string) error {
 	var planningErr *Error
 	if !errors.As(err, &planningErr) {
 		return err
 	}
 	duplicate := *planningErr
 	duplicate.NodeID = nodeID
+	if duplicate.Field == "" {
+		duplicate.Field = field
+	}
 
 	return &duplicate
 }

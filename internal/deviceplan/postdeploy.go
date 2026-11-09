@@ -228,7 +228,7 @@ func (a Adapter) RunDeployEndpoints(
 	if !ok || !endpointBoundary.DirectEndpointLifecycleBoundary() {
 		return &Error{
 			Code: ErrorUnsupported, NodeID: targetNode.ID, Field: "runtime.networkNamespace",
-			Behavior: "runtime.GetNSPath",
+			Behavior: RuntimeBehaviorGetNSPath,
 			Message: "a distinct host worker and target application network " +
 				"namespace are required",
 		}
@@ -554,9 +554,10 @@ func verifyConstructedContainerIDs(nodeID string, plan Plan, containers []Record
 type importedDeploymentConstructionRuntime struct {
 	clabruntime.ContainerRuntime
 
-	live       clabruntime.ContainerRuntime
-	recorder   *recordingRuntime
-	liveActive bool
+	live              clabruntime.ContainerRuntime
+	recorder          *recordingRuntime
+	deploymentStarted bool
+	liveActive        bool
 }
 
 func newImportedDeploymentConstructionRuntime(
@@ -576,6 +577,21 @@ func newImportedDeploymentConstructionRuntime(
 
 func (r *importedDeploymentConstructionRuntime) beginDeployment() {
 	r.recorder.BeginMutationRecording()
+	r.deploymentStarted = true
+}
+
+// GetNSPath delegates deployment-time observations to the live application or endpoint runtime.
+// Construction records container intent, but it must not block an internal namespace holder whose
+// shared namespace relationship is carried by the accepted plan.
+func (r *importedDeploymentConstructionRuntime) GetNSPath(
+	ctx context.Context,
+	runtimeID string,
+) (string, error) {
+	if r.deploymentStarted {
+		return r.live.GetNSPath(ctx, runtimeID)
+	}
+
+	return r.ContainerRuntime.GetNSPath(ctx, runtimeID)
 }
 
 // switchToLive completes construction: every later package call, including the hook this boundary

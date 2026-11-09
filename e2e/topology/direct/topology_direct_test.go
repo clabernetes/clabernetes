@@ -564,9 +564,10 @@ func observeDevicePod(t *testing.T, namespace, nodeName string) devicePodObserva
 
 	image := ""
 	containerName := ""
+	primaryContainer := pod.Metadata.Annotations[clabernetestesthelper.DefaultDeviceContainerAnnotation]
 
 	for _, container := range pod.Spec.Containers {
-		if strings.HasPrefix(container.Name, "node-") {
+		if primaryContainer != "" && container.Name == primaryContainer {
 			image = container.Image
 			containerName = container.Name
 		}
@@ -613,7 +614,8 @@ func waitForWorkerArtifactCollection(t *testing.T, namespace string) {
 type podList struct {
 	Items []struct {
 		Metadata struct {
-			Name string `json:"name"`
+			Name        string            `json:"name"`
+			Annotations map[string]string `json:"annotations"`
 		} `json:"metadata"`
 		Spec struct {
 			Containers []struct {
