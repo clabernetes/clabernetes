@@ -32,9 +32,10 @@ func DirectDeviceContainerName(t *testing.T, namespace, workload string) string 
 		),
 	)
 
-	containerName := strings.TrimSpace(string(Execute(t, cmd)))
+	output := Execute(t, cmd)
+	containerName := strings.TrimSpace(string(output))
 	if containerName == "" {
-		t.Fatalf("workload %q has no primary direct device container", workload)
+		t.Fatalf("workload %q has no primary direct device container: %s", workload, output)
 	}
 
 	return containerName
