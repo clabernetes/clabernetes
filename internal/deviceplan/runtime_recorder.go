@@ -19,6 +19,8 @@ import (
 	clabtypes "github.com/srl-labs/containerlab/types"
 )
 
+const forbiddenRuntimeBoundaryMessage = "imported code reached a forbidden runtime boundary"
+
 var _ clabruntime.ContainerRuntime = (*recordingRuntime)(nil)
 
 type recordingRuntime struct {
@@ -201,7 +203,7 @@ func (r *recordingRuntime) blocked(operation string) error {
 	err := &Error{
 		Code:     ErrorSideEffect,
 		Behavior: operation,
-		Message:  "imported code reached a forbidden runtime boundary",
+		Message:  forbiddenRuntimeBoundaryMessage,
 	}
 	if r.failure == nil {
 		r.failure = err
@@ -417,7 +419,23 @@ func (r *recordingRuntime) ListContainers(
 }
 
 func (r *recordingRuntime) GetNSPath(context.Context, string) (string, error) {
-	return "", r.blocked("runtime.GetNSPath")
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.recordingMutations {
+		return "", r.blockedLocked("runtime.GetNSPath")
+	}
+
+	const operation = "runtime.GetNSPath"
+	r.calls = append(r.calls, operation)
+
+	// Deployment mutation recording cannot supply a live runtime namespace. Internal namespace
+	// holders can still be planned when their application joins the same direct Pod; all other
+	// uses retain the normal forbidden-boundary diagnostic.
+	return "", &Error{
+		Code: ErrorSideEffect, Behavior: operation,
+		Message: forbiddenRuntimeBoundaryMessage,
+	}
 }
 
 func (r *recordingRuntime) LogNonRunningContainerOutput(context.Context, string) {
@@ -841,7 +859,7 @@ func (r *recordingRuntime) blockedLocked(operation string) error {
 
 	return r.failLocked(&Error{
 		Code: ErrorSideEffect, Behavior: operation,
-		Message: "imported code reached a forbidden runtime boundary",
+		Message: forbiddenRuntimeBoundaryMessage,
 	})
 }
 

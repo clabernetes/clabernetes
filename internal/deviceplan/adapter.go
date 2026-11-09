@@ -677,7 +677,7 @@ func recordDeployments(
 			"containerlab deployment hook panicked",
 			func() error { return node.implementation.Deploy(ctx, params) },
 		)
-		if err != nil {
+		if err != nil && !redundantDirectPodNamespaceLink(err, node.recorder.Containers()) {
 			if planningErr, ok := errors.AsType[*Error](err); ok {
 				return planningErr
 			}
@@ -730,6 +730,40 @@ func recordDeployments(
 	}
 
 	return nil
+}
+
+// redundantDirectPodNamespaceLink reports whether a deployment stopped only at containerlab's
+// host-side namespace symlink after recording an internal namespace holder and its started
+// application. Both containers share one network namespace in a direct Pod, so Kubernetes
+// already provides the persistence the holder and symlink provide for local container runtimes.
+func redundantDirectPodNamespaceLink(err error, containers []RecordedContainer) bool {
+	planningErr, ok := errors.AsType[*Error](err)
+	if !ok || planningErr.Code != ErrorSideEffect ||
+		planningErr.Behavior != "runtime.GetNSPath" {
+		return false
+	}
+
+	holders := map[string]bool{}
+	for _, container := range containers {
+		if container.Config == nil || !container.Started ||
+			container.Config.Labels[clabconstants.InternalNode] != "true" {
+			continue
+		}
+		holders[container.RuntimeID] = true
+		holders[container.Config.ShortName] = true
+	}
+
+	for _, container := range containers {
+		if container.Config == nil || !container.Started {
+			continue
+		}
+		target, shared := strings.CutPrefix(container.Config.NetworkMode, "container:")
+		if shared && holders[target] {
+			return true
+		}
+	}
+
+	return false
 }
 
 func importedContainerInventory(
@@ -813,7 +847,23 @@ func invokeImported(
 		}
 	}()
 
-	return withImportedEntropy(nodeID, behavior, operation)
+	err = withImportedEntropy(nodeID, behavior, operation)
+	if err == nil {
+		return nil
+	}
+
+	planningErr, ok := errors.AsType[*Error](err)
+	if !ok {
+		return err
+	}
+
+	duplicate := *planningErr
+	duplicate.NodeID = nodeID
+	if duplicate.Field == "" {
+		duplicate.Field = field
+	}
+
+	return &duplicate
 }
 
 func importedPanicCause(recovered any) error {
