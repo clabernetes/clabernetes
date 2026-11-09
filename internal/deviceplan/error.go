@@ -30,13 +30,16 @@ const (
 	behaviorCertificateMaterial        = "certificate-material"
 	behaviorNetworkNamespace           = "network-namespace"
 	behaviorRuntimeCreateContainer     = "runtime.CreateContainer"
-	behaviorRuntimeGetNSPath           = "runtime.GetNSPath"
 	behaviorURLPayload                 = "url-payload"
 	filesystemTmpfs                    = "tmpfs"
 	// plannerIdentity is the planner name recorded in discovered image and mapper identities and
 	// used as the certificate organization, identifying clabernetes-issued material.
 	plannerIdentity = "clabernetes"
 )
+
+// RuntimeBehaviorGetNSPath identifies container-runtime network namespace inspection in a
+// structured planning diagnostic.
+const RuntimeBehaviorGetNSPath = "runtime.GetNSPath"
 
 // Error is a stable, structured planning diagnostic. It contains identities and field paths but
 // never rejected values, payload content, credentials, or other secret material.

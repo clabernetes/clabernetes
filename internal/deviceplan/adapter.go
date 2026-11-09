@@ -739,7 +739,7 @@ func recordDeployments(
 func tolerateRedundantDirectPodNamespaceLink(err error, recorder *recordingRuntime) bool {
 	planningErr, ok := errors.AsType[*Error](err)
 	if !ok || planningErr.Code != ErrorSideEffect ||
-		planningErr.Behavior != behaviorRuntimeGetNSPath {
+		planningErr.Behavior != RuntimeBehaviorGetNSPath {
 		return false
 	}
 

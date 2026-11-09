@@ -147,7 +147,7 @@ func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) 
 			}).Plan(planContext, planningInput)
 			if planErr != nil {
 				var planningErr *clabernetesinternaldeviceplan.Error
-				if errors.As(planErr, &planningErr) && planningErr.Behavior == "runtime.GetNSPath" {
+				if errors.As(planErr, &planningErr) && planningErr.Behavior == clabernetesinternaldeviceplan.RuntimeBehaviorGetNSPath {
 					t.Fatalf("generic internal namespace-holder planning regressed: %v", planErr)
 				}
 				if !errors.As(planErr, &planningErr) ||

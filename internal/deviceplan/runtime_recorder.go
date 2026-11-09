@@ -151,7 +151,7 @@ func (r *recordingRuntime) tolerateNamespacePathFailure(runtimeID string) bool {
 	defer r.mu.Unlock()
 
 	planningErr, ok := errors.AsType[*Error](r.failure)
-	if !ok || planningErr.Behavior != behaviorRuntimeGetNSPath ||
+	if !ok || planningErr.Behavior != RuntimeBehaviorGetNSPath ||
 		r.namespaceFailureID != runtimeID || r.namespaceFailureCall != len(r.calls) {
 		return false
 	}
@@ -449,7 +449,7 @@ func (r *recordingRuntime) GetNSPath(_ context.Context, runtimeID string) (strin
 		return "", r.blockedLocked("runtime.GetNSPath")
 	}
 
-	const operation = behaviorRuntimeGetNSPath
+	const operation = RuntimeBehaviorGetNSPath
 	r.calls = append(r.calls, operation)
 	if r.failure == nil {
 		r.namespaceFailureID = runtimeID

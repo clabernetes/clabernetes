@@ -228,7 +228,7 @@ func (a Adapter) RunDeployEndpoints(
 	if !ok || !endpointBoundary.DirectEndpointLifecycleBoundary() {
 		return &Error{
 			Code: ErrorUnsupported, NodeID: targetNode.ID, Field: "runtime.networkNamespace",
-			Behavior: behaviorRuntimeGetNSPath,
+			Behavior: RuntimeBehaviorGetNSPath,
 			Message: "a distinct host worker and target application network " +
 				"namespace are required",
 		}
