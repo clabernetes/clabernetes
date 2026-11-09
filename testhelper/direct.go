@@ -1,9 +1,12 @@
 package testhelper
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
+
+	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 )
 
 // DirectDeviceContainerName resolves the primary direct device container of one logical Node's
@@ -21,17 +24,16 @@ func DirectDeviceContainerName(t *testing.T, namespace, workload string) string 
 		"--selector",
 		"c9s.run/direct-workload="+workload,
 		"-o",
-		`jsonpath={range .items[0].spec.containers[*]}{.name}{"\n"}{end}`,
+		fmt.Sprintf(
+			"jsonpath={.items[0].metadata.annotations['%s']}",
+			clabernetesinternaldirectpod.KubectlDefaultContainerAnnotation,
+		),
 	)
 
-	output := Execute(t, cmd)
-	for name := range strings.SplitSeq(string(output), "\n") {
-		if strings.HasPrefix(name, "node-") {
-			return name
-		}
+	containerName := strings.TrimSpace(string(Execute(t, cmd)))
+	if containerName == "" {
+		t.Fatalf("workload %q has no primary direct device container", workload)
 	}
 
-	t.Fatalf("workload %q has no direct device container: %s", workload, output)
-
-	return ""
+	return containerName
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	clabernetesinternaldirectpod "github.com/clabernetes/clabernetes/internal/directpod"
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	clabernetestesthelpersuite "github.com/clabernetes/clabernetes/testhelper/suite"
 )
@@ -432,7 +433,8 @@ func getDevicePodTarget(t *testing.T, namespace, nodeName string) (string, strin
 	var podList struct {
 		Items []struct {
 			Metadata struct {
-				Name string `json:"name"`
+				Name        string            `json:"name"`
+				Annotations map[string]string `json:"annotations"`
 			} `json:"metadata"`
 			Spec struct {
 				Containers []struct {
@@ -455,8 +457,9 @@ func getDevicePodTarget(t *testing.T, namespace, nodeName string) (string, strin
 			continue
 		}
 
+		primaryContainer := pod.Metadata.Annotations[clabernetesinternaldirectpod.KubectlDefaultContainerAnnotation]
 		for _, container := range pod.Spec.Containers {
-			if strings.HasPrefix(container.Name, "node-") {
+			if primaryContainer != "" && container.Name == primaryContainer {
 				return pod.Metadata.Name, container.Name, nil
 			}
 		}
