@@ -3,6 +3,7 @@ package deviceplan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -41,6 +42,7 @@ type recordingRuntime struct {
 	allowMissingImages   bool
 	missingImages        map[string]bool
 	failure              error
+	namespaceFailureID   string
 }
 
 // RecordedContainer is one generic container creation observed through containerlab's runtime
@@ -138,6 +140,25 @@ func (r *recordingRuntime) Failure() error {
 	defer r.mu.Unlock()
 
 	return r.failure
+}
+
+// tolerateNamespacePathFailure clears a recorded runtime.GetNSPath failure only when it was
+// raised for the requested internal namespace holder. Every other recorder failure remains
+// fail-closed, including an upstream deployment hook swallowing the returned error.
+func (r *recordingRuntime) tolerateNamespacePathFailure(runtimeID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	planningErr, ok := errors.AsType[*Error](r.failure)
+	if !ok || planningErr.Behavior != behaviorRuntimeGetNSPath ||
+		r.namespaceFailureID != runtimeID {
+		return false
+	}
+
+	r.failure = nil
+	r.namespaceFailureID = ""
+
+	return true
 }
 
 func (r *recordingRuntime) BeginMutationRecording() {
@@ -418,7 +439,7 @@ func (r *recordingRuntime) ListContainers(
 	return result, nil
 }
 
-func (r *recordingRuntime) GetNSPath(context.Context, string) (string, error) {
+func (r *recordingRuntime) GetNSPath(_ context.Context, runtimeID string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -426,16 +447,19 @@ func (r *recordingRuntime) GetNSPath(context.Context, string) (string, error) {
 		return "", r.blockedLocked("runtime.GetNSPath")
 	}
 
-	const operation = "runtime.GetNSPath"
+	const operation = behaviorRuntimeGetNSPath
 	r.calls = append(r.calls, operation)
+	if r.failure == nil {
+		r.namespaceFailureID = runtimeID
+	}
 
-	// Deployment mutation recording cannot supply a live runtime namespace. Internal namespace
-	// holders can still be planned when their application joins the same direct Pod; all other
-	// uses retain the normal forbidden-boundary diagnostic.
-	return "", &Error{
+	// Deployment mutation recording cannot supply a live runtime namespace. The adapter may
+	// explicitly tolerate this audited failure for an internal holder's redundant symlink;
+	// every other namespace observation remains fail-closed.
+	return "", r.failLocked(&Error{
 		Code: ErrorSideEffect, Behavior: operation,
 		Message: forbiddenRuntimeBoundaryMessage,
-	}
+	})
 }
 
 func (r *recordingRuntime) LogNonRunningContainerOutput(context.Context, string) {

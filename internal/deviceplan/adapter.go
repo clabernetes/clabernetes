@@ -677,7 +677,7 @@ func recordDeployments(
 			"containerlab deployment hook panicked",
 			func() error { return node.implementation.Deploy(ctx, params) },
 		)
-		if err != nil && !redundantDirectPodNamespaceLink(err, node.recorder.Containers()) {
+		if err != nil && !tolerateRedundantDirectPodNamespaceLink(err, node.recorder) {
 			if planningErr, ok := errors.AsType[*Error](err); ok {
 				return planningErr
 			}
@@ -732,17 +732,18 @@ func recordDeployments(
 	return nil
 }
 
-// redundantDirectPodNamespaceLink reports whether a deployment stopped only at containerlab's
-// host-side namespace symlink after recording an internal namespace holder and its started
-// application. Both containers share one network namespace in a direct Pod, so Kubernetes
-// already provides the persistence the holder and symlink provide for local container runtimes.
-func redundantDirectPodNamespaceLink(err error, containers []RecordedContainer) bool {
+// tolerateRedundantDirectPodNamespaceLink accepts only the audited holder namespace lookup
+// needed for containerlab's host-side symlink. The internal holder and its application share one
+// network namespace in a direct Pod, so that symlink has no c9s representation. A foreign target
+// or a swallowed recorder failure remains fatal.
+func tolerateRedundantDirectPodNamespaceLink(err error, recorder *recordingRuntime) bool {
 	planningErr, ok := errors.AsType[*Error](err)
 	if !ok || planningErr.Code != ErrorSideEffect ||
-		planningErr.Behavior != "runtime.GetNSPath" {
+		planningErr.Behavior != behaviorRuntimeGetNSPath {
 		return false
 	}
 
+	containers := recorder.Containers()
 	holders := map[string]bool{}
 	for _, container := range containers {
 		if container.Config == nil || !container.Started ||
@@ -753,12 +754,20 @@ func redundantDirectPodNamespaceLink(err error, containers []RecordedContainer) 
 		holders[container.Config.ShortName] = true
 	}
 
+	joined := false
 	for _, container := range containers {
 		if container.Config == nil || !container.Started {
 			continue
 		}
 		target, shared := strings.CutPrefix(container.Config.NetworkMode, "container:")
-		if shared && holders[target] {
+		joined = joined || shared && holders[target]
+	}
+	if !joined {
+		return false
+	}
+
+	for runtimeID := range holders {
+		if recorder.tolerateNamespacePathFailure(runtimeID) {
 			return true
 		}
 	}

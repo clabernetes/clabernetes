@@ -10,6 +10,12 @@ This rule applies to every agent working in this repository, in every session, u
 
 This is the canonical, vendor-neutral guidance for automated coding agents working in this repository. It applies to the whole repository unless a more specific `AGENTS.md` exists below the directory being changed.
 
+### Pull requests
+
+- Always provide a non-empty pull request body when creating a pull request, including when working through Orca or other automation. Pass the body through the creation mechanism (for example, `gh pr create --body-file`); never rely on adding it later or on commit-title autofill.
+- The body must summarize the purpose and notable implementation changes and list the validation performed, including relevant skipped checks and blockers.
+- Before reporting a pull request as complete, verify that its persisted body is present and accurate. If automation omitted it, update the pull request immediately through the supported editing mechanism and verify the result.
+
 ## Instruction contract
 
 - Follow system and user instructions before this file. For repository guidance, the nearest applicable `AGENTS.md` takes precedence.

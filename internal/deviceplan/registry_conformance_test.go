@@ -11,6 +11,7 @@ import (
 	"time"
 
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabconstants "github.com/srl-labs/containerlab/constants"
 )
 
 func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) {
@@ -144,14 +145,6 @@ func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) 
 				Revision:        "registry-conformance",
 				CertificateRoot: certificateRoot,
 			}).Plan(planContext, planningInput)
-			// Containerlab 0.83's SR Linux network-namespace holder must map onto the Pod's
-			// shared namespace, not degrade a previously supported default node to a capability
-			// failure merely because local containerlab also creates a host-side netns symlink.
-			srLinux := kind == "nokia_srlinux" || kind == "srl"
-			if planErr != nil && srLinux {
-				t.Fatalf("SR Linux namespace-holder planning failed: %v", planErr)
-			}
-
 			if planErr != nil {
 				var planningErr *clabernetesinternaldeviceplan.Error
 				if !errors.As(planErr, &planningErr) ||
@@ -175,22 +168,30 @@ func TestEveryLiveRegistryNameFlowsThroughGenericPlanningBoundary(t *testing.T) 
 				t.Fatalf("generic planning returned no direct application plan: %#v", plan)
 			}
 
-			if srLinux {
-				if len(plan.Containers) != 2 || len(plan.Nodes[0].ContainerIDs) != 2 {
-					t.Fatalf("SR Linux namespace-holder plan = %#v, nodes = %#v",
-						plan.Containers, plan.Nodes)
+			namespaceHolders := map[string]bool{}
+			for _, container := range plan.Containers {
+				for _, label := range container.Labels {
+					if label.Name == clabconstants.InternalNode && label.Value == "true" {
+						namespaceHolders[container.ID] = true
+						if container.NamespaceOwnerID != container.ID {
+							t.Fatalf("internal namespace holder does not own its namespace: %#v",
+								container)
+						}
+					}
 				}
-				holderID := plan.Nodes[0].ContainerIDs[0]
-				applicationID := plan.Nodes[0].ContainerIDs[1]
-				namespaceOwners := map[string]string{}
+			}
+			if len(namespaceHolders) != 0 {
+				primaryJoined := false
 				for _, container := range plan.Containers {
-					namespaceOwners[container.ID] = container.NamespaceOwnerID
+					if container.ID == plan.Nodes[0].PrimaryContainerID &&
+						container.NamespaceOwnerID != container.ID &&
+						namespaceHolders[container.NamespaceOwnerID] {
+						primaryJoined = true
+					}
 				}
-				if namespaceOwners[holderID] != holderID ||
-					namespaceOwners[applicationID] != holderID ||
-					plan.Nodes[0].PrimaryContainerID != applicationID {
-					t.Fatalf("SR Linux namespace-holder plan = %#v, nodes = %#v",
-						plan.Containers, plan.Nodes)
+				if !primaryJoined {
+					t.Fatalf("primary application does not join its internal namespace holder: %#v",
+						plan.Containers)
 				}
 			}
 

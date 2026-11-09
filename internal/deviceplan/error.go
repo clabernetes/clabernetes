@@ -30,6 +30,7 @@ const (
 	behaviorCertificateMaterial        = "certificate-material"
 	behaviorNetworkNamespace           = "network-namespace"
 	behaviorRuntimeCreateContainer     = "runtime.CreateContainer"
+	behaviorRuntimeGetNSPath           = "runtime.GetNSPath"
 	behaviorURLPayload                 = "url-payload"
 	filesystemTmpfs                    = "tmpfs"
 	// plannerIdentity is the planner name recorded in discovered image and mapper identities and

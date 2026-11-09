@@ -1,6 +1,44 @@
 package deviceplan
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	clabruntime "github.com/srl-labs/containerlab/runtime"
+)
+
+type namespacePathRuntime struct {
+	clabruntime.ContainerRuntime
+
+	runtimeID string
+}
+
+func (r *namespacePathRuntime) GetNSPath(_ context.Context, runtimeID string) (string, error) {
+	r.runtimeID = runtimeID
+
+	return "/proc/self/ns/net", nil
+}
+
+func TestDeploymentConstructionDelegatesNamespaceObservation(t *testing.T) {
+	t.Parallel()
+
+	live := &namespacePathRuntime{}
+	runtime := newImportedDeploymentConstructionRuntime(
+		live, nil, nil, t.TempDir(),
+	)
+	runtime.beginDeployment()
+
+	path, err := runtime.GetNSPath(context.Background(), "holder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/proc/self/ns/net" || live.runtimeID != "holder" {
+		t.Fatalf("namespace lookup path %q, target %q", path, live.runtimeID)
+	}
+	if boundaryErr := runtime.BoundaryFailure(); boundaryErr != nil {
+		t.Fatalf("delegated namespace observation retained boundary failure: %v", boundaryErr)
+	}
+}
 
 func TestConstructedContainerInventoryMatchesTargetNode(t *testing.T) {
 	t.Parallel()

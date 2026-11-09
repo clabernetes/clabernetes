@@ -12,6 +12,15 @@ title: "0.11"
   facts={['packet capture', 'pcap and pcapng streams', 'stop on client close', 'node run state']}
 />
 
+## Containerlab 0.83
+
+c9s now embeds containerlab 0.83.0. Its SR Linux network-namespace holder is represented in the
+device plan as an internal container sharing the Pod namespace with the SR Linux application.
+The application remains the primary and readiness container, while ordinary SR Linux topologies
+can plan and boot without requiring containerlab's host-side netns symlink during planning.
+
+Done in [#388](https://github.com/clabernetes/clabernetes/pull/388)
+
 ## Packet capture
 
 Capturing from a c9s lab used to mean knowing where the sidecar keeps its plan: every call spelled
