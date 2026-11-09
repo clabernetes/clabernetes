@@ -17,38 +17,29 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 		name       string
 		runtimeID  string
 		swallow    bool
+		laterCall  bool
 		wantAccept bool
 	}{
 		{name: "holder lookup", runtimeID: "holder", wantAccept: true},
 		{name: "foreign lookup stays fail closed", runtimeID: "application"},
 		{name: "swallowed lookup stays fail closed", runtimeID: "holder", swallow: true},
+		{name: "continued forbidden calls stay fail closed", runtimeID: "holder", laterCall: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
 			recorder := newRecordingRuntime(nil, nil, t.TempDir())
 			recorder.BeginMutationRecording()
-			for _, config := range []*clabtypes.NodeConfig{
-				{
-					ShortName: "holder", LongName: "holder",
-					Labels: map[string]string{clabconstants.InternalNode: "true"},
-				},
-				{ShortName: "application", LongName: "application", NetworkMode: "container:holder"},
-			} {
-				runtimeID, err := recorder.CreateContainer(context.Background(), config)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, err = recorder.StartContainer(
-					context.Background(), runtimeID, clabruntime.NewEndpointlessNode(config),
-				); err != nil {
-					t.Fatal(err)
-				}
-			}
+			recordInternalNamespacePair(t, recorder)
 
 			_, err := recorder.GetNSPath(context.Background(), test.runtimeID)
 			if err == nil || recorder.Failure() == nil {
 				t.Fatal("namespace observation was not retained by the recorder")
+			}
+			if test.laterCall {
+				if laterErr := recorder.CreateNet(context.Background()); laterErr == nil {
+					t.Fatal("continued forbidden runtime call unexpectedly succeeded")
+				}
 			}
 
 			var deployErr error
@@ -64,5 +55,27 @@ func TestRedundantDirectPodNamespaceLinkTolerance(t *testing.T) {
 					recorder.Failure(), test.wantAccept)
 			}
 		})
+	}
+}
+
+func recordInternalNamespacePair(t *testing.T, recorder *recordingRuntime) {
+	t.Helper()
+
+	for _, config := range []*clabtypes.NodeConfig{
+		{
+			ShortName: "holder", LongName: "holder",
+			Labels: map[string]string{clabconstants.InternalNode: "true"},
+		},
+		{ShortName: "application", LongName: "application", NetworkMode: "container:holder"},
+	} {
+		runtimeID, err := recorder.CreateContainer(context.Background(), config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = recorder.StartContainer(
+			context.Background(), runtimeID, clabruntime.NewEndpointlessNode(config),
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabnodessros "github.com/srl-labs/containerlab/nodes/sros"
+	clabnodesvrsros "github.com/srl-labs/containerlab/nodes/vr_sros"
+	clabtypes "github.com/srl-labs/containerlab/types"
 )
 
 // pinnedContainerlabVersion is the containerlab release the vocabulary below was taken from. It
@@ -208,5 +211,56 @@ func TestNodeVocabularyIsContainerlabSubset(t *testing.T) {
 				)
 			}
 		}
+	}
+}
+
+// TestPinnedVocabularyMatchesContainerlab verifies the snapshot itself against the linked module;
+// without this check, a stale entry could make the c9s subset guard pass after containerlab
+// renamed or removed a field.
+func TestPinnedVocabularyMatchesContainerlab(t *testing.T) {
+	moduleTypes := map[string][]reflect.Type{
+		"CertificateConfig": {reflect.TypeFor[clabtypes.CertificateConfig]()},
+		"Component": {
+			reflect.TypeFor[clabnodessros.Component](),
+			reflect.TypeFor[clabnodesvrsros.Component](),
+		},
+		"ConfigDispatcher":  {reflect.TypeFor[clabtypes.ConfigDispatcher]()},
+		"DNSConfig":         {reflect.TypeFor[clabtypes.DNSConfig]()},
+		"HealthcheckConfig": {reflect.TypeFor[clabtypes.HealthcheckConfig]()},
+		"MDA":               {reflect.TypeFor[clabnodessros.MDA]()},
+		"NodeDefinition":    {reflect.TypeFor[clabtypes.NodeDefinition]()},
+		"XIOM":              {reflect.TypeFor[clabnodessros.XIOM]()},
+	}
+
+	for typeName, types := range moduleTypes {
+		t.Run(typeName, func(t *testing.T) {
+			uniqueTags := map[string]bool{}
+			for _, importedType := range types {
+				for field := range importedType.Fields() {
+					tag, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
+					if tag != "" && tag != "-" {
+						uniqueTags[tag] = true
+					}
+				}
+			}
+
+			moduleTags := make([]string, 0, len(uniqueTags))
+			for tag := range uniqueTags {
+				moduleTags = append(moduleTags, tag)
+			}
+			slices.Sort(moduleTags)
+
+			snapshotTags := slices.Clone(pinnedContainerlabVocabulary[typeName])
+			slices.Sort(snapshotTags)
+			if !slices.Equal(snapshotTags, moduleTags) {
+				t.Errorf(
+					"%s vocabulary snapshot = %v, containerlab %s fields = %v",
+					typeName,
+					snapshotTags,
+					pinnedContainerlabVersion,
+					moduleTags,
+				)
+			}
+		})
 	}
 }

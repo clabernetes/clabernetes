@@ -43,6 +43,7 @@ type recordingRuntime struct {
 	missingImages        map[string]bool
 	failure              error
 	namespaceFailureID   string
+	namespaceFailureCall int
 }
 
 // RecordedContainer is one generic container creation observed through containerlab's runtime
@@ -151,12 +152,13 @@ func (r *recordingRuntime) tolerateNamespacePathFailure(runtimeID string) bool {
 
 	planningErr, ok := errors.AsType[*Error](r.failure)
 	if !ok || planningErr.Behavior != behaviorRuntimeGetNSPath ||
-		r.namespaceFailureID != runtimeID {
+		r.namespaceFailureID != runtimeID || r.namespaceFailureCall != len(r.calls) {
 		return false
 	}
 
 	r.failure = nil
 	r.namespaceFailureID = ""
+	r.namespaceFailureCall = 0
 
 	return true
 }
@@ -451,6 +453,7 @@ func (r *recordingRuntime) GetNSPath(_ context.Context, runtimeID string) (strin
 	r.calls = append(r.calls, operation)
 	if r.failure == nil {
 		r.namespaceFailureID = runtimeID
+		r.namespaceFailureCall = len(r.calls)
 	}
 
 	// Deployment mutation recording cannot supply a live runtime namespace. The adapter may
