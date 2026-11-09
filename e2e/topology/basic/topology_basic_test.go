@@ -2,6 +2,7 @@ package basic_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,10 @@ import (
 
 	clabernetestesthelper "github.com/clabernetes/clabernetes/testhelper"
 	clabernetestesthelpersuite "github.com/clabernetes/clabernetes/testhelper/suite"
+)
+
+var errDefaultContainerMismatch = errors.New(
+	"default-container annotation does not match any container",
 )
 
 func TestMain(m *testing.M) {
@@ -263,7 +268,10 @@ func waitForSRLinuxRemotePing(t *testing.T, namespace, sourceNode, remoteNode st
 
 	for {
 		podName, containerName, targetErr := getDevicePodTarget(t, namespace, sourceNode)
-		if targetErr != nil || podName == "" {
+		if targetErr != nil {
+			t.Fatalf("resolving device Pod target for %s: %v", sourceNode, targetErr)
+		}
+		if podName == "" {
 			lastOutput = []byte("device Pod for " + sourceNode + " is not observable yet")
 
 			select {
@@ -461,6 +469,12 @@ func getDevicePodTarget(t *testing.T, namespace, nodeName string) (string, strin
 			if primaryContainer != "" && container.Name == primaryContainer {
 				return pod.Metadata.Name, container.Name, nil
 			}
+		}
+		if primaryContainer != "" {
+			return "", "", fmt.Errorf(
+				"pod %q: %w: %q",
+				pod.Metadata.Name, errDefaultContainerMismatch, primaryContainer,
+			)
 		}
 	}
 
