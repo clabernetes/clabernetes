@@ -40,6 +40,23 @@ func TestDeploymentConstructionDelegatesNamespaceObservation(t *testing.T) {
 	}
 }
 
+func TestDeploymentConstructionBlocksNamespaceObservationBeforeDeployment(t *testing.T) {
+	t.Parallel()
+
+	live := &namespacePathRuntime{}
+	runtime := newImportedDeploymentConstructionRuntime(
+		live, nil, nil, t.TempDir(),
+	)
+
+	if _, err := runtime.GetNSPath(context.Background(), "holder"); err == nil ||
+		runtime.BoundaryFailure() == nil {
+		t.Fatal("pre-deployment namespace observation escaped the recorder boundary")
+	}
+	if live.runtimeID != "" {
+		t.Fatalf("pre-deployment observation reached live runtime for %q", live.runtimeID)
+	}
+}
+
 func TestConstructedContainerInventoryMatchesTargetNode(t *testing.T) {
 	t.Parallel()
 

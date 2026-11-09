@@ -861,18 +861,7 @@ func invokeImported(
 		return nil
 	}
 
-	planningErr, ok := errors.AsType[*Error](err)
-	if !ok {
-		return err
-	}
-
-	duplicate := *planningErr
-	duplicate.NodeID = nodeID
-	if duplicate.Field == "" {
-		duplicate.Field = field
-	}
-
-	return &duplicate
+	return withErrorAttribution(err, nodeID, field)
 }
 
 func importedPanicCause(recovered any) error {
@@ -1820,12 +1809,19 @@ func mapLinkApplyMode(mode clabnodes.LinkApplyMode) LinkApplyMode {
 }
 
 func withNodeID(err error, nodeID string) error {
+	return withErrorAttribution(err, nodeID, "")
+}
+
+func withErrorAttribution(err error, nodeID, field string) error {
 	var planningErr *Error
 	if !errors.As(err, &planningErr) {
 		return err
 	}
 	duplicate := *planningErr
 	duplicate.NodeID = nodeID
+	if duplicate.Field == "" {
+		duplicate.Field = field
+	}
 
 	return &duplicate
 }
