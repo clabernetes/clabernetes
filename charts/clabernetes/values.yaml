@@ -151,6 +151,158 @@ globalConfig:
         memory: 512Mi
         cpu: 200m
 
+    # resourcesByKind maps exact, case-sensitive containerlab kinds (including independent aliases)
+    # to primary-container resource defaults. A matching image rule or explicit NodeProfile wins.
+    resourcesByKind:
+      6wind_vsr: &native-medium
+        requests: {cpu: "2", memory: 4Gi}
+      ale_vaos: &vm-2-3
+        requests: {cpu: "2", memory: 3Gi}
+      arista_ceos: &ceos
+        requests: {cpu: "1", memory: 2Gi}
+      ceos: *ceos
+      arista_veos: &vm-2-3-alias
+        requests: {cpu: "2", memory: 3Gi}
+      vr-veos: *vm-2-3-alias
+      vr-arista_veos: *vm-2-3-alias
+      arrcus_arcos: &vm-4-17
+        requests: {cpu: "4", memory: 17Gi}
+      aruba_aoscx: &vm-4-9
+        requests: {cpu: "4", memory: 9Gi}
+      vr-aoscx: *vm-4-9
+      vr-aruba_aoscx: *vm-4-9
+      c8000: &c8000
+        requests: {cpu: "4", memory: 22Gi}
+      cisco_c8000: *c8000
+      checkpoint_cloudguard: &vm-1-5
+        requests: {cpu: "1", memory: 5Gi}
+      ciena_saos: &vm-2-9
+        requests: {cpu: "2", memory: 9Gi}
+      vr-ciena_saos: *vm-2-9
+      cisco_asav: &vm-1-3
+        requests: {cpu: "1", memory: 3Gi}
+      cisco_c8000v: &vm-1-5-alias
+        requests: {cpu: "1", memory: 5Gi}
+      cisco_cat9kv: &vm-4-19
+        requests: {cpu: "4", memory: 19Gi}
+      cisco_csr1000v: &csr
+        requests: {cpu: "1", memory: 5Gi}
+      vr-csr: *csr
+      vr-cisco_csr1000v: *csr
+      cisco_ftdv: *vm-4-9
+      cisco_iol: &iol
+        requests: {cpu: "1", memory: 1Gi}
+      cisco_n9kv: &vm-4-11
+        requests: {cpu: "4", memory: 11Gi}
+      vr-n9kv: *vm-4-11
+      vr-cisco_n9kv: *vm-4-11
+      cisco_sdwan: &vm-1-17
+        requests: {cpu: "1", memory: 17Gi}
+      cisco_vios: *iol
+      cisco_xrd: &xrd
+        requests: {cpu: "2", memory: 4Gi}
+      xrd: *xrd
+      cisco_xrd_vrouter: *vm-4-11
+      cisco_xrv: &xrv
+        requests: {cpu: "1", memory: 5Gi}
+      vr-xrv: *xrv
+      vr-cisco_xrv: *xrv
+      cisco_xrv9k: &vm-2-17
+        requests: {cpu: "2", memory: 17Gi}
+      vr-xrv9k: *vm-2-17
+      vr-cisco_xrv9k: *vm-2-17
+      cjunosevolved: &cjunos
+        requests: {cpu: "4", memory: 10Gi}
+      juniper_cjunosevolved: *cjunos
+      crpd: &crpd
+        requests: {cpu: "1", memory: 2Gi}
+      juniper_crpd: *crpd
+      cvx: &cvx
+        requests: {cpu: "1", memory: 1Gi}
+      cumulus_cvx: *cvx
+      dell_ftosv: &vm-4-5
+        requests: {cpu: "4", memory: 5Gi}
+      vr-ftosv: *vm-4-5
+      vr-dell_ftosv: *vm-4-5
+      dell_sonic: &vm-2-5
+        requests: {cpu: "2", memory: 5Gi}
+      f5_bigip-ve: *vm-4-9
+      fdio_vpp: &light
+        requests: {cpu: 250m, memory: 512Mi}
+      fortinet_fortigate: &fortinet
+        requests: {cpu: "2", memory: 3Gi}
+      fortinet_fortiproxy: *fortinet
+      freebsd: &vm-1-1
+        requests: {cpu: "1", memory: 1Gi}
+      openbsd: *vm-1-1
+      frr: &frr
+        requests: {cpu: 250m, memory: 512Mi}
+      frrouting: *frr
+      generic_vm: *vm-1-5
+      huawei_vrp: &vm-2-3-huawei
+        requests: {cpu: "2", memory: 3Gi}
+      ipinfusion_ocnos: *vm-2-5
+      juniper_csrx: *crpd
+      juniper_vjunosevolved: &vm-4-9-juniper
+        requests: {cpu: "4", memory: 9Gi}
+      juniper_vjunosrouter: &vjunos
+        requests: {cpu: "4", memory: 6Gi}
+      juniper_vjunosswitch: *vjunos
+      juniper_vmx: &vm-4-7
+        requests: {cpu: "4", memory: 7Gi}
+      vr-vmx: *vm-4-7
+      vr-juniper_vmx: *vm-4-7
+      juniper_vqfx: &vqfx
+        requests: {cpu: "2", memory: 5Gi}
+      vr-vqfx: *vqfx
+      vr-juniper_vqfx: *vqfx
+      juniper_vsrx: &vsrx
+        requests: {cpu: "2", memory: 5Gi}
+      vr-vsrx: *vsrx
+      vr-juniper_vsrx: *vsrx
+      keysight_ixia-c-one: *native-medium
+      linux: &linux
+        requests: {cpu: 250m, memory: 512Mi}
+      mikrotik_chr: &routeros
+        requests: {cpu: "1", memory: 512Mi}
+      mikrotik_ros: &routeros-vm
+        requests: {cpu: "1", memory: 512Mi}
+      vr-ros: *routeros-vm
+      vr-mikrotik_ros: *routeros-vm
+      nokia_srlinux: &srl
+        requests: {cpu: "2", memory: 2Gi}
+      srl: *srl
+      nokia_sros: &sros
+        requests: {cpu: "2", memory: 5Gi}
+      vr-sros: *sros
+      vr-nokia_sros: *sros
+      nokia_srsim: &srsim
+        requests: {cpu: "4", memory: 8Gi}
+      nvidia_cumulusvx: &vm-2-5-cumulus
+        requests: {cpu: "2", memory: 5Gi}
+      openwrt: *routeros
+      paloalto_panos: &vm-2-7
+        requests: {cpu: "2", memory: 7Gi}
+      vr-pan: *vm-2-7
+      vr-paloalto_panos: *vm-2-7
+      plvision_sonic: &vm-2-5-plvision
+        requests: {cpu: "2", memory: 5Gi}
+      rare: *light
+      sonic-vm: *vm-2-5
+      sonic-vs: *native-medium
+      spirent_stc: *native-medium
+      tailscale: *linux
+      veesix_osvbng: &veesix
+        requests: {cpu: "1", memory: 2Gi}
+      vyosnetworks_vyos: &vm-1-5-vyos
+        requests: {cpu: "1", memory: 5Gi}
+
+    # resourcesByImage maps RE2 regular expressions to primary-container resource defaults.
+    # Expressions match the complete source image reference and must have exactly one match per
+    # image; invalid or ambiguous configuration fails reconciliation. Image rules override kind
+    # and generic defaults, while explicit NodeProfiles override all global defaults.
+    resourcesByImage: {}
+
     # nodeSelectorsByImage is a mapping of image glob patterns (as key) and node label and value
     # pairs (as value) to apply to direct device workloads as Kubernetes NodeSelectors.
     # Note that in case of multiple matches the longest (with most characters) will take

@@ -431,8 +431,142 @@
                                         "description": "NodeSelectorsByImage is a mapping of image glob pattern as key and node selectors (value)\nto apply to direct device workloads. The longest matching pattern wins; conflicts between\nimages in one grouped/component workload fail preflight. A config example:\n{\n  \"internal.io/nokia_sros*\": {\"node-flavour\": \"baremetal\"},\n  \"ghcr.io/nokia/srlinux*\":  {\"node-flavour\": \"amd64\"},\n  \"default\":                 {\"node-flavour\": \"cheap\"},\n}.",
                                         "type": "object"
                                     },
+                                    "resourcesByImage": {
+                                        "additionalProperties": {
+                                            "description": "ResourceRequirements describes the compute resource requirements.",
+                                            "properties": {
+                                                "claims": {
+                                                    "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                                                    "items": {
+                                                        "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                                                        "properties": {
+                                                            "name": {
+                                                                "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                                                                "type": "string"
+                                                            },
+                                                            "request": {
+                                                                "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "name"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array",
+                                                    "x-kubernetes-list-map-keys": [
+                                                        "name"
+                                                    ],
+                                                    "x-kubernetes-list-type": "map"
+                                                },
+                                                "limits": {
+                                                    "additionalProperties": {
+                                                        "anyOf": [
+                                                            {
+                                                                "type": "integer"
+                                                            },
+                                                            {
+                                                                "type": "string"
+                                                            }
+                                                        ],
+                                                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                                        "x-kubernetes-int-or-string": true
+                                                    },
+                                                    "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                                    "type": "object"
+                                                },
+                                                "requests": {
+                                                    "additionalProperties": {
+                                                        "anyOf": [
+                                                            {
+                                                                "type": "integer"
+                                                            },
+                                                            {
+                                                                "type": "string"
+                                                            }
+                                                        ],
+                                                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                                        "x-kubernetes-int-or-string": true
+                                                    },
+                                                    "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "description": "ResourcesByImage maps RE2 regular expressions to default resources for each logical Node\nwhose primary container's complete source image reference matches exactly one expression.\nThe expression is implicitly full-reference anchored. Image matches take precedence over kind\nand generic defaults. Invalid or multiply matching expressions fail reconciliation before\nworkload mutation. An explicitly empty value suppresses lower-priority defaults.",
+                                        "type": "object"
+                                    },
+                                    "resourcesByKind": {
+                                        "additionalProperties": {
+                                            "description": "ResourceRequirements describes the compute resource requirements.",
+                                            "properties": {
+                                                "claims": {
+                                                    "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
+                                                    "items": {
+                                                        "description": "ResourceClaim references one entry in PodSpec.ResourceClaims.",
+                                                        "properties": {
+                                                            "name": {
+                                                                "description": "Name must match the name of one entry in pod.spec.resourceClaims of\nthe Pod where this field is used. It makes that resource available\ninside a container.",
+                                                                "type": "string"
+                                                            },
+                                                            "request": {
+                                                                "description": "Request is the name chosen for a request in the referenced claim.\nIf empty, everything from the claim is made available, otherwise\nonly the result of this request.",
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "name"
+                                                        ],
+                                                        "type": "object"
+                                                    },
+                                                    "type": "array",
+                                                    "x-kubernetes-list-map-keys": [
+                                                        "name"
+                                                    ],
+                                                    "x-kubernetes-list-type": "map"
+                                                },
+                                                "limits": {
+                                                    "additionalProperties": {
+                                                        "anyOf": [
+                                                            {
+                                                                "type": "integer"
+                                                            },
+                                                            {
+                                                                "type": "string"
+                                                            }
+                                                        ],
+                                                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                                        "x-kubernetes-int-or-string": true
+                                                    },
+                                                    "description": "Limits describes the maximum amount of compute resources allowed.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                                    "type": "object"
+                                                },
+                                                "requests": {
+                                                    "additionalProperties": {
+                                                        "anyOf": [
+                                                            {
+                                                                "type": "integer"
+                                                            },
+                                                            {
+                                                                "type": "string"
+                                                            }
+                                                        ],
+                                                        "pattern": "^(\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\\+|-)?(([0-9]+(\\.[0-9]*)?)|(\\.[0-9]+))))?$",
+                                                        "x-kubernetes-int-or-string": true
+                                                    },
+                                                    "description": "Requests describes the minimum amount of compute resources required.\nIf Requests is omitted for a container, it defaults to Limits if that is explicitly specified,\notherwise to an implementation-defined value. Requests cannot exceed Limits.\nMore info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "description": "ResourcesByKind maps exact, case-sensitive containerlab kind names to default resources for\neach matching logical Node's primary application container. Aliases are independent keys.\nImage matches take precedence; an explicitly empty value suppresses lower-priority defaults.",
+                                        "type": "object"
+                                    },
                                     "resourcesDefault": {
-                                        "description": "ResourcesDefault is merged onto each logical Node's primary application container. Imported\nplans remain the source of kind-owned component requirements.",
+                                        "description": "ResourcesDefault is the generic resource fallback for each logical Node's primary application\ncontainer. It applies only when no explicit NodeProfile, image, or kind block is selected;\nlayers are never deep-merged. Imported plans remain the source of component requirements.",
                                         "properties": {
                                             "claims": {
                                                 "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
@@ -1043,7 +1177,7 @@
                                 "type": "object"
                             },
                             "resources": {
-                                "description": "Resources holds the Kubernetes resource requirements for device Pods.",
+                                "description": "Resources holds Kubernetes resource requirements for each logical Node's primary application\ncontainer. When non-nil, this whole block is selected before all global image, kind, and\ngeneric defaults; quantities are not merged across layers. An explicit empty block suppresses\nglobal policy. Non-primary component containers retain imported plan requirements.",
                                 "properties": {
                                     "claims": {
                                         "description": "Claims lists the names of resources, defined in spec.resourceClaims,\nthat are used by this container.\n\nThis field depends on the\nDynamicResourceAllocation feature gate.\n\nThis field is immutable. It can only be set for containers.",
@@ -3168,7 +3302,7 @@
                                             },
                                             "type": "object"
                                         },
-                                        "description": "Resources is a mapping of nodeName (or \"default\") to kubernetes resource requirements -- any\nvalue set here overrides the \"global\" config resource definitions. If a key \"default\" is set,\nthose resource values will be preferred over *all global settings* for this topology --\nmeaning, the \"global\" resource settings will never be looked up for this topology, and any\nkind/type that is *not* in this resources map will have the \"default\" resources from this\nmapping applied.",
+                                        "description": "Resources maps nodeName (or \"default\") to Kubernetes resource requirements. Entries compile\ninto explicit shared or dedicated NodeProfiles and therefore take precedence over all global\nresource layers. \"default\" applies to Nodes without a nodeName entry. Each entry is selected\nas one whole block rather than deep-merged with global policy; an explicit empty entry\nsuppresses global resources for its Nodes.",
                                         "type": "object"
                                     },
                                     "scheduling": {

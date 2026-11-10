@@ -38,6 +38,12 @@ data:
   resourcesDefault: |-
     ---
 {{ .Values.globalConfig.deployment.resourcesDefault | toYaml | indent 4 }}
+  resourcesByKind: |-
+    ---
+{{ .Values.globalConfig.deployment.resourcesByKind | toYaml | indent 4 }}
+  resourcesByImage: |-
+    ---
+{{ .Values.globalConfig.deployment.resourcesByImage | toYaml | indent 4 }}
   nodeSelectorsByImage: |-
 {{ .Values.globalConfig.deployment.nodeSelectorsByImage | toYaml | indent 4 }}
     ---

@@ -415,7 +415,13 @@ func (r *Reconciler) reconcileDirect(
 	}
 	owner := *metav1.NewControllerRef(node,
 		clabernetesapisv1alpha1.SchemeGroupVersion.WithKind(nodeCRKind))
-	primaryContainerResources := r.directPrimaryContainerResources(profile)
+	primaryContainerResources, err := r.directPrimaryContainerResources(
+		profile,
+		*planningResult.Plan,
+	)
+	if err != nil {
+		return err
+	}
 	renderOptions := clabernetesinternaldirectpod.Options{
 		Name: node.GetName(), Namespace: node.GetNamespace(),
 		PreparationImage:           r.DirectRuntimeImage,
@@ -1620,12 +1626,45 @@ func (r *Reconciler) directNodeSelector(
 
 func (r *Reconciler) directPrimaryContainerResources(
 	profile *ResolvedProfile,
-) *k8scorev1.ResourceRequirements {
-	if profile.Resources != nil {
-		return profile.Resources.DeepCopy()
+	plan clabernetesinternaldeviceplan.Plan,
+) (map[string]*k8scorev1.ResourceRequirements, error) {
+	resources := map[string]*k8scorev1.ResourceRequirements{}
+	containers := make(map[string]clabernetesinternaldeviceplan.ContainerPlan, len(plan.Containers))
+	for _, container := range plan.Containers {
+		containers[container.ID] = container
 	}
 
-	return r.configManagerGetter().GetDefaultResources()
+	for _, node := range plan.Nodes {
+		primaryID := node.PrimaryContainerID
+		if primaryID == "" && len(node.ContainerIDs) > 0 {
+			primaryID = node.ContainerIDs[0]
+		}
+
+		container, exists := containers[primaryID]
+		if !exists {
+			continue
+		}
+
+		if profile.Resources != nil {
+			resources[primaryID] = profile.Resources.DeepCopy()
+
+			continue
+		}
+
+		selected, err := r.configManagerGetter().GetResources(node.Kind, container.Image)
+		if err != nil {
+			return nil, planInputError(
+				clabernetesinternaldeviceplan.ErrorInvalidInput,
+				"config.deployment.resourcesByImage",
+				err.Error(),
+			)
+		}
+		if selected != nil {
+			resources[primaryID] = selected
+		}
+	}
+
+	return resources, nil
 }
 
 func (r *Reconciler) directMetadata(

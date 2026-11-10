@@ -147,6 +147,52 @@ func TestKindSpecificConfigReachesNokiaSrsimKind(t *testing.T) {
 	}
 }
 
+func TestKindSpecificSrsimDistributedPrimaryIdentity(t *testing.T) {
+	t.Parallel()
+
+	const image = "nokia_srsim:25.10.R1"
+
+	input := singleNodeInput("nokia_srsim", image)
+	input.Nodes[0].Type = "sr-7"
+	input.Nodes[0].Definition = []byte(`{"kind":"nokia_srsim","type":"sr-7","image":"` + image + `",` +
+		`"kind-specific-config":{"components":[` +
+		`{"slot":"A","type":"cpm-ixr-e"},` +
+		`{"slot":"1","type":"imm24-sfp++8-sfp28+2-qsfp28"}]}}`)
+
+	plan, err := (clabernetesinternaldeviceplan.Adapter{
+		Registry: clabernetesinternaldeviceplan.NewContainerlabRegistry(),
+		Revision: "kind-specific-config-v1",
+	}).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	primaryIDs := map[string]bool{}
+	foundCPM := false
+	for _, node := range plan.Nodes {
+		primaryIDs[node.PrimaryContainerID] = true
+		for _, container := range plan.Containers {
+			if container.ID == node.PrimaryContainerID &&
+				strings.EqualFold(container.RuntimeID, "router-a") {
+				foundCPM = true
+			}
+		}
+	}
+	if len(primaryIDs) != 1 || !foundCPM {
+		t.Fatalf("distributed primary identities = %#v, plan nodes = %#v", primaryIDs, plan.Nodes)
+	}
+
+	nonPrimary := 0
+	for _, container := range plan.Containers {
+		if !primaryIDs[container.ID] {
+			nonPrimary++
+		}
+	}
+	if nonPrimary != 2 {
+		t.Fatalf("distributed non-primary container count = %d, plan = %#v", nonPrimary, plan.Containers)
+	}
+}
+
 // TestKindSpecificConfigFrrDaemonsArtifact proves the migrated frr key -- the former
 // `extras.frr.daemons`, now the `daemons` kind-specific config key of the frr/frrouting
 // kinds -- reaches the imported kind and produces the daemon-selection file the kind's

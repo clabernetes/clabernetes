@@ -13,6 +13,7 @@ import (
 	k8scorev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachineryruntime "k8s.io/apimachinery/pkg/runtime"
+	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	clientgoworkqueue "k8s.io/client-go/util/workqueue"
 	ctrlruntimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -88,6 +89,55 @@ func TestNodeProfileEventEnqueuesOnlyReferencingGroups(t *testing.T) {
 	requests := controller.enqueuePrimariesForNodeProfile(context.Background(), profile)
 	if len(requests) != 1 || requests[0].Name != primary.GetName() {
 		t.Fatalf("expected only primary %q, got %+v", primary.GetName(), requests)
+	}
+}
+
+func TestConfigEventEnqueuesAllPrimariesOnlyForSingleton(t *testing.T) {
+	scheme := apimachineryruntime.NewScheme()
+	if err := clabernetesapisv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+
+	primaryA := &clabernetesapisv1alpha1.Node{ObjectMeta: metav1.ObjectMeta{
+		Name: "primary-a", Namespace: "lab-a",
+	}}
+	primaryA.Spec.ProfileRef = &k8scorev1.LocalObjectReference{Name: "explicit-profile"}
+	secondaryA := &clabernetesapisv1alpha1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "secondary-a", Namespace: "lab-a"},
+		Spec: clabernetesapisv1alpha1.NodeSpec{
+			NodeDefinition: clabernetesapisv1alpha1.NodeDefinition{NetworkMode: "container:primary-a"},
+		},
+	}
+	primaryB := &clabernetesapisv1alpha1.Node{ObjectMeta: metav1.ObjectMeta{
+		Name: "primary-b", Namespace: "lab-b",
+	}}
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(primaryA, secondaryA, primaryB).Build()
+	controller := &Controller{BaseController: &clabernetescontrollers.BaseController{
+		Client: client, ControllerNamespace: "manager", Log: &claberneteslogging.FakeInstance{},
+	}}
+	config := &clabernetesapisv1alpha1.Config{ObjectMeta: metav1.ObjectMeta{
+		Name: clabernetesconstants.Clabernetes, Namespace: "manager",
+	}}
+
+	requests := controller.enqueuePrimariesForConfig(context.Background(), config)
+	want := []ctrlruntimereconcile.Request{
+		{NamespacedName: apimachinerytypes.NamespacedName{Namespace: "lab-a", Name: "primary-a"}},
+		{NamespacedName: apimachinerytypes.NamespacedName{Namespace: "lab-b", Name: "primary-b"}},
+	}
+	if !reflect.DeepEqual(requests, want) {
+		t.Fatalf("Config event requests = %#v, want %#v", requests, want)
+	}
+
+	wrongName := config.DeepCopy()
+	wrongName.SetName("other")
+	if requests = controller.enqueuePrimariesForConfig(context.Background(), wrongName); len(requests) != 0 {
+		t.Fatalf("non-singleton Config enqueued requests: %#v", requests)
+	}
+	wrongNamespace := config.DeepCopy()
+	wrongNamespace.SetNamespace("other")
+	if requests = controller.enqueuePrimariesForConfig(context.Background(), wrongNamespace); len(requests) != 0 {
+		t.Fatalf("foreign Config enqueued requests: %#v", requests)
 	}
 }
 

@@ -1547,6 +1547,64 @@ func TestDirectInvalidStaticManagementReportsDiagnosticWithoutMutatingWorkload(t
 	}
 }
 
+func TestDirectInvalidImageResourcesDoNotMutateExistingDeployment(t *testing.T) {
+	ctx := context.Background()
+	node := planInputTestNode("device-a", "node-uid", "opaque-package-kind", "example/a:1")
+	scheme := plannerTestScheme(t)
+	if err := k8sappsv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	client := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).
+		WithStatusSubresource(&clabernetesapisv1alpha1.Node{}).
+		WithObjects(node).Build()
+	reconciler := NewReconciler(
+		&claberneteslogging.FakeInstance{}, client, client, "clabernetes",
+		clabernetesconfig.GetFakeManager,
+	)
+	reconciler.DirectRuntimeImage = "example/c9s-manager@sha256:cccccccc"
+	reconciler.DirectCompatibility = func() (clabernetesinternaldeviceplan.Compatibility, error) {
+		return planInputTestCompatibility(), nil
+	}
+	reconciler.DirectPlatform = clabernetesinternalocimetadata.Platform{
+		OS: "linux", Architecture: "amd64",
+	}
+	reconciler.ImageMetadataResolver.Resolver = &fakeOCIMetadataResolver{
+		result: &clabernetesinternalocimetadata.Metadata{
+			SchemaVersion:   clabernetesinternalocimetadata.SchemaVersion,
+			DigestReference: "example/a@sha256:" + strings.Repeat("a", 64),
+		},
+	}
+	reconciler.PlannerReconciler.ReadLogs = directTestWorkerLogs(t, client)
+
+	wantDeployment := reconcileDirectTestDeployment(
+		ctx, t, reconciler, client, node,
+	).DeepCopy()
+
+	reconciler.configManagerGetter = func() clabernetesconfig.Manager {
+		return clabernetesconfig.NewFakeManager(
+			clabernetesconfig.WithResourcesByImage(
+				map[string]k8scorev1.ResourceRequirements{"[": {}},
+			),
+		)
+	}
+	err := reconciler.Reconcile(ctx, node)
+	var planningErr *clabernetesinternaldeviceplan.Error
+	if !errors.As(err, &planningErr) ||
+		planningErr.Field != "config.deployment.resourcesByImage" {
+		t.Fatalf("invalid global resource error = %#v, %v", planningErr, err)
+	}
+
+	actual := &k8sappsv1.Deployment{}
+	if err = client.Get(ctx, ctrlruntimeclient.ObjectKeyFromObject(node), actual); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(actual.Spec, wantDeployment.Spec) ||
+		!reflect.DeepEqual(actual.OwnerReferences, wantDeployment.OwnerReferences) {
+		t.Fatalf("invalid global resource config mutated Deployment: actual=%#v want=%#v",
+			actual, wantDeployment)
+	}
+}
+
 func TestDirectPolicyUsesOpaqueImageSchedulingAndGenericResourceDefaults(t *testing.T) {
 	defaultResources := &k8scorev1.ResourceRequirements{Requests: k8scorev1.ResourceList{
 		k8scorev1.ResourceCPU: apiresource.MustParse("100m"),
@@ -1561,15 +1619,34 @@ func TestDirectPolicyUsesOpaqueImageSchedulingAndGenericResourceDefaults(t *test
 	}
 	reconciler := &Reconciler{configManagerGetter: getter}
 
-	resources := reconciler.directPrimaryContainerResources(&ResolvedProfile{})
-	if resources == nil || resources.Requests.Cpu().String() != "100m" {
+	plan := clabernetesinternaldeviceplan.Plan{
+		Nodes: []clabernetesinternaldeviceplan.NodePlan{{
+			Kind: "custom-kind", ContainerIDs: []string{"node-a/root"},
+		}},
+		Containers: []clabernetesinternaldeviceplan.ContainerPlan{{
+			ID: "node-a/root", Image: "registry.example/future-device:1",
+		}},
+	}
+	resources, err := reconciler.directPrimaryContainerResources(&ResolvedProfile{}, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected := resources["node-a/root"]
+	if selected == nil || selected.Requests.Cpu().String() != "100m" {
 		t.Fatalf("generic default resources = %#v", resources)
 	}
 
 	explicit := &k8scorev1.ResourceRequirements{}
-	if got := reconciler.directPrimaryContainerResources(&ResolvedProfile{Resources: explicit}); got == nil ||
-		!got.Requests.Cpu().IsZero() {
-		t.Fatalf("explicit empty profile resources did not clear default: %#v", got)
+	resources, err = reconciler.directPrimaryContainerResources(
+		&ResolvedProfile{Resources: explicit},
+		plan,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected = resources["node-a/root"]
+	if selected == nil || !selected.Requests.Cpu().IsZero() {
+		t.Fatalf("explicit empty profile resources did not clear default: %#v", resources)
 	}
 
 	selectors, err := reconciler.directNodeSelector(
@@ -1594,6 +1671,81 @@ func TestDirectPolicyUsesOpaqueImageSchedulingAndGenericResourceDefaults(t *test
 	)
 	if err != nil || selectors == nil || len(selectors) != 0 {
 		t.Fatalf("explicit empty profile selector did not clear default: %#v, %v", selectors, err)
+	}
+}
+
+func TestDirectPrimaryContainerResourcesResolvePerLogicalNode(t *testing.T) {
+	srlResources := &k8scorev1.ResourceRequirements{Requests: k8scorev1.ResourceList{
+		k8scorev1.ResourceCPU: apiresource.MustParse("2"),
+	}}
+	ceosResources := &k8scorev1.ResourceRequirements{Requests: k8scorev1.ResourceList{
+		k8scorev1.ResourceCPU: apiresource.MustParse("4"),
+	}}
+	reconciler := &Reconciler{configManagerGetter: func() clabernetesconfig.Manager {
+		return clabernetesconfig.NewFakeManager(
+			clabernetesconfig.WithDefaultResources(&k8scorev1.ResourceRequirements{
+				Requests: k8scorev1.ResourceList{k8scorev1.ResourceCPU: apiresource.MustParse("100m")},
+			}),
+			clabernetesconfig.WithResourcesByKind(map[string]k8scorev1.ResourceRequirements{
+				"nokia_srlinux": *srlResources,
+			}),
+			clabernetesconfig.WithResourcesByImage(map[string]k8scorev1.ResourceRequirements{
+				"registry.example/ceos:.*": *ceosResources,
+			}),
+		)
+	}}
+	plan := clabernetesinternaldeviceplan.Plan{
+		Nodes: []clabernetesinternaldeviceplan.NodePlan{
+			{Kind: "nokia_srlinux", ContainerIDs: []string{"srl/root"}},
+			{Kind: "arista_ceos", PrimaryContainerID: "ceos/root"},
+		},
+		Containers: []clabernetesinternaldeviceplan.ContainerPlan{
+			{ID: "srl/root", Image: "registry.example/srl:1"},
+			{ID: "ceos/root", Image: "registry.example/ceos:1"},
+			{ID: "shared/internal", Image: "registry.example/srl:1"},
+		},
+	}
+
+	resources, err := reconciler.directPrimaryContainerResources(&ResolvedProfile{}, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resources) != 2 || resources["srl/root"].Requests.Cpu().String() != "2" ||
+		resources["ceos/root"].Requests.Cpu().String() != "4" {
+		t.Fatalf("per-primary resources = %#v", resources)
+	}
+	if resources["shared/internal"] != nil {
+		t.Fatalf("internal container received primary policy: %#v", resources)
+	}
+}
+
+func TestDirectProfileResourcesBypassInvalidGlobalImageRules(t *testing.T) {
+	reconciler := &Reconciler{configManagerGetter: func() clabernetesconfig.Manager {
+		return clabernetesconfig.NewFakeManager(
+			clabernetesconfig.WithResourcesByImage(
+				map[string]k8scorev1.ResourceRequirements{"[": {}},
+			),
+		)
+	}}
+	plan := clabernetesinternaldeviceplan.Plan{
+		Nodes: []clabernetesinternaldeviceplan.NodePlan{{
+			Kind: "linux", ContainerIDs: []string{"node-a/root"},
+		}},
+		Containers: []clabernetesinternaldeviceplan.ContainerPlan{{
+			ID: "node-a/root", Image: "alpine:3.22",
+		}},
+	}
+
+	resources, err := reconciler.directPrimaryContainerResources(
+		&ResolvedProfile{Resources: &k8scorev1.ResourceRequirements{}},
+		plan,
+	)
+	if err != nil || resources["node-a/root"] == nil {
+		t.Fatalf("explicit profile did not bypass invalid global rules: %#v, %v", resources, err)
+	}
+
+	if _, err = reconciler.directPrimaryContainerResources(&ResolvedProfile{}, plan); err == nil {
+		t.Fatal("expected invalid global image expression to fail global resolution")
 	}
 }
 

@@ -18,6 +18,8 @@ type bootstrapConfig struct {
 	globalAnnotations       map[string]string
 	globalLabels            map[string]string
 	resourcesDefault        *k8scorev1.ResourceRequirements
+	resourcesByKind         map[string]k8scorev1.ResourceRequirements
+	resourcesByImage        map[string]k8scorev1.ResourceRequirements
 	nodeSelectorsByImage    map[string]map[string]string
 	containerStopSignals    bool
 	imagePullPolicy         string
@@ -86,6 +88,9 @@ func bootstrapFromConfigMap(
 			outErrors = append(outErrors, err.Error())
 		}
 	}
+
+	outErrors = unmarshalBootstrapKey(inMap, "resourcesByKind", &bc.resourcesByKind, outErrors)
+	outErrors = unmarshalBootstrapKey(inMap, "resourcesByImage", &bc.resourcesByImage, outErrors)
 
 	nodeSelectorsByImageData, nodeSelectorsByImageOk := inMap["nodeSelectorsByImage"]
 	if nodeSelectorsByImageOk {
@@ -221,6 +226,15 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 		config.Spec.Deployment.ResourcesDefault = bootstrap.resourcesDefault
 	}
 
+	mergeBootstrapResourceMapDefaults(
+		config.Spec.Deployment.ResourcesByKind,
+		bootstrap.resourcesByKind,
+	)
+	mergeBootstrapResourceMapDefaults(
+		config.Spec.Deployment.ResourcesByImage,
+		bootstrap.resourcesByImage,
+	)
+
 	if !config.Spec.Deployment.ContainerStopSignals {
 		config.Spec.Deployment.ContainerStopSignals = bootstrap.containerStopSignals
 	}
@@ -282,6 +296,23 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 	}
 }
 
+func mergeBootstrapResourceMapDefaults(
+	current map[string]k8scorev1.ResourceRequirements,
+	defaults map[string]k8scorev1.ResourceRequirements,
+) {
+	if current == nil {
+		return
+	}
+
+	for key, value := range defaults {
+		if _, exists := current[key]; exists {
+			continue
+		}
+
+		current[key] = *value.DeepCopy()
+	}
+}
+
 func mergeFromBootstrapConfigReplace(
 	bootstrap *bootstrapConfig,
 	config *clabernetesapisv1alpha1.Config,
@@ -300,6 +331,8 @@ func mergeFromBootstrapConfigReplace(
 		},
 		Deployment: clabernetesapisv1alpha1.ConfigDeployment{
 			ResourcesDefault:     bootstrap.resourcesDefault,
+			ResourcesByKind:      bootstrap.resourcesByKind,
+			ResourcesByImage:     bootstrap.resourcesByImage,
 			NodeSelectorsByImage: bootstrap.nodeSelectorsByImage,
 			ContainerStopSignals: bootstrap.containerStopSignals,
 		},

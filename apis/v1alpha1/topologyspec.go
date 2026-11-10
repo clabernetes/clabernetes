@@ -165,12 +165,11 @@ type Deployment struct {
 	// applies the ixia-c family default at resolve time.
 	// +optional
 	NetworkIsolation *bool `json:"networkIsolation,omitempty"`
-	// Resources is a mapping of nodeName (or "default") to kubernetes resource requirements -- any
-	// value set here overrides the "global" config resource definitions. If a key "default" is set,
-	// those resource values will be preferred over *all global settings* for this topology --
-	// meaning, the "global" resource settings will never be looked up for this topology, and any
-	// kind/type that is *not* in this resources map will have the "default" resources from this
-	// mapping applied.
+	// Resources maps nodeName (or "default") to Kubernetes resource requirements. Entries compile
+	// into explicit shared or dedicated NodeProfiles and therefore take precedence over all global
+	// resource layers. "default" applies to Nodes without a nodeName entry. Each entry is selected
+	// as one whole block rather than deep-merged with global policy; an explicit empty entry
+	// suppresses global resources for its Nodes.
 	// +optional
 	Resources map[string]k8scorev1.ResourceRequirements `json:"resources"`
 	// Scheduling holds direct Pod scheduling policy.

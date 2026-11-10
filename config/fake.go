@@ -19,6 +19,8 @@ func GetFakeManager() Manager {
 type fakeManager struct {
 	nodeSelectorsByImage        map[string]map[string]string
 	defaultResources            *k8scorev1.ResourceRequirements
+	resourcesByKind             map[string]k8scorev1.ResourceRequirements
+	resourcesByImage            map[string]k8scorev1.ResourceRequirements
 	imagePullPolicy             string
 	imagePullSecrets            []string
 	globalAnnotations           map[string]string
@@ -73,6 +75,20 @@ func WithDefaultResources(resources *k8scorev1.ResourceRequirements) FakeOption 
 	}
 }
 
+// WithResourcesByKind configures exact-kind application resource defaults on the fake manager.
+func WithResourcesByKind(resources map[string]k8scorev1.ResourceRequirements) FakeOption {
+	return func(fm *fakeManager) {
+		fm.resourcesByKind = deepCopyResourceMap(resources)
+	}
+}
+
+// WithResourcesByImage configures image-regexp application resource defaults on the fake manager.
+func WithResourcesByImage(resources map[string]k8scorev1.ResourceRequirements) FakeOption {
+	return func(fm *fakeManager) {
+		fm.resourcesByImage = deepCopyResourceMap(resources)
+	}
+}
+
 // WithMetadata configures global annotations and labels on the fake manager.
 func WithMetadata(annotations, labels map[string]string) FakeOption {
 	return func(fm *fakeManager) {
@@ -103,8 +119,15 @@ func (f fakeManager) GetAllMetadata() (annotations, labels map[string]string) {
 	return f.GetGlobalAnnotations(), f.GetGlobalLabels()
 }
 
-func (f fakeManager) GetDefaultResources() *k8scorev1.ResourceRequirements {
-	return f.defaultResources.DeepCopy()
+func (f fakeManager) GetResources(
+	kind string,
+	sourceImage string,
+) (*k8scorev1.ResourceRequirements, error) {
+	return ResolveDefaultResources(kind, sourceImage, clabernetesapisv1alpha1.ConfigDeployment{
+		ResourcesDefault: f.defaultResources,
+		ResourcesByKind:  f.resourcesByKind,
+		ResourcesByImage: f.resourcesByImage,
+	})
 }
 
 func (f fakeManager) GetApplicationImagePullPolicy() string {

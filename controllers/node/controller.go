@@ -308,7 +308,7 @@ func (c *Controller) SetupWithManager(mgr ctrlruntime.Manager) error {
 		// global config is the base of every profile resolution
 		Watches(
 			&clabernetesapisv1alpha1.Config{},
-			c.externalEnqueueHandler(c.enqueueAllNodes),
+			c.externalEnqueueHandler(c.enqueuePrimariesForConfig),
 		).
 		// owned objects
 		Watches(
@@ -591,11 +591,16 @@ func (c *Controller) enqueuePrimariesForNodeProfile(
 	return requests
 }
 
-// enqueueAllNodes enqueues all Nodes in all namespaces (config changes affect everything).
-func (c *Controller) enqueueAllNodes(
+// enqueuePrimariesForConfig enqueues every group primary only for the manager's singleton Config.
+func (c *Controller) enqueuePrimariesForConfig(
 	ctx context.Context,
-	_ ctrlruntimeclient.Object,
+	obj ctrlruntimeclient.Object,
 ) []ctrlruntimereconcile.Request {
+	if obj.GetName() != clabernetesconstants.Clabernetes ||
+		obj.GetNamespace() != c.ControllerNamespace {
+		return nil
+	}
+
 	nodes := &clabernetesapisv1alpha1.NodeList{}
 
 	err := c.Client.List(ctx, nodes)
@@ -605,16 +610,40 @@ func (c *Controller) enqueueAllNodes(
 		return nil
 	}
 
-	requests := make([]ctrlruntimereconcile.Request, len(nodes.Items))
-
+	nodesByNamespace := map[string]map[string]*clabernetesapisv1alpha1.Node{}
 	for idx := range nodes.Items {
-		requests[idx] = ctrlruntimereconcile.Request{
-			NamespacedName: apimachinerytypes.NamespacedName{
-				Namespace: nodes.Items[idx].GetNamespace(),
-				Name:      nodes.Items[idx].GetName(),
-			},
+		node := &nodes.Items[idx]
+		if nodesByNamespace[node.GetNamespace()] == nil {
+			nodesByNamespace[node.GetNamespace()] = map[string]*clabernetesapisv1alpha1.Node{}
+		}
+		nodesByNamespace[node.GetNamespace()][node.GetName()] = node
+	}
+
+	primaryNames := map[apimachinerytypes.NamespacedName]struct{}{}
+	for namespace, nodesByName := range nodesByNamespace {
+		for _, node := range nodesByName {
+			primaryName := clabernetesutilcontainerlab.ResolvePrimaryNode(
+				nodesByName,
+				node.GetName(),
+			)
+			primaryNames[apimachinerytypes.NamespacedName{
+				Namespace: namespace,
+				Name:      primaryName,
+			}] = struct{}{}
 		}
 	}
+
+	requests := make([]ctrlruntimereconcile.Request, 0, len(primaryNames))
+	for primaryName := range primaryNames {
+		requests = append(requests, ctrlruntimereconcile.Request{NamespacedName: primaryName})
+	}
+	sort.Slice(requests, func(i, j int) bool {
+		if requests[i].Namespace == requests[j].Namespace {
+			return requests[i].Name < requests[j].Name
+		}
+
+		return requests[i].Namespace < requests[j].Namespace
+	})
 
 	return requests
 }

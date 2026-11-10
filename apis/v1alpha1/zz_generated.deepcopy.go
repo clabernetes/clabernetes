@@ -140,6 +140,20 @@ func (in *ConfigDeployment) DeepCopyInto(out *ConfigDeployment) {
 		*out = new(v1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ResourcesByKind != nil {
+		in, out := &in.ResourcesByKind, &out.ResourcesByKind
+		*out = make(map[string]v1.ResourceRequirements, len(*in))
+		for key, val := range *in {
+			(*out)[key] = *val.DeepCopy()
+		}
+	}
+	if in.ResourcesByImage != nil {
+		in, out := &in.ResourcesByImage, &out.ResourcesByImage
+		*out = make(map[string]v1.ResourceRequirements, len(*in))
+		for key, val := range *in {
+			(*out)[key] = *val.DeepCopy()
+		}
+	}
 	if in.NodeSelectorsByImage != nil {
 		in, out := &in.NodeSelectorsByImage, &out.NodeSelectorsByImage
 		*out = make(map[string]map[string]string, len(*in))

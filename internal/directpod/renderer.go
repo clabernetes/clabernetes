@@ -160,7 +160,7 @@ type Options struct {
 	NodeSelector                      map[string]string
 	Tolerations                       []k8scorev1.Toleration
 	Affinity                          *k8scorev1.Affinity
-	PrimaryContainerResources         *k8scorev1.ResourceRequirements
+	PrimaryContainerResources         map[string]*k8scorev1.ResourceRequirements
 	ApplicationImagePullPolicy        string
 	Payloads                          []clabernetesinternaldeviceplan.PayloadInput
 	CertificateSecretName             string
@@ -979,23 +979,11 @@ func defaultApplicationContainer(
 func applyPrimaryContainerResources(
 	plan clabernetesinternaldeviceplan.Plan,
 	containers []k8scorev1.Container,
-	policy *k8scorev1.ResourceRequirements,
+	policies map[string]*k8scorev1.ResourceRequirements,
 ) {
-	if policy == nil {
-		return
-	}
-
-	primaryIDs := make(map[string]bool, len(plan.Nodes))
-	for _, node := range plan.Nodes {
-		if node.PrimaryContainerID != "" {
-			primaryIDs[node.PrimaryContainerID] = true
-		} else if len(node.ContainerIDs) != 0 {
-			primaryIDs[node.ContainerIDs[0]] = true
-		}
-	}
-
 	for index, planned := range plan.Containers {
-		if !primaryIDs[planned.ID] {
+		policy := policies[planned.ID]
+		if policy == nil {
 			continue
 		}
 

@@ -106,9 +106,8 @@ type Manager interface { //nolint: interfacebloat
 	GetGlobalLabels() map[string]string
 	// GetAllMetadata returns the global annotations and global labels.
 	GetAllMetadata() (map[string]string, map[string]string)
-	// GetDefaultResources returns the generic default application resource policy without
-	// consulting any kind/type-indexed lookup.
-	GetDefaultResources() *k8scorev1.ResourceRequirements
+	// GetResources returns independently selected image, exact-kind, or generic default resources.
+	GetResources(kind, sourceImage string) (*k8scorev1.ResourceRequirements, error)
 	// GetApplicationImagePullPolicy returns the global default Kubernetes application pull policy.
 	GetApplicationImagePullPolicy() string
 	// GetImagePullSecrets returns global same-namespace Pod image-pull Secret names.

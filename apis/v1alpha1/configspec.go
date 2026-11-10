@@ -19,10 +19,23 @@ type ConfigMetadata struct {
 
 // ConfigDeployment holds generic global defaults for direct device workloads.
 type ConfigDeployment struct {
-	// ResourcesDefault is merged onto each logical Node's primary application container. Imported
-	// plans remain the source of kind-owned component requirements.
+	// ResourcesDefault is the generic resource fallback for each logical Node's primary application
+	// container. It applies only when no explicit NodeProfile, image, or kind block is selected;
+	// layers are never deep-merged. Imported plans remain the source of component requirements.
 	// +optional
 	ResourcesDefault *k8scorev1.ResourceRequirements `json:"resourcesDefault"`
+	// ResourcesByKind maps exact, case-sensitive containerlab kind names to default resources for
+	// each matching logical Node's primary application container. Aliases are independent keys.
+	// Image matches take precedence; an explicitly empty value suppresses lower-priority defaults.
+	// +optional
+	ResourcesByKind map[string]k8scorev1.ResourceRequirements `json:"resourcesByKind,omitempty"`
+	// ResourcesByImage maps RE2 regular expressions to default resources for each logical Node
+	// whose primary container's complete source image reference matches exactly one expression.
+	// The expression is implicitly full-reference anchored. Image matches take precedence over kind
+	// and generic defaults. Invalid or multiply matching expressions fail reconciliation before
+	// workload mutation. An explicitly empty value suppresses lower-priority defaults.
+	// +optional
+	ResourcesByImage map[string]k8scorev1.ResourceRequirements `json:"resourcesByImage,omitempty"`
 	// NodeSelectorsByImage is a mapping of image glob pattern as key and node selectors (value)
 	// to apply to direct device workloads. The longest matching pattern wins; conflicts between
 	// images in one grouped/component workload fail preflight. A config example:
