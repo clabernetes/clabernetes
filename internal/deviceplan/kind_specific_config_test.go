@@ -154,10 +154,12 @@ func TestKindSpecificSrsimDistributedPrimaryIdentity(t *testing.T) {
 
 	input := singleNodeInput("nokia_srsim", image)
 	input.Nodes[0].Type = "sr-7"
-	input.Nodes[0].Definition = []byte(`{"kind":"nokia_srsim","type":"sr-7","image":"` + image + `",` +
-		`"kind-specific-config":{"components":[` +
-		`{"slot":"A","type":"cpm-ixr-e"},` +
-		`{"slot":"1","type":"imm24-sfp++8-sfp28+2-qsfp28"}]}}`)
+	input.Nodes[0].Definition = []byte(
+		`{"kind":"nokia_srsim","type":"sr-7","image":"` + image + `",` +
+			`"kind-specific-config":{"components":[` +
+			`{"slot":"A","type":"cpm-ixr-e"},` +
+			`{"slot":"1","type":"imm24-sfp++8-sfp28+2-qsfp28"}]}}`,
+	)
 
 	plan, err := (clabernetesinternaldeviceplan.Adapter{
 		Registry: clabernetesinternaldeviceplan.NewContainerlabRegistry(),
@@ -189,7 +191,11 @@ func TestKindSpecificSrsimDistributedPrimaryIdentity(t *testing.T) {
 		}
 	}
 	if nonPrimary != 2 {
-		t.Fatalf("distributed non-primary container count = %d, plan = %#v", nonPrimary, plan.Containers)
+		t.Fatalf(
+			"distributed non-primary container count = %d, plan = %#v",
+			nonPrimary,
+			plan.Containers,
+		)
 	}
 }
 

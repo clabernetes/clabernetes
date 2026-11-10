@@ -1684,7 +1684,9 @@ func TestDirectPrimaryContainerResourcesResolvePerLogicalNode(t *testing.T) {
 	reconciler := &Reconciler{configManagerGetter: func() clabernetesconfig.Manager {
 		return clabernetesconfig.NewFakeManager(
 			clabernetesconfig.WithDefaultResources(&k8scorev1.ResourceRequirements{
-				Requests: k8scorev1.ResourceList{k8scorev1.ResourceCPU: apiresource.MustParse("100m")},
+				Requests: k8scorev1.ResourceList{
+					k8scorev1.ResourceCPU: apiresource.MustParse("100m"),
+				},
 			}),
 			clabernetesconfig.WithResourcesByKind(map[string]k8scorev1.ResourceRequirements{
 				"nokia_srlinux": *srlResources,

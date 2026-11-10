@@ -55,7 +55,10 @@ func resourceCoverageErrors(
 		resources, exists := defaults[kind]
 		if !exists {
 			if exclusions[kind] == "" {
-				problems = append(problems, fmt.Sprintf("kind %q has no default or documented exclusion", kind))
+				problems = append(
+					problems,
+					fmt.Sprintf("kind %q has no default or documented exclusion", kind),
+				)
 			}
 
 			continue
@@ -68,17 +71,44 @@ func resourceCoverageErrors(
 			problems = append(problems, fmt.Sprintf("kind %q ships resource limits", kind))
 		}
 		if resources.Requests.Cpu().Sign() <= 0 || resources.Requests.Memory().Sign() <= 0 {
-			problems = append(problems, fmt.Sprintf("kind %q lacks positive CPU and memory requests", kind))
+			problems = append(
+				problems,
+				fmt.Sprintf("kind %q lacks positive CPU and memory requests", kind),
+			)
 		}
 	}
 
 	return problems
 }
 
+func TestCriticalKindRequestDefaults(t *testing.T) {
+	defaults := loadShippedKindResources(t)
+	for kind, expected := range map[string]struct {
+		cpu    string
+		memory string
+	}{
+		"nokia_srlinux": {cpu: "2", memory: "2Gi"},
+		"srl":           {cpu: "2", memory: "2Gi"},
+		"nokia_srsim":   {cpu: "1", memory: "4Gi"},
+	} {
+		resources := defaults[kind]
+		if got := resources.Requests.Cpu().String(); got != expected.cpu {
+			t.Errorf("kind %q CPU request = %q, want %q", kind, got, expected.cpu)
+		}
+		if got := resources.Requests.Memory().String(); got != expected.memory {
+			t.Errorf("kind %q memory request = %q, want %q", kind, got, expected.memory)
+		}
+	}
+}
+
 func TestShippedResourcesCoverSupportedRegistryKinds(t *testing.T) {
 	registry := clabernetesinternaldeviceplan.NewContainerlabRegistry()
 	kinds := registry.GetRegisteredNodeKindNames()
-	problems := resourceCoverageErrors(kinds, loadShippedKindResources(t), resourceDefaultExclusions)
+	problems := resourceCoverageErrors(
+		kinds,
+		loadShippedKindResources(t),
+		resourceDefaultExclusions,
+	)
 	for _, problem := range problems {
 		t.Error(problem)
 	}

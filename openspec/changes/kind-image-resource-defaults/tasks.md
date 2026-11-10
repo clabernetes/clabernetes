@@ -41,3 +41,9 @@
 
 - [x] 7.1 Add exact-kind e2e coverage that asserts SRL's shipped memory default in Deployment and running Pod specs, raises it above the default through global Config, and verifies convergence; pass the focused direct-runtime e2e test.
 - [x] 7.2 Run the default CI e2e matrix through the root Make targets against the selected existing cluster and record pass/skip results plus any unavailable prerequisites.
+
+## 8. CI failure remediation
+
+- [x] 8.1 Reproduce the generated-format failure with Go 1.26.10, make `fmt` work in linked worktrees, and pass Go 1.26.10 `make verify-generated` and `make lint` against the corrected formatter and generated output.
+- [x] 8.2 Add a regression for a schedulable SR-SIM default of 1 CPU/4Gi, update provenance and fixtures, pass `go test ./charts/clabernetes/tests/...`, and run licensed SR-SIM e2e with that kind default.
+- [ ] 8.3 Commit and push the CI remediation without rewriting history, then verify the GitHub lint and SR-SIM checks complete successfully.

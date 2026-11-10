@@ -250,8 +250,8 @@ data:
         memory: 5Gi
     nokia_srsim:
       requests:
-        cpu: "4"
-        memory: 8Gi
+        cpu: "1"
+        memory: 4Gi
     nvidia_cumulusvx:
       requests:
         cpu: "2"

@@ -152,7 +152,9 @@ preview-docs: build-docs ## Preview the built static documentation site
 fmt: ## Run formatters
 	gofumpt -w -extra .
 	gci write --skip-generated .
-	golines --base-formatter="gofmt" --no-reformat-tags -w .
+	# Walk package directories directly: linked worktrees have a .git file, which stops
+	# golines' repository-root walk before it reaches any Go sources.
+	$(C9S_GO_ENV) go list -f '{{.Dir}}' ./... | xargs golines --base-formatter="gofmt" --no-reformat-tags -w
 
 lint: fmt ## Run linters
 	$(C9S_GO_ENV) golangci-lint run

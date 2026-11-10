@@ -56,7 +56,10 @@ func TestManagerAndFakeResolveIndependentResourceCopies(t *testing.T) {
 				t.Fatal(err)
 			}
 			if got.Requests.Cpu().String() != "100m" {
-				t.Fatalf("selected CPU = %q, want original configured value 100m", got.Requests.Cpu())
+				t.Fatalf(
+					"selected CPU = %q, want original configured value 100m",
+					got.Requests.Cpu(),
+				)
 			}
 
 			got.Requests[k8scorev1.ResourceCPU] = apiresource.MustParse("4")

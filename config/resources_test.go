@@ -186,7 +186,9 @@ func TestResolveDefaultResourcesRejectsInvalidAndAmbiguousImages(t *testing.T) {
 	}
 
 	deployment := clabernetesapisv1alpha1.ConfigDeployment{
-		ResourcesByKind: map[string]k8scorev1.ResourceRequirements{"other": testResources("1", "1Gi")},
+		ResourcesByKind: map[string]k8scorev1.ResourceRequirements{
+			"other": testResources("1", "1Gi"),
+		},
 		ResourcesByImage: map[string]k8scorev1.ResourceRequirements{
 			"z|a.*": {},
 			"a.*":   {},

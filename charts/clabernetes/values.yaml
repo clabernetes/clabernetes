@@ -277,7 +277,7 @@ globalConfig:
       vr-sros: *sros
       vr-nokia_sros: *sros
       nokia_srsim: &srsim
-        requests: {cpu: "4", memory: 8Gi}
+        requests: {cpu: "1", memory: 4Gi}
       nvidia_cumulusvx: &vm-2-5-cumulus
         requests: {cpu: "2", memory: 5Gi}
       openwrt: *routeros

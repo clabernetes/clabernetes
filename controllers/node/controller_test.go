@@ -105,7 +105,9 @@ func TestConfigEventEnqueuesAllPrimariesOnlyForSingleton(t *testing.T) {
 	secondaryA := &clabernetesapisv1alpha1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "secondary-a", Namespace: "lab-a"},
 		Spec: clabernetesapisv1alpha1.NodeSpec{
-			NodeDefinition: clabernetesapisv1alpha1.NodeDefinition{NetworkMode: "container:primary-a"},
+			NodeDefinition: clabernetesapisv1alpha1.NodeDefinition{
+				NetworkMode: "container:primary-a",
+			},
 		},
 	}
 	primaryB := &clabernetesapisv1alpha1.Node{ObjectMeta: metav1.ObjectMeta{
@@ -131,12 +133,16 @@ func TestConfigEventEnqueuesAllPrimariesOnlyForSingleton(t *testing.T) {
 
 	wrongName := config.DeepCopy()
 	wrongName.SetName("other")
-	if requests = controller.enqueuePrimariesForConfig(context.Background(), wrongName); len(requests) != 0 {
+	if requests = controller.enqueuePrimariesForConfig(context.Background(), wrongName); len(
+		requests,
+	) != 0 {
 		t.Fatalf("non-singleton Config enqueued requests: %#v", requests)
 	}
 	wrongNamespace := config.DeepCopy()
 	wrongNamespace.SetNamespace("other")
-	if requests = controller.enqueuePrimariesForConfig(context.Background(), wrongNamespace); len(requests) != 0 {
+	if requests = controller.enqueuePrimariesForConfig(context.Background(), wrongNamespace); len(
+		requests,
+	) != 0 {
 		t.Fatalf("foreign Config enqueued requests: %#v", requests)
 	}
 }

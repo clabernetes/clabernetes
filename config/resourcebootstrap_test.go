@@ -22,11 +22,11 @@ func testBootstrapResourceMaps() (
 	map[string]k8scorev1.ResourceRequirements,
 ) {
 	return map[string]k8scorev1.ResourceRequirements{
-		"nokia_srlinux": testResources("2", "2Gi"),
-		"linux":         testResources("200m", "512Mi"),
-	}, map[string]k8scorev1.ResourceRequirements{
-		"^registry\\.example/srl:.*$": testResources("3", "3Gi"),
-	}
+			"nokia_srlinux": testResources("2", "2Gi"),
+			"linux":         testResources("200m", "512Mi"),
+		}, map[string]k8scorev1.ResourceRequirements{
+			"^registry\\.example/srl:.*$": testResources("3", "3Gi"),
+		}
 }
 
 func TestMergeFromBootstrapConfigResourceMaps(t *testing.T) {
