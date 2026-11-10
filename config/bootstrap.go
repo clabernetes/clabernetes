@@ -17,9 +17,9 @@ type bootstrapConfig struct {
 	mergeMode               string
 	globalAnnotations       map[string]string
 	globalLabels            map[string]string
-	resourcesDefault        *k8scorev1.ResourceRequirements
-	resourcesByKind         map[string]k8scorev1.ResourceRequirements
-	resourcesByImage        map[string]k8scorev1.ResourceRequirements
+	resourcesDefault        *clabernetesapisv1alpha1.ResourceRequirements
+	resourcesByKind         map[string]clabernetesapisv1alpha1.ResourceRequirements
+	resourcesByImage        map[string]clabernetesapisv1alpha1.ResourceRequirements
 	nodeSelectorsByImage    map[string]map[string]string
 	containerStopSignals    bool
 	imagePullPolicy         string
@@ -297,8 +297,8 @@ func mergeFromBootstrapConfigMerge( //nolint:gocyclo
 }
 
 func mergeBootstrapResourceMapDefaults(
-	current map[string]k8scorev1.ResourceRequirements,
-	defaults map[string]k8scorev1.ResourceRequirements,
+	current map[string]clabernetesapisv1alpha1.ResourceRequirements,
+	defaults map[string]clabernetesapisv1alpha1.ResourceRequirements,
 ) {
 	if current == nil {
 		return

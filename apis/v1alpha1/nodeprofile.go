@@ -1,9 +1,6 @@
 package v1alpha1
 
-import (
-	k8scorev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -35,7 +32,7 @@ type NodeProfileSpec struct {
 	// generic defaults; quantities are not merged across layers. An explicit empty block suppresses
 	// global policy. Non-primary component containers retain imported plan requirements.
 	// +optional
-	Resources *k8scorev1.ResourceRequirements `json:"resources,omitempty"`
+	Resources *ResourceRequirements `json:"resources,omitempty"`
 	// Scheduling holds device Pod scheduling settings.
 	// +optional
 	Scheduling *Scheduling `json:"scheduling,omitempty"`

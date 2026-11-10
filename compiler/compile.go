@@ -516,14 +516,12 @@ func compileProbeConfiguration(
 }
 
 func perNodeResources(
-	resources map[string]k8scorev1.ResourceRequirements,
+	resources map[string]clabernetesapisv1alpha1.ResourceRequirements,
 ) map[string]*k8scorev1.ResourceRequirements {
 	perNode := make(map[string]*k8scorev1.ResourceRequirements, len(resources))
 
 	for nodeName, resourceRequirements := range resources {
-		requirements := resourceRequirements
-
-		perNode[nodeName] = &requirements
+		perNode[nodeName] = resourceRequirements.ToCoreV1()
 	}
 
 	return perNode

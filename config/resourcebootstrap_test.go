@@ -10,21 +10,25 @@ import (
 	apiresource "k8s.io/apimachinery/pkg/api/resource"
 )
 
-func testResources(cpu, memory string) k8scorev1.ResourceRequirements {
-	return k8scorev1.ResourceRequirements{Requests: k8scorev1.ResourceList{
-		k8scorev1.ResourceCPU:    apiresource.MustParse(cpu),
-		k8scorev1.ResourceMemory: apiresource.MustParse(memory),
-	}}
+func testResources(cpu, memory string) clabernetesapisv1alpha1.ResourceRequirements {
+	cpuQuantity := apiresource.MustParse(cpu)
+	memoryQuantity := apiresource.MustParse(memory)
+
+	return clabernetesapisv1alpha1.ResourceRequirements{
+		Requests: &clabernetesapisv1alpha1.ResourceList{
+			CPU: &cpuQuantity, Memory: &memoryQuantity,
+		},
+	}
 }
 
 func testBootstrapResourceMaps() (
-	map[string]k8scorev1.ResourceRequirements,
-	map[string]k8scorev1.ResourceRequirements,
+	map[string]clabernetesapisv1alpha1.ResourceRequirements,
+	map[string]clabernetesapisv1alpha1.ResourceRequirements,
 ) {
-	return map[string]k8scorev1.ResourceRequirements{
+	return map[string]clabernetesapisv1alpha1.ResourceRequirements{
 			"nokia_srlinux": testResources("2", "2Gi"),
 			"linux":         testResources("200m", "512Mi"),
-		}, map[string]k8scorev1.ResourceRequirements{
+		}, map[string]clabernetesapisv1alpha1.ResourceRequirements{
 			"^registry\\.example/srl:.*$": testResources("3", "3Gi"),
 		}
 }
@@ -38,10 +42,10 @@ func TestMergeFromBootstrapConfigResourceMaps(t *testing.T) {
 		name           string
 		configExists   bool
 		mergeMode      string
-		existingKinds  map[string]k8scorev1.ResourceRequirements
-		existingImages map[string]k8scorev1.ResourceRequirements
-		wantKinds      map[string]k8scorev1.ResourceRequirements
-		wantImages     map[string]k8scorev1.ResourceRequirements
+		existingKinds  map[string]clabernetesapisv1alpha1.ResourceRequirements
+		existingImages map[string]clabernetesapisv1alpha1.ResourceRequirements
+		wantKinds      map[string]clabernetesapisv1alpha1.ResourceRequirements
+		wantImages     map[string]clabernetesapisv1alpha1.ResourceRequirements
 	}{
 		{
 			name: "fresh Config receives both maps", wantKinds: bootstrapKinds,
@@ -52,35 +56,35 @@ func TestMergeFromBootstrapConfigResourceMaps(t *testing.T) {
 		},
 		{
 			name: "merge opts into non-nil kind map independently", configExists: true,
-			existingKinds: map[string]k8scorev1.ResourceRequirements{
+			existingKinds: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 				"nokia_srlinux": testResources("4", "4Gi"),
 			},
-			wantKinds: map[string]k8scorev1.ResourceRequirements{
+			wantKinds: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 				"nokia_srlinux": testResources("4", "4Gi"),
 				"linux":         testResources("200m", "512Mi"),
 			},
 		},
 		{
 			name: "merge opts into non-nil image map independently", configExists: true,
-			existingImages: map[string]k8scorev1.ResourceRequirements{
+			existingImages: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 				"^registry\\.example/srl:.*$": testResources("6", "6Gi"),
 			},
-			wantImages: map[string]k8scorev1.ResourceRequirements{
+			wantImages: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 				"^registry\\.example/srl:.*$": testResources("6", "6Gi"),
 			},
 		},
 		{
 			name: "merge fills explicitly empty enabled maps", configExists: true,
-			existingKinds:  map[string]k8scorev1.ResourceRequirements{},
-			existingImages: map[string]k8scorev1.ResourceRequirements{},
+			existingKinds:  map[string]clabernetesapisv1alpha1.ResourceRequirements{},
+			existingImages: map[string]clabernetesapisv1alpha1.ResourceRequirements{},
 			wantKinds:      bootstrapKinds, wantImages: bootstrapImages,
 		},
 		{
 			name: "overwrite replaces user maps", configExists: true, mergeMode: "overwrite",
-			existingKinds: map[string]k8scorev1.ResourceRequirements{
+			existingKinds: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 				"custom": testResources("8", "8Gi"),
 			},
-			existingImages: map[string]k8scorev1.ResourceRequirements{
+			existingImages: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 				"custom": testResources("8", "8Gi"),
 			},
 			wantKinds: bootstrapKinds, wantImages: bootstrapImages,

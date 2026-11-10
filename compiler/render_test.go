@@ -44,28 +44,20 @@ func renderTestTopology(t *testing.T) (
 			SecretPath: "license.key",
 		}},
 	}
-	topology.Spec.Deployment.Resources = map[string]k8scorev1.ResourceRequirements{
+	topology.Spec.Deployment.Resources = map[string]clabernetesapisv1alpha1.ResourceRequirements{
 		clabernetesconstants.Default: {
-			Requests: k8scorev1.ResourceList{
-				"memory": resource.MustParse("2Gi"),
-			},
+			Requests: testResourceList("2Gi"),
 		},
 		"multitool": {
-			Requests: k8scorev1.ResourceList{
-				"memory": resource.MustParse("128Mi"),
-			},
+			Requests: testResourceList("128Mi"),
 		},
 		// Equal to the shared policy: this must not create a redundant dedicated profile.
 		"srl1": {
-			Requests: k8scorev1.ResourceList{
-				"memory": resource.MustParse("2Gi"),
-			},
+			Requests: testResourceList("2Gi"),
 		},
 		// Not a compiled Node: stale/invalid map keys must not create orphan profiles.
 		"not-a-node": {
-			Requests: k8scorev1.ResourceList{
-				"memory": resource.MustParse("1Gi"),
-			},
+			Requests: testResourceList("1Gi"),
 		},
 	}
 	topology.Spec.ImagePull.Policy = string(k8scorev1.PullAlways)
@@ -81,7 +73,13 @@ func renderTestTopology(t *testing.T) (
 	return topology, compiled
 }
 
-//nolint:gocyclo,wsl_v5 // This contract test checks every field on the rendered Node pair.
+func testResourceList(value string) *clabernetesapisv1alpha1.ResourceList {
+	quantity := resource.MustParse(value)
+
+	return &clabernetesapisv1alpha1.ResourceList{Memory: &quantity}
+}
+
+//nolint:gocyclo // Dense assertions cover the complete rendered-Node policy.
 func TestRenderNodes(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
 
@@ -518,7 +516,7 @@ func TestRenderNodeProfiles(t *testing.T) {
 	}
 
 	if main.Spec.Resources == nil ||
-		!main.Spec.Resources.Requests.Memory().Equal(resource.MustParse("2Gi")) {
+		!main.Spec.Resources.Requests.Memory.Equal(resource.MustParse("2Gi")) {
 		t.Fatalf("expected default resources compiled into profile, got %+v", main.Spec.Resources)
 	}
 
@@ -702,16 +700,12 @@ func TestRenderNodeProfilesPreservesAffinity(t *testing.T) {
 
 func TestRenderNodeProfilesOmitsUnusedSharedProfile(t *testing.T) {
 	topology, compiled := renderTestTopology(t)
-	topology.Spec.Deployment.Resources = map[string]k8scorev1.ResourceRequirements{
+	topology.Spec.Deployment.Resources = map[string]clabernetesapisv1alpha1.ResourceRequirements{
 		"multitool": {
-			Requests: k8scorev1.ResourceList{
-				"memory": resource.MustParse("128Mi"),
-			},
+			Requests: testResourceList("128Mi"),
 		},
 		"srl1": {
-			Requests: k8scorev1.ResourceList{
-				"memory": resource.MustParse("2Gi"),
-			},
+			Requests: testResourceList("2Gi"),
 		},
 	}
 
@@ -756,7 +750,7 @@ func assertPerNodeNodeProfile(
 	}
 
 	if perNode.Spec.Resources == nil ||
-		!perNode.Spec.Resources.Requests.Memory().Equal(resource.MustParse("128Mi")) {
+		!perNode.Spec.Resources.Requests.Memory.Equal(resource.MustParse("128Mi")) {
 		t.Fatalf(
 			"expected per node resources compiled into profile, got %+v",
 			perNode.Spec.Resources,

@@ -171,7 +171,7 @@ type Deployment struct {
 	// as one whole block rather than deep-merged with global policy; an explicit empty entry
 	// suppresses global resources for its Nodes.
 	// +optional
-	Resources map[string]k8scorev1.ResourceRequirements `json:"resources"`
+	Resources map[string]ResourceRequirements `json:"resources"`
 	// Scheduling holds direct Pod scheduling policy.
 	// +optional
 	Scheduling Scheduling `json:"scheduling"`

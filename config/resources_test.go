@@ -17,14 +17,14 @@ func TestResolveDefaultResourcesSelectsOneLayer(t *testing.T) {
 	generic := testResources("100m", "256Mi")
 	kind := testResources("2", "2Gi")
 	image := testResources("4", "4Gi")
-	empty := k8scorev1.ResourceRequirements{}
+	empty := clabernetesapisv1alpha1.ResourceRequirements{}
 
 	for _, test := range []struct {
 		name       string
 		kind       string
 		image      string
 		deployment clabernetesapisv1alpha1.ConfigDeployment
-		want       *k8scorev1.ResourceRequirements
+		want       *clabernetesapisv1alpha1.ResourceRequirements
 	}{
 		{
 			name: "nil without policy", kind: "custom", image: "other:latest",
@@ -38,7 +38,7 @@ func TestResolveDefaultResourcesSelectsOneLayer(t *testing.T) {
 			name: "kind precedes generic", kind: "nokia_srlinux", image: "other:latest",
 			deployment: clabernetesapisv1alpha1.ConfigDeployment{
 				ResourcesDefault: &generic,
-				ResourcesByKind: map[string]k8scorev1.ResourceRequirements{
+				ResourcesByKind: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 					"nokia_srlinux": kind,
 				},
 			},
@@ -49,10 +49,10 @@ func TestResolveDefaultResourcesSelectsOneLayer(t *testing.T) {
 			image: "ghcr.io/nokia/srlinux:25.1",
 			deployment: clabernetesapisv1alpha1.ConfigDeployment{
 				ResourcesDefault: &generic,
-				ResourcesByKind: map[string]k8scorev1.ResourceRequirements{
+				ResourcesByKind: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 					"nokia_srlinux": kind,
 				},
-				ResourcesByImage: map[string]k8scorev1.ResourceRequirements{
+				ResourcesByImage: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 					"ghcr.io/nokia/srlinux:.*": image,
 				},
 			},
@@ -62,7 +62,7 @@ func TestResolveDefaultResourcesSelectsOneLayer(t *testing.T) {
 			name: "empty kind suppresses generic", kind: "nokia_srlinux", image: "other:latest",
 			deployment: clabernetesapisv1alpha1.ConfigDeployment{
 				ResourcesDefault: &generic,
-				ResourcesByKind:  map[string]k8scorev1.ResourceRequirements{"nokia_srlinux": empty},
+				ResourcesByKind:  map[string]clabernetesapisv1alpha1.ResourceRequirements{"nokia_srlinux": empty},
 			},
 			want: &empty,
 		},
@@ -71,8 +71,8 @@ func TestResolveDefaultResourcesSelectsOneLayer(t *testing.T) {
 			image: "srl:latest",
 			deployment: clabernetesapisv1alpha1.ConfigDeployment{
 				ResourcesDefault: &generic,
-				ResourcesByKind:  map[string]k8scorev1.ResourceRequirements{"nokia_srlinux": kind},
-				ResourcesByImage: map[string]k8scorev1.ResourceRequirements{"srl:.*": empty},
+				ResourcesByKind:  map[string]clabernetesapisv1alpha1.ResourceRequirements{"nokia_srlinux": kind},
+				ResourcesByImage: map[string]clabernetesapisv1alpha1.ResourceRequirements{"srl:.*": empty},
 			},
 			want: &empty,
 		},
@@ -91,7 +91,7 @@ func TestResolveDefaultResourcesSelectsOneLayer(t *testing.T) {
 			if err != nil {
 				t.Fatalf("resolve resources: %v", err)
 			}
-			if !reflect.DeepEqual(got, test.want) {
+			if !reflect.DeepEqual(got, test.want.ToCoreV1()) {
 				t.Fatalf("resources = %#v, want %#v", got, test.want)
 			}
 		})
@@ -103,7 +103,9 @@ func TestResolveDefaultResourcesReturnsDeepCopies(t *testing.T) {
 
 	original := testResources("2", "2Gi")
 	deployment := clabernetesapisv1alpha1.ConfigDeployment{
-		ResourcesByKind: map[string]k8scorev1.ResourceRequirements{"nokia_srlinux": original},
+		ResourcesByKind: map[string]clabernetesapisv1alpha1.ResourceRequirements{
+			"nokia_srlinux": original,
+		},
 	}
 
 	got, err := clabernetesconfig.ResolveDefaultResources("nokia_srlinux", "srl:latest", deployment)
@@ -113,7 +115,7 @@ func TestResolveDefaultResourcesReturnsDeepCopies(t *testing.T) {
 	got.Requests[k8scorev1.ResourceCPU] = apiresource.MustParse("8")
 
 	remaining := deployment.ResourcesByKind["nokia_srlinux"]
-	if got := remaining.Requests.Cpu().String(); got != "2" {
+	if got := remaining.Requests.CPU.String(); got != "2" {
 		t.Fatalf("mutating selection changed Config CPU to %q", got)
 	}
 }
@@ -127,11 +129,11 @@ func TestResolveDefaultResourcesKindAndImageMatching(t *testing.T) {
 	tagged := testResources("4", "4Gi")
 	deployment := clabernetesapisv1alpha1.ConfigDeployment{
 		ResourcesDefault: &generic,
-		ResourcesByKind: map[string]k8scorev1.ResourceRequirements{
+		ResourcesByKind: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 			"nokia_srlinux": canonical,
 			"srl":           alias,
 		},
-		ResourcesByImage: map[string]k8scorev1.ResourceRequirements{
+		ResourcesByImage: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 			"ghcr\\.io/nokia/srlinux:25\\..*": tagged,
 			"nokia":                           tagged,
 		},
@@ -141,7 +143,7 @@ func TestResolveDefaultResourcesKindAndImageMatching(t *testing.T) {
 		name  string
 		kind  string
 		image string
-		want  *k8scorev1.ResourceRequirements
+		want  *clabernetesapisv1alpha1.ResourceRequirements
 	}{
 		{name: "canonical kind", kind: "nokia_srlinux", image: "other", want: &canonical},
 		{name: "independent alias", kind: "srl", image: "other", want: &alias},
@@ -166,7 +168,7 @@ func TestResolveDefaultResourcesKindAndImageMatching(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, test.want) {
+			if !reflect.DeepEqual(got, test.want.ToCoreV1()) {
 				t.Fatalf("resources = %#v, want %#v", got, test.want)
 			}
 		})
@@ -178,7 +180,7 @@ func TestResolveDefaultResourcesRejectsInvalidAndAmbiguousImages(t *testing.T) {
 
 	_, err := clabernetesconfig.ResolveDefaultResources(
 		"other", "image:latest", clabernetesapisv1alpha1.ConfigDeployment{
-			ResourcesByImage: map[string]k8scorev1.ResourceRequirements{"[": {}},
+			ResourcesByImage: map[string]clabernetesapisv1alpha1.ResourceRequirements{"[": {}},
 		},
 	)
 	if err == nil || !strings.Contains(err.Error(), "invalid image resource pattern") {
@@ -186,10 +188,10 @@ func TestResolveDefaultResourcesRejectsInvalidAndAmbiguousImages(t *testing.T) {
 	}
 
 	deployment := clabernetesapisv1alpha1.ConfigDeployment{
-		ResourcesByKind: map[string]k8scorev1.ResourceRequirements{
+		ResourcesByKind: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 			"other": testResources("1", "1Gi"),
 		},
-		ResourcesByImage: map[string]k8scorev1.ResourceRequirements{
+		ResourcesByImage: map[string]clabernetesapisv1alpha1.ResourceRequirements{
 			"z|a.*": {},
 			"a.*":   {},
 		},

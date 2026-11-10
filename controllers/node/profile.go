@@ -26,7 +26,7 @@ type ResolvedProfile struct {
 	PullSecrets     []string
 
 	// device Pod resources -- nil means use the Config default resources
-	Resources *k8scorev1.ResourceRequirements
+	Resources *clabernetesapisv1alpha1.ResourceRequirements
 
 	// scheduling
 	NodeSelector map[string]string

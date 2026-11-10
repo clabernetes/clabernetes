@@ -1646,7 +1646,7 @@ func (r *Reconciler) directPrimaryContainerResources(
 		}
 
 		if profile.Resources != nil {
-			resources[primaryID] = profile.Resources.DeepCopy()
+			resources[primaryID] = profile.Resources.ToCoreV1()
 
 			continue
 		}

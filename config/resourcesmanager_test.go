@@ -20,10 +20,15 @@ func TestManagerAndFakeResolveIndependentResourceCopies(t *testing.T) {
 		{
 			name: "manager",
 			new: func(resources map[string]k8scorev1.ResourceRequirements) Manager {
+				apiResources := map[string]clabernetesapisv1alpha1.ResourceRequirements{}
+				for kind, value := range resources {
+					apiResources[kind] = *clabernetesapisv1alpha1.FromCoreV1ResourceRequirements(&value)
+				}
+
 				return &manager{
 					lock: &sync.RWMutex{},
 					config: &clabernetesapisv1alpha1.ConfigSpec{
-						Deployment: clabernetesapisv1alpha1.ConfigDeployment{ResourcesByKind: resources},
+						Deployment: clabernetesapisv1alpha1.ConfigDeployment{ResourcesByKind: apiResources},
 					},
 				}
 			},

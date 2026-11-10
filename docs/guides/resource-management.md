@@ -187,6 +187,29 @@ An explicit `{}` value in `resourcesByKind` or `resourcesByImage` likewise suppr
 This is different from an omitted map/key. A selected block still overlays only the resource names
 it declares onto imported requirements, preserving unrelated planned values.
 
+The generated CRD schema documents `requests` and `limits` as structured objects with explicit
+`cpu` and `memory` quantity fields. Other Kubernetes resource names retain their ordinary flattened
+ResourceList syntax next to them; they are not wrapped in an `additionalResources` field. Resource
+claims remain a structured list of `{name: ...}` objects:
+
+```yaml
+spec:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+      ephemeral-storage: 256Mi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+    claims:
+      - name: shared-gpu
+```
+
+`cpu` accepts Kubernetes CPU quantities such as `100m`, `500m`, or `"2"`; `memory` accepts values
+such as `512Mi` and `2Gi`. The corresponding fields in both `requests` and `limits` describe
+reservation versus ceiling behavior, while `claims` uses the DynamicResourceAllocation feature gate.
+
 Policy applies independently to every logical Node's declared primary application container,
 including grouped Nodes of different kinds. Non-primary component and internal containers keep
 the requirements imported from their device plans. Singleton Config changes re-evaluate Nodes;

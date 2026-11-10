@@ -45,27 +45,12 @@ func ResolveDefaultResources(
 	if len(matches) == 1 {
 		resources := deployment.ResourcesByImage[matches[0]]
 
-		return resources.DeepCopy(), nil
+		return resources.ToCoreV1(), nil
 	}
 
 	if resources, exists := deployment.ResourcesByKind[kind]; exists {
-		return resources.DeepCopy(), nil
+		return resources.ToCoreV1(), nil
 	}
 
-	return deployment.ResourcesDefault.DeepCopy(), nil
-}
-
-func deepCopyResourceMap(
-	resources map[string]k8scorev1.ResourceRequirements,
-) map[string]k8scorev1.ResourceRequirements {
-	if resources == nil {
-		return nil
-	}
-
-	result := make(map[string]k8scorev1.ResourceRequirements, len(resources))
-	for key, value := range resources {
-		result[key] = *value.DeepCopy()
-	}
-
-	return result
+	return deployment.ResourcesDefault.ToCoreV1(), nil
 }

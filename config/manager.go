@@ -60,7 +60,7 @@ func InitManager(
 					Labels:      nil,
 				},
 				Deployment: clabernetesapisv1alpha1.ConfigDeployment{
-					ResourcesDefault: &k8scorev1.ResourceRequirements{
+					ResourcesDefault: &clabernetesapisv1alpha1.ResourceRequirements{
 						Limits:   nil,
 						Requests: nil,
 						Claims:   nil,

@@ -1636,7 +1636,7 @@ func TestDirectPolicyUsesOpaqueImageSchedulingAndGenericResourceDefaults(t *test
 		t.Fatalf("generic default resources = %#v", resources)
 	}
 
-	explicit := &k8scorev1.ResourceRequirements{}
+	explicit := &clabernetesapisv1alpha1.ResourceRequirements{}
 	resources, err = reconciler.directPrimaryContainerResources(
 		&ResolvedProfile{Resources: explicit},
 		plan,
@@ -1739,7 +1739,7 @@ func TestDirectProfileResourcesBypassInvalidGlobalImageRules(t *testing.T) {
 	}
 
 	resources, err := reconciler.directPrimaryContainerResources(
-		&ResolvedProfile{Resources: &k8scorev1.ResourceRequirements{}},
+		&ResolvedProfile{Resources: &clabernetesapisv1alpha1.ResourceRequirements{}},
 		plan,
 	)
 	if err != nil || resources["node-a/root"] == nil {

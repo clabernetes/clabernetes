@@ -47,3 +47,8 @@
 - [x] 8.1 Reproduce the generated-format failure with Go 1.26.10, make `fmt` work in linked worktrees, and pass Go 1.26.10 `make verify-generated` and `make lint` against the corrected formatter and generated output.
 - [x] 8.2 Add a regression for a schedulable SR-SIM default of 1 CPU/4Gi, update provenance and fixtures, pass `go test ./charts/clabernetes/tests/...`, and run licensed SR-SIM e2e with that kind default.
 - [x] 8.3 Commit and push the CI remediation without rewriting history, then verify the GitHub lint and SR-SIM checks complete successfully.
+
+## 9. Structured resource schemas
+
+- [x] 9.1 Replace generic CRD ResourceList maps with schema-aware `requests`/`limits` objects containing documented cpu/memory fields and structured claims, regenerate the CRDs, and pass flattened serialization/deepcopy/schema assertions without losing arbitrary resource names.
+- [x] 9.2 Finish resource-model integration, update the generated documentation guide, and run `make test` plus the full generated/lint/docs checks before committing the schema enhancement.
