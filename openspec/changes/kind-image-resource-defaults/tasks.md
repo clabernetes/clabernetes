@@ -46,4 +46,4 @@
 
 - [x] 8.1 Reproduce the generated-format failure with Go 1.26.10, make `fmt` work in linked worktrees, and pass Go 1.26.10 `make verify-generated` and `make lint` against the corrected formatter and generated output.
 - [x] 8.2 Add a regression for a schedulable SR-SIM default of 1 CPU/4Gi, update provenance and fixtures, pass `go test ./charts/clabernetes/tests/...`, and run licensed SR-SIM e2e with that kind default.
-- [ ] 8.3 Commit and push the CI remediation without rewriting history, then verify the GitHub lint and SR-SIM checks complete successfully.
+- [x] 8.3 Commit and push the CI remediation without rewriting history, then verify the GitHub lint and SR-SIM checks complete successfully.
