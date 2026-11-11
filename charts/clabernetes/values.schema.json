@@ -184,6 +184,12 @@
             "resourcesDefault": {
               "type": "object"
             },
+            "resourcesByKind": {
+              "type": "object"
+            },
+            "resourcesByImage": {
+              "type": "object"
+            },
             "containerStopSignals": {
               "type": "boolean"
             }

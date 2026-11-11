@@ -394,7 +394,12 @@ func startDeviceCarrierWatch(
 	if err != nil || strings.TrimSpace(line) != "WIRE-WATCH-READY" {
 		cancel()
 		_ = cmd.Wait()
-		t.Fatalf("carrier watch in %q did not become ready: %v: %s", device.podName, err, output.String())
+		t.Fatalf(
+			"carrier watch in %q did not become ready: %v: %s",
+			device.podName,
+			err,
+			output.String(),
+		)
 	}
 
 	return func() string {

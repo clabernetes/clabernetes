@@ -69,20 +69,192 @@ spec:
                         "default":                 {"node-flavour": "cheap"},
                       }.
                     type: object
+                  resourcesByImage:
+                    additionalProperties:
+                      description: ResourceRequirements describes the compute resources
+                        required by a container.
+                      properties:
+                        claims:
+                          description: |-
+                            Claims lists names of resources, defined in spec.resourceClaims, that are used by this
+                            container. This field depends on the DynamicResourceAllocation feature gate.
+                          items:
+                            description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                            properties:
+                              name:
+                                description: |-
+                                  Name must match the name of one entry in pod.spec.resourceClaims of
+                                  the Pod where this field is used. It makes that resource available
+                                  inside a container.
+                                type: string
+                              request:
+                                description: |-
+                                  Request is the name chosen for a request in the referenced claim.
+                                  If empty, everything from the claim is made available, otherwise
+                                  only the result of this request.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        limits:
+                          description: Limits describes the maximum compute resources
+                            allowed. Limits cannot be exceeded.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                CPU requests or limits the container's CPU resources in Kubernetes quantity format, such as
+                                100m, 500m, "1", or "2.5".
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Memory requests or limits the container's memory in Kubernetes quantity format, such as
+                                512Mi, 2Gi, or 500M.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        requests:
+                          description: |-
+                            Requests describes the minimum compute resources required. When omitted for a container,
+                            Limits is used if explicitly specified; otherwise an implementation-defined value applies.
+                            Requests cannot exceed Limits.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                CPU requests or limits the container's CPU resources in Kubernetes quantity format, such as
+                                100m, 500m, "1", or "2.5".
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Memory requests or limits the container's memory in Kubernetes quantity format, such as
+                                512Mi, 2Gi, or 500M.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      type: object
+                    description: |-
+                      ResourcesByImage maps RE2 regular expressions to default resources for each logical Node
+                      whose primary container's complete source image reference matches exactly one expression.
+                      The expression is implicitly full-reference anchored. Image matches take precedence over kind
+                      and generic defaults. Invalid or multiply matching expressions fail reconciliation before
+                      workload mutation. An explicitly empty value suppresses lower-priority defaults.
+                    type: object
+                  resourcesByKind:
+                    additionalProperties:
+                      description: ResourceRequirements describes the compute resources
+                        required by a container.
+                      properties:
+                        claims:
+                          description: |-
+                            Claims lists names of resources, defined in spec.resourceClaims, that are used by this
+                            container. This field depends on the DynamicResourceAllocation feature gate.
+                          items:
+                            description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                            properties:
+                              name:
+                                description: |-
+                                  Name must match the name of one entry in pod.spec.resourceClaims of
+                                  the Pod where this field is used. It makes that resource available
+                                  inside a container.
+                                type: string
+                              request:
+                                description: |-
+                                  Request is the name chosen for a request in the referenced claim.
+                                  If empty, everything from the claim is made available, otherwise
+                                  only the result of this request.
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        limits:
+                          description: Limits describes the maximum compute resources
+                            allowed. Limits cannot be exceeded.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                CPU requests or limits the container's CPU resources in Kubernetes quantity format, such as
+                                100m, 500m, "1", or "2.5".
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Memory requests or limits the container's memory in Kubernetes quantity format, such as
+                                512Mi, 2Gi, or 500M.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        requests:
+                          description: |-
+                            Requests describes the minimum compute resources required. When omitted for a container,
+                            Limits is used if explicitly specified; otherwise an implementation-defined value applies.
+                            Requests cannot exceed Limits.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                CPU requests or limits the container's CPU resources in Kubernetes quantity format, such as
+                                100m, 500m, "1", or "2.5".
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Memory requests or limits the container's memory in Kubernetes quantity format, such as
+                                512Mi, 2Gi, or 500M.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                      type: object
+                    description: |-
+                      ResourcesByKind maps exact, case-sensitive containerlab kind names to default resources for
+                      each matching logical Node's primary application container. Aliases are independent keys.
+                      Image matches take precedence; an explicitly empty value suppresses lower-priority defaults.
+                    type: object
                   resourcesDefault:
                     description: |-
-                      ResourcesDefault is merged onto each logical Node's primary application container. Imported
-                      plans remain the source of kind-owned component requirements.
+                      ResourcesDefault is the generic resource fallback for each logical Node's primary application
+                      container. It applies only when no explicit NodeProfile, image, or kind block is selected;
+                      layers are never deep-merged. Imported plans remain the source of component requirements.
                     properties:
                       claims:
                         description: |-
-                          Claims lists the names of resources, defined in spec.resourceClaims,
-                          that are used by this container.
-
-                          This field depends on the
-                          DynamicResourceAllocation feature gate.
-
-                          This field is immutable. It can only be set for containers.
+                          Claims lists names of resources, defined in spec.resourceClaims, that are used by this
+                          container. This field depends on the DynamicResourceAllocation feature gate.
                         items:
                           description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                           properties:
@@ -106,29 +278,55 @@ spec:
                         - name
                         x-kubernetes-list-type: map
                       limits:
-                        additionalProperties:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                          x-kubernetes-int-or-string: true
-                        description: |-
-                          Limits describes the maximum amount of compute resources allowed.
-                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                        description: Limits describes the maximum compute resources
+                          allowed. Limits cannot be exceeded.
+                        properties:
+                          cpu:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              CPU requests or limits the container's CPU resources in Kubernetes quantity format, such as
+                              100m, 500m, "1", or "2.5".
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          memory:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              Memory requests or limits the container's memory in Kubernetes quantity format, such as
+                              512Mi, 2Gi, or 500M.
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
                         type: object
+                        x-kubernetes-preserve-unknown-fields: true
                       requests:
-                        additionalProperties:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                          x-kubernetes-int-or-string: true
                         description: |-
-                          Requests describes the minimum amount of compute resources required.
-                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                          otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                          Requests describes the minimum compute resources required. When omitted for a container,
+                          Limits is used if explicitly specified; otherwise an implementation-defined value applies.
+                          Requests cannot exceed Limits.
+                        properties:
+                          cpu:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              CPU requests or limits the container's CPU resources in Kubernetes quantity format, such as
+                              100m, 500m, "1", or "2.5".
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          memory:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: |-
+                              Memory requests or limits the container's memory in Kubernetes quantity format, such as
+                              512Mi, 2Gi, or 500M.
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
                         type: object
+                        x-kubernetes-preserve-unknown-fields: true
                     type: object
                 type: object
               imagePull:

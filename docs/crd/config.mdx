@@ -5,10 +5,16 @@ icon: SlidersHorizontal
 ---
 
 The `Config` CRD holds the cluster-wide defaults for direct device Pods: pull policy and pull
-Secrets, default resources, node selectors by image, and the controller-only registry metadata
-trust and mirror policies. A NodeProfile referenced by a Node overrides only the fields it sets;
-everything else comes from the Config. One Config named `clabernetes` lives in the namespace
-where c9s is installed. See [Global configuration](/docs/installation#global-configuration) for
-how it is created and edited.
+Secrets, generic/exact-kind/image-regexp resources, node selectors by image, and the
+controller-only registry metadata trust and mirror policies. Resource selection follows explicit
+NodeProfile, unique image match, exact kind match, generic default order. Images use full-reference
+RE2 expressions, and invalid or multiply matching rules fail without mutating the workload. A
+NodeProfile's `spec.resources` block is selected whole rather than deep-merged with global blocks.
+
+See [resource configuration](/docs/guides/resource-management#global-resources-config-crd) for
+examples and scope, [shipped defaults](/docs/guides/resource-management#shipped-kind-request-defaults)
+for every kind's provenance, and [Global configuration](/docs/installation#global-configuration)
+for bootstrap and upgrade behavior. One Config named `clabernetes` lives in the namespace where
+c9s is installed.
 
 <CrdViewer name="config" />

@@ -2145,6 +2145,7 @@ func TestRenderAppliesProfileResourcesOnlyToLogicalNodePrimaries(t *testing.T) {
 	t.Parallel()
 
 	plan := renderablePlan()
+	plan.Containers[1].Resources.CPURequest = "175m"
 	plan.Nodes = append(plan.Nodes, clabernetesinternaldeviceplan.NodePlan{
 		ID: "node-b", Name: "device-b", Kind: "another-package-kind",
 		ContainerIDs: []string{"node-b/root"}, ReadinessContainerIDs: []string{"node-b/root"},
@@ -2162,9 +2163,16 @@ func TestRenderAppliesProfileResourcesOnlyToLogicalNodePrimaries(t *testing.T) {
 			InputConfigMapName: "device-a-plan-input-abc",
 			PreparationImage:   "example/c9s:1", ConnectivityImage: "example/c9s:1",
 			EnableContainerStopSignals: true,
-			PrimaryContainerResources: &k8scorev1.ResourceRequirements{
-				Requests: k8scorev1.ResourceList{
-					k8scorev1.ResourceCPU: apiresource.MustParse("250m"),
+			PrimaryContainerResources: map[string]*k8scorev1.ResourceRequirements{
+				"node-a/root": {
+					Requests: k8scorev1.ResourceList{
+						k8scorev1.ResourceCPU: apiresource.MustParse("250m"),
+					},
+				},
+				"node-b/root": {
+					Requests: k8scorev1.ResourceList{
+						k8scorev1.ResourceCPU: apiresource.MustParse("500m"),
+					},
 				},
 			},
 		},
@@ -2189,14 +2197,96 @@ func TestRenderAppliesProfileResourcesOnlyToLogicalNodePrimaries(t *testing.T) {
 		deployment.Spec.Template.Spec.Containers,
 		"example/device-b@sha256:"+strings.Repeat("c", 64),
 	)
-	for name, container := range map[string]*k8scorev1.Container{"root": root, "second": second} {
-		if container == nil || container.Resources.Requests.Cpu().String() != "250m" {
-			t.Fatalf("%s primary resources = %#v", name, container)
+	for name, test := range map[string]struct {
+		container *k8scorev1.Container
+		cpu       string
+	}{
+		"root":   {container: root, cpu: "250m"},
+		"second": {container: second, cpu: "500m"},
+	} {
+		if test.container == nil || test.container.Resources.Requests.Cpu().String() != test.cpu {
+			t.Fatalf("%s primary resources = %#v, want CPU %s", name, test.container, test.cpu)
 		}
 	}
 
-	if component == nil || !component.Resources.Requests.Cpu().IsZero() {
-		t.Fatalf("component unexpectedly inherited primary policy: %#v", component)
+	if root == nil || root.Resources.Limits.Memory().String() != "1Gi" {
+		t.Fatalf("selected primary policy replaced unrelated planned limits: %#v", root)
+	}
+	if component == nil || component.Resources.Requests.Cpu().String() != "175m" {
+		t.Fatalf("component did not retain imported resources: %#v", component)
+	}
+}
+
+func TestRenderAppliesSRSIMResourcesOnlyToPrimaryCard(t *testing.T) {
+	t.Parallel()
+
+	plan := renderablePlan()
+	plan.Nodes = []clabernetesinternaldeviceplan.NodePlan{{
+		ID: "node-a", Name: "device-a", Kind: "nokia_srsim",
+		ContainerIDs:          []string{"node-a/netns", "node-a/cpm", "node-a/linecard"},
+		ReadinessContainerIDs: []string{"node-a/cpm"},
+		PrimaryContainerID:    "node-a/cpm",
+	}}
+	plan.Containers = []clabernetesinternaldeviceplan.ContainerPlan{
+		{
+			ID: "node-a/netns", NodeID: "node-a", NamespaceOwnerID: "node-a/netns",
+			RuntimeID: "device-a-netns", Image: "example/srsim:1",
+			ImageDigest: "sha256:" + strings.Repeat("d", 64), Required: true,
+		},
+		{
+			ID: "node-a/cpm", NodeID: "node-a", NamespaceOwnerID: "node-a/netns",
+			RuntimeID: "device-a-a", Image: "example/srsim:1",
+			ImageDigest: "sha256:" + strings.Repeat("d", 64), Required: true,
+		},
+		{
+			ID: "node-a/linecard", NodeID: "node-a", ComponentID: "1",
+			NamespaceOwnerID: "node-a/netns", RuntimeID: "device-a-1", Image: "example/srsim:1",
+			ImageDigest: "sha256:" + strings.Repeat("d", 64), Required: true,
+			Resources: clabernetesinternaldeviceplan.ResourcePlan{CPURequest: "150m"},
+		},
+	}
+	plan.Mounts = nil
+	plan.Volumes = nil
+
+	deployment, err := clabernetesinternaldirectpod.Render(
+		plan,
+		clabernetesinternaldirectpod.Options{
+			Name: "device-a", Namespace: "lab-a", PlanConfigMapName: "device-a-plan-abc",
+			InputConfigMapName: "device-a-plan-input-abc",
+			PreparationImage:   "example/c9s:1", ConnectivityImage: "example/c9s:1",
+			EnableContainerStopSignals: true,
+			PrimaryContainerResources: map[string]*k8scorev1.ResourceRequirements{
+				"node-a/cpm": {Requests: k8scorev1.ResourceList{
+					k8scorev1.ResourceCPU: apiresource.MustParse("4"),
+				}},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := map[string]k8scorev1.Container{}
+	for _, container := range deployment.Spec.Template.Spec.Containers {
+		rendered[container.Name] = container
+	}
+	for _, planned := range plan.Containers {
+		container := rendered[clabernetesinternaldirectpod.ApplicationContainerName(planned.ID)]
+		got := container.Resources.Requests.Cpu()
+		switch planned.ID {
+		case "node-a/cpm":
+			if got.String() != "4" {
+				t.Fatalf("CPM primary CPU = %q, want 4", got)
+			}
+		case "node-a/linecard":
+			if got.String() != "150m" {
+				t.Fatalf("linecard did not retain imported CPU request: %q", got)
+			}
+		default:
+			if !got.IsZero() {
+				t.Fatalf("netns container received primary policy: %#v", container.Resources)
+			}
+		}
 	}
 }
 

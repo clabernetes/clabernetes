@@ -39,8 +39,9 @@ func TestExternalInputReplayPreservesReadyNodes(t *testing.T) {
 					Build()
 				controller := &Controller{
 					BaseController: &clabernetescontrollers.BaseController{
-						Client: client,
-						Log:    &claberneteslogging.FakeInstance{},
+						Client:              client,
+						ControllerNamespace: node.GetNamespace(),
+						Log:                 &claberneteslogging.FakeInstance{},
 					},
 					reconciler: &Reconciler{Client: client, apiReader: client},
 				}
@@ -52,7 +53,7 @@ func TestExternalInputReplayPreservesReadyNodes(t *testing.T) {
 					mapper = controller.enqueuePrimariesForNodeProfile
 				case "config":
 					object = &clabernetesapisv1alpha1.Config{}
-					mapper = controller.enqueueAllNodes
+					mapper = controller.enqueuePrimariesForConfig
 				case "configmap":
 					object = &k8scorev1.ConfigMap{}
 					mapper = controller.enqueuePrimariesForPayloadObject
@@ -64,6 +65,9 @@ func TestExternalInputReplayPreservesReadyNodes(t *testing.T) {
 					mapper = controller.enqueuePrimariesForLink
 				}
 				object.SetName("input")
+				if kind == "config" {
+					object.SetName(clabernetesconstants.Clabernetes)
+				}
 				object.SetNamespace(node.GetNamespace())
 				object.SetResourceVersion("1")
 				handler := controller.externalEnqueueHandler(mapper)

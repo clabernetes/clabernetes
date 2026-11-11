@@ -18,7 +18,9 @@ func GetFakeManager() Manager {
 // fakeManager defined type alias to be used below.
 type fakeManager struct {
 	nodeSelectorsByImage        map[string]map[string]string
-	defaultResources            *k8scorev1.ResourceRequirements
+	defaultResources            *clabernetesapisv1alpha1.ResourceRequirements
+	resourcesByKind             map[string]clabernetesapisv1alpha1.ResourceRequirements
+	resourcesByImage            map[string]clabernetesapisv1alpha1.ResourceRequirements
 	imagePullPolicy             string
 	imagePullSecrets            []string
 	globalAnnotations           map[string]string
@@ -69,7 +71,37 @@ func WithNodeSelectors(selectors map[string]map[string]string) FakeOption {
 // WithDefaultResources configures generic default application resources on the fake manager.
 func WithDefaultResources(resources *k8scorev1.ResourceRequirements) FakeOption {
 	return func(fm *fakeManager) {
-		fm.defaultResources = resources.DeepCopy()
+		fm.defaultResources = clabernetesapisv1alpha1.FromCoreV1ResourceRequirements(resources)
+	}
+}
+
+// WithResourcesByKind configures exact-kind application resource defaults on the fake manager.
+func WithResourcesByKind(resources map[string]k8scorev1.ResourceRequirements) FakeOption {
+	return func(fm *fakeManager) {
+		fm.resourcesByKind = make(
+			map[string]clabernetesapisv1alpha1.ResourceRequirements,
+			len(resources),
+		)
+		for kind, value := range resources {
+			valueCopy := value
+			converted := clabernetesapisv1alpha1.FromCoreV1ResourceRequirements(&valueCopy)
+			fm.resourcesByKind[kind] = *converted
+		}
+	}
+}
+
+// WithResourcesByImage configures image-regexp application resource defaults on the fake manager.
+func WithResourcesByImage(resources map[string]k8scorev1.ResourceRequirements) FakeOption {
+	return func(fm *fakeManager) {
+		fm.resourcesByImage = make(
+			map[string]clabernetesapisv1alpha1.ResourceRequirements,
+			len(resources),
+		)
+		for pattern, value := range resources {
+			valueCopy := value
+			converted := clabernetesapisv1alpha1.FromCoreV1ResourceRequirements(&valueCopy)
+			fm.resourcesByImage[pattern] = *converted
+		}
 	}
 }
 
@@ -103,8 +135,15 @@ func (f fakeManager) GetAllMetadata() (annotations, labels map[string]string) {
 	return f.GetGlobalAnnotations(), f.GetGlobalLabels()
 }
 
-func (f fakeManager) GetDefaultResources() *k8scorev1.ResourceRequirements {
-	return f.defaultResources.DeepCopy()
+func (f fakeManager) GetResources(
+	kind string,
+	sourceImage string,
+) (*k8scorev1.ResourceRequirements, error) {
+	return ResolveDefaultResources(kind, sourceImage, clabernetesapisv1alpha1.ConfigDeployment{
+		ResourcesDefault: f.defaultResources,
+		ResourcesByKind:  f.resourcesByKind,
+		ResourcesByImage: f.resourcesByImage,
+	})
 }
 
 func (f fakeManager) GetApplicationImagePullPolicy() string {

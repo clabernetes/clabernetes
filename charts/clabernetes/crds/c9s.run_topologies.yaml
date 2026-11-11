@@ -224,18 +224,13 @@ spec:
                     type: object
                   resources:
                     additionalProperties:
-                      description: ResourceRequirements describes the compute resource
-                        requirements.
+                      description: ResourceRequirements describes the compute resources
+                        required by a container.
                       properties:
                         claims:
                           description: |-
-                            Claims lists the names of resources, defined in spec.resourceClaims,
-                            that are used by this container.
-
-                            This field depends on the
-                            DynamicResourceAllocation feature gate.
-
-                            This field is immutable. It can only be set for containers.
+                            Claims lists names of resources, defined in spec.resourceClaims, that are used by this
+                            container. This field depends on the DynamicResourceAllocation feature gate.
                           items:
                             description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                             properties:
@@ -259,37 +254,62 @@ spec:
                           - name
                           x-kubernetes-list-type: map
                         limits:
-                          additionalProperties:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
-                          description: |-
-                            Limits describes the maximum amount of compute resources allowed.
-                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                          description: Limits describes the maximum compute resources
+                            allowed. Limits cannot be exceeded.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                CPU requests or limits the container's CPU resources in Kubernetes quantity format, such as
+                                100m, 500m, "1", or "2.5".
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Memory requests or limits the container's memory in Kubernetes quantity format, such as
+                                512Mi, 2Gi, or 500M.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                         requests:
-                          additionalProperties:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                            x-kubernetes-int-or-string: true
                           description: |-
-                            Requests describes the minimum amount of compute resources required.
-                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
-                            otherwise to an implementation-defined value. Requests cannot exceed Limits.
-                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                            Requests describes the minimum compute resources required. When omitted for a container,
+                            Limits is used if explicitly specified; otherwise an implementation-defined value applies.
+                            Requests cannot exceed Limits.
+                          properties:
+                            cpu:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                CPU requests or limits the container's CPU resources in Kubernetes quantity format, such as
+                                100m, 500m, "1", or "2.5".
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            memory:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Memory requests or limits the container's memory in Kubernetes quantity format, such as
+                                512Mi, 2Gi, or 500M.
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
                           type: object
+                          x-kubernetes-preserve-unknown-fields: true
                       type: object
                     description: |-
-                      Resources is a mapping of nodeName (or "default") to kubernetes resource requirements -- any
-                      value set here overrides the "global" config resource definitions. If a key "default" is set,
-                      those resource values will be preferred over *all global settings* for this topology --
-                      meaning, the "global" resource settings will never be looked up for this topology, and any
-                      kind/type that is *not* in this resources map will have the "default" resources from this
-                      mapping applied.
+                      Resources maps nodeName (or "default") to Kubernetes resource requirements. Entries compile
+                      into explicit shared or dedicated NodeProfiles and therefore take precedence over all global
+                      resource layers. "default" applies to Nodes without a nodeName entry. Each entry is selected
+                      as one whole block rather than deep-merged with global policy; an explicit empty entry
+                      suppresses global resources for its Nodes.
                     type: object
                   scheduling:
                     description: Scheduling holds direct Pod scheduling policy.

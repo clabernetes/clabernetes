@@ -1,0 +1,20 @@
+---
+apiVersion: c9s.run/v1alpha1
+kind: NodeProfile
+metadata:
+  name: direct
+spec:
+  expose:
+    disableAutoExpose: true
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: srl1
+  labels:
+    c9s.run/mode: direct
+spec:
+  kind: srl
+  image: ghcr.io/nokia/srlinux
+  profileRef:
+    name: direct

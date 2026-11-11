@@ -33,6 +33,399 @@ data:
     requests:
       cpu: 200m
       memory: 512Mi
+  resourcesByKind: |-
+    ---
+    6wind_vsr:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+    ale_vaos:
+      requests:
+        cpu: "2"
+        memory: 3Gi
+    arista_ceos:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    arista_veos:
+      requests:
+        cpu: "2"
+        memory: 3Gi
+    arrcus_arcos:
+      requests:
+        cpu: "4"
+        memory: 17Gi
+    aruba_aoscx:
+      requests:
+        cpu: "4"
+        memory: 9Gi
+    c8000:
+      requests:
+        cpu: "4"
+        memory: 22Gi
+    ceos:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    checkpoint_cloudguard:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    ciena_saos:
+      requests:
+        cpu: "2"
+        memory: 9Gi
+    cisco_asav:
+      requests:
+        cpu: "1"
+        memory: 3Gi
+    cisco_c8000:
+      requests:
+        cpu: "4"
+        memory: 22Gi
+    cisco_c8000v:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    cisco_cat9kv:
+      requests:
+        cpu: "4"
+        memory: 19Gi
+    cisco_csr1000v:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    cisco_ftdv:
+      requests:
+        cpu: "4"
+        memory: 9Gi
+    cisco_iol:
+      requests:
+        cpu: "1"
+        memory: 1Gi
+    cisco_n9kv:
+      requests:
+        cpu: "4"
+        memory: 11Gi
+    cisco_sdwan:
+      requests:
+        cpu: "1"
+        memory: 17Gi
+    cisco_vios:
+      requests:
+        cpu: "1"
+        memory: 1Gi
+    cisco_xrd:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+    cisco_xrd_vrouter:
+      requests:
+        cpu: "4"
+        memory: 11Gi
+    cisco_xrv:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    cisco_xrv9k:
+      requests:
+        cpu: "2"
+        memory: 17Gi
+    cjunosevolved:
+      requests:
+        cpu: "4"
+        memory: 10Gi
+    crpd:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    cumulus_cvx:
+      requests:
+        cpu: "1"
+        memory: 1Gi
+    cvx:
+      requests:
+        cpu: "1"
+        memory: 1Gi
+    dell_ftosv:
+      requests:
+        cpu: "4"
+        memory: 5Gi
+    dell_sonic:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    f5_bigip-ve:
+      requests:
+        cpu: "4"
+        memory: 9Gi
+    fdio_vpp:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+    fortinet_fortigate:
+      requests:
+        cpu: "2"
+        memory: 3Gi
+    fortinet_fortiproxy:
+      requests:
+        cpu: "2"
+        memory: 3Gi
+    freebsd:
+      requests:
+        cpu: "1"
+        memory: 1Gi
+    frr:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+    frrouting:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+    generic_vm:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    huawei_vrp:
+      requests:
+        cpu: "2"
+        memory: 3Gi
+    ipinfusion_ocnos:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    juniper_cjunosevolved:
+      requests:
+        cpu: "4"
+        memory: 10Gi
+    juniper_crpd:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    juniper_csrx:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    juniper_vjunosevolved:
+      requests:
+        cpu: "4"
+        memory: 9Gi
+    juniper_vjunosrouter:
+      requests:
+        cpu: "4"
+        memory: 6Gi
+    juniper_vjunosswitch:
+      requests:
+        cpu: "4"
+        memory: 6Gi
+    juniper_vmx:
+      requests:
+        cpu: "4"
+        memory: 7Gi
+    juniper_vqfx:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    juniper_vsrx:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    keysight_ixia-c-one:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+    linux:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+    mikrotik_chr:
+      requests:
+        cpu: "1"
+        memory: 512Mi
+    mikrotik_ros:
+      requests:
+        cpu: "1"
+        memory: 512Mi
+    nokia_srlinux:
+      requests:
+        cpu: "2"
+        memory: 2Gi
+    nokia_sros:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    nokia_srsim:
+      requests:
+        cpu: "1"
+        memory: 4Gi
+    nvidia_cumulusvx:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    openbsd:
+      requests:
+        cpu: "1"
+        memory: 1Gi
+    openwrt:
+      requests:
+        cpu: "1"
+        memory: 512Mi
+    paloalto_panos:
+      requests:
+        cpu: "2"
+        memory: 7Gi
+    plvision_sonic:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    rare:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+    sonic-vm:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    sonic-vs:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+    spirent_stc:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+    srl:
+      requests:
+        cpu: "2"
+        memory: 2Gi
+    tailscale:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+    veesix_osvbng:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+    vr-aoscx:
+      requests:
+        cpu: "4"
+        memory: 9Gi
+    vr-arista_veos:
+      requests:
+        cpu: "2"
+        memory: 3Gi
+    vr-aruba_aoscx:
+      requests:
+        cpu: "4"
+        memory: 9Gi
+    vr-ciena_saos:
+      requests:
+        cpu: "2"
+        memory: 9Gi
+    vr-cisco_csr1000v:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    vr-cisco_n9kv:
+      requests:
+        cpu: "4"
+        memory: 11Gi
+    vr-cisco_xrv:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    vr-cisco_xrv9k:
+      requests:
+        cpu: "2"
+        memory: 17Gi
+    vr-csr:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    vr-dell_ftosv:
+      requests:
+        cpu: "4"
+        memory: 5Gi
+    vr-ftosv:
+      requests:
+        cpu: "4"
+        memory: 5Gi
+    vr-juniper_vmx:
+      requests:
+        cpu: "4"
+        memory: 7Gi
+    vr-juniper_vqfx:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    vr-juniper_vsrx:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    vr-mikrotik_ros:
+      requests:
+        cpu: "1"
+        memory: 512Mi
+    vr-n9kv:
+      requests:
+        cpu: "4"
+        memory: 11Gi
+    vr-nokia_sros:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    vr-paloalto_panos:
+      requests:
+        cpu: "2"
+        memory: 7Gi
+    vr-pan:
+      requests:
+        cpu: "2"
+        memory: 7Gi
+    vr-ros:
+      requests:
+        cpu: "1"
+        memory: 512Mi
+    vr-sros:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    vr-veos:
+      requests:
+        cpu: "2"
+        memory: 3Gi
+    vr-vmx:
+      requests:
+        cpu: "4"
+        memory: 7Gi
+    vr-vqfx:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    vr-vsrx:
+      requests:
+        cpu: "2"
+        memory: 5Gi
+    vr-xrv:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    vr-xrv9k:
+      requests:
+        cpu: "2"
+        memory: 17Gi
+    vyosnetworks_vyos:
+      requests:
+        cpu: "1"
+        memory: 5Gi
+    xrd:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+  resourcesByImage: |-
+    ---
+    {}
   nodeSelectorsByImage: |-
     {}
     ---

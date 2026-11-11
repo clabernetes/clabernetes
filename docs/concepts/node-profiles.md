@@ -52,7 +52,9 @@ spec:
 
 Profiles are not selected by labels and are not merged into inheritance chains. Fields set on the
 referenced profile take precedence over supported global `Config` defaults; omitted fields use
-their built-in defaults or, where available, Config resolution. Service exposure uses the built-in
+their built-in defaults or, where available, Config resolution. `spec.resources` is one whole
+field-level selection: its quantities are not deep-merged with kind/image/generic resource blocks,
+and `resources: {}` explicitly suppresses those global blocks. Service exposure uses the built-in
 `LoadBalancer` default because Config has no exposure-mode field. Set `spec.expose.exposeType` to
 `ClusterIP`, `Headless`, or `None` to override it.
 

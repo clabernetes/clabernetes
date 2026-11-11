@@ -10,8 +10,6 @@ import (
 	clabernetescompiler "github.com/clabernetes/clabernetes/compiler"
 	clabernetesconfig "github.com/clabernetes/clabernetes/config"
 	claberneteslogging "github.com/clabernetes/clabernetes/logging"
-	k8scorev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const uppercaseNamesDefinition = `
@@ -130,8 +128,8 @@ func TestRenderFollowsSanitizedNodeNames(t *testing.T) {
 			ConfigMapPath: "startup-config",
 		}},
 	}
-	topology.Spec.Deployment.Resources = map[string]k8scorev1.ResourceRequirements{
-		"R1": {Requests: k8scorev1.ResourceList{"memory": resource.MustParse("512Mi")}},
+	topology.Spec.Deployment.Resources = map[string]clabernetesapisv1alpha1.ResourceRequirements{
+		"R1": {Requests: testResourceList("512Mi")},
 	}
 	topology.Spec.StatusProbes = clabernetesapisv1alpha1.StatusProbes{
 		Enabled:       true,
@@ -205,7 +203,7 @@ func assertSanitizedProfiles(t *testing.T, profiles []*clabernetesapisv1alpha1.N
 	for _, profile := range profiles {
 		if profile.GetName() == "name-test-r1" {
 			if profile.Spec.Resources == nil ||
-				profile.Spec.Resources.Requests.Memory().String() != "512Mi" {
+				profile.Spec.Resources.Requests.Memory.String() != "512Mi" {
 				t.Fatalf("r1 profile resources = %+v, want the policy keyed by R1",
 					profile.Spec.Resources)
 			}

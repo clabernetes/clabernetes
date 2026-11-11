@@ -1,9 +1,6 @@
 package v1alpha1
 
-import (
-	k8scorev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -30,9 +27,12 @@ type NodeProfileSpec struct {
 	// ImagePull holds configurations relevant to how device Pods handle pulling images.
 	// +optional
 	ImagePull *NodeProfileImagePull `json:"imagePull,omitempty"`
-	// Resources holds the Kubernetes resource requirements for device Pods.
+	// Resources holds Kubernetes resource requirements for each logical Node's primary application
+	// container. When non-nil, this whole block is selected before all global image, kind, and
+	// generic defaults; quantities are not merged across layers. An explicit empty block suppresses
+	// global policy. Non-primary component containers retain imported plan requirements.
 	// +optional
-	Resources *k8scorev1.ResourceRequirements `json:"resources,omitempty"`
+	Resources *ResourceRequirements `json:"resources,omitempty"`
 	// Scheduling holds device Pod scheduling settings.
 	// +optional
 	Scheduling *Scheduling `json:"scheduling,omitempty"`

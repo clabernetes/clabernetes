@@ -399,7 +399,7 @@ spec:
             type: sr-1
 ```
 
-For distributed chassis, specify resources for the primary card (the policy applies to each card's application container in the chassis pod):
+For distributed chassis, specify resources for the primary card. The normalized plan identifies only CPM-A as the logical primary; the policy applies to CPM-A, while the internal netns holder and linecard containers retain their imported requirements. Account for every card separately when checking worker capacity:
 
 ```yaml
 spec:

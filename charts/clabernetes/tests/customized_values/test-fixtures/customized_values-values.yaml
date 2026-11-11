@@ -6,6 +6,17 @@ globalTolerations: &globalTolerations
     value: "true"
     effect: PreferNoSchedule
 globalConfig:
+  deployment:
+    resourcesByKind:
+      custom-kind:
+        requests:
+          cpu: "2"
+          memory: 3Gi
+    resourcesByImage:
+      '^registry\.example/custom:.*$':
+        requests:
+          cpu: "4"
+          memory: 8Gi
   imagePull:
     policy: Always
     pullSecrets:

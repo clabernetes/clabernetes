@@ -135,12 +135,21 @@ for lab users. Bind them per lab namespace with a RoleBinding, see
 
 ## Global configuration
 
-Cluster-wide defaults (pull policy and pull Secrets, default resources, node selectors by image,
-registry trust and mirrors) live in one `Config` resource named `clabernetes` in the c9s
-namespace. The Helm chart creates it from the `globalConfig` values. On later upgrades the chart
-only fills fields that are still unset in the Config; set `globalConfig.mergeMode: overwrite` to
-have the chart values replace the whole resource on every upgrade. When the release is managed
-by Argo CD or Flux, set `globalConfig.enabled: false` and apply the Config yourself.
+Cluster-wide defaults (pull policy and pull Secrets, generic/exact-kind/image-regexp resources,
+node selectors by image, registry trust and mirrors) live in one `Config` resource named
+`clabernetes` in the c9s namespace. The Helm chart creates it from the `globalConfig` values.
+On later upgrades the chart only fills fields that are still unset in the Config; set
+`globalConfig.mergeMode: overwrite` to have the chart values replace the whole resource on every
+upgrade. When the release is managed by Argo CD or Flux, set `globalConfig.enabled: false` and
+apply the Config yourself.
+
+Fresh installations receive request recommendations for supported containerlab kinds and aliases.
+For upgrade safety, `resourcesByKind` and `resourcesByImage` are exceptions to ordinary merge
+fill-in: a nil map remains nil so new kind defaults cannot silently outrank your existing generic
+`resourcesDefault`. Review and copy entries from chart values to opt in; once a map is present,
+future merges add absent keys without replacing your entries. Read
+[resource configuration](/docs/guides/resource-management#global-resources-config-crd) for matching,
+precedence, and adoption details before using overwrite mode or enabling these maps.
 
 Edit the Config directly when you do not manage it through Helm values:
 

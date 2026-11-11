@@ -61,15 +61,14 @@ func (m *manager) GetImagePullSecrets() []string {
 	return slices.Clone(m.config.ImagePull.PullSecrets)
 }
 
-func (m *manager) GetDefaultResources() *k8scorev1.ResourceRequirements {
+func (m *manager) GetResources(
+	kind string,
+	sourceImage string,
+) (*k8scorev1.ResourceRequirements, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	if m.config.Deployment.ResourcesDefault == nil {
-		return nil
-	}
-
-	return m.config.Deployment.ResourcesDefault.DeepCopy()
+	return ResolveDefaultResources(kind, sourceImage, m.config.Deployment)
 }
 
 func (m *manager) GetNodeSelectorsByImage(

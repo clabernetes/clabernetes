@@ -181,6 +181,12 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.RegistryMetadataTrustEntry": schema_clabernetes_clabernetes_apis_v1alpha1_RegistryMetadataTrustEntry(
 			ref,
 		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceList": schema_clabernetes_clabernetes_apis_v1alpha1_ResourceList(
+			ref,
+		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceRequirements": schema_clabernetes_clabernetes_apis_v1alpha1_ResourceRequirements(
+			ref,
+		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.SSHProbeConfiguration": schema_clabernetes_clabernetes_apis_v1alpha1_SSHProbeConfiguration(
 			ref,
 		),
@@ -470,8 +476,42 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigDeployment(
 				Properties: map[string]spec.Schema{
 					"resourcesDefault": {
 						SchemaProps: spec.SchemaProps{
-							Description: "ResourcesDefault is merged onto each logical Node's primary application container. Imported plans remain the source of kind-owned component requirements.",
-							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+							Description: "ResourcesDefault is the generic resource fallback for each logical Node's primary application container. It applies only when no explicit NodeProfile, image, or kind block is selected; layers are never deep-merged. Imported plans remain the source of component requirements.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceRequirements",
+							),
+						},
+					},
+					"resourcesByKind": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourcesByKind maps exact, case-sensitive containerlab kind names to default resources for each matching logical Node's primary application container. Aliases are independent keys. Image matches take precedence; an explicitly empty value suppresses lower-priority defaults.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceRequirements",
+										),
+									},
+								},
+							},
+						},
+					},
+					"resourcesByImage": {
+						SchemaProps: spec.SchemaProps{
+							Description: "ResourcesByImage maps RE2 regular expressions to default resources for each logical Node whose primary container's complete source image reference matches exactly one expression. The expression is implicitly full-reference anchored. Image matches take precedence over kind and generic defaults. Invalid or multiply matching expressions fail reconciliation before workload mutation. An explicitly empty value suppresses lower-priority defaults.",
+							Type:        []string{"object"},
+							AdditionalProperties: &spec.SchemaOrBool{
+								Allows: true,
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref(
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceRequirements",
+										),
+									},
+								},
+							},
 						},
 					},
 					"nodeSelectorsByImage": {
@@ -508,7 +548,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_ConfigDeployment(
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.ResourceRequirements"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceRequirements"},
 	}
 }
 
@@ -939,13 +979,15 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Deployment(
 					},
 					"resources": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Resources is a mapping of nodeName (or \"default\") to kubernetes resource requirements -- any value set here overrides the \"global\" config resource definitions. If a key \"default\" is set, those resource values will be preferred over *all global settings* for this topology -- meaning, the \"global\" resource settings will never be looked up for this topology, and any kind/type that is *not* in this resources map will have the \"default\" resources from this mapping applied.",
+							Description: "Resources maps nodeName (or \"default\") to Kubernetes resource requirements. Entries compile into explicit shared or dedicated NodeProfiles and therefore take precedence over all global resource layers. \"default\" applies to Nodes without a nodeName entry. Each entry is selected as one whole block rather than deep-merged with global policy; an explicit empty entry suppresses global resources for its Nodes.",
 							Type:        []string{"object"},
 							AdditionalProperties: &spec.SchemaOrBool{
 								Allows: true,
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Ref: ref("k8s.io/api/core/v1.ResourceRequirements"),
+										Ref: ref(
+											"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceRequirements",
+										),
 									},
 								},
 							},
@@ -1042,7 +1084,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_Deployment(
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromSecret", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL", "github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence", "github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling", "k8s.io/api/core/v1.ResourceRequirements"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromConfigMap", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromSecret", "github.com/clabernetes/clabernetes/apis/v1alpha1.FileFromURL", "github.com/clabernetes/clabernetes/apis/v1alpha1.Persistence", "github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceRequirements", "github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling"},
 	}
 }
 
@@ -2752,8 +2794,10 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileSpec(
 					},
 					"resources": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Resources holds the Kubernetes resource requirements for device Pods.",
-							Ref:         ref("k8s.io/api/core/v1.ResourceRequirements"),
+							Description: "Resources holds Kubernetes resource requirements for each logical Node's primary application container. When non-nil, this whole block is selected before all global image, kind, and generic defaults; quantities are not merged across layers. An explicit empty block suppresses global policy. Non-primary component containers retain imported plan requirements.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceRequirements",
+							),
 						},
 					},
 					"scheduling": {
@@ -2792,7 +2836,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_NodeProfileSpec(
 			},
 		},
 		Dependencies: []string{
-			"github.com/clabernetes/clabernetes/apis/v1alpha1.ManagementPolicy", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileDeployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileExpose", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling", "github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes", "k8s.io/api/core/v1.ResourceRequirements"},
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ManagementPolicy", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileDeployment", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileExpose", "github.com/clabernetes/clabernetes/apis/v1alpha1.NodeProfileImagePull", "github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceRequirements", "github.com/clabernetes/clabernetes/apis/v1alpha1.Scheduling", "github.com/clabernetes/clabernetes/apis/v1alpha1.StatusProbes"},
 	}
 }
 
@@ -3614,6 +3658,89 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_RegistryMetadataTrustEntry(
 				Required: []string{"registry"},
 			},
 		},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_ResourceList(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResourceList describes CPU, memory, and additional Kubernetes resources for one container. Additional resource names are flattened beside cpu and memory when serialized.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"cpu": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CPU requests or limits the container's CPU resources in Kubernetes quantity format, such as 100m, 500m, \"1\", or \"2.5\".",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"memory": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Memory requests or limits the container's memory in Kubernetes quantity format, such as 512Mi, 2Gi, or 500M.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_ResourceRequirements(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ResourceRequirements describes the compute resources required by a container.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"requests": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Requests describes the minimum compute resources required. When omitted for a container, Limits is used if explicitly specified; otherwise an implementation-defined value applies. Requests cannot exceed Limits.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceList",
+							),
+						},
+					},
+					"limits": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Limits describes the maximum compute resources allowed. Limits cannot be exceeded.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceList",
+							),
+						},
+					},
+					"claims": {
+						VendorExtensible: spec.VendorExtensible{
+							Extensions: spec.Extensions{
+								"x-kubernetes-list-map-keys": []interface{}{
+									"name",
+								},
+								"x-kubernetes-list-type": "map",
+							},
+						},
+						SchemaProps: spec.SchemaProps{
+							Description: "Claims lists names of resources, defined in spec.resourceClaims, that are used by this container. This field depends on the DynamicResourceAllocation feature gate.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("k8s.io/api/core/v1.ResourceClaim"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.ResourceList", "k8s.io/api/core/v1.ResourceClaim"},
 	}
 }
 
