@@ -161,5 +161,5 @@ Read the selected skill before following its workflow. Do not duplicate these wo
 
 - `AGENTS.md` is the single source of truth for shared repository instructions.
 - `.agents/skills/` is the single source of truth for portable repository skills.
-- `.claude/CLAUDE.md`, `.claude/skills/`, and `.cline/skills/` are discovery symlinks only; they contain no independent guidance and do not make this repository vendor-specific.
+- `.claude/CLAUDE.md`, `.claude/skills/`, `.pi/skills/`, and `.codex/skills/` are discovery symlinks only; they contain no independent guidance and do not make this repository vendor-specific.
 - Edit canonical files, not compatibility paths. Do not create copied rules, commands, or skills for individual agents unless a required capability cannot be represented by `AGENTS.md` or `.agents/skills/`.

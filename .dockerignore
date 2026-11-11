@@ -26,7 +26,6 @@ examples
 AGENTS.md
 .agents
 .claude
-.cline
 
 # caches
 .pnpm-store
