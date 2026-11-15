@@ -18,6 +18,14 @@ diagnostic. Nothing is silently dropped.
   `/run/netns` symlink for the holder: that Docker discovery link is redundant when every
   application shares one Pod namespace. During live endpoint work, holder observations use the
   accepted plan's namespace relationship.
+- **Link endpoint addresses are kind-configured cold state.** Brief link-level `ipv4`/`ipv6`
+  arrays and structured veth-endpoint fields compile onto the direct Link endpoints. Imported kinds
+  consume them exactly as their containerlab implementations do; c9s does not assign data-link
+  addresses generically with netlink. Adding, changing, or removing an address on a realized Node
+  recreates that Node instead of applying a Live connectivity revision. The unchanged peer is not
+  independently recreated, and ordinary persistence protections continue to decide whether saved
+  device configuration or newly planned startup content wins. Use the existing
+  `enforce-startup-config` or device-state reset controls when saved state must be replaced.
 - **Cross-node wires are sidecar-realized.** The transport is an implementation detail: each
   endpoint feeds a sidecar-to-sidecar wire keyed by the Link's allocated wire id, which
   carries any link MTU without underlay coordination and propagates carrier state between the

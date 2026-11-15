@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/netip"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,7 +26,11 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const maxGeneratedSymlinkTargetBytes = 4096
+const (
+	maxGeneratedSymlinkTargetBytes = 4096
+	fieldInterfaces                = "interfaces"
+	behaviorImportedInterface      = "imported-interface"
+)
 
 // Adapter evaluates explicit inputs against the pinned containerlab registry through generic
 // containerlab interfaces. It contains no kind-name dispatch.
@@ -588,17 +593,38 @@ func evaluateInterfacesWithRuntimeState(
 			MTU:  linkMTU,
 			Vars: map[string]any{},
 		}
-		var endpoint clablinks.Endpoint = clablinks.NewEndpointVeth(
-			clablinks.NewEndpointGeneric(implementation, input.Name, link),
-		)
+		genericEndpoint := clablinks.NewEndpointGeneric(implementation, input.Name, link)
+		for _, address := range []struct {
+			value  string
+			ipv4   bool
+			target *netip.Prefix
+		}{
+			{value: input.IPv4, ipv4: true, target: &genericEndpoint.IPv4},
+			{value: input.IPv6, target: &genericEndpoint.IPv6},
+		} {
+			if address.value == "" {
+				continue
+			}
+			prefix, parseErr := netip.ParsePrefix(address.value)
+			if parseErr != nil || prefix.Addr().Is4() != address.ipv4 {
+				return nil, &Error{
+					Code: ErrorInvalidInput, NodeID: nodeID, Field: fieldInterfaces,
+					Behavior: behaviorImportedInterface, Message: "interface address is invalid",
+					cause: parseErr,
+				}
+			}
+			*address.target = prefix
+		}
+
+		var endpoint clablinks.Endpoint = clablinks.NewEndpointVeth(genericEndpoint)
 		if preRealized {
 			endpoint = &preRealizedEndpoint{Endpoint: endpoint}
 		}
 		link.Endpoints = append(link.Endpoints, endpoint)
 		err := invokeImported(
 			nodeID,
-			"interfaces",
-			"imported-interface",
+			fieldInterfaces,
+			behaviorImportedInterface,
 			"containerlab endpoint attachment panicked",
 			func() error { return implementation.AddEndpoint(endpoint) },
 		)
@@ -607,8 +633,8 @@ func evaluateInterfacesWithRuntimeState(
 				return nil, planningErr
 			}
 			return nil, &Error{
-				Code: ErrorInvalidInput, NodeID: nodeID, Field: "interfaces",
-				Behavior: "imported-interface", Message: "containerlab rejected an endpoint",
+				Code: ErrorInvalidInput, NodeID: nodeID, Field: fieldInterfaces,
+				Behavior: behaviorImportedInterface, Message: "containerlab rejected an endpoint",
 				cause: err,
 			}
 		}
@@ -620,8 +646,8 @@ func evaluateInterfacesWithRuntimeState(
 	}
 	err := invokeImported(
 		nodeID,
-		"interfaces",
-		"imported-interface",
+		fieldInterfaces,
+		behaviorImportedInterface,
 		"containerlab interface validation panicked",
 		implementation.CheckInterfaceName,
 	)
@@ -630,9 +656,10 @@ func evaluateInterfacesWithRuntimeState(
 			return nil, planningErr
 		}
 		return nil, &Error{
-			Code: ErrorInvalidInput, NodeID: nodeID, Field: "interfaces",
-			Behavior: "imported-interface", Message: "containerlab interface validation failed",
-			cause: err,
+			Code: ErrorInvalidInput, NodeID: nodeID, Field: fieldInterfaces,
+			Behavior: behaviorImportedInterface,
+			Message:  "containerlab interface validation failed",
+			cause:    err,
 		}
 	}
 

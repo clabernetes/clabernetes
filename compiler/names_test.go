@@ -27,6 +27,8 @@ topology:
       network-mode: container:R1
   links:
     - endpoints: ["R1:eth1", "Client_2:eth1"]
+      ipv4: ["10.0.0.0/31", "10.0.0.1/31"]
+      ipv6: ["2001:db8::/127", "2001:db8::1/127"]
     - endpoints: ["Client_2:eth2", "host:ens5"]
 `
 
@@ -73,10 +75,14 @@ func TestCompileSanitizesNodeNamesKubernetesCannotCarry(t *testing.T) {
 			EndpointA: clabernetescompiler.Endpoint{
 				NodeName:      "r1",
 				InterfaceName: "eth1",
+				IPv4:          "10.0.0.0/31",
+				IPv6:          "2001:db8::/127",
 			},
 			EndpointB: clabernetescompiler.Endpoint{
 				NodeName:      "client-2",
 				InterfaceName: "eth1",
+				IPv4:          "10.0.0.1/31",
+				IPv6:          "2001:db8::1/127",
 			},
 		},
 		{

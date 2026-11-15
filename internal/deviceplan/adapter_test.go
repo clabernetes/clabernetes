@@ -350,7 +350,9 @@ func (n *syntheticImportedNode) DeployEndpoints(ctx context.Context) error {
 	case "pre-realized-endpoint-test":
 		endpoints := n.GetEndpoints()
 		if len(endpoints) != 1 || !endpoints[0].IsRuntimeDiscovered() ||
-			endpoints[0].GetLink() == nil || endpoints[0].GetLink().GetMTU() != 9000 {
+			endpoints[0].GetLink() == nil || endpoints[0].GetLink().GetMTU() != 9000 ||
+			endpoints[0].GetIPv4Addr().String() != "192.0.2.5/24" ||
+			endpoints[0].GetIPv6Addr().String() != "2001:db8::5/64" {
 			return errors.New("package endpoint does not retain pre-realized topology metadata")
 		}
 
@@ -1589,6 +1591,7 @@ func TestImportedEndpointLifecycleRetainsTopologyMetadataWithoutRedeployingLink(
 		ID: "interface-a", NodeID: input.Nodes[0].ID, Name: "eth1", LinkID: "link-a",
 		PeerNodeID: "peer-a", PeerInterface: "eth1", Connectivity: "wire",
 		PeerTransport: "peer-a-wire", WireID: 101, MTU: 9000,
+		IPv4: "192.0.2.5/24", IPv6: "2001:db8::5/64",
 	}}
 	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-pre-realized-endpoint-v1",
@@ -1597,6 +1600,11 @@ func TestImportedEndpointLifecycleRetainsTopologyMetadataWithoutRedeployingLink(
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if len(plan.Interfaces) != 1 || plan.Interfaces[0].IPv4 != "192.0.2.5/24" ||
+		plan.Interfaces[0].IPv6 != "2001:db8::5/64" {
+		t.Fatalf("planned endpoint addresses = %#v", plan.Interfaces)
 	}
 
 	artifactRoot := t.TempDir()

@@ -14,6 +14,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
 const sha256DigestLength = len("sha256:") + sha256.Size*2
@@ -92,6 +94,25 @@ func NormalizeInput(input Input) (Input, error) {
 		return Input{}, planningError(ErrorSerialization, "input", "cannot clone input", err)
 	}
 
+	for index := range normalized.Interfaces {
+		normalized.Interfaces[index].IPv4, err = normalizeInterfaceAddress(
+			normalized.Interfaces[index].IPv4,
+			true,
+			fmt.Sprintf("interfaces[%d].ipv4", index),
+		)
+		if err != nil {
+			return Input{}, err
+		}
+		normalized.Interfaces[index].IPv6, err = normalizeInterfaceAddress(
+			normalized.Interfaces[index].IPv6,
+			false,
+			fmt.Sprintf("interfaces[%d].ipv6", index),
+		)
+		if err != nil {
+			return Input{}, err
+		}
+	}
+
 	if err = validateInput(normalized); err != nil {
 		return Input{}, err
 	}
@@ -137,6 +158,15 @@ func NormalizeInput(input Input) (Input, error) {
 	return normalized, nil
 }
 
+func normalizeInterfaceAddress(value string, ipv4 bool, field string) (string, error) {
+	canonical, err := clabernetesutilcontainerlab.NormalizeLinkEndpointAddress(value, ipv4)
+	if err != nil {
+		return "", planningError(ErrorInvalidInput, field, err.Error(), nil)
+	}
+
+	return canonical, nil
+}
+
 // NormalizePlan validates and orders every set-like plan field without mutating the caller.
 func NormalizePlan(plan Plan) (Plan, error) {
 	normalized, err := cloneJSON(plan)
@@ -153,6 +183,25 @@ func NormalizePlan(plan Plan) (Plan, error) {
 	for index := range normalized.Files {
 		if normalized.Files[index].ArtifactKind == "" {
 			normalized.Files[index].ArtifactKind = ArtifactRegular
+		}
+	}
+
+	for index := range normalized.Interfaces {
+		normalized.Interfaces[index].IPv4, err = normalizeInterfaceAddress(
+			normalized.Interfaces[index].IPv4,
+			true,
+			fmt.Sprintf("interfaces[%d].ipv4", index),
+		)
+		if err != nil {
+			return Plan{}, err
+		}
+		normalized.Interfaces[index].IPv6, err = normalizeInterfaceAddress(
+			normalized.Interfaces[index].IPv6,
+			false,
+			fmt.Sprintf("interfaces[%d].ipv6", index),
+		)
+		if err != nil {
+			return Plan{}, err
 		}
 	}
 

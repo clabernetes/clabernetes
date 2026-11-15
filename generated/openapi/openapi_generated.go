@@ -1445,6 +1445,20 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkEndpointSpec(
 							Format:      "",
 						},
 					},
+					"ipv4": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IPv4 is the optional IPv4 CIDR prefix containerlab assigns to this endpoint. It is cold-plan configuration for kinds that consume endpoint addresses; changing it on a realized Node requires recreation. It is invalid on the reserved host endpoint.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ipv6": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IPv6 is the optional IPv6 CIDR prefix containerlab assigns to this endpoint. It is cold-plan configuration for kinds that consume endpoint addresses; changing it on a realized Node requires recreation. It is invalid on the reserved host endpoint.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"nodeName", "interfaceName"},
 			},

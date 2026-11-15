@@ -538,6 +538,13 @@ func evaluateNormalizedConnectivityTransition(
 	}
 
 	transition := ConnectivityTransition{RequiredMode: clabernetesinternaldeviceplan.LinkApplyLive}
+	if endpointAddressesChanged(baseInput, desiredInput) {
+		// Endpoint addresses contribute to creation-time imported configuration rather than to the
+		// sidecar-owned wire. A retained-Live revision would therefore acknowledge new plan input
+		// without applying it. Address admission, change, and removal all require the complete cold
+		// plan through the existing recreate path, independent of a kind's structural Link mode.
+		transition.RequiredMode = clabernetesinternaldeviceplan.LinkApplyRecreate
+	}
 	if len(affectedLinks) == 0 {
 		return transition, nil
 	}
@@ -575,6 +582,44 @@ func evaluateNormalizedConnectivityTransition(
 	slices.Sort(transition.AffectedNodeIDs)
 
 	return transition, nil
+}
+
+func endpointAddressesChanged(
+	baseInput,
+	desiredInput clabernetesinternaldeviceplan.Input,
+) bool {
+	base := map[string][2]string{}
+	for _, intf := range baseInput.Interfaces {
+		base[intf.ID] = [2]string{intf.IPv4, intf.IPv6}
+	}
+
+	desired := map[string][2]string{}
+	for _, intf := range desiredInput.Interfaces {
+		desired[intf.ID] = [2]string{intf.IPv4, intf.IPv6}
+	}
+
+	if len(base) != len(desired) {
+		for id := range base {
+			if _, exists := desired[id]; !exists && base[id] != ([2]string{}) {
+				return true
+			}
+		}
+		for id := range desired {
+			if _, exists := base[id]; !exists && desired[id] != ([2]string{}) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	for id, addresses := range base {
+		if desired[id] != addresses {
+			return true
+		}
+	}
+
+	return false
 }
 
 func linkApplyModeRank(mode clabernetesinternaldeviceplan.LinkApplyMode) int {

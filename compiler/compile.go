@@ -173,6 +173,10 @@ type Endpoint struct {
 	NodeName string
 	// InterfaceName is the interface name on the node.
 	InterfaceName string
+	// IPv4 is the optional IPv4 CIDR prefix assigned to this endpoint.
+	IPv4 string
+	// IPv6 is the optional IPv6 CIDR prefix assigned to this endpoint.
+	IPv6 string
 }
 
 // AppProtocol is the application-protocol intent for one expose Service destination port.

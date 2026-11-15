@@ -83,10 +83,28 @@ spec:
   endpointA:
     nodeName: srl1
     interfaceName: e1-1
+    ipv4: 192.0.2.0/31
+    ipv6: 2001:db8::/127
   endpointB:
     nodeName: multitool
     interfaceName: eth1
+    ipv4: 192.0.2.1/31
+    ipv6: 2001:db8::1/127
 ```
+
+Each non-host endpoint optionally carries one IPv4 and one IPv6 CIDR prefix. Prefixes must belong
+to the family named by their field, and host bits are preserved; point-to-point and full-length
+prefixes such as `/31`, `/32`, `/127`, and `/128` are valid. Imported containerlab kinds decide
+whether and how these endpoint addresses become device configuration, exactly as they do on a
+containerlab host. c9s does not generically assign them with netlink, so kinds that ignore
+containerlab endpoint addresses retain that behavior.
+
+Endpoint addresses are cold-plan configuration. Adding, changing, or removing one on a realized
+Node **recreates that Node's device Pod**, even when the kind supports live structural Link changes.
+An unchanged peer does not recreate unless its own address set changed, subject to the normal
+shared-Pod grouping behavior. Recreation does not implicitly erase saved state on persistent
+volumes: the ordinary saved-configuration, `enforce-startup-config`, and device-state reset rules
+still apply. See [Persistent storage](/docs/guides/persistence).
 
 Wiring belongs only to Link objects; interfaces are not embedded into Node specifications. The
 link controller validates endpoints and records a namespace-unique wire id in status, while
