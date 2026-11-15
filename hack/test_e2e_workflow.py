@@ -60,11 +60,14 @@ class E2EWorkflowTests(unittest.TestCase):
             "-run='${{ inputs.tests }}' ${{ inputs.additional-test-args }}",
         )
         direct = next(entry for entry in entries if entry["suite"] == "direct runtime")
-        self.assertEqual(direct["additional-test-args"], "-p 1")
+        self.assertEqual(direct["additional-test-args"], "-parallel 1")
+        self.assertEqual(direct["test-timeout"], "60m")
         self.assertEqual(
             job["with"]["additional-test-args"],
             "${{ matrix.additional-test-args }}",
         )
+        self.assertEqual(job["with"]["test-timeout"], "${{ matrix.test-timeout }}")
+        self.assertEqual(runner["env"]["E2E_TEST_TIMEOUT"], "${{ inputs.test-timeout }}")
         run = next(step for step in runner["steps"] if step.get("id") == "run-the-e2e-suite")
         self.assertEqual(run["run"], "make e2e-test")
         self.assertFalse(run.get("continue-on-error", False))

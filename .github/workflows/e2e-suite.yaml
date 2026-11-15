@@ -21,6 +21,11 @@ on:
         type: string
         required: false
         default: ""
+      test-timeout:
+        description: "Go test aggregate timeout for this suite"
+        type: string
+        required: false
+        default: "30m"
       srsim-enabled:
         description: "whether the SR-SIM license is available"
         type: boolean
@@ -44,6 +49,7 @@ jobs:
       E2E_TEST_PACKAGES: ${{ inputs.package }}
       E2E_TEST_ARGS: -run='${{ inputs.tests }}' ${{ inputs.additional-test-args }}
       E2E_TEST_FORMAT: standard-verbose
+      E2E_TEST_TIMEOUT: ${{ inputs.test-timeout }}
       SRSIM_LICENSE: ${{ secrets.SRSIM_LICENSE }}
       SRSIM_IMAGE: ghcr.io/clabernetes/nokia_srsim:26.7.R1
       PLANNER_POOL_E2E: "1"

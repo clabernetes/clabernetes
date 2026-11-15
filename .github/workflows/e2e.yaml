@@ -72,7 +72,8 @@ jobs:
           - suite: direct runtime
             package: ./e2e/topology/direct
             tests: ^Test(Direct.*|NodeLinkDirect|LinuxDataplaneDirect|LinuxWithoutManagement|ExposeRequestsManagementAddress|MultiWorkerRecoveryDirect|Ixiac|LabEditorRoleIsNamespaceScoped)$
-            additional-test-args: -p 1
+            additional-test-args: -parallel 1
+            test-timeout: 60m
           - suite: planner pool
             package: ./e2e/topology/direct
             tests: ^Test(PlannerPoolReuseAndRecovery|PlannerPoolDelayedPeerStartup|GlobalBatchCleanup)$
@@ -88,6 +89,7 @@ jobs:
       package: ${{ matrix.package }}
       tests: ${{ matrix.tests }}
       additional-test-args: ${{ matrix.additional-test-args }}
+      test-timeout: ${{ matrix.test-timeout }}
       srsim-enabled: ${{ needs.build-image.outputs.srsim-enabled == 'true' }}
       debug: ${{ inputs.debug }}
     secrets: inherit
