@@ -79,6 +79,17 @@ func TestNodeLinkDirect(t *testing.T) {
 
 		initialPods[nodeName] = observation
 	}
+
+	// Startup-config templating consumes nested config vars through the imported SR Linux
+	// preparation and post-deploy lifecycle, not just during planning.
+	waitForDeviceCommand(
+		t,
+		namespace,
+		initialPods["srl1"],
+		[]string{"sr_cli", "info from running /system information location"},
+		"config-vars-rendered-srl1",
+	)
+
 	management := poolMixedManagementAddresses(t, namespace, len(nodeNames))
 	for index, nodeName := range nodeNames {
 		peerName := nodeNames[(index+1)%len(nodeNames)]
