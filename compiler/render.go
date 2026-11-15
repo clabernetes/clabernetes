@@ -664,12 +664,16 @@ func renderLinks(
 			),
 			"spec": map[string]any{
 				"endpointA": map[string]any{
-					"nodeName":      compiledLink.EndpointA.NodeName,
-					"interfaceName": compiledLink.EndpointA.InterfaceName,
+					"nodeName":           compiledLink.EndpointA.NodeName,
+					"interfaceName":      compiledLink.EndpointA.InterfaceName,
+					linkAddressIPv4Field: compiledLink.EndpointA.IPv4,
+					linkAddressIPv6Field: compiledLink.EndpointA.IPv6,
 				},
 				"endpointB": map[string]any{
-					"nodeName":      compiledLink.EndpointB.NodeName,
-					"interfaceName": compiledLink.EndpointB.InterfaceName,
+					"nodeName":           compiledLink.EndpointB.NodeName,
+					"interfaceName":      compiledLink.EndpointB.InterfaceName,
+					linkAddressIPv4Field: compiledLink.EndpointB.IPv4,
+					linkAddressIPv6Field: compiledLink.EndpointB.IPv6,
 				},
 				"mtu": mtu,
 			},

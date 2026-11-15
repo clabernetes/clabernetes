@@ -55,7 +55,19 @@ class E2EWorkflowTests(unittest.TestCase):
         runner = workflow("e2e-suite.yaml")["jobs"]["suite"]
         self.assertEqual(runner["name"], "${{ inputs.suite }}")
         self.assertEqual(runner["env"]["E2E_TEST_PACKAGES"], "${{ inputs.package }}")
-        self.assertEqual(runner["env"]["E2E_TEST_ARGS"], "-run='${{ inputs.tests }}'")
+        self.assertEqual(
+            runner["env"]["E2E_TEST_ARGS"],
+            "-run='${{ inputs.tests }}' ${{ inputs.additional-test-args }}",
+        )
+        direct = next(entry for entry in entries if entry["suite"] == "direct runtime")
+        self.assertEqual(direct["additional-test-args"], "-parallel 1")
+        self.assertEqual(direct["test-timeout"], "60m")
+        self.assertEqual(
+            job["with"]["additional-test-args"],
+            "${{ matrix.additional-test-args }}",
+        )
+        self.assertEqual(job["with"]["test-timeout"], "${{ matrix.test-timeout || '30m' }}")
+        self.assertEqual(runner["env"]["E2E_TEST_TIMEOUT"], "${{ inputs.test-timeout }}")
         run = next(step for step in runner["steps"] if step.get("id") == "run-the-e2e-suite")
         self.assertEqual(run["run"], "make e2e-test")
         self.assertFalse(run.get("continue-on-error", False))
@@ -112,8 +124,11 @@ class E2EWorkflowTests(unittest.TestCase):
             env = dict(os.environ, PATH=f"{directory}:{os.environ['PATH']}", E2E_ARGUMENTS=str(record))
             for entry in workflow("e2e.yaml")["jobs"]["e2e"]["strategy"]["matrix"]["include"]:
                 with self.subTest(suite=entry["suite"]):
-                    env.update(E2E_TEST_ARGS=f"-run='{entry['tests']}'",
-                               E2E_TEST_PACKAGES=entry["package"], E2E_TEST_FORMAT="standard-verbose")
+                    extra_args = entry.get("additional-test-args", "")
+                    env.update(
+                        E2E_TEST_ARGS=f"-run='{entry['tests']}' {extra_args}",
+                        E2E_TEST_PACKAGES=entry["package"], E2E_TEST_FORMAT="standard-verbose",
+                    )
                     subprocess.run(["/usr/bin/make", "--no-print-directory", "e2e-run"],
                                    cwd=ROOT, env=env, capture_output=True, text=True, check=True)
                     arguments = json.loads(record.read_text())
@@ -123,6 +138,8 @@ class E2EWorkflowTests(unittest.TestCase):
                     self.assertIn("-count=1", arguments)
                     self.assertIn("-coverprofile=cover.out", arguments)
                     self.assertEqual(arguments[:2], ["--format", "standard-verbose"])
+                    if extra_args:
+                        self.assertEqual(arguments[-3:-1], extra_args.split())
 
 
 if __name__ == "__main__":

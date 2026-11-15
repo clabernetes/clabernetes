@@ -178,6 +178,8 @@ topology:
       components: []
   links:
     - endpoints: [primary:eth1, secondary:eth1]
+      ipv4: [198.51.100.0/31, 198.51.100.1/31]
+      ipv6: ["2001:db8:100::/127", "2001:db8:100::1/127"]
       mtu: 9000
 `
 	topology.Spec.Deployment.FilesFromConfigMap = map[string][]clabernetesapisv1alpha1.FileFromConfigMap{
@@ -231,7 +233,11 @@ topology:
 		t.Fatalf("rendered secondary Node = %#v", secondary)
 	}
 	if links[0].Spec.MTU != 9000 || links[0].Spec.EndpointA.NodeName != "primary" ||
-		links[0].Spec.EndpointB.NodeName != "secondary" {
+		links[0].Spec.EndpointB.NodeName != "secondary" ||
+		links[0].Spec.EndpointA.IPv4 != "198.51.100.0/31" ||
+		links[0].Spec.EndpointB.IPv4 != "198.51.100.1/31" ||
+		links[0].Spec.EndpointA.IPv6 != "2001:db8:100::/127" ||
+		links[0].Spec.EndpointB.IPv6 != "2001:db8:100::1/127" {
 		t.Fatalf("rendered Link = %#v", links[0])
 	}
 	management := profiles[0].Spec.Mgmt

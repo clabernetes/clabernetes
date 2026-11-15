@@ -8,6 +8,7 @@ import (
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 )
@@ -60,6 +61,11 @@ func TestCompilePlanInputTreatsKindsAsOpaqueAndCompilesUIDBoundInterfaces(t *tes
 		},
 	}
 
+	links[0].Spec.EndpointA.IPv4 = "198.51.100.0/31"
+	links[1].Spec.EndpointA.IPv4 = "192.0.2.5/24"
+	links[1].Spec.EndpointA.IPv6 = "2001:0db8:0:0::5/64"
+	links[2].Spec.EndpointB.IPv4 = "203.0.113.1/32"
+
 	input, err := CompilePlanInput(PlanInputCompileRequest{
 		Primary: primary, GroupMembers: []string{secondary.GetName(), primary.GetName()},
 		NodesByName: nodes, Links: links, Compatibility: planInputTestCompatibility(),
@@ -105,6 +111,20 @@ func TestCompilePlanInputTreatsKindsAsOpaqueAndCompilesUIDBoundInterfaces(t *tes
 	assertCompiledInterface(t, input.Interfaces, "eth1", connectivitySamePod, 0, "")
 	assertCompiledInterface(t, input.Interfaces, "eth2", "wire", 42, "remote-wire")
 	assertCompiledInterface(t, input.Interfaces, "eth3", connectivityHost, 0, "")
+
+	addresses := map[string][2]string{}
+	for _, intf := range input.Interfaces {
+		addresses[intf.ID] = [2]string{intf.IPv4, intf.IPv6}
+	}
+	expectedAddresses := map[string][2]string{
+		"uid-link-same/a":  {"198.51.100.0/31", ""},
+		"uid-link-same/b":  {"", ""},
+		"uid-link-cross/a": {"192.0.2.5/24", "2001:db8::5/64"},
+		"uid-link-host/a":  {"", ""},
+	}
+	if diff := cmp.Diff(expectedAddresses, addresses); diff != "" {
+		t.Fatalf("compiled endpoint addresses differ (-want +got):\n%s", diff)
+	}
 
 	if input.Management[0].InterfaceName != "" {
 		t.Fatalf("compiler invented a kind-specific management interface: %#v", input.Management[0])

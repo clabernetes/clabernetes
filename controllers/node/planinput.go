@@ -10,6 +10,7 @@ import (
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesconstants "github.com/clabernetes/clabernetes/constants"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 )
 
@@ -194,13 +195,17 @@ func compileAcceptedInterfaces(
 			if connectivity == connectivityWire {
 				peerTransport = FabricServiceName(endpoints[peerSide].NodeName)
 			}
+			ipv4, ipv6, err := normalizeAcceptedEndpointAddresses(link, endpoints[side], side)
+			if err != nil {
+				return nil, err
+			}
 			result = append(result, clabernetesinternaldeviceplan.InterfaceInput{
 				ID:     fmt.Sprintf("%s/%c", link.GetUID(), 'a'+rune(side)),
 				NodeID: memberIDs[member.GetName()], Name: endpoints[side].InterfaceName,
 				LinkID: string(link.GetUID()), LinkName: link.GetName(), PeerNodeID: peerNodeID,
 				PeerInterface: endpoints[peerSide].InterfaceName,
 				PeerTransport: peerTransport, Connectivity: connectivity,
-				WireID: link.Status.WireID, MTU: link.Spec.MTU,
+				WireID: link.Status.WireID, MTU: link.Spec.MTU, IPv4: ipv4, IPv6: ipv6,
 			})
 		}
 	}
@@ -209,6 +214,34 @@ func compileAcceptedInterfaces(
 	})
 
 	return result, nil
+}
+
+func normalizeAcceptedEndpointAddresses(
+	link *clabernetesapisv1alpha1.Link,
+	endpoint clabernetesapisv1alpha1.LinkEndpointSpec,
+	side int,
+) (string, string, error) {
+	endpointSide := [2]string{"A", "B"}[side]
+	field := fmt.Sprintf("links.%s.spec.endpoint%s", link.GetName(), endpointSide)
+	ipv4, err := clabernetesutilcontainerlab.NormalizeLinkEndpointAddress(endpoint.IPv4, true)
+	if err != nil {
+		return "", "", planInputError(
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
+			field+".ipv4",
+			err.Error(),
+		)
+	}
+
+	ipv6, err := clabernetesutilcontainerlab.NormalizeLinkEndpointAddress(endpoint.IPv6, false)
+	if err != nil {
+		return "", "", planInputError(
+			clabernetesinternaldeviceplan.ErrorInvalidInput,
+			field+".ipv6",
+			err.Error(),
+		)
+	}
+
+	return ipv4, ipv6, nil
 }
 
 func validateResolvedEndpoint(

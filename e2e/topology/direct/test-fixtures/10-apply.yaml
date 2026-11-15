@@ -15,9 +15,13 @@ spec:
   endpointA:
     nodeName: srl1
     interfaceName: e1-1
+    ipv4: 192.168.0.1/29
+    ipv6: 2001:db8:168::/127
   endpointB:
     nodeName: srl2
     interfaceName: e1-1
+    ipv4: 192.168.0.2/29
+    ipv6: 2001:db8:168::1/127
 ---
 apiVersion: c9s.run/v1alpha1
 kind: Node
@@ -31,11 +35,6 @@ spec:
   profileRef:
     name: direct
   startup-config: |
-    set / interface ethernet-1/1 admin-state enable
-    set / interface ethernet-1/1 subinterface 0
-    set / interface ethernet-1/1 subinterface 0 ipv4
-    set / interface ethernet-1/1 subinterface 0 ipv4 admin-state enable
-    set / interface ethernet-1/1 subinterface 0 ipv4 address 192.168.0.0/31
     set / network-instance default
     set / network-instance default interface ethernet-1/1.0
 ---
@@ -51,10 +50,5 @@ spec:
   profileRef:
     name: direct
   startup-config: |
-    set / interface ethernet-1/1 admin-state enable
-    set / interface ethernet-1/1 subinterface 0
-    set / interface ethernet-1/1 subinterface 0 ipv4
-    set / interface ethernet-1/1 subinterface 0 ipv4 admin-state enable
-    set / interface ethernet-1/1 subinterface 0 ipv4 address 192.168.0.1/31
     set / network-instance default
     set / network-instance default interface ethernet-1/1.0

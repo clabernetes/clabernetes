@@ -170,6 +170,10 @@ type InterfaceInput struct {
 	Connectivity  string `json:"connectivity"`
 	WireID        int    `json:"wireID,omitempty"`
 	MTU           int    `json:"mtu,omitempty"`
+	// IPv4 is the optional canonical IPv4 CIDR prefix supplied to the imported endpoint.
+	IPv4 string `json:"ipv4,omitempty"`
+	// IPv6 is the optional canonical IPv6 CIDR prefix supplied to the imported endpoint.
+	IPv6 string `json:"ipv6,omitempty"`
 }
 
 // Plan is a normalized runtime-neutral description rendered by c9s into Kubernetes resources.
@@ -651,19 +655,23 @@ type Route struct {
 
 // InterfacePlan describes one direct Link endpoint and its change lifecycle.
 type InterfacePlan struct {
-	ID               string        `json:"id"`
-	NodeID           string        `json:"nodeID"`
-	NamespaceOwnerID string        `json:"namespaceOwnerID"`
-	Name             string        `json:"name"`
-	Alias            string        `json:"alias,omitempty"`
-	LinkID           string        `json:"linkID"`
-	LinkName         string        `json:"linkName,omitempty"`
-	PeerNodeID       string        `json:"peerNodeID,omitempty"`
-	PeerInterface    string        `json:"peerInterface,omitempty"`
-	PeerTransport    string        `json:"peerTransport,omitempty"`
-	Connectivity     string        `json:"connectivity"`
-	WireID           int           `json:"wireID,omitempty"`
-	MTU              int           `json:"mtu,omitempty"`
-	LinkApplyMode    LinkApplyMode `json:"linkApplyMode"`
-	RequiredAtStart  bool          `json:"requiredAtStart,omitempty"`
+	ID               string `json:"id"`
+	NodeID           string `json:"nodeID"`
+	NamespaceOwnerID string `json:"namespaceOwnerID"`
+	Name             string `json:"name"`
+	Alias            string `json:"alias,omitempty"`
+	LinkID           string `json:"linkID"`
+	LinkName         string `json:"linkName,omitempty"`
+	PeerNodeID       string `json:"peerNodeID,omitempty"`
+	PeerInterface    string `json:"peerInterface,omitempty"`
+	PeerTransport    string `json:"peerTransport,omitempty"`
+	Connectivity     string `json:"connectivity"`
+	WireID           int    `json:"wireID,omitempty"`
+	MTU              int    `json:"mtu,omitempty"`
+	// IPv4 is the optional canonical IPv4 CIDR prefix supplied to the imported endpoint.
+	IPv4 string `json:"ipv4,omitempty"`
+	// IPv6 is the optional canonical IPv6 CIDR prefix supplied to the imported endpoint.
+	IPv6            string        `json:"ipv6,omitempty"`
+	LinkApplyMode   LinkApplyMode `json:"linkApplyMode"`
+	RequiredAtStart bool          `json:"requiredAtStart,omitempty"`
 }

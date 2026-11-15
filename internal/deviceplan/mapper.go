@@ -1392,6 +1392,8 @@ func appendInterfacePlans(
 			Connectivity:     intf.Input.Connectivity,
 			WireID:           intf.Input.WireID,
 			MTU:              intf.Input.MTU,
+			IPv4:             intf.Input.IPv4,
+			IPv6:             intf.Input.IPv6,
 			LinkApplyMode:    node.LinkApplyMode,
 			RequiredAtStart:  true,
 		})

@@ -45,6 +45,42 @@ spec:
 Existing Topology settings for exposure, deployment, image pulling, and status
 probes are translated into the generated primitive resources and NodeProfile policy.
 
+### Link endpoint addresses
+
+Containerlab's link-level address arrays compile onto the corresponding endpoints of the generated
+Link. An empty entry leaves that endpoint unaddressed:
+
+```yaml
+links:
+  - endpoints: [srl1:e1-1, srl2:e1-1]
+    ipv4: ["192.0.2.0/31", "192.0.2.1/31"]
+    ipv6: ["2001:db8::/127", "2001:db8::1/127"]
+```
+
+Structured explicit veth endpoints carry the same prefixes directly, and both forms produce the
+same direct Link representation:
+
+```yaml
+links:
+  - type: veth
+    endpoints:
+      - node: srl1
+        interface: e1-1
+        ipv4: 192.0.2.0/31
+        ipv6: 2001:db8::/127
+      - node: srl2
+        interface: e1-1
+        ipv4: 192.0.2.1/31
+        ipv6: 2001:db8::1/127
+```
+
+Invalid CIDRs, wrong-family prefixes, and arrays with more entries than endpoints fail compilation.
+Addresses on the reserved `host` endpoint are also rejected. Address configuration is applied by
+the imported kind during cold planning and startup, not by a generic live runtime command. After a
+Node has been realized, any change to its effective endpoint address set recreates that Node so
+the new cold plan is consumed. Existing persistence and explicit device-state reset semantics are
+unchanged; see [Nodes and Links](nodes-and-links.md#link).
+
 ### Native definition vocabulary
 
 The embedded `containerlab` definition remains native containerlab YAML, and compilation is
