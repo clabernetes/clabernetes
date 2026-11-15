@@ -59,9 +59,15 @@ class E2EWorkflowTests(unittest.TestCase):
             runner["env"]["E2E_TEST_ARGS"],
             "-run='${{ inputs.tests }}' ${{ inputs.additional-test-args }}",
         )
-        direct = next(entry for entry in entries if entry["suite"] == "direct runtime")
-        self.assertEqual(direct["additional-test-args"], "-parallel 1")
-        self.assertEqual(direct["test-timeout"], "60m")
+        direct_suites = {
+            "direct topology", "direct configuration", "direct dataplane", "direct operations",
+            "direct lifecycle", "direct recovery", "direct integrations",
+        }
+        direct = [entry for entry in entries if entry["suite"] in direct_suites]
+        self.assertEqual({entry["suite"] for entry in direct}, direct_suites)
+        for entry in direct:
+            self.assertEqual(entry["additional-test-args"], "-parallel 1")
+            self.assertEqual(entry["test-timeout"], "60m")
         self.assertEqual(
             job["with"]["additional-test-args"],
             "${{ matrix.additional-test-args }}",
