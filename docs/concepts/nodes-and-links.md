@@ -52,6 +52,10 @@ diagnostic naming the field.
 - **Files:** `startup-config` (inline text or a path), `license`, and `binds` take their content
   from payloads attached to the Node, see
   [Containerlab file fields](/docs/guides/file-mounting#containerlab-file-fields).
+- **Startup-config variables:** nested values in `config.vars` are available to containerlab
+  startup-config Go templates. The rendered configuration is supplied during boot, including
+  CLI-format configuration applied by the imported post-deploy lifecycle. Variables without a
+  startup-config consumer do not independently configure the Node.
 - **Grouping:** `network-mode: container:<primary>` places the Node in the primary Node's Pod.
   Other network modes are rejected.
 - **Link changes:** `link-apply-mode` (`live`, `restart`, or `recreate`) overrides the kind's
@@ -63,8 +67,7 @@ diagnostic naming the field.
 - **Run state:** `runState` (`Running` or `Stopped`) is operational state rather than node
   definition: it scales the Node's Pod to one or zero and never changes its plan, see
   [Stopping, starting, and restarting a Node](/docs/guides/lab-operations#stopping-starting-and-restarting-a-node).
-- **Rejected at planning:** `config` (config-engine variables), `env-files`, `runtime`,
-  `stages`, and `credentials`, see
+- **Rejected at planning:** `env-files`, `runtime`, `stages`, and `credentials`, see
   [Differences from containerlab](/docs/concepts/containerlab-differences).
 
 Inside a device, node names, aliases, and chassis component names resolve to management

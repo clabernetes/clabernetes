@@ -34,7 +34,12 @@ spec:
   image: ghcr.io/nokia/srlinux
   profileRef:
     name: direct
+  config:
+    vars:
+      system:
+        location: config-vars-rendered-srl1
   startup-config: |
+    set / system information location {{ index (index .Config.Vars "system") "location" }}
     set / network-instance default
     set / network-instance default interface ethernet-1/1.0
 ---

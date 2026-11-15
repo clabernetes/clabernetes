@@ -1505,13 +1505,23 @@ func rewriteImportedStringLeaves(
 	value reflect.Value,
 	rewrite func(string) (string, error),
 ) error {
+	return rewriteImportedStringLeavesAtPath(value, "", rewrite)
+}
+
+// rewriteImportedStringLeavesAtPath preserves arbitrary user data rather than treating it as a
+// declared file reference. Every other imported definition field retains structural traversal.
+func rewriteImportedStringLeavesAtPath(
+	value reflect.Value,
+	parentPath string,
+	rewrite func(string) (string, error),
+) error {
 	if !value.IsValid() {
 		return nil
 	}
 	switch value.Kind() {
 	case reflect.Pointer:
 		if !value.IsNil() {
-			return rewriteImportedStringLeaves(value.Elem(), rewrite)
+			return rewriteImportedStringLeavesAtPath(value.Elem(), parentPath, rewrite)
 		}
 	case reflect.Interface:
 		if value.IsNil() {
@@ -1519,21 +1529,31 @@ func rewriteImportedStringLeaves(
 		}
 		duplicate := reflect.New(value.Elem().Type()).Elem()
 		duplicate.Set(value.Elem())
-		if err := rewriteImportedStringLeaves(duplicate, rewrite); err != nil {
+		if err := rewriteImportedStringLeavesAtPath(duplicate, parentPath, rewrite); err != nil {
 			return err
 		}
 		value.Set(duplicate)
 	case reflect.Struct:
-		for _, field := range value.Fields() {
-			if field.CanSet() {
-				if err := rewriteImportedStringLeaves(field, rewrite); err != nil {
-					return err
-				}
+		valueType := value.Type()
+		for structField, field := range value.Fields() {
+			if !field.CanSet() {
+				continue
+			}
+			fieldPath := valueType.Name() + "." + structField.Name
+			if parentPath != "" {
+				fieldPath = parentPath + "." + structField.Name
+			}
+			if fieldPath == "NodeDefinition.Config.Vars" {
+				continue
+			}
+			if err := rewriteImportedStringLeavesAtPath(field, fieldPath, rewrite); err != nil {
+				return err
 			}
 		}
 	case reflect.Slice, reflect.Array:
 		for index := range value.Len() {
-			if err := rewriteImportedStringLeaves(value.Index(index), rewrite); err != nil {
+			err := rewriteImportedStringLeavesAtPath(value.Index(index), parentPath, rewrite)
+			if err != nil {
 				return err
 			}
 		}
@@ -1543,7 +1563,8 @@ func rewriteImportedStringLeaves(
 			entry := iterator.Value()
 			duplicate := reflect.New(entry.Type()).Elem()
 			duplicate.Set(entry)
-			if err := rewriteImportedStringLeaves(duplicate, rewrite); err != nil {
+			err := rewriteImportedStringLeavesAtPath(duplicate, parentPath, rewrite)
+			if err != nil {
 				return err
 			}
 			value.SetMapIndex(iterator.Key(), duplicate)
