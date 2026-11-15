@@ -61,6 +61,10 @@ class E2EWorkflowTests(unittest.TestCase):
         )
         direct = next(entry for entry in entries if entry["suite"] == "direct runtime")
         self.assertEqual(direct["additional-test-args"], "-p 1")
+        self.assertEqual(
+            job["with"]["additional-test-args"],
+            "${{ matrix.additional-test-args }}",
+        )
         run = next(step for step in runner["steps"] if step.get("id") == "run-the-e2e-suite")
         self.assertEqual(run["run"], "make e2e-test")
         self.assertFalse(run.get("continue-on-error", False))

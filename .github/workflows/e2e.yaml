@@ -87,6 +87,7 @@ jobs:
       suite: ${{ matrix.suite }}
       package: ${{ matrix.package }}
       tests: ${{ matrix.tests }}
+      additional-test-args: ${{ matrix.additional-test-args }}
       srsim-enabled: ${{ needs.build-image.outputs.srsim-enabled == 'true' }}
       debug: ${{ inputs.debug }}
     secrets: inherit
