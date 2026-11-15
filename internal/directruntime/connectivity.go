@@ -598,23 +598,22 @@ func endpointAddressesChanged(
 		desired[intf.ID] = [2]string{intf.IPv4, intf.IPv6}
 	}
 
-	if len(base) != len(desired) {
-		for id := range base {
-			if _, exists := desired[id]; !exists && base[id] != ([2]string{}) {
+	for id, addresses := range base {
+		desiredAddresses, exists := desired[id]
+		if !exists {
+			if addresses != ([2]string{}) {
 				return true
 			}
-		}
-		for id := range desired {
-			if _, exists := base[id]; !exists && desired[id] != ([2]string{}) {
-				return true
-			}
-		}
 
-		return false
+			continue
+		}
+		if desiredAddresses != addresses {
+			return true
+		}
 	}
 
-	for id, addresses := range base {
-		if desired[id] != addresses {
+	for id, addresses := range desired {
+		if _, exists := base[id]; !exists && addresses != ([2]string{}) {
 			return true
 		}
 	}

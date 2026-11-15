@@ -56,6 +56,19 @@ func TestEndpointAddressChangesRequireRecreate(t *testing.T) {
 			wantRecreate:           true,
 		},
 		{
+			name: "shared address changes while an unaddressed interface is removed",
+			base: func(input *clabernetesinternaldeviceplan.Input) {
+				input.Interfaces[0].IPv4 = "198.51.100.0/31"
+			},
+			desired: func(input *clabernetesinternaldeviceplan.Input) {
+				input.Interfaces = input.Interfaces[:1]
+				input.Interfaces[0].IPv4 = "198.51.100.2/31"
+			},
+			truncatePlanInterfaces: true,
+			wantChanged:            true,
+			wantRecreate:           true,
+		},
+		{
 			name: "equivalent IPv6 spelling",
 			base: func(input *clabernetesinternaldeviceplan.Input) {
 				input.Interfaces[0].IPv6 = "2001:0db8:0:0::1/127"

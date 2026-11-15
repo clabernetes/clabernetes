@@ -95,18 +95,11 @@ func NormalizeInput(input Input) (Input, error) {
 	}
 
 	for index := range normalized.Interfaces {
-		normalized.Interfaces[index].IPv4, err = normalizeInterfaceAddress(
-			normalized.Interfaces[index].IPv4,
-			true,
-			fmt.Sprintf("interfaces[%d].ipv4", index),
-		)
-		if err != nil {
-			return Input{}, err
-		}
-		normalized.Interfaces[index].IPv6, err = normalizeInterfaceAddress(
-			normalized.Interfaces[index].IPv6,
-			false,
-			fmt.Sprintf("interfaces[%d].ipv6", index),
+		intf := &normalized.Interfaces[index]
+		intf.IPv4, intf.IPv6, err = normalizeInterfaceAddressPair(
+			intf.IPv4,
+			intf.IPv6,
+			fmt.Sprintf("interfaces[%d]", index),
 		)
 		if err != nil {
 			return Input{}, err
@@ -158,6 +151,20 @@ func NormalizeInput(input Input) (Input, error) {
 	return normalized, nil
 }
 
+func normalizeInterfaceAddressPair(ipv4, ipv6, field string) (string, string, error) {
+	normalizedIPv4, err := normalizeInterfaceAddress(ipv4, true, field+".ipv4")
+	if err != nil {
+		return "", "", err
+	}
+
+	normalizedIPv6, err := normalizeInterfaceAddress(ipv6, false, field+".ipv6")
+	if err != nil {
+		return "", "", err
+	}
+
+	return normalizedIPv4, normalizedIPv6, nil
+}
+
 func normalizeInterfaceAddress(value string, ipv4 bool, field string) (string, error) {
 	canonical, err := clabernetesutilcontainerlab.NormalizeLinkEndpointAddress(value, ipv4)
 	if err != nil {
@@ -187,18 +194,11 @@ func NormalizePlan(plan Plan) (Plan, error) {
 	}
 
 	for index := range normalized.Interfaces {
-		normalized.Interfaces[index].IPv4, err = normalizeInterfaceAddress(
-			normalized.Interfaces[index].IPv4,
-			true,
-			fmt.Sprintf("interfaces[%d].ipv4", index),
-		)
-		if err != nil {
-			return Plan{}, err
-		}
-		normalized.Interfaces[index].IPv6, err = normalizeInterfaceAddress(
-			normalized.Interfaces[index].IPv6,
-			false,
-			fmt.Sprintf("interfaces[%d].ipv6", index),
+		intf := &normalized.Interfaces[index]
+		intf.IPv4, intf.IPv6, err = normalizeInterfaceAddressPair(
+			intf.IPv4,
+			intf.IPv6,
+			fmt.Sprintf("interfaces[%d]", index),
 		)
 		if err != nil {
 			return Plan{}, err
