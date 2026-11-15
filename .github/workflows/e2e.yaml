@@ -89,7 +89,7 @@ jobs:
       package: ${{ matrix.package }}
       tests: ${{ matrix.tests }}
       additional-test-args: ${{ matrix.additional-test-args }}
-      test-timeout: ${{ matrix.test-timeout }}
+      test-timeout: ${{ matrix.test-timeout || '30m' }}
       srsim-enabled: ${{ needs.build-image.outputs.srsim-enabled == 'true' }}
       debug: ${{ inputs.debug }}
     secrets: inherit

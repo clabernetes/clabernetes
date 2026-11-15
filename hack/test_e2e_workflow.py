@@ -66,7 +66,7 @@ class E2EWorkflowTests(unittest.TestCase):
             job["with"]["additional-test-args"],
             "${{ matrix.additional-test-args }}",
         )
-        self.assertEqual(job["with"]["test-timeout"], "${{ matrix.test-timeout }}")
+        self.assertEqual(job["with"]["test-timeout"], "${{ matrix.test-timeout || '30m' }}")
         self.assertEqual(runner["env"]["E2E_TEST_TIMEOUT"], "${{ inputs.test-timeout }}")
         run = next(step for step in runner["steps"] if step.get("id") == "run-the-e2e-suite")
         self.assertEqual(run["run"], "make e2e-test")
