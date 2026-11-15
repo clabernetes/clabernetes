@@ -16,6 +16,11 @@ on:
         description: "Go test name filter for this suite"
         type: string
         required: true
+      additional-test-args:
+        description: "Additional Go test arguments for resource-heavy suites"
+        type: string
+        required: false
+        default: ""
       srsim-enabled:
         description: "whether the SR-SIM license is available"
         type: boolean
@@ -37,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       E2E_TEST_PACKAGES: ${{ inputs.package }}
-      E2E_TEST_ARGS: -run='${{ inputs.tests }}'
+      E2E_TEST_ARGS: -run='${{ inputs.tests }}' ${{ inputs.additional-test-args }}
       E2E_TEST_FORMAT: standard-verbose
       SRSIM_LICENSE: ${{ secrets.SRSIM_LICENSE }}
       SRSIM_IMAGE: ghcr.io/clabernetes/nokia_srsim:26.7.R1

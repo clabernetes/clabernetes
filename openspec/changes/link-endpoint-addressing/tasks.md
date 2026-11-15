@@ -35,3 +35,4 @@
 - [x] 6.1 Run `make test`, inspect failures against the changes, and confirm all address-free compatibility tests and new unit/integration coverage pass.
 - [x] 6.2 Run `make lint`, install missing tools using the repository target if needed, inspect formatter edits and the final diff, and report any validation or e2e checks that could not run.
 - [x] 6.3 Re-check the exact #355 brief-array example and an equivalent structured dual-stack definition through compilation, inspect only the intended change artifacts, generated files, source, tests, and docs, and close remaining spec scenarios with mapped evidence.
+- [x] 6.4 Serialize the resource-heavy direct-runtime CI suite so parallel SR Linux Pods cannot exhaust runner CPU, and verify the CI selection plus workflow preflight with `make test-e2e-workflow`.
