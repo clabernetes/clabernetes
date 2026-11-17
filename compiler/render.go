@@ -686,8 +686,10 @@ func renderLinks(
 // renderLinkEndpoint renders one side of a Link, with its impairment only when it has one.
 func renderLinkEndpoint(endpoint Endpoint) (map[string]any, error) {
 	rendered := map[string]any{
-		"nodeName":      endpoint.NodeName,
-		"interfaceName": endpoint.InterfaceName,
+		"nodeName":           endpoint.NodeName,
+		"interfaceName":      endpoint.InterfaceName,
+		linkAddressIPv4Field: endpoint.IPv4,
+		linkAddressIPv6Field: endpoint.IPv6,
 	}
 
 	if endpoint.Netem != nil {

@@ -934,6 +934,14 @@
                                         "minLength": 1,
                                         "type": "string"
                                     },
+                                    "ipv4": {
+                                        "description": "IPv4 is the optional IPv4 CIDR prefix containerlab assigns to this endpoint. It is cold-plan\nconfiguration for kinds that consume endpoint addresses; changing it on a realized Node\nrequires recreation. It is invalid on the reserved host endpoint.",
+                                        "type": "string"
+                                    },
+                                    "ipv6": {
+                                        "description": "IPv6 is the optional IPv6 CIDR prefix containerlab assigns to this endpoint. It is cold-plan\nconfiguration for kinds that consume endpoint addresses; changing it on a realized Node\nrequires recreation. It is invalid on the reserved host endpoint.",
+                                        "type": "string"
+                                    },
                                     "netem": {
                                         "description": "Netem is the link impairment of the packets this side of the link sends -- the same\nimpairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning\nthis endpoint programs it as the interface's root qdisc and re-asserts it while the Pod\nruns, so it survives the interface being recreated. Changing it is always applied live.",
                                         "properties": {
@@ -1016,6 +1024,14 @@
                                     "interfaceName": {
                                         "description": "InterfaceName is the name of the interface on the node this side of the link is on.",
                                         "minLength": 1,
+                                        "type": "string"
+                                    },
+                                    "ipv4": {
+                                        "description": "IPv4 is the optional IPv4 CIDR prefix containerlab assigns to this endpoint. It is cold-plan\nconfiguration for kinds that consume endpoint addresses; changing it on a realized Node\nrequires recreation. It is invalid on the reserved host endpoint.",
+                                        "type": "string"
+                                    },
+                                    "ipv6": {
+                                        "description": "IPv6 is the optional IPv6 CIDR prefix containerlab assigns to this endpoint. It is cold-plan\nconfiguration for kinds that consume endpoint addresses; changing it on a realized Node\nrequires recreation. It is invalid on the reserved host endpoint.",
                                         "type": "string"
                                     },
                                     "netem": {

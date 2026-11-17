@@ -1,16 +1,78 @@
 package containerlab
 
 import (
+	"errors"
 	"fmt"
+	"net/netip"
 	"sort"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	claberneteserrors "github.com/clabernetes/clabernetes/errors"
 )
 
+var errInvalidLinkEndpointAddress = errors.New("invalid Link endpoint address")
+
+// NormalizeLinkEndpointAddress validates one optional endpoint CIDR and returns its canonical
+// form without masking host bits. An empty value remains empty.
+func NormalizeLinkEndpointAddress(value string, ipv4 bool) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+
+	family := "IPv6"
+	if ipv4 {
+		family = "IPv4"
+	}
+
+	prefix, err := netip.ParsePrefix(value)
+	if err != nil || prefix.Addr().Is4() != ipv4 {
+		return "", fmt.Errorf(
+			"%w: invalid %s CIDR prefix %q",
+			errInvalidLinkEndpointAddress,
+			family,
+			value,
+		)
+	}
+
+	return prefix.String(), nil
+}
+
 // ValidateLink checks the parts of a link spec that the CRD schema cannot express.
 func ValidateLink(link *clabernetesapisv1alpha1.Link) error {
 	endpointA, endpointB := link.Spec.EndpointA, link.Spec.EndpointB
+
+	for _, endpoint := range []struct {
+		field string
+		spec  clabernetesapisv1alpha1.LinkEndpointSpec
+	}{
+		{field: "spec.endpointA", spec: endpointA},
+		{field: "spec.endpointB", spec: endpointB},
+	} {
+		for _, address := range []struct {
+			field string
+			value string
+			ipv4  bool
+		}{
+			{field: "ipv4", value: endpoint.spec.IPv4, ipv4: true},
+			{field: "ipv6", value: endpoint.spec.IPv6},
+		} {
+			if address.value == "" {
+				continue
+			}
+			if endpoint.spec.NodeName == clabernetesapisv1alpha1.LinkHostNodeName {
+				return fmt.Errorf(
+					"%w: %s.%s requires a Node endpoint",
+					claberneteserrors.ErrInvalidData, endpoint.field, address.field,
+				)
+			}
+			if _, err := NormalizeLinkEndpointAddress(address.value, address.ipv4); err != nil {
+				return fmt.Errorf(
+					"%w: %s.%s: %w",
+					claberneteserrors.ErrInvalidData, endpoint.field, address.field, err,
+				)
+			}
+		}
+	}
 
 	if endpointA.NodeName == clabernetesapisv1alpha1.LinkHostNodeName &&
 		endpointB.NodeName == clabernetesapisv1alpha1.LinkHostNodeName {

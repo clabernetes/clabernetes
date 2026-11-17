@@ -11,7 +11,14 @@ import (
 	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	yamlv3 "gopkg.in/yaml.v3"
+)
+
+const (
+	linkAddressIPv4Field   = "ipv4"
+	linkAddressIPv6Field   = "ipv6"
+	invalidLinkAddressCode = "invalid-link-address"
 )
 
 // Bounds of a link impairment, the same the Link API enforces: the connectivity sidecar programs
@@ -40,6 +47,8 @@ type linkConfig struct {
 	Labels    map[string]string `yaml:"labels,omitempty"`
 	Vars      map[string]any    `yaml:"vars,omitempty"`
 	MTU       int               `yaml:"mtu,omitempty"`
+	IPv4      []string          `yaml:"ipv4,omitempty"`
+	IPv6      []string          `yaml:"ipv6,omitempty"`
 	// Netem is the brief link form of the endpoint impairments, in the order of the endpoints.
 	Netem []*netemDefinition `yaml:"netem,omitempty"`
 }
@@ -53,12 +62,15 @@ type netemDefinition struct {
 	Corruption float64 `yaml:"corruption,omitempty"`
 }
 
-// linkEndpoints stores the canonical brief endpoint form, because that is the complete endpoint
-// vocabulary the c9s Link API can represent. The impairment a structured endpoint declares is
-// kept beside it, in the same order.
-type linkEndpoints struct {
-	names []string
-	netem []*netemDefinition
+// linkEndpoints stores the complete per-endpoint vocabulary the c9s Link API can represent.
+type linkEndpoints []linkEndpoint
+
+// linkEndpoint is one endpoint with the impairment a structured endpoint declares, which the
+// compiler validates and resolves into the Endpoint's Netem.
+type linkEndpoint struct {
+	Endpoint
+
+	netem *netemDefinition
 }
 
 func (e *linkEndpoints) UnmarshalYAML(value *yamlv3.Node) error {
@@ -66,10 +78,7 @@ func (e *linkEndpoints) UnmarshalYAML(value *yamlv3.Node) error {
 		return fmt.Errorf("%w: link endpoints must be a sequence", errParse)
 	}
 
-	endpoints := linkEndpoints{
-		names: make([]string, 0, len(value.Content)),
-		netem: make([]*netemDefinition, 0, len(value.Content)),
-	}
+	endpoints := make(linkEndpoints, 0, len(value.Content))
 
 	for _, endpointNode := range value.Content {
 		switch endpointNode.Kind {
@@ -79,12 +88,13 @@ func (e *linkEndpoints) UnmarshalYAML(value *yamlv3.Node) error {
 				return err
 			}
 
-			endpoints.names = append(endpoints.names, endpoint)
-			endpoints.netem = append(endpoints.netem, nil)
+			endpoints = append(endpoints, linkEndpoint{Endpoint: endpoint})
 		case yamlv3.MappingNode:
 			endpoint := struct {
 				Node      string           `yaml:"node"`
 				Interface string           `yaml:"interface"`
+				IPv4      string           `yaml:"ipv4,omitempty"`
+				IPv6      string           `yaml:"ipv6,omitempty"`
 				Netem     *netemDefinition `yaml:"netem"`
 			}{}
 
@@ -109,8 +119,10 @@ func (e *linkEndpoints) UnmarshalYAML(value *yamlv3.Node) error {
 				return err
 			}
 
-			endpoints.names = append(endpoints.names, canonical)
-			endpoints.netem = append(endpoints.netem, endpoint.Netem)
+			canonical.IPv4 = endpoint.IPv4
+			canonical.IPv6 = endpoint.IPv6
+
+			endpoints = append(endpoints, linkEndpoint{Endpoint: canonical, netem: endpoint.Netem})
 		case yamlv3.DocumentNode, yamlv3.SequenceNode, yamlv3.AliasNode:
 			return fmt.Errorf(
 				"%w: link endpoint must be a string or node/interface mapping",
@@ -124,10 +136,10 @@ func (e *linkEndpoints) UnmarshalYAML(value *yamlv3.Node) error {
 	return nil
 }
 
-func canonicalLinkEndpoint(value string) (string, error) {
+func canonicalLinkEndpoint(value string) (Endpoint, error) {
 	parts := strings.Split(strings.TrimSpace(value), ":")
 	if len(parts) != linkEndpointElementCount {
-		return "", fmt.Errorf(
+		return Endpoint{}, fmt.Errorf(
 			"%w: link endpoint %q must use node:interface syntax",
 			errParse,
 			value,
@@ -138,14 +150,14 @@ func canonicalLinkEndpoint(value string) (string, error) {
 
 	interfaceName := strings.TrimSpace(parts[1])
 	if nodeName == "" || interfaceName == "" {
-		return "", fmt.Errorf(
+		return Endpoint{}, fmt.Errorf(
 			"%w: link endpoint %q requires non-empty node and interface",
 			errParse,
 			value,
 		)
 	}
 
-	return fmt.Sprintf("%s:%s", nodeName, interfaceName), nil
+	return Endpoint{NodeName: nodeName, InterfaceName: interfaceName}, nil
 }
 
 func validateStructuredLinkEndpoint(value *yamlv3.Node) error {
@@ -153,8 +165,16 @@ func validateStructuredLinkEndpoint(value *yamlv3.Node) error {
 		key := value.Content[index]
 		field := value.Content[index+1]
 
-		if key.Value != "node" && key.Value != "interface" {
+		switch key.Value {
+		case "netem":
 			continue
+		case "node", "interface", linkAddressIPv4Field, linkAddressIPv6Field:
+		default:
+			return fmt.Errorf(
+				"%w: structured link endpoint field %q is not supported by clabernetes",
+				errParse,
+				key.Value,
+			)
 		}
 
 		if field.Kind != yamlv3.ScalarNode || field.Tag != "!!str" {
@@ -202,37 +222,20 @@ func compileContainerlabLinks( //nolint:gocyclo
 			continue
 		}
 
-		if len(link.Endpoints.names) != linkEndpointElementCount {
+		if len(link.Endpoints) != linkEndpointElementCount {
 			return nil, fmt.Errorf(
-				"%w: endpoint '%q' has wrong syntax, unexpected number of items",
+				"%w: endpoint '%v' has wrong syntax, unexpected number of items",
 				errParse,
-				link.Endpoints.names,
+				link.Endpoints,
 			)
 		}
 
-		endpointAParts := strings.Split(link.Endpoints.names[0], ":")
-		endpointBParts := strings.Split(link.Endpoints.names[1], ":")
+		invalidEndpoint := applyLinkAddressArrays(link, linkPath, diagnostics)
 
-		if len(endpointAParts) != linkEndpointElementCount ||
-			len(endpointBParts) != linkEndpointElementCount {
-			return nil, fmt.Errorf(
-				"%w: endpoint '%q' has wrong syntax, bad node:interface config",
-				errParse,
-				link.Endpoints.names,
-			)
-		}
+		netem, invalidNetem := compileLinkNetem(link, linkPath, diagnostics)
 
-		netem, invalidNetem := compileLinkNetem(
-			link,
-			linkPath,
-			[2]string{endpointAParts[0], endpointBParts[0]},
-			diagnostics,
-		)
-
-		invalidEndpoint := false
-
-		for endpointIndex, endpointParts := range [][]string{endpointAParts, endpointBParts} {
-			nodeName := endpointParts[0]
+		for endpointIndex := range link.Endpoints {
+			nodeName := link.Endpoints[endpointIndex].NodeName
 
 			if nodeName == LinkHostNodeName {
 				continue
@@ -264,8 +267,8 @@ func compileContainerlabLinks( //nolint:gocyclo
 			}
 		}
 
-		if endpointAParts[0] == LinkHostNodeName &&
-			endpointBParts[0] == LinkHostNodeName {
+		if link.Endpoints[0].NodeName == LinkHostNodeName &&
+			link.Endpoints[1].NodeName == LinkHostNodeName {
 			diagnostics.add(Diagnostic{
 				Code:    "invalid-host-link",
 				Path:    linkPath + ".endpoints",
@@ -275,26 +278,129 @@ func compileContainerlabLinks( //nolint:gocyclo
 			invalidEndpoint = true
 		}
 
+		if validateLinkEndpointAddresses(link, linkPath, diagnostics) {
+			invalidEndpoint = true
+		}
+
 		if invalidEndpoint || invalidNetem {
 			continue
 		}
 
+		endpointA := link.Endpoints[0].Endpoint
+		endpointA.Netem = netem[0]
+
+		endpointB := link.Endpoints[1].Endpoint
+		endpointB.Netem = netem[1]
+
 		links = append(links, CompiledLink{
-			EndpointA: Endpoint{
-				NodeName:      endpointAParts[0],
-				InterfaceName: endpointAParts[1],
-				Netem:         netem[0],
-			},
-			EndpointB: Endpoint{
-				NodeName:      endpointBParts[0],
-				InterfaceName: endpointBParts[1],
-				Netem:         netem[1],
-			},
-			MTU: link.MTU,
+			EndpointA: endpointA,
+			EndpointB: endpointB,
+			MTU:       link.MTU,
 		})
 	}
 
 	return links, nil
+}
+
+func validateLinkEndpointAddresses(
+	link *linkDefinition,
+	linkPath string,
+	diagnostics *compileDiagnostics,
+) bool {
+	invalid := false
+
+	for endpointIndex := range link.Endpoints {
+		for _, address := range []struct {
+			field string
+			value string
+			ipv4  bool
+		}{
+			{field: linkAddressIPv4Field, value: link.Endpoints[endpointIndex].IPv4, ipv4: true},
+			{field: linkAddressIPv6Field, value: link.Endpoints[endpointIndex].IPv6},
+		} {
+			if address.value == "" {
+				continue
+			}
+			path := fmt.Sprintf("%s.endpoints[%d].%s", linkPath, endpointIndex, address.field)
+			if link.Endpoints[endpointIndex].NodeName == LinkHostNodeName {
+				diagnostics.add(invalidLinkAddressDiagnostic(
+					path,
+					"endpoint addresses require a Node endpoint",
+				))
+				invalid = true
+
+				continue
+			}
+			if _, err := clabernetesutilcontainerlab.NormalizeLinkEndpointAddress(
+				address.value,
+				address.ipv4,
+			); err != nil {
+				diagnostics.add(invalidLinkAddressDiagnostic(path, err.Error()))
+				invalid = true
+			}
+		}
+	}
+
+	return invalid
+}
+
+func invalidLinkAddressDiagnostic(path, message string) Diagnostic {
+	return Diagnostic{Code: invalidLinkAddressCode, Path: path, Message: message}
+}
+
+// applyLinkAddressArrays maps link-level address entries onto their endpoints. It reports whether
+// the Link became invalid and leaves family/CIDR validation to the common endpoint pass below.
+func applyLinkAddressArrays(
+	link *linkDefinition,
+	linkPath string,
+	diagnostics *compileDiagnostics,
+) bool {
+	invalid := false
+
+	for _, family := range []struct {
+		field  string
+		values []string
+		ipv4   bool
+	}{
+		{field: linkAddressIPv4Field, values: link.IPv4, ipv4: true},
+		{field: linkAddressIPv6Field, values: link.IPv6},
+	} {
+		if len(family.values) > linkEndpointElementCount {
+			diagnostics.add(invalidLinkAddressDiagnostic(
+				linkPath+"."+family.field,
+				"link address arrays must contain at most two entries",
+			))
+			invalid = true
+		}
+
+		for endpointIndex, value := range family.values {
+			if value == "" || endpointIndex >= linkEndpointElementCount {
+				continue
+			}
+			endpoint := &link.Endpoints[endpointIndex]
+			current := &endpoint.IPv4
+			if !family.ipv4 {
+				current = &endpoint.IPv6
+			}
+			if *current != "" && *current != value {
+				diagnostics.add(invalidLinkAddressDiagnostic(
+					fmt.Sprintf(
+						"%s.%s[%d]",
+						linkPath,
+						family.field,
+						endpointIndex,
+					),
+					"link-level and structured endpoint addresses disagree",
+				))
+				invalid = true
+
+				continue
+			}
+			*current = value
+		}
+	}
+
+	return invalid
 }
 
 // compileLinkNetem resolves the impairment of each endpoint, from the endpoint itself or from
@@ -304,7 +410,6 @@ func compileContainerlabLinks( //nolint:gocyclo
 func compileLinkNetem(
 	link *linkDefinition,
 	linkPath string,
-	nodeNames [2]string,
 	diagnostics *compileDiagnostics,
 ) ([2]*clabernetesapisv1alpha1.LinkNetemSpec, bool) {
 	resolved := [2]*clabernetesapisv1alpha1.LinkNetemSpec{}
@@ -322,7 +427,7 @@ func compileLinkNetem(
 	invalid := false
 
 	for side := range resolved {
-		definition := link.Endpoints.netem[side]
+		definition := link.Endpoints[side].netem
 		path := fmt.Sprintf("%s.endpoints[%d].netem", linkPath, side)
 
 		if side < len(link.Netem) && link.Netem[side] != nil {
@@ -346,7 +451,7 @@ func compileLinkNetem(
 			continue
 		}
 
-		if nodeNames[side] == LinkHostNodeName {
+		if link.Endpoints[side].NodeName == LinkHostNodeName {
 			diagnostics.add(Diagnostic{
 				Code:    invalidLinkNetemCode,
 				Path:    path,

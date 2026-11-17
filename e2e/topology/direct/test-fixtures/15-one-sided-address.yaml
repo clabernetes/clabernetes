@@ -1,0 +1,15 @@
+apiVersion: c9s.run/v1alpha1
+kind: Link
+metadata:
+  name: srl1-e1-1-srl2-e1-1
+spec:
+  endpointA:
+    nodeName: srl1
+    interfaceName: e1-1
+    ipv4: 192.168.0.3/29
+    ipv6: 2001:db8:168::/127
+  endpointB:
+    nodeName: srl2
+    interfaceName: e1-1
+    ipv4: 192.168.0.2/29
+    ipv6: 2001:db8:168::1/127

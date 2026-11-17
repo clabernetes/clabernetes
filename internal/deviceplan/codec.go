@@ -14,6 +14,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 )
 
 const sha256DigestLength = len("sha256:") + sha256.Size*2
@@ -92,6 +94,18 @@ func NormalizeInput(input Input) (Input, error) {
 		return Input{}, planningError(ErrorSerialization, "input", "cannot clone input", err)
 	}
 
+	for index := range normalized.Interfaces {
+		intf := &normalized.Interfaces[index]
+		intf.IPv4, intf.IPv6, err = normalizeInterfaceAddressPair(
+			intf.IPv4,
+			intf.IPv6,
+			fmt.Sprintf("interfaces[%d]", index),
+		)
+		if err != nil {
+			return Input{}, err
+		}
+	}
+
 	if err = validateInput(normalized); err != nil {
 		return Input{}, err
 	}
@@ -137,6 +151,29 @@ func NormalizeInput(input Input) (Input, error) {
 	return normalized, nil
 }
 
+func normalizeInterfaceAddressPair(ipv4, ipv6, field string) (string, string, error) {
+	normalizedIPv4, err := normalizeInterfaceAddress(ipv4, true, field+".ipv4")
+	if err != nil {
+		return "", "", err
+	}
+
+	normalizedIPv6, err := normalizeInterfaceAddress(ipv6, false, field+".ipv6")
+	if err != nil {
+		return "", "", err
+	}
+
+	return normalizedIPv4, normalizedIPv6, nil
+}
+
+func normalizeInterfaceAddress(value string, ipv4 bool, field string) (string, error) {
+	canonical, err := clabernetesutilcontainerlab.NormalizeLinkEndpointAddress(value, ipv4)
+	if err != nil {
+		return "", planningError(ErrorInvalidInput, field, err.Error(), nil)
+	}
+
+	return canonical, nil
+}
+
 // NormalizePlan validates and orders every set-like plan field without mutating the caller.
 func NormalizePlan(plan Plan) (Plan, error) {
 	normalized, err := cloneJSON(plan)
@@ -153,6 +190,18 @@ func NormalizePlan(plan Plan) (Plan, error) {
 	for index := range normalized.Files {
 		if normalized.Files[index].ArtifactKind == "" {
 			normalized.Files[index].ArtifactKind = ArtifactRegular
+		}
+	}
+
+	for index := range normalized.Interfaces {
+		intf := &normalized.Interfaces[index]
+		intf.IPv4, intf.IPv6, err = normalizeInterfaceAddressPair(
+			intf.IPv4,
+			intf.IPv6,
+			fmt.Sprintf("interfaces[%d]", index),
+		)
+		if err != nil {
+			return Plan{}, err
 		}
 	}
 

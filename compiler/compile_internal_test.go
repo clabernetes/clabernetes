@@ -331,6 +331,8 @@ topology:
       image: img
   links:
     - endpoints: [R1:eth1, PE_1:eth1]
+      ipv4: [192.0.2.0/31, 192.0.2.1/31]
+      ipv6: ["2001:db8::/127", "2001:db8::1/127"]
 `)
 	if compiled.Nodes["r1"] == nil || compiled.Nodes["pe-1"] == nil {
 		t.Fatalf("compiled node names = %v, want sanitized names", keys(compiled.Nodes))
@@ -358,8 +360,12 @@ topology:
 	}
 
 	spec := specOf(t, links[0])
-	if mappingOf(t, spec["endpointA"], "endpointA")["nodeName"] != "r1" {
+	endpointA := mappingOf(t, spec["endpointA"], "endpointA")
+	if endpointA["nodeName"] != "r1" {
 		t.Fatalf("link endpoints were not renamed: %#v", spec)
+	}
+	if endpointA["ipv4"] != "192.0.2.0/31" || endpointA["ipv6"] != "2001:db8::/127" {
+		t.Fatalf("link addresses were not rendered: %#v", endpointA)
 	}
 }
 
@@ -413,6 +419,61 @@ topology:
     - endpoints: [r1:eth1, mgmt-net:eth1]
 `,
 			want: "host networking that c9s does not provide",
+		},
+		{
+			name: "bare IPv4 link address",
+			definition: `
+name: lab
+topology:
+  nodes:
+    r1: { kind: linux, image: img }
+    r2: { kind: linux, image: img }
+  links:
+    - endpoints: [r1:eth1, r2:eth1]
+      ipv4: [192.0.2.1, 192.0.2.2/31]
+`,
+			want: "invalid IPv4 CIDR prefix",
+		},
+		{
+			name: "wrong address family",
+			definition: `
+name: lab
+topology:
+  nodes:
+    r1: { kind: linux, image: img }
+    r2: { kind: linux, image: img }
+  links:
+    - endpoints: [r1:eth1, r2:eth1]
+      ipv4: ["2001:db8::/127", 192.0.2.2/31]
+`,
+			want: "invalid IPv4 CIDR prefix",
+		},
+		{
+			name: "too many link addresses",
+			definition: `
+name: lab
+topology:
+  nodes:
+    r1: { kind: linux, image: img }
+    r2: { kind: linux, image: img }
+  links:
+    - endpoints: [r1:eth1, r2:eth1]
+      ipv6: ["2001:db8::/128", "2001:db8::1/128", "2001:db8::2/128"]
+`,
+			want: "at most two entries",
+		},
+		{
+			name: "addressed host endpoint",
+			definition: `
+name: lab
+topology:
+  nodes:
+    r1: { kind: linux, image: img }
+  links:
+    - endpoints: [r1:eth1, host:eth1]
+      ipv4: ["", 192.0.2.1/32]
+`,
+			want: "endpoint addresses require a Node endpoint",
 		},
 		{
 			name: "unsupported link type",

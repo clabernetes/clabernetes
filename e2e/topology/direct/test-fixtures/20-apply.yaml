@@ -7,6 +7,10 @@ spec:
   endpointA:
     nodeName: srl1
     interfaceName: e1-1
+    ipv4: 192.168.2.0/31
+    ipv6: 2001:db8:200::/127
   endpointB:
     nodeName: srl2
     interfaceName: e1-2
+    ipv4: 192.168.2.1/31
+    ipv6: 2001:db8:200::1/127

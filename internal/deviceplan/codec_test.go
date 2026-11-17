@@ -436,6 +436,77 @@ func TestPlanningErrorDoesNotExposeRejectedValue(t *testing.T) {
 	}
 }
 
+func TestInterfaceAddressNormalizationValidationAndIdentity(t *testing.T) {
+	t.Parallel()
+
+	input := validInput()
+	input.Interfaces[0].IPv4 = "192.0.2.5/24"
+	input.Interfaces[0].IPv6 = "2001:0db8:0:0::5/64"
+
+	normalized, err := clabernetesinternaldeviceplan.NormalizeInput(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Interfaces[1].IPv4 != "192.0.2.5/24" ||
+		normalized.Interfaces[1].IPv6 != "2001:db8::5/64" {
+		t.Fatalf("normalized interface addresses = %#v", normalized.Interfaces[1])
+	}
+	if input.Interfaces[0].IPv6 != "2001:0db8:0:0::5/64" {
+		t.Fatalf("NormalizeInput() mutated caller address %q", input.Interfaces[0].IPv6)
+	}
+
+	digest, err := normalized.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := normalized
+	changed.Interfaces[1].IPv4 = "192.0.2.6/24"
+	changedDigest, err := changed.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest == changedDigest {
+		t.Fatal("interface address change did not change input digest")
+	}
+
+	for _, test := range []struct {
+		name  string
+		ipv4  string
+		ipv6  string
+		field string
+	}{
+		{name: "bare IPv4", ipv4: "192.0.2.1", field: "interfaces[0].ipv4"},
+		{name: "wrong IPv4 family", ipv4: "2001:db8::/64", field: "interfaces[0].ipv4"},
+		{name: "wrong IPv6 family", ipv6: "192.0.2.1/24", field: "interfaces[0].ipv6"},
+	} {
+		t.Run("input "+test.name, func(t *testing.T) {
+			t.Parallel()
+
+			invalid := validInput()
+			invalid.Interfaces[0].IPv4 = test.ipv4
+			invalid.Interfaces[0].IPv6 = test.ipv6
+			_, normalizeErr := clabernetesinternaldeviceplan.NormalizeInput(invalid)
+			var planningErr *clabernetesinternaldeviceplan.Error
+			if !errors.As(normalizeErr, &planningErr) || planningErr.Field != test.field {
+				t.Fatalf("NormalizeInput() error = %#v, want field %q", normalizeErr, test.field)
+			}
+		})
+
+		t.Run("plan "+test.name, func(t *testing.T) {
+			t.Parallel()
+
+			plan := validPlan("sha256:" + strings.Repeat("a", 64))
+			plan.Interfaces[0].IPv4 = test.ipv4
+			plan.Interfaces[0].IPv6 = test.ipv6
+			_, normalizeErr := clabernetesinternaldeviceplan.NormalizePlan(plan)
+			var planningErr *clabernetesinternaldeviceplan.Error
+			if !errors.As(normalizeErr, &planningErr) || planningErr.Field != test.field {
+				t.Fatalf("NormalizePlan() error = %#v, want field %q", normalizeErr, test.field)
+			}
+		})
+	}
+}
+
 func validInput() clabernetesinternaldeviceplan.Input {
 	return clabernetesinternaldeviceplan.Input{
 		SchemaVersion: clabernetesinternaldeviceplan.SchemaVersion,

@@ -1448,6 +1448,20 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkEndpointSpec(
 							Format:      "",
 						},
 					},
+					"ipv4": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IPv4 is the optional IPv4 CIDR prefix containerlab assigns to this endpoint. It is cold-plan configuration for kinds that consume endpoint addresses; changing it on a realized Node requires recreation. It is invalid on the reserved host endpoint.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"ipv6": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IPv6 is the optional IPv6 CIDR prefix containerlab assigns to this endpoint. It is cold-plan configuration for kinds that consume endpoint addresses; changing it on a realized Node requires recreation. It is invalid on the reserved host endpoint.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 					"netem": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Netem is the link impairment of the packets this side of the link sends -- the same impairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning this endpoint programs it as the interface's root qdisc and re-asserts it while the Pod runs, so it survives the interface being recreated. Changing it is always applied live.",

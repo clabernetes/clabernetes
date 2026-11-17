@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/netip"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,7 +26,11 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const maxGeneratedSymlinkTargetBytes = 4096
+const (
+	maxGeneratedSymlinkTargetBytes = 4096
+	fieldInterfaces                = "interfaces"
+	behaviorImportedInterface      = "imported-interface"
+)
 
 // Adapter evaluates explicit inputs against the pinned containerlab registry through generic
 // containerlab interfaces. It contains no kind-name dispatch.
@@ -588,17 +593,38 @@ func evaluateInterfacesWithRuntimeState(
 			MTU:  linkMTU,
 			Vars: map[string]any{},
 		}
-		var endpoint clablinks.Endpoint = clablinks.NewEndpointVeth(
-			clablinks.NewEndpointGeneric(implementation, input.Name, link),
-		)
+		genericEndpoint := clablinks.NewEndpointGeneric(implementation, input.Name, link)
+		for _, address := range []struct {
+			value  string
+			ipv4   bool
+			target *netip.Prefix
+		}{
+			{value: input.IPv4, ipv4: true, target: &genericEndpoint.IPv4},
+			{value: input.IPv6, target: &genericEndpoint.IPv6},
+		} {
+			if address.value == "" {
+				continue
+			}
+			prefix, parseErr := netip.ParsePrefix(address.value)
+			if parseErr != nil || prefix.Addr().Is4() != address.ipv4 {
+				return nil, &Error{
+					Code: ErrorInvalidInput, NodeID: nodeID, Field: fieldInterfaces,
+					Behavior: behaviorImportedInterface, Message: "interface address is invalid",
+					cause: parseErr,
+				}
+			}
+			*address.target = prefix
+		}
+
+		var endpoint clablinks.Endpoint = clablinks.NewEndpointVeth(genericEndpoint)
 		if preRealized {
 			endpoint = &preRealizedEndpoint{Endpoint: endpoint}
 		}
 		link.Endpoints = append(link.Endpoints, endpoint)
 		err := invokeImported(
 			nodeID,
-			"interfaces",
-			"imported-interface",
+			fieldInterfaces,
+			behaviorImportedInterface,
 			"containerlab endpoint attachment panicked",
 			func() error { return implementation.AddEndpoint(endpoint) },
 		)
@@ -607,8 +633,8 @@ func evaluateInterfacesWithRuntimeState(
 				return nil, planningErr
 			}
 			return nil, &Error{
-				Code: ErrorInvalidInput, NodeID: nodeID, Field: "interfaces",
-				Behavior: "imported-interface", Message: "containerlab rejected an endpoint",
+				Code: ErrorInvalidInput, NodeID: nodeID, Field: fieldInterfaces,
+				Behavior: behaviorImportedInterface, Message: "containerlab rejected an endpoint",
 				cause: err,
 			}
 		}
@@ -620,8 +646,8 @@ func evaluateInterfacesWithRuntimeState(
 	}
 	err := invokeImported(
 		nodeID,
-		"interfaces",
-		"imported-interface",
+		fieldInterfaces,
+		behaviorImportedInterface,
 		"containerlab interface validation panicked",
 		implementation.CheckInterfaceName,
 	)
@@ -630,9 +656,10 @@ func evaluateInterfacesWithRuntimeState(
 			return nil, planningErr
 		}
 		return nil, &Error{
-			Code: ErrorInvalidInput, NodeID: nodeID, Field: "interfaces",
-			Behavior: "imported-interface", Message: "containerlab interface validation failed",
-			cause: err,
+			Code: ErrorInvalidInput, NodeID: nodeID, Field: fieldInterfaces,
+			Behavior: behaviorImportedInterface,
+			Message:  "containerlab interface validation failed",
+			cause:    err,
 		}
 	}
 
@@ -1478,13 +1505,23 @@ func rewriteImportedStringLeaves(
 	value reflect.Value,
 	rewrite func(string) (string, error),
 ) error {
+	return rewriteImportedStringLeavesAtPath(value, "", rewrite)
+}
+
+// rewriteImportedStringLeavesAtPath preserves arbitrary user data rather than treating it as a
+// declared file reference. Every other imported definition field retains structural traversal.
+func rewriteImportedStringLeavesAtPath(
+	value reflect.Value,
+	parentPath string,
+	rewrite func(string) (string, error),
+) error {
 	if !value.IsValid() {
 		return nil
 	}
 	switch value.Kind() {
 	case reflect.Pointer:
 		if !value.IsNil() {
-			return rewriteImportedStringLeaves(value.Elem(), rewrite)
+			return rewriteImportedStringLeavesAtPath(value.Elem(), parentPath, rewrite)
 		}
 	case reflect.Interface:
 		if value.IsNil() {
@@ -1492,21 +1529,31 @@ func rewriteImportedStringLeaves(
 		}
 		duplicate := reflect.New(value.Elem().Type()).Elem()
 		duplicate.Set(value.Elem())
-		if err := rewriteImportedStringLeaves(duplicate, rewrite); err != nil {
+		if err := rewriteImportedStringLeavesAtPath(duplicate, parentPath, rewrite); err != nil {
 			return err
 		}
 		value.Set(duplicate)
 	case reflect.Struct:
-		for _, field := range value.Fields() {
-			if field.CanSet() {
-				if err := rewriteImportedStringLeaves(field, rewrite); err != nil {
-					return err
-				}
+		valueType := value.Type()
+		for structField, field := range value.Fields() {
+			if !field.CanSet() {
+				continue
+			}
+			fieldPath := valueType.Name() + "." + structField.Name
+			if parentPath != "" {
+				fieldPath = parentPath + "." + structField.Name
+			}
+			if fieldPath == "NodeDefinition.Config.Vars" {
+				continue
+			}
+			if err := rewriteImportedStringLeavesAtPath(field, fieldPath, rewrite); err != nil {
+				return err
 			}
 		}
 	case reflect.Slice, reflect.Array:
 		for index := range value.Len() {
-			if err := rewriteImportedStringLeaves(value.Index(index), rewrite); err != nil {
+			err := rewriteImportedStringLeavesAtPath(value.Index(index), parentPath, rewrite)
+			if err != nil {
 				return err
 			}
 		}
@@ -1516,7 +1563,8 @@ func rewriteImportedStringLeaves(
 			entry := iterator.Value()
 			duplicate := reflect.New(entry.Type()).Elem()
 			duplicate.Set(entry)
-			if err := rewriteImportedStringLeaves(duplicate, rewrite); err != nil {
+			err := rewriteImportedStringLeavesAtPath(duplicate, parentPath, rewrite)
+			if err != nil {
 				return err
 			}
 			value.SetMapIndex(iterator.Key(), duplicate)

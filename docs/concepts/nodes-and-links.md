@@ -52,6 +52,10 @@ diagnostic naming the field.
 - **Files:** `startup-config` (inline text or a path), `license`, and `binds` take their content
   from payloads attached to the Node, see
   [Containerlab file fields](/docs/guides/file-mounting#containerlab-file-fields).
+- **Startup-config variables:** nested values in `config.vars` are available to containerlab
+  startup-config Go templates. The rendered configuration is supplied during boot, including
+  CLI-format configuration applied by the imported post-deploy lifecycle. Variables without a
+  startup-config consumer do not independently configure the Node.
 - **Grouping:** `network-mode: container:<primary>` places the Node in the primary Node's Pod.
   Other network modes are rejected.
 - **Link changes:** `link-apply-mode` (`live`, `restart`, or `recreate`) overrides the kind's
@@ -63,8 +67,7 @@ diagnostic naming the field.
 - **Run state:** `runState` (`Running` or `Stopped`) is operational state rather than node
   definition: it scales the Node's Pod to one or zero and never changes its plan, see
   [Stopping, starting, and restarting a Node](/docs/guides/lab-operations#stopping-starting-and-restarting-a-node).
-- **Rejected at planning:** `config` (config-engine variables), `env-files`, `runtime`,
-  `stages`, and `credentials`, see
+- **Rejected at planning:** `env-files`, `runtime`, `stages`, and `credentials`, see
   [Differences from containerlab](/docs/concepts/containerlab-differences).
 
 Inside a device, node names, aliases, and chassis component names resolve to management
@@ -83,10 +86,28 @@ spec:
   endpointA:
     nodeName: srl1
     interfaceName: e1-1
+    ipv4: 192.0.2.0/31
+    ipv6: 2001:db8::/127
   endpointB:
     nodeName: multitool
     interfaceName: eth1
+    ipv4: 192.0.2.1/31
+    ipv6: 2001:db8::1/127
 ```
+
+Each non-host endpoint optionally carries one IPv4 and one IPv6 CIDR prefix. Prefixes must belong
+to the family named by their field, and host bits are preserved; point-to-point and full-length
+prefixes such as `/31`, `/32`, `/127`, and `/128` are valid. Imported containerlab kinds decide
+whether and how these endpoint addresses become device configuration, exactly as they do on a
+containerlab host. c9s does not generically assign them with netlink, so kinds that ignore
+containerlab endpoint addresses retain that behavior.
+
+Endpoint addresses are cold-plan configuration. Adding, changing, or removing one on a realized
+Node **recreates that Node's device Pod**, even when the kind supports live structural Link changes.
+An unchanged peer does not recreate unless its own address set changed, subject to the normal
+shared-Pod grouping behavior. Recreation does not implicitly erase saved state on persistent
+volumes: the ordinary saved-configuration, `enforce-startup-config`, and device-state reset rules
+still apply. See [Persistent storage](/docs/guides/persistence).
 
 Wiring belongs only to Link objects; interfaces are not embedded into Node specifications. The
 link controller validates endpoints and records a namespace-unique wire id in status, while

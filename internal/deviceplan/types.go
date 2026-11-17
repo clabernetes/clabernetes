@@ -175,6 +175,10 @@ type InterfaceInput struct {
 	WireID        int    `json:"wireID,omitempty"`
 	MTU           int    `json:"mtu,omitempty"`
 	Netem         *Netem `json:"netem,omitempty"`
+	// IPv4 is the optional canonical IPv4 CIDR prefix supplied to the imported endpoint.
+	IPv4 string `json:"ipv4,omitempty"`
+	// IPv6 is the optional canonical IPv6 CIDR prefix supplied to the imported endpoint.
+	IPv6 string `json:"ipv6,omitempty"`
 }
 
 // Bounds of a Netem, the same the Link API validates. The delay is programmed in 32-bit kernel
@@ -676,20 +680,24 @@ type Route struct {
 
 // InterfacePlan describes one direct Link endpoint and its change lifecycle.
 type InterfacePlan struct {
-	ID               string        `json:"id"`
-	NodeID           string        `json:"nodeID"`
-	NamespaceOwnerID string        `json:"namespaceOwnerID"`
-	Name             string        `json:"name"`
-	Alias            string        `json:"alias,omitempty"`
-	LinkID           string        `json:"linkID"`
-	LinkName         string        `json:"linkName,omitempty"`
-	PeerNodeID       string        `json:"peerNodeID,omitempty"`
-	PeerInterface    string        `json:"peerInterface,omitempty"`
-	PeerTransport    string        `json:"peerTransport,omitempty"`
-	Connectivity     string        `json:"connectivity"`
-	WireID           int           `json:"wireID,omitempty"`
-	MTU              int           `json:"mtu,omitempty"`
-	Netem            *Netem        `json:"netem,omitempty"`
-	LinkApplyMode    LinkApplyMode `json:"linkApplyMode"`
-	RequiredAtStart  bool          `json:"requiredAtStart,omitempty"`
+	ID               string `json:"id"`
+	NodeID           string `json:"nodeID"`
+	NamespaceOwnerID string `json:"namespaceOwnerID"`
+	Name             string `json:"name"`
+	Alias            string `json:"alias,omitempty"`
+	LinkID           string `json:"linkID"`
+	LinkName         string `json:"linkName,omitempty"`
+	PeerNodeID       string `json:"peerNodeID,omitempty"`
+	PeerInterface    string `json:"peerInterface,omitempty"`
+	PeerTransport    string `json:"peerTransport,omitempty"`
+	Connectivity     string `json:"connectivity"`
+	WireID           int    `json:"wireID,omitempty"`
+	MTU              int    `json:"mtu,omitempty"`
+	Netem            *Netem `json:"netem,omitempty"`
+	// IPv4 is the optional canonical IPv4 CIDR prefix supplied to the imported endpoint.
+	IPv4 string `json:"ipv4,omitempty"`
+	// IPv6 is the optional canonical IPv6 CIDR prefix supplied to the imported endpoint.
+	IPv6            string        `json:"ipv6,omitempty"`
+	LinkApplyMode   LinkApplyMode `json:"linkApplyMode"`
+	RequiredAtStart bool          `json:"requiredAtStart,omitempty"`
 }

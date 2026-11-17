@@ -20,6 +20,11 @@ import (
 )
 
 func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
+	invalidAddress := reconcileTestLink("bad-address", "srl1", "e1-1", "srl2", "e1-1", 7)
+	invalidAddress.Spec.EndpointA.IPv4 = "not-a-prefix"
+	hostAddress := reconcileTestLink("host-address", "srl1", "e1-1", "host", "eth1", 7)
+	hostAddress.Spec.EndpointB.IPv6 = "2001:db8::/127"
+
 	tests := []struct {
 		name      string
 		links     []clabernetesapisv1alpha1.Link
@@ -35,6 +40,20 @@ func TestReconcileClearsRejectedLinkAllocation(t *testing.T) {
 			},
 			target:    "bad-link",
 			errorPart: "to itself",
+			reason:    "InvalidSpec",
+		},
+		{
+			name:      "invalid-address",
+			links:     []clabernetesapisv1alpha1.Link{invalidAddress},
+			target:    invalidAddress.Name,
+			errorPart: "spec.endpointA.ipv4",
+			reason:    "InvalidSpec",
+		},
+		{
+			name:      "host-address",
+			links:     []clabernetesapisv1alpha1.Link{hostAddress},
+			target:    hostAddress.Name,
+			errorPart: "spec.endpointB.ipv6 requires a Node endpoint",
 			reason:    "InvalidSpec",
 		},
 		{

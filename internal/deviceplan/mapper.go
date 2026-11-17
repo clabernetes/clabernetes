@@ -623,7 +623,6 @@ func validateMappedDefinition(node *EvaluatedNode, input Input) error {
 		field    string
 		behavior string
 	}{
-		{definition.Config != nil, "definition.config", "config-engine"},
 		{len(definition.EnvFiles) != 0, "definition.env-files", "environment-file"},
 		{definition.Runtime != "", "definition.runtime", "container-runtime"},
 		{definition.Stages != nil, "definition.stages", "deployment-stages"},
@@ -1392,6 +1391,8 @@ func appendInterfacePlans(
 			Connectivity:     intf.Input.Connectivity,
 			WireID:           intf.Input.WireID,
 			MTU:              intf.Input.MTU,
+			IPv4:             intf.Input.IPv4,
+			IPv6:             intf.Input.IPv6,
 			Netem:            intf.Input.Netem,
 			LinkApplyMode:    node.LinkApplyMode,
 			RequiredAtStart:  true,

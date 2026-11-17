@@ -350,7 +350,9 @@ func (n *syntheticImportedNode) DeployEndpoints(ctx context.Context) error {
 	case "pre-realized-endpoint-test":
 		endpoints := n.GetEndpoints()
 		if len(endpoints) != 1 || !endpoints[0].IsRuntimeDiscovered() ||
-			endpoints[0].GetLink() == nil || endpoints[0].GetLink().GetMTU() != 9000 {
+			endpoints[0].GetLink() == nil || endpoints[0].GetLink().GetMTU() != 9000 ||
+			endpoints[0].GetIPv4Addr().String() != "192.0.2.5/24" ||
+			endpoints[0].GetIPv6Addr().String() != "2001:db8::5/64" {
 			return errors.New("package endpoint does not retain pre-realized topology metadata")
 		}
 
@@ -623,7 +625,8 @@ func (n *syntheticImportedNode) PreDeploy(
 		)
 	}
 
-	if n.Config().NodeType != "payload-workspace-test" {
+	if n.Config().NodeType != "payload-workspace-test" &&
+		n.Config().NodeType != "config-vars-test" {
 		return nil
 	}
 
@@ -632,11 +635,84 @@ func (n *syntheticImportedNode) PreDeploy(
 		return err
 	}
 
+	if n.Config().NodeType == "config-vars-test" {
+		return n.GenerateConfig(
+			filepath.Join(n.Config().LabDir, "generated", "rendered.conf"),
+			string(content),
+		)
+	}
+
 	return os.WriteFile( //nolint:gosec // the path is test-controlled.
 		filepath.Join(n.Config().LabDir, "generated", "payload-derived.conf"),
 		append([]byte("derived:"), content...),
 		0o600,
 	)
+}
+
+func TestPlanRendersConfigVarsThroughImportedStartupConfig(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nested values", func(t *testing.T) {
+		t.Parallel()
+
+		input := singleNodeInput(syntheticKind, "example/future:1")
+		input.Nodes[0].Type = "config-vars-test"
+		input.Nodes[0].Definition = mustJSON(t, map[string]any{
+			"kind": syntheticKind, "type": input.Nodes[0].Type, "image": "example/future:1",
+			"startup-config": "router={{ index (index .Config.Vars \"router\") \"id\" }}\n" +
+				"as={{ index (index .Config.Vars \"router\") \"as\" }}\n" +
+				"ifaces={{ range $iface := index .Config.Vars \"ifaces\" }}{{ $iface }},{{ end }}\n" +
+				"enabled={{ index .Config.Vars \"enabled\" }}\n",
+			"config": map[string]any{"vars": map[string]any{
+				"router": map[string]any{"id": "100.0.1.2", "as": 64999},
+				"ifaces": []int{1, 2, 3}, "enabled": true,
+			}},
+		})
+
+		plan, artifacts, err := (clabernetesinternaldeviceplan.Adapter{
+			Registry: newSyntheticRegistry(t), Revision: "config-vars-v1",
+		}).PlanArtifacts(context.Background(), input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(plan.Nodes) != 1 {
+			t.Fatalf("planned Nodes = %#v, want one", plan.Nodes)
+		}
+
+		const expected = "router=100.0.1.2\nas=64999\nifaces=1,2,3,\nenabled=true\n"
+		found := false
+		for _, artifact := range artifacts {
+			if artifact.ArtifactPath == "generated/rendered.conf" {
+				found = true
+				if string(artifact.Data) != expected {
+					t.Fatalf("rendered startup config = %q, want %q", artifact.Data, expected)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("rendered startup-config artifact is absent: %#v", artifacts)
+		}
+	})
+
+	t.Run("no startup config consumer", func(t *testing.T) {
+		t.Parallel()
+
+		input := singleNodeInput(syntheticKind, "example/future:1")
+		input.Nodes[0].Definition = mustJSON(t, map[string]any{
+			"kind": syntheticKind, "image": "example/future:1",
+			"config": map[string]any{"vars": map[string]any{"unused": "value"}},
+		})
+
+		plan, err := (clabernetesinternaldeviceplan.Adapter{
+			Registry: newSyntheticRegistry(t), Revision: "config-vars-v1",
+		}).Plan(context.Background(), input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(plan.Nodes) != 1 {
+			t.Fatalf("planned Nodes = %#v, want one", plan.Nodes)
+		}
+	})
 }
 
 func TestPackageRequestedCertificatesFlowWithoutKindMapping(t *testing.T) {
@@ -1589,6 +1665,7 @@ func TestImportedEndpointLifecycleRetainsTopologyMetadataWithoutRedeployingLink(
 		ID: "interface-a", NodeID: input.Nodes[0].ID, Name: "eth1", LinkID: "link-a",
 		PeerNodeID: "peer-a", PeerInterface: "eth1", Connectivity: "wire",
 		PeerTransport: "peer-a-wire", WireID: 101, MTU: 9000,
+		IPv4: "192.0.2.5/24", IPv6: "2001:db8::5/64",
 	}}
 	adapter := clabernetesinternaldeviceplan.Adapter{
 		Registry: newSyntheticRegistry(t), Revision: "package-pre-realized-endpoint-v1",
@@ -1597,6 +1674,11 @@ func TestImportedEndpointLifecycleRetainsTopologyMetadataWithoutRedeployingLink(
 	plan, err := adapter.Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if len(plan.Interfaces) != 1 || plan.Interfaces[0].IPv4 != "192.0.2.5/24" ||
+		plan.Interfaces[0].IPv6 != "2001:db8::5/64" {
+		t.Fatalf("planned endpoint addresses = %#v", plan.Interfaces)
 	}
 
 	artifactRoot := t.TempDir()

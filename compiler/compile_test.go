@@ -721,6 +721,83 @@ topology:
 	}
 }
 
+func TestCompileContainerlabLinkAddressArrays(t *testing.T) {
+	compiled, err := compileDefinition(t, `
+name: addressed-link
+topology:
+  nodes:
+    leaf1: {kind: nokia_srlinux, image: ghcr.io/nokia/srlinux}
+    spine1: {kind: nokia_srlinux, image: ghcr.io/nokia/srlinux}
+  links:
+    - endpoints: [ leaf1:e1-1, spine1:e1-1 ]
+      ipv4: [ "10.1.1.1/31", "10.1.1.0/31" ]
+      ipv6: [ "2001:db8::1/127", "2001:db8::/127" ]
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(compiled.Links) != 1 {
+		t.Fatalf("compiled links = %+v, want one", compiled.Links)
+	}
+
+	link := compiled.Links[0]
+	if link.EndpointA.IPv4 != "10.1.1.1/31" || link.EndpointB.IPv4 != "10.1.1.0/31" ||
+		link.EndpointA.IPv6 != "2001:db8::1/127" || link.EndpointB.IPv6 != "2001:db8::/127" {
+		t.Fatalf("compiled addressed link = %+v", link)
+	}
+}
+
+func TestCompileContainerlabStructuredVethEndpointAddresses(t *testing.T) {
+	compiled, err := compileDefinition(t, `
+name: structured-addressed-link
+topology:
+  nodes:
+    leaf1: {kind: nokia_srlinux, image: ghcr.io/nokia/srlinux}
+    spine1: {kind: nokia_srlinux, image: ghcr.io/nokia/srlinux}
+  links:
+    - type: veth
+      endpoints:
+        - {node: leaf1, interface: e1-1, ipv4: 10.1.1.1/31, ipv6: "2001:db8::1/127"}
+        - {node: spine1, interface: e1-1, ipv4: 10.1.1.0/31, ipv6: "2001:db8::/127"}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(compiled.Links) != 1 {
+		t.Fatalf("compiled links = %+v, want one", compiled.Links)
+	}
+
+	link := compiled.Links[0]
+	if link.EndpointA.IPv4 != "10.1.1.1/31" || link.EndpointB.IPv4 != "10.1.1.0/31" ||
+		link.EndpointA.IPv6 != "2001:db8::1/127" || link.EndpointB.IPv6 != "2001:db8::/127" {
+		t.Fatalf("compiled structured addressed link = %+v", link)
+	}
+}
+
+func TestCompileContainerlabOneSidedLinkAddress(t *testing.T) {
+	compiled, err := compileDefinition(t, `
+name: one-sided-address
+topology:
+  nodes:
+    leaf1: {kind: nokia_srlinux, image: ghcr.io/nokia/srlinux}
+    spine1: {kind: nokia_srlinux, image: ghcr.io/nokia/srlinux}
+  links:
+    - endpoints: [leaf1:e1-1, spine1:e1-1]
+      ipv4: ["", 10.1.1.0/31]
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	link := compiled.Links[0]
+	if link.EndpointA.IPv4 != "" || link.EndpointB.IPv4 != "10.1.1.0/31" ||
+		link.EndpointA.IPv6 != "" || link.EndpointB.IPv6 != "" {
+		t.Fatalf("compiled one-sided address = %+v", link)
+	}
+}
+
 func TestCompileContainerlabSRSimEmptyComponents(t *testing.T) {
 	compiled, err := compileDefinition(t, `
 name: srsim-components-empty

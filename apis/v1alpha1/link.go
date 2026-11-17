@@ -56,6 +56,16 @@ type LinkEndpointSpec struct {
 	// InterfaceName is the name of the interface on the node this side of the link is on.
 	// +kubebuilder:validation:MinLength=1
 	InterfaceName string `json:"interfaceName"`
+	// IPv4 is the optional IPv4 CIDR prefix containerlab assigns to this endpoint. It is cold-plan
+	// configuration for kinds that consume endpoint addresses; changing it on a realized Node
+	// requires recreation. It is invalid on the reserved host endpoint.
+	// +optional
+	IPv4 string `json:"ipv4,omitempty"`
+	// IPv6 is the optional IPv6 CIDR prefix containerlab assigns to this endpoint. It is cold-plan
+	// configuration for kinds that consume endpoint addresses; changing it on a realized Node
+	// requires recreation. It is invalid on the reserved host endpoint.
+	// +optional
+	IPv6 string `json:"ipv6,omitempty"`
 	// Netem is the link impairment of the packets this side of the link sends -- the same
 	// impairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning
 	// this endpoint programs it as the interface's root qdisc and re-asserts it while the Pod

@@ -31,6 +31,8 @@ func TestMain(m *testing.M) {
 // whose application container is the actual device image, planning worker artifacts must be
 // collected once their records are persisted, and a link rewire that the plan declares live
 // must be applied without rolling the device Pods.
+//
+//nolint:gocyclo // one real-device flow covers address lifecycles and rewiring.
 func TestNodeLinkDirect(t *testing.T) {
 	t.Parallel()
 
@@ -77,6 +79,17 @@ func TestNodeLinkDirect(t *testing.T) {
 
 		initialPods[nodeName] = observation
 	}
+
+	// Startup-config templating consumes nested config vars through the imported SR Linux
+	// preparation and post-deploy lifecycle, not just during planning.
+	waitForDeviceCommand(
+		t,
+		namespace,
+		initialPods["srl1"],
+		[]string{"sr_cli", "info from running /system information location"},
+		"config-vars-rendered-srl1",
+	)
+
 	management := poolMixedManagementAddresses(t, namespace, len(nodeNames))
 	for index, nodeName := range nodeNames {
 		peerName := nodeNames[(index+1)%len(nodeNames)]
@@ -86,16 +99,27 @@ func TestNodeLinkDirect(t *testing.T) {
 		}, " 0% packet loss")
 	}
 
-	// The embedded startup configuration must have been materialized, planned, prepared, and
-	// committed by the imported package hooks: ethernet-1/1.0 carries the configured address
-	// inside the running device.
-	waitForDeviceCommand(
-		t,
-		namespace,
-		initialPods["srl1"],
-		[]string{"ip", "netns", "exec", "srbase-default", "ip", "-br", "addr", "show"},
-		"192.168.0.0/31",
-	)
+	waitForSRLAddress := func(device devicePodObservation, address string) {
+		t.Helper()
+		waitForDeviceCommand(
+			t,
+			namespace,
+			device,
+			[]string{"ip", "netns", "exec", "srbase-default", "ip", "-br", "addr", "show"},
+			address,
+		)
+	}
+	assertSRLAddressAbsent := func(device devicePodObservation, address string) {
+		t.Helper()
+		deviceCommand(t, namespace, device, []string{
+			"sh", "-c",
+			"! ip netns exec srbase-default ip -br addr show | grep -F '" + address + "'",
+		})
+	}
+
+	// Link endpoint addresses flow into the imported kind's default post-deploy configuration.
+	waitForSRLAddress(initialPods["srl1"], "192.168.0.1/29")
+	waitForSRLAddress(initialPods["srl1"], "2001:db8:168::/127")
 
 	// Dataplane across the Link: fabric transports terminate in the worker host namespace, so
 	// the wire works even though SR Linux takes ownership of the Pod's primary interface.
@@ -113,14 +137,118 @@ func TestNodeLinkDirect(t *testing.T) {
 			"2",
 			"-W",
 			"2",
-			"192.168.0.1",
+			"192.168.0.2",
+		},
+		" 0% packet loss",
+	)
+
+	waitForDeviceCommand(
+		t,
+		namespace,
+		initialPods["srl1"],
+		[]string{
+			"ip", "netns", "exec", "srbase-default", "ping", "-6", "-c", "2", "-W", "2",
+			"2001:db8:168::1",
 		},
 		" 0% packet loss",
 	)
 
 	waitForWorkerArtifactCollection(t, namespace)
 
+	// A one-sided address edit recreates only the owning Node. The unchanged peer stays in the
+	// same connected subnet, proving that its running device and address are untouched.
 	initialDigest := nodePlanDigest(t, namespace, "srl1")
+	clabernetestesthelper.KubectlFileOp(
+		t,
+		clabernetestesthelper.Apply,
+		namespace,
+		"test-fixtures/15-one-sided-address.yaml",
+	)
+	waitForPlanDigestChange(t, namespace, "srl1", initialDigest)
+	for _, nodeName := range nodeNames {
+		waitForDirectNodeReady(t, namespace, nodeName)
+	}
+
+	oneSidedPods := map[string]devicePodObservation{}
+	for _, nodeName := range nodeNames {
+		oneSidedPods[nodeName] = observeDevicePod(t, namespace, nodeName)
+	}
+	if oneSidedPods["srl1"].podName == initialPods["srl1"].podName {
+		t.Fatal("one-sided address edit retained srl1's device Pod, want recreation")
+	}
+	if oneSidedPods["srl2"].podName != initialPods["srl2"].podName {
+		t.Fatal("one-sided address edit unnecessarily recreated unchanged srl2")
+	}
+	waitForSRLAddress(oneSidedPods["srl1"], "192.168.0.3/29")
+	waitForSRLAddress(oneSidedPods["srl2"], "192.168.0.2/29")
+	assertSRLAddressAbsent(oneSidedPods["srl1"], "192.168.0.1/29")
+	waitForDeviceCommand(
+		t,
+		namespace,
+		oneSidedPods["srl1"],
+		[]string{
+			"ip", "netns", "exec", "srbase-default", "ping", "-c", "2", "-W", "2",
+			"192.168.0.2",
+		},
+		" 0% packet loss",
+	)
+
+	// Editing both endpoints recreates both Nodes and replaces both address families.
+	oneSidedDigests := map[string]string{}
+	for _, nodeName := range nodeNames {
+		oneSidedDigests[nodeName] = nodePlanDigest(t, namespace, nodeName)
+	}
+	clabernetestesthelper.KubectlFileOp(
+		t,
+		clabernetestesthelper.Apply,
+		namespace,
+		"test-fixtures/16-two-sided-address.yaml",
+	)
+	for _, nodeName := range nodeNames {
+		waitForPlanDigestChange(t, namespace, nodeName, oneSidedDigests[nodeName])
+		waitForDirectNodeReady(t, namespace, nodeName)
+	}
+
+	twoSidedPods := map[string]devicePodObservation{}
+	expectedAddresses := map[string][2]string{
+		"srl1": {"192.168.2.0/31", "2001:db8:200::/127"},
+		"srl2": {"192.168.2.1/31", "2001:db8:200::1/127"},
+	}
+	for _, nodeName := range nodeNames {
+		twoSidedPods[nodeName] = observeDevicePod(t, namespace, nodeName)
+		if twoSidedPods[nodeName].podName == oneSidedPods[nodeName].podName {
+			t.Fatalf("two-sided address edit retained %s's device Pod, want recreation", nodeName)
+		}
+		for _, address := range expectedAddresses[nodeName] {
+			waitForSRLAddress(twoSidedPods[nodeName], address)
+		}
+	}
+	assertSRLAddressAbsent(twoSidedPods["srl1"], "192.168.0.3/29")
+	assertSRLAddressAbsent(twoSidedPods["srl2"], "192.168.0.2/29")
+	waitForDeviceCommand(
+		t,
+		namespace,
+		twoSidedPods["srl1"],
+		[]string{
+			"ip", "netns", "exec", "srbase-default", "ping", "-c", "2", "-W", "2",
+			"192.168.2.1",
+		},
+		" 0% packet loss",
+	)
+	waitForDeviceCommand(
+		t,
+		namespace,
+		twoSidedPods["srl1"],
+		[]string{
+			"ip", "netns", "exec", "srbase-default", "ping", "-6", "-c", "2", "-W", "2",
+			"2001:db8:200::1",
+		},
+		" 0% packet loss",
+	)
+
+	waitForWorkerArtifactCollection(t, namespace)
+
+	initialDigest = nodePlanDigest(t, namespace, "srl1")
 
 	clabernetestesthelper.KubectlFileOp(
 		t,
@@ -137,11 +265,11 @@ func TestNodeLinkDirect(t *testing.T) {
 
 	for _, nodeName := range nodeNames {
 		observation := observeDevicePod(t, namespace, nodeName)
-		if observation.podName != initialPods[nodeName].podName {
+		if observation.podName != twoSidedPods[nodeName].podName {
 			t.Fatalf(
 				"link rewire rolled device Pod for %q: %q -> %q, want a live update",
 				nodeName,
-				initialPods[nodeName].podName,
+				twoSidedPods[nodeName].podName,
 				observation.podName,
 			)
 		}

@@ -262,7 +262,7 @@ func TestDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(t *testing.T)
 	} {
 		t.Run(string(mode), func(t *testing.T) {
 			t.Parallel()
-			testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(t, mode, false)
+			testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(t, mode, false, false)
 		})
 	}
 }
@@ -270,14 +270,63 @@ func TestDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(t *testing.T)
 func TestDirectConnectivityRevisionRecreatesLegacyRestartRevision(t *testing.T) {
 	t.Parallel()
 	testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
-		t, clabernetesinternaldeviceplan.LinkApplyRestart, true,
+		t, clabernetesinternaldeviceplan.LinkApplyRestart, true, false,
 	)
+}
+
+func TestDirectConnectivityRevisionRecreatesOneSidedAddressChange(t *testing.T) {
+	t.Parallel()
+
+	testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
+		t,
+		clabernetesinternaldeviceplan.LinkApplyLive,
+		false,
+		true,
+	)
+}
+
+func TestDirectAddressedColdStartAndStoppedNodeNeedNoAddressLifecycle(t *testing.T) {
+	t.Parallel()
+
+	node := planInputTestNode("router", "node-uid-a", "package-kind", "example/device:1")
+	input, plan := directConnectivityTestPlan(t, node)
+	addDirectConnectivityTestLoopback(
+		t,
+		&input,
+		&plan,
+		clabernetesinternaldeviceplan.LinkApplyLive,
+	)
+	input.Interfaces[0].IPv4 = "198.51.100.0/31"
+	plan.Interfaces[0].IPv4 = input.Interfaces[0].IPv4
+
+	reconciler := &Reconciler{}
+	for _, stopped := range []bool{false, true} {
+		options := directConnectivityRenderOptions(node)
+		options.Stopped = stopped
+		decision, err := reconciler.directConnectivityRevision(
+			context.Background(),
+			node,
+			nil,
+			input,
+			plan,
+			options,
+			nil,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if decision.RetainPod || decision.LifecycleMode != "" ||
+			decision.Revision.DesiredPlanDigest != "" {
+			t.Fatalf("cold/stopped address decision = %#v", decision)
+		}
+	}
 }
 
 func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 	t *testing.T,
 	mode clabernetesinternaldeviceplan.LinkApplyMode,
 	projected bool,
+	addressChange bool,
 ) {
 	t.Helper()
 
@@ -291,6 +340,15 @@ func testDirectConnectivityRevisionSelectsDeclaredNonLiveLifecycle(
 		&desiredPlan,
 		mode,
 	)
+	if addressChange {
+		desiredInput.Interfaces[0].IPv4 = "198.51.100.0/31"
+		desiredPlan.Interfaces[0].IPv4 = desiredInput.Interfaces[0].IPv4
+		digest, digestErr := desiredInput.Digest()
+		if digestErr != nil {
+			t.Fatal(digestErr)
+		}
+		desiredPlan.InputDigest = digest
+	}
 
 	scheme := planTestScheme(t)
 	if err := k8sappsv1.AddToScheme(scheme); err != nil {

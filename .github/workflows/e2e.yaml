@@ -69,9 +69,41 @@ jobs:
           - suite: basic topology
             package: ./e2e/topology/basic
             tests: ^Test
-          - suite: direct runtime
+          - suite: direct topology
             package: ./e2e/topology/direct
-            tests: ^Test(Direct.*|NodeLinkDirect|LinuxDataplaneDirect|LinuxWithoutManagement|ExposeRequestsManagementAddress|MultiWorkerRecoveryDirect|Ixiac|LabEditorRoleIsNamespaceScoped)$
+            tests: ^Test(NodeLinkDirect|LinuxWithoutManagement|ExposeRequestsManagementAddress|DirectSingleCharacterNodeNames)$
+            additional-test-args: -parallel 1
+            test-timeout: 60m
+          - suite: direct configuration
+            package: ./e2e/topology/direct
+            tests: ^Test(DirectGlobalKindResourceUpdates|DirectDisposablePlannerArtifacts)$
+            additional-test-args: -parallel 1
+            test-timeout: 60m
+          - suite: direct dataplane
+            package: ./e2e/topology/direct
+            tests: ^Test(LinuxDataplaneDirect|DirectFrrDataplane|DirectLinkNetem)$
+            additional-test-args: -parallel 1
+            test-timeout: 60m
+          - suite: direct operations
+            package: ./e2e/topology/direct
+            tests: ^Test(DirectSaveOperation|DirectPacketCaptureOperation)$
+            additional-test-args: -parallel 1
+            test-timeout: 60m
+          - suite: direct lifecycle
+            package: ./e2e/topology/direct
+            tests: ^Test(DirectNodeRunStateAndRestart|DirectPersistenceSavedConfigSurvival)$
+            additional-test-args: -parallel 1
+            test-timeout: 60m
+          - suite: direct recovery
+            package: ./e2e/topology/direct
+            tests: ^TestMultiWorkerRecoveryDirect$
+            additional-test-args: -parallel 1
+            test-timeout: 60m
+          - suite: direct integrations
+            package: ./e2e/topology/direct
+            tests: ^Test(Ixiac|LabEditorRoleIsNamespaceScoped)$
+            additional-test-args: -parallel 1
+            test-timeout: 60m
           - suite: planner pool
             package: ./e2e/topology/direct
             tests: ^Test(PlannerPoolReuseAndRecovery|PlannerPoolDelayedPeerStartup|GlobalBatchCleanup)$
@@ -86,6 +118,8 @@ jobs:
       suite: ${{ matrix.suite }}
       package: ${{ matrix.package }}
       tests: ${{ matrix.tests }}
+      additional-test-args: ${{ matrix.additional-test-args }}
+      test-timeout: ${{ matrix.test-timeout || '30m' }}
       srsim-enabled: ${{ needs.build-image.outputs.srsim-enabled == 'true' }}
       debug: ${{ inputs.debug }}
     secrets: inherit
