@@ -4,7 +4,9 @@ package node
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
+	"time"
 
 	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
@@ -260,4 +262,64 @@ func assertCompiledInterface(
 	}
 
 	t.Fatalf("interface %q is missing from %#v", name, interfaces)
+}
+
+func TestCompilePlanInputCarriesEndpointNetem(t *testing.T) {
+	t.Parallel()
+
+	primary := planInputTestNode("primary", "uid-primary", "new-package-kind", "example/primary:1")
+	remote := planInputTestNode("remote", "uid-remote", "remote-package-kind", "example/remote:1")
+	link := planInputTestLink(
+		"impaired", "uid-link", primary, "eth1", remote, "eth1", 1,
+	)
+	link.Spec.EndpointA.Netem = &clabernetesapisv1alpha1.LinkNetemSpec{
+		Delay: "50ms", Jitter: "5ms", Loss: 1, Rate: 10000, Corruption: 0.5,
+	}
+	request := PlanInputCompileRequest{
+		Primary: primary, GroupMembers: []string{primary.GetName()},
+		NodesByName: map[string]*clabernetesapisv1alpha1.Node{
+			primary.GetName(): primary, remote.GetName(): remote,
+		},
+		Links: []clabernetesapisv1alpha1.Link{link}, Compatibility: planInputTestCompatibility(),
+		Images: []clabernetesinternaldeviceplan.ImageInput{
+			planInputTestImage(primary, primary.Spec.Image),
+		},
+	}
+
+	input, err := CompilePlanInput(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := &clabernetesinternaldeviceplan.Netem{
+		Delay: 50 * time.Millisecond, Jitter: 5 * time.Millisecond,
+		Loss: 1, Rate: 10000, Corruption: 0.5,
+	}
+	if len(input.Interfaces) != 1 || !reflect.DeepEqual(input.Interfaces[0].Netem, expected) {
+		t.Fatalf("compiled interfaces = %+v, want netem %+v", input.Interfaces, expected)
+	}
+
+	// An impairment without any set field leaves the endpoint unimpaired.
+	link.Spec.EndpointA.Netem = &clabernetesapisv1alpha1.LinkNetemSpec{}
+	request.Links = []clabernetesapisv1alpha1.Link{link}
+
+	if input, err = CompilePlanInput(request); err != nil {
+		t.Fatal(err)
+	}
+
+	if input.Interfaces[0].Netem != nil {
+		t.Fatalf("empty impairment compiled to %+v", input.Interfaces[0].Netem)
+	}
+
+	// Admission validates the durations, so one that does not parse is rejected as input.
+	link.Spec.EndpointA.Netem = &clabernetesapisv1alpha1.LinkNetemSpec{Delay: "fast"}
+	request.Links = []clabernetesapisv1alpha1.Link{link}
+
+	_, err = CompilePlanInput(request)
+
+	var planningErr *clabernetesinternaldeviceplan.Error
+	if !errors.As(err, &planningErr) ||
+		planningErr.Field != "links.impaired.spec.endpointA.netem.delay" {
+		t.Fatalf("CompilePlanInput() error = %#v, want an invalid delay", err)
+	}
 }

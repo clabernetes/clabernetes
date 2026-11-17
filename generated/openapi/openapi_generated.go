@@ -100,6 +100,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkList": schema_clabernetes_clabernetes_apis_v1alpha1_LinkList(
 			ref,
 		),
+		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkNetemSpec": schema_clabernetes_clabernetes_apis_v1alpha1_LinkNetemSpec(
+			ref,
+		),
 		"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkResolvedEndpointStatus": schema_clabernetes_clabernetes_apis_v1alpha1_LinkResolvedEndpointStatus(
 			ref,
 		),
@@ -1459,10 +1462,20 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkEndpointSpec(
 							Format:      "",
 						},
 					},
+					"netem": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Netem is the link impairment of the packets this side of the link sends -- the same impairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning this endpoint programs it as the interface's root qdisc and re-asserts it while the Pod runs, so it survives the interface being recreated. Changing it is always applied live.",
+							Ref: ref(
+								"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkNetemSpec",
+							),
+						},
+					},
 				},
 				Required: []string{"nodeName", "interfaceName"},
 			},
 		},
+		Dependencies: []string{
+			"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkNetemSpec"},
 	}
 }
 
@@ -1515,6 +1528,56 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkList(
 		},
 		Dependencies: []string{
 			"github.com/clabernetes/clabernetes/apis/v1alpha1.Link", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_clabernetes_clabernetes_apis_v1alpha1_LinkNetemSpec(
+	ref common.ReferenceCallback,
+) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "LinkNetemSpec is the link impairment of one Link endpoint in containerlab's vocabulary. Each set field adds its impairment to the packets the endpoint's interface sends; an impairment without any set field leaves the interface unimpaired.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"delay": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Delay is the time packets are delayed by, as a Go duration -- i.e. 50ms. The connectivity sidecar programs the qdisc in 32-bit kernel ticks, which caps the delay at 4m.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"jitter": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the kernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"loss": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Loss is the random packet loss in percent -- i.e. 0.5 for 0.5%.",
+							Type:        []string{"number"},
+							Format:      "double",
+						},
+					},
+					"rate": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Rate is the rate limit in kbit/s. The maximum is the highest rate containerlab accepts, the highest one whose rate in bytes/s fits 64 bits; it is a rule rather than a schema maximum because the schema stores maximums as floats, which can't hold it exactly.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"corruption": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Corruption is the random packet corruption in percent -- i.e. 0.1 for 0.1%.",
+							Type:        []string{"number"},
+							Format:      "double",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 

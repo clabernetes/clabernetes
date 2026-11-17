@@ -99,6 +99,11 @@ type LinkOperations interface {
 	// SweepTransportState removes sidecar-owned transport links whose owners are no longer
 	// desired, tolerating already-absent state.
 	SweepTransportState(ownerPrefix string, keepOwners []string) error
+	// EnsureNetem converges one endpoint interface to its declared netem impairment, in the
+	// namespace the interface lives in: it replaces the root qdisc with the impairment, or
+	// removes the sidecar's own impairment when none is declared. An interface that is not
+	// realized yet is left for a later pass.
+	EnsureNetem(interfaceName string, netem *clabernetesinternaldeviceplan.Netem) error
 }
 
 // VethInterface is the ownership inventory needed to reconcile one Pod network namespace. The
@@ -501,7 +506,7 @@ func evaluateNormalizedConnectivityTransition(
 	desiredInput clabernetesinternaldeviceplan.Input,
 	desiredPlan clabernetesinternaldeviceplan.Plan,
 ) (ConnectivityTransition, error) {
-	changedInterfaces := changedConnectivityInterfaces(
+	changedInterfaces, impairedInterfaces := changedConnectivityInterfaces(
 		baseInput,
 		basePlan,
 		desiredInput,
@@ -545,12 +550,20 @@ func evaluateNormalizedConnectivityTransition(
 		// plan through the existing recreate path, independent of a kind's structural Link mode.
 		transition.RequiredMode = clabernetesinternaldeviceplan.LinkApplyRecreate
 	}
-	if len(affectedLinks) == 0 {
+	if len(affectedLinks) == 0 && len(impairedInterfaces) == 0 {
 		return transition, nil
 	}
 
 	transition.Changed = true
 	affectedNodeIDs := map[string]bool{}
+
+	// The sidecar reprograms an impairment on the running interface, so an endpoint whose only
+	// change is its netem affects its Node without raising the mode the Link declares.
+	for _, intf := range desiredPlan.Interfaces {
+		if impairedInterfaces[intf.ID] {
+			affectedNodeIDs[intf.NodeID] = true
+		}
+	}
 
 	for index := range basePlan.Interfaces {
 		intf := &basePlan.Interfaces[index]
@@ -634,12 +647,14 @@ func linkApplyModeRank(mode clabernetesinternaldeviceplan.LinkApplyMode) int {
 	}
 }
 
+// changedConnectivityInterfaces returns the interfaces whose endpoint changed, and separately
+// those whose only change is their netem impairment.
 func changedConnectivityInterfaces(
 	baseInput clabernetesinternaldeviceplan.Input,
 	basePlan clabernetesinternaldeviceplan.Plan,
 	desiredInput clabernetesinternaldeviceplan.Input,
 	desiredPlan clabernetesinternaldeviceplan.Plan,
-) map[string]bool {
+) (changed, impaired map[string]bool) {
 	baseInputs := interfaceInputsByID(baseInput.Interfaces)
 	desiredInputs := interfaceInputsByID(desiredInput.Interfaces)
 	baseInterfaces := interfacePlansByID(basePlan.Interfaces)
@@ -656,17 +671,34 @@ func changedConnectivityInterfaces(
 		allIDs[id] = true
 	}
 
-	changed := map[string]bool{}
+	changed = map[string]bool{}
+	impaired = map[string]bool{}
 
 	for id := range allIDs {
-		if !reflect.DeepEqual(baseInputs[id], desiredInputs[id]) ||
-			!reflect.DeepEqual(baseInterfaces[id], desiredInterfaces[id]) ||
-			!reflect.DeepEqual(baseWaits[id], desiredWaits[id]) {
+		baseIntf, desiredIntf := baseInterfaces[id], desiredInterfaces[id]
+		baseIntfInput, desiredIntfInput := baseInputs[id], desiredInputs[id]
+
+		if !reflect.DeepEqual(baseWaits[id], desiredWaits[id]) {
 			changed[id] = true
+
+			continue
+		}
+
+		netemChanged := !reflect.DeepEqual(baseIntf.Netem, desiredIntf.Netem) ||
+			!reflect.DeepEqual(baseIntfInput.Netem, desiredIntfInput.Netem)
+		baseIntf.Netem, desiredIntf.Netem = nil, nil
+		baseIntfInput.Netem, desiredIntfInput.Netem = nil, nil
+
+		switch {
+		case !reflect.DeepEqual(baseIntfInput, desiredIntfInput) ||
+			!reflect.DeepEqual(baseIntf, desiredIntf):
+			changed[id] = true
+		case netemChanged:
+			impaired[id] = true
 		}
 	}
 
-	return changed
+	return changed, impaired
 }
 
 func interfaceInputsByID(
@@ -1342,6 +1374,12 @@ func runConnectivity(
 		return err
 	}
 
+	// A restarted sidecar finds the interfaces as its predecessor left them, so the cold pass
+	// also removes impairments the plan no longer declares.
+	if err = reconcileLinkImpairments(effectivePlan, operations, true); err != nil {
+		return err
+	}
+
 	if err = reconcileImportedEndpointLifecycle(
 		ctx,
 		effectiveInput,
@@ -1906,6 +1944,13 @@ func applyProjectedConnectivityRevision(
 			return appliedRevision, false, reconcileErr
 		}
 
+		// A recreated interface comes back without its qdisc, so every tick re-asserts the
+		// declared impairments; removals only follow a new revision.
+		reconcileErr = reconcileLinkImpairments(revisedPlan, operations, false)
+		if reconcileErr != nil {
+			return appliedRevision, false, reconcileErr
+		}
+
 		return appliedRevision, ready, nil
 	}
 
@@ -1935,6 +1980,10 @@ func applyProjectedConnectivityRevision(
 		return appliedRevision, false, err
 	}
 
+	if err = reconcileLinkImpairments(revisedPlan, operations, true); err != nil {
+		return appliedRevision, false, err
+	}
+
 	if err = reconcileImportedEndpointLifecycle(
 		ctx,
 		revisedInput,
@@ -1946,6 +1995,27 @@ func applyProjectedConnectivityRevision(
 	}
 
 	return desiredDigest, ready, nil
+}
+
+// reconcileLinkImpairments converges the endpoint interfaces to their declared netem
+// impairments. With all set it also visits the endpoints without one, removing the sidecar's
+// impairment from those that stopped declaring it.
+func reconcileLinkImpairments(
+	plan clabernetesinternaldeviceplan.Plan,
+	operations LinkOperations,
+	all bool,
+) error {
+	for _, intf := range plan.Interfaces {
+		if intf.Netem == nil && !all {
+			continue
+		}
+
+		if err := operations.EnsureNetem(intf.Name, intf.Netem); err != nil {
+			return fmt.Errorf("converging the netem impairment of Link %q: %w", intf.LinkID, err)
+		}
+	}
+
+	return nil
 }
 
 type kubernetesApplicationLogStreamer struct {

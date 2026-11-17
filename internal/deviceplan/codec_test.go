@@ -3,10 +3,12 @@ package deviceplan_test
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 	"github.com/google/go-cmp/cmp"
@@ -696,5 +698,102 @@ func testCompatibility() clabernetesinternaldeviceplan.Compatibility {
 		ContainerlabVersion: "v0.83.0",
 		RegistryDigest:      "sha256:e93a86a821a7e6704432c52f0eb4dcc35443a18b7857cca3137b86750caafc3c",
 		PlanSchemaVersion:   clabernetesinternaldeviceplan.SchemaVersion,
+	}
+}
+
+func TestInputNetemIsValidatedAndPreserved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		netem clabernetesinternaldeviceplan.Netem
+		valid bool
+		// field is where the rejection is reported; JSON cannot even encode NaN.
+		field string
+	}{
+		{
+			name: "every impairment",
+			netem: clabernetesinternaldeviceplan.Netem{
+				Delay: 50 * time.Millisecond, Jitter: 5 * time.Millisecond,
+				Loss: 0.5, Rate: 10000, Corruption: 0.1,
+			},
+			valid: true,
+		},
+		{
+			name:  "longest delay the sidecar can program",
+			netem: clabernetesinternaldeviceplan.Netem{Delay: 4 * time.Minute},
+			valid: true,
+		},
+		{
+			name:  "longer delay",
+			netem: clabernetesinternaldeviceplan.Netem{Delay: 4*time.Minute + 1},
+		},
+		{
+			name:  "jitter without delay",
+			netem: clabernetesinternaldeviceplan.Netem{Jitter: time.Millisecond},
+		},
+		{
+			name: "jitter the kernel would cap",
+			netem: clabernetesinternaldeviceplan.Netem{
+				Delay: time.Minute, Jitter: math.MaxInt32 + 1,
+			},
+		},
+		{
+			name:  "loss above 100",
+			netem: clabernetesinternaldeviceplan.Netem{Loss: 100.5},
+		},
+		{
+			name:  "corruption that is not a number",
+			netem: clabernetesinternaldeviceplan.Netem{Corruption: math.NaN()},
+			field: "input",
+		},
+		{
+			name:  "negative rate",
+			netem: clabernetesinternaldeviceplan.Netem{Rate: -1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			input := validInput()
+			input.Interfaces[0].Netem = &tt.netem
+			impairedID := input.Interfaces[0].ID
+
+			normalized, err := clabernetesinternaldeviceplan.NormalizeInput(input)
+			if !tt.valid {
+				field := tt.field
+				if field == "" {
+					field = "interfaces[0].netem"
+				}
+
+				var planningErr *clabernetesinternaldeviceplan.Error
+				if !errors.As(err, &planningErr) || planningErr.Field != field {
+					t.Fatalf("NormalizeInput() error = %v, want an error at %s", err, field)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Normalization orders the interfaces, so the impaired one is found by its ID.
+			index := slices.IndexFunc(
+				normalized.Interfaces,
+				func(intf clabernetesinternaldeviceplan.InterfaceInput) bool {
+					return intf.ID == impairedID
+				},
+			)
+			if index < 0 || !reflect.DeepEqual(normalized.Interfaces[index].Netem, &tt.netem) {
+				t.Fatalf(
+					"normalized interfaces = %+v, want netem %+v",
+					normalized.Interfaces,
+					tt.netem,
+				)
+			}
+		})
 	}
 }

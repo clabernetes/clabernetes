@@ -66,6 +66,12 @@ diagnostic. Nothing is silently dropped.
   does not provide. Host Links (`host:<interface>`) are supported through the node-local
   connectivity sidecar, which places the worker-side veth end through a read-only worker
   namespace handle; the pair dies with the Pod, leaving no worker residue.
+- **Link impairments are declarative and live.** An endpoint's `netem` (`delay`, `jitter`,
+  `loss`, `rate`, `corruption`) compiles onto the Link and the connectivity sidecar programs it,
+  re-asserting it while the Pod runs; a changed impairment is applied without a restart. Unlike
+  containerlab, which programs the delay in 64 bits, c9s caps the delay at `4m` because its
+  netlink library programs it in 32-bit kernel ticks. A host endpoint cannot be impaired;
+  impair the node endpoint instead.
 - **Rewiring through a Topology replaces the Link object.** Compiled Link names encode both
   endpoints, so changing either endpoint's interface in the definition deletes the old Link and
   creates a new one: the former endpoints are removed and recreated *on both sides*, exactly

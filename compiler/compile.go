@@ -177,6 +177,8 @@ type Endpoint struct {
 	IPv4 string
 	// IPv6 is the optional IPv6 CIDR prefix assigned to this endpoint.
 	IPv6 string
+	// Netem is the link impairment of the packets the endpoint sends (nil means unimpaired).
+	Netem *clabernetesapisv1alpha1.LinkNetemSpec
 }
 
 // AppProtocol is the application-protocol intent for one expose Service destination port.

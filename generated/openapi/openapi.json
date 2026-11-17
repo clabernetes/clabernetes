@@ -942,6 +942,64 @@
                                         "description": "IPv6 is the optional IPv6 CIDR prefix containerlab assigns to this endpoint. It is cold-plan\nconfiguration for kinds that consume endpoint addresses; changing it on a realized Node\nrequires recreation. It is invalid on the reserved host endpoint.",
                                         "type": "string"
                                     },
+                                    "netem": {
+                                        "description": "Netem is the link impairment of the packets this side of the link sends -- the same\nimpairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning\nthis endpoint programs it as the interface's root qdisc and re-asserts it while the Pod\nruns, so it survives the interface being recreated. Changing it is always applied live.",
+                                        "properties": {
+                                            "corruption": {
+                                                "description": "Corruption is the random packet corruption in percent -- i.e. 0.1 for 0.1%.",
+                                                "maximum": 100,
+                                                "minimum": 0,
+                                                "type": "number"
+                                            },
+                                            "delay": {
+                                                "description": "Delay is the time packets are delayed by, as a Go duration -- i.e. 50ms. The connectivity\nsidecar programs the qdisc in 32-bit kernel ticks, which caps the delay at 4m.",
+                                                "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
+                                                "type": "string",
+                                                "x-kubernetes-validations": [
+                                                    {
+                                                        "message": "delay must be at most 4m",
+                                                        "rule": "duration(self) <= duration('4m')"
+                                                    }
+                                                ]
+                                            },
+                                            "jitter": {
+                                                "description": "Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the\nkernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.",
+                                                "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
+                                                "type": "string",
+                                                "x-kubernetes-validations": [
+                                                    {
+                                                        "message": "jitter must be at most 2.147483647s",
+                                                        "rule": "duration(self) <= duration('2147483647ns')"
+                                                    }
+                                                ]
+                                            },
+                                            "loss": {
+                                                "description": "Loss is the random packet loss in percent -- i.e. 0.5 for 0.5%.",
+                                                "maximum": 100,
+                                                "minimum": 0,
+                                                "type": "number"
+                                            },
+                                            "rate": {
+                                                "description": "Rate is the rate limit in kbit/s. The maximum is the highest rate containerlab accepts,\nthe highest one whose rate in bytes/s fits 64 bits; it is a rule rather than a schema\nmaximum because the schema stores maximums as floats, which can't hold it exactly.",
+                                                "format": "int64",
+                                                "minimum": 0,
+                                                "type": "integer",
+                                                "x-kubernetes-validations": [
+                                                    {
+                                                        "message": "rate must be at most 18446744073709551 kbit/s",
+                                                        "rule": "self <= 18446744073709551"
+                                                    }
+                                                ]
+                                            }
+                                        },
+                                        "type": "object",
+                                        "x-kubernetes-validations": [
+                                            {
+                                                "message": "jitter cannot be set without setting delay",
+                                                "rule": "!has(self.jitter) || has(self.delay)"
+                                            }
+                                        ]
+                                    },
                                     "nodeName": {
                                         "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
                                         "minLength": 1,
@@ -952,7 +1010,13 @@
                                     "interfaceName",
                                     "nodeName"
                                 ],
-                                "type": "object"
+                                "type": "object",
+                                "x-kubernetes-validations": [
+                                    {
+                                        "message": "a host endpoint cannot have a netem impairment -- impair the Node endpoint instead",
+                                        "rule": "self.nodeName != 'host' || !has(self.netem)"
+                                    }
+                                ]
                             },
                             "endpointB": {
                                 "description": "EndpointB is the \"b\" side of this link.",
@@ -970,6 +1034,64 @@
                                         "description": "IPv6 is the optional IPv6 CIDR prefix containerlab assigns to this endpoint. It is cold-plan\nconfiguration for kinds that consume endpoint addresses; changing it on a realized Node\nrequires recreation. It is invalid on the reserved host endpoint.",
                                         "type": "string"
                                     },
+                                    "netem": {
+                                        "description": "Netem is the link impairment of the packets this side of the link sends -- the same\nimpairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning\nthis endpoint programs it as the interface's root qdisc and re-asserts it while the Pod\nruns, so it survives the interface being recreated. Changing it is always applied live.",
+                                        "properties": {
+                                            "corruption": {
+                                                "description": "Corruption is the random packet corruption in percent -- i.e. 0.1 for 0.1%.",
+                                                "maximum": 100,
+                                                "minimum": 0,
+                                                "type": "number"
+                                            },
+                                            "delay": {
+                                                "description": "Delay is the time packets are delayed by, as a Go duration -- i.e. 50ms. The connectivity\nsidecar programs the qdisc in 32-bit kernel ticks, which caps the delay at 4m.",
+                                                "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
+                                                "type": "string",
+                                                "x-kubernetes-validations": [
+                                                    {
+                                                        "message": "delay must be at most 4m",
+                                                        "rule": "duration(self) <= duration('4m')"
+                                                    }
+                                                ]
+                                            },
+                                            "jitter": {
+                                                "description": "Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the\nkernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.",
+                                                "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
+                                                "type": "string",
+                                                "x-kubernetes-validations": [
+                                                    {
+                                                        "message": "jitter must be at most 2.147483647s",
+                                                        "rule": "duration(self) <= duration('2147483647ns')"
+                                                    }
+                                                ]
+                                            },
+                                            "loss": {
+                                                "description": "Loss is the random packet loss in percent -- i.e. 0.5 for 0.5%.",
+                                                "maximum": 100,
+                                                "minimum": 0,
+                                                "type": "number"
+                                            },
+                                            "rate": {
+                                                "description": "Rate is the rate limit in kbit/s. The maximum is the highest rate containerlab accepts,\nthe highest one whose rate in bytes/s fits 64 bits; it is a rule rather than a schema\nmaximum because the schema stores maximums as floats, which can't hold it exactly.",
+                                                "format": "int64",
+                                                "minimum": 0,
+                                                "type": "integer",
+                                                "x-kubernetes-validations": [
+                                                    {
+                                                        "message": "rate must be at most 18446744073709551 kbit/s",
+                                                        "rule": "self <= 18446744073709551"
+                                                    }
+                                                ]
+                                            }
+                                        },
+                                        "type": "object",
+                                        "x-kubernetes-validations": [
+                                            {
+                                                "message": "jitter cannot be set without setting delay",
+                                                "rule": "!has(self.jitter) || has(self.delay)"
+                                            }
+                                        ]
+                                    },
                                     "nodeName": {
                                         "description": "NodeName is the name of the Node object (and therefore containerlab node) this side of the\nlink resides on -- or the reserved name `host` for a (node local) host link.",
                                         "minLength": 1,
@@ -980,7 +1102,13 @@
                                     "interfaceName",
                                     "nodeName"
                                 ],
-                                "type": "object"
+                                "type": "object",
+                                "x-kubernetes-validations": [
+                                    {
+                                        "message": "a host endpoint cannot have a netem impairment -- impair the Node endpoint instead",
+                                        "rule": "self.nodeName != 'host' || !has(self.netem)"
+                                    }
+                                ]
                             },
                             "mtu": {
                                 "description": "MTU is the MTU for both direct endpoint interfaces; zero means unset.",

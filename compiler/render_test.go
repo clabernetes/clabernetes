@@ -813,3 +813,74 @@ func TestRenderAllSurfacesContractViolations(t *testing.T) {
 		t.Fatal("expected no rendered primitives from a failed render")
 	}
 }
+
+func TestRenderLinkNetem(t *testing.T) {
+	topology := &clabernetesapisv1alpha1.Topology{}
+	topology.Name = "netem"
+	topology.Namespace = "clabernetes"
+	topology.Spec.Definition.Containerlab = `
+name: netem
+topology:
+  nodes:
+    r1:
+      kind: linux
+      image: alpine:latest
+    r2:
+      kind: linux
+      image: alpine:latest
+  links:
+    - endpoints: ["r1:eth1", "r2:eth1"]
+      netem:
+        - {delay: 50ms, jitter: 5ms, loss: 1}
+        - {}
+    - type: veth
+      endpoints:
+        - node: r1
+          interface: eth2
+        - node: r2
+          interface: eth2
+          netem: {rate: 10000, corruption: 0.5}
+`
+
+	compiled, err := clabernetescompiler.CompileTopology(
+		&claberneteslogging.FakeInstance{},
+		topology,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error compiling topology: %s", err)
+	}
+
+	_, links, _, err := clabernetescompiler.RenderAll(
+		topology,
+		compiled,
+		clabernetesconfig.GetFakeManager,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error rendering topology: %s", err)
+	}
+
+	if len(links) != 2 {
+		t.Fatalf("expected 2 rendered links, got %d", len(links))
+	}
+
+	brief, structured := links[0].Spec, links[1].Spec
+
+	expected := &clabernetesapisv1alpha1.LinkNetemSpec{Delay: "50ms", Jitter: "5ms", Loss: 1}
+	if !reflect.DeepEqual(brief.EndpointA.Netem, expected) {
+		t.Fatalf("brief link endpoint A netem = %+v, want %+v", brief.EndpointA.Netem, expected)
+	}
+
+	// An empty entry leaves its endpoint unimpaired, like containerlab.
+	if brief.EndpointB.Netem != nil || structured.EndpointA.Netem != nil {
+		t.Fatalf("unimpaired endpoints rendered netem: %+v, %+v", brief, structured)
+	}
+
+	expected = &clabernetesapisv1alpha1.LinkNetemSpec{Rate: 10000, Corruption: 0.5}
+	if !reflect.DeepEqual(structured.EndpointB.Netem, expected) {
+		t.Fatalf(
+			"structured link endpoint B netem = %+v, want %+v",
+			structured.EndpointB.Netem,
+			expected,
+		)
+	}
+}

@@ -5,6 +5,8 @@ package directruntime
 import (
 	"context"
 	"fmt"
+
+	clabernetesinternaldeviceplan "github.com/clabernetes/clabernetes/internal/deviceplan"
 )
 
 type unsupportedLinkOperations struct{}
@@ -72,4 +74,8 @@ func (unsupportedLinkOperations) EnsureHostInterface(HostInterfaceSpec) error {
 
 func (unsupportedLinkOperations) SweepTransportState(string, []string) error {
 	return fmt.Errorf("transport sweep requires Linux")
+}
+
+func (unsupportedLinkOperations) EnsureNetem(string, *clabernetesinternaldeviceplan.Netem) error {
+	return fmt.Errorf("link impairments require Linux")
 }

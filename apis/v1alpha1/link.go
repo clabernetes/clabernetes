@@ -47,6 +47,7 @@ type Link struct {
 }
 
 // LinkEndpointSpec holds information about one side of a Link.
+// +kubebuilder:validation:XValidation:rule="self.nodeName != 'host' || !has(self.netem)",message="a host endpoint cannot have a netem impairment -- impair the Node endpoint instead"
 type LinkEndpointSpec struct {
 	// NodeName is the name of the Node object (and therefore containerlab node) this side of the
 	// link resides on -- or the reserved name `host` for a (node local) host link.
@@ -65,6 +66,48 @@ type LinkEndpointSpec struct {
 	// requires recreation. It is invalid on the reserved host endpoint.
 	// +optional
 	IPv6 string `json:"ipv6,omitempty"`
+	// Netem is the link impairment of the packets this side of the link sends -- the same
+	// impairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning
+	// this endpoint programs it as the interface's root qdisc and re-asserts it while the Pod
+	// runs, so it survives the interface being recreated. Changing it is always applied live.
+	// +optional
+	Netem *LinkNetemSpec `json:"netem,omitempty"`
+}
+
+// LinkNetemSpec is the link impairment of one Link endpoint in containerlab's vocabulary. Each
+// set field adds its impairment to the packets the endpoint's interface sends; an impairment
+// without any set field leaves the interface unimpaired.
+// +kubebuilder:validation:XValidation:rule="!has(self.jitter) || has(self.delay)",message="jitter cannot be set without setting delay"
+type LinkNetemSpec struct {
+	// Delay is the time packets are delayed by, as a Go duration -- i.e. 50ms. The connectivity
+	// sidecar programs the qdisc in 32-bit kernel ticks, which caps the delay at 4m.
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
+	// +kubebuilder:validation:XValidation:rule="duration(self) <= duration('4m')",message="delay must be at most 4m"
+	// +optional
+	Delay string `json:"delay,omitempty"`
+	// Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the
+	// kernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
+	// +kubebuilder:validation:XValidation:rule="duration(self) <= duration('2147483647ns')",message="jitter must be at most 2.147483647s"
+	// +optional
+	Jitter string `json:"jitter,omitempty"`
+	// Loss is the random packet loss in percent -- i.e. 0.5 for 0.5%.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	// +optional
+	Loss float64 `json:"loss,omitempty"`
+	// Rate is the rate limit in kbit/s. The maximum is the highest rate containerlab accepts,
+	// the highest one whose rate in bytes/s fits 64 bits; it is a rule rather than a schema
+	// maximum because the schema stores maximums as floats, which can't hold it exactly.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:XValidation:rule="self <= 18446744073709551",message="rate must be at most 18446744073709551 kbit/s"
+	// +optional
+	Rate int64 `json:"rate,omitempty"`
+	// Corruption is the random packet corruption in percent -- i.e. 0.1 for 0.1%.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	// +optional
+	Corruption float64 `json:"corruption,omitempty"`
 }
 
 // LinkSpec is the spec for a Link resource -- the wire as the user drew it, nothing else.

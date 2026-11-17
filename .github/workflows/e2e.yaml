@@ -81,7 +81,7 @@ jobs:
             test-timeout: 60m
           - suite: direct dataplane
             package: ./e2e/topology/direct
-            tests: ^Test(LinuxDataplaneDirect|DirectFrrDataplane)$
+            tests: ^Test(LinuxDataplaneDirect|DirectFrrDataplane|DirectLinkNetem)$
             additional-test-args: -parallel 1
             test-timeout: 60m
           - suite: direct operations

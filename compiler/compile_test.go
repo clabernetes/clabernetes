@@ -1685,3 +1685,95 @@ topology:
 		t.Fatalf("expected the extras migration error, got: %s", err)
 	}
 }
+
+func TestCompileContainerlabRejectsInvalidLinkNetem(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		links string
+		path  string
+	}{
+		{
+			name: "jitter without delay",
+			links: `
+    - endpoints: ["r1:eth1", "r2:eth1"]
+      netem: [{jitter: 5ms}]`,
+			path: "topology.links[0].netem[0]",
+		},
+		{
+			name: "delay longer than the sidecar can program",
+			links: `
+    - endpoints: ["r1:eth1", "r2:eth1"]
+      netem: [{}, {delay: 5m}]`,
+			path: "topology.links[0].netem[1]",
+		},
+		{
+			name: "jitter the kernel would cap",
+			links: `
+    - endpoints: ["r1:eth1", "r2:eth1"]
+      netem: [{delay: 1m, jitter: 3s}]`,
+			path: "topology.links[0].netem[0]",
+		},
+		{
+			name: "loss that is not a number",
+			links: `
+    - endpoints: ["r1:eth1", "r2:eth1"]
+      netem: [{loss: .nan}]`,
+			path: "topology.links[0].netem[0]",
+		},
+		{
+			name: "more entries than endpoints",
+			links: `
+    - endpoints: ["r1:eth1", "r2:eth1"]
+      netem: [{}, {}, {}]`,
+			path: "topology.links[0].netem",
+		},
+		{
+			name: "host endpoint",
+			links: `
+    - endpoints: ["r1:eth1", "host:r1-eth1"]
+      netem: [{}, {delay: 1ms}]`,
+			path: "topology.links[0].netem[1]",
+		},
+		{
+			name: "endpoint and list both set",
+			links: `
+    - type: veth
+      endpoints:
+        - node: r1
+          interface: eth1
+          netem: {delay: 1ms}
+        - node: r2
+          interface: eth1
+      netem: [{delay: 2ms}]`,
+			path: "topology.links[0].endpoints[0].netem",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := compileDefinition(t, `
+name: invalid-netem
+topology:
+  nodes:
+    r1:
+      kind: linux
+      image: alpine:latest
+    r2:
+      kind: linux
+      image: alpine:latest
+  links:`+test.links+"\n")
+			if err == nil {
+				t.Fatal("expected the invalid impairment to fail compilation")
+			}
+
+			unsupported := &clabernetescompiler.UnsupportedFeaturesError{}
+			if !errors.As(err, &unsupported) {
+				t.Fatalf("expected UnsupportedFeaturesError, got %T: %s", err, err)
+			}
+
+			if len(unsupported.Diagnostics) != 1 ||
+				unsupported.Diagnostics[0].Code != "invalid-link-netem" ||
+				unsupported.Diagnostics[0].Path != test.path {
+				t.Fatalf("unexpected diagnostics: %+v", unsupported.Diagnostics)
+			}
+		})
+	}
+}

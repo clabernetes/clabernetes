@@ -1393,6 +1393,7 @@ func appendInterfacePlans(
 			MTU:              intf.Input.MTU,
 			IPv4:             intf.Input.IPv4,
 			IPv6:             intf.Input.IPv6,
+			Netem:            intf.Input.Netem,
 			LinkApplyMode:    node.LinkApplyMode,
 			RequiredAtStart:  true,
 		})
