@@ -943,7 +943,7 @@
                                         "type": "string"
                                     },
                                     "netem": {
-                                        "description": "Netem is the link impairment of the packets this side of the link sends -- the same\nimpairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning\nthis endpoint programs it as the interface's root qdisc and re-asserts it while the Pod\nruns, so it survives the interface being recreated. Changing it is always applied live.",
+                                        "description": "Netem is the link impairment of the packets this side of the link sends -- the same\nimpairment containerlab's endpoint `netem` key declares. On a cross-Pod Link the peer\nPod's connectivity sidecar programs it as the root qdisc of its sidecar leg, which these\npackets cross on their way to the peer, so it applies whatever the device does with its own\ninterface. On a Link within one Pod, and on a host Link, the connectivity sidecar owning\nthis endpoint programs it as the endpoint interface's root qdisc. The sidecar re-asserts it\nwhile the Pod runs, so it survives the interface being recreated. Changing it is always\napplied live.",
                                         "properties": {
                                             "corruption": {
                                                 "description": "Corruption is the random packet corruption in percent -- i.e. 0.1 for 0.1%.",
@@ -1035,7 +1035,7 @@
                                         "type": "string"
                                     },
                                     "netem": {
-                                        "description": "Netem is the link impairment of the packets this side of the link sends -- the same\nimpairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning\nthis endpoint programs it as the interface's root qdisc and re-asserts it while the Pod\nruns, so it survives the interface being recreated. Changing it is always applied live.",
+                                        "description": "Netem is the link impairment of the packets this side of the link sends -- the same\nimpairment containerlab's endpoint `netem` key declares. On a cross-Pod Link the peer\nPod's connectivity sidecar programs it as the root qdisc of its sidecar leg, which these\npackets cross on their way to the peer, so it applies whatever the device does with its own\ninterface. On a Link within one Pod, and on a host Link, the connectivity sidecar owning\nthis endpoint programs it as the endpoint interface's root qdisc. The sidecar re-asserts it\nwhile the Pod runs, so it survives the interface being recreated. Changing it is always\napplied live.",
                                         "properties": {
                                             "corruption": {
                                                 "description": "Corruption is the random packet corruption in percent -- i.e. 0.1 for 0.1%.",

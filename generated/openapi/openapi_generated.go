@@ -1464,7 +1464,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkEndpointSpec(
 					},
 					"netem": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Netem is the link impairment of the packets this side of the link sends -- the same impairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning this endpoint programs it as the interface's root qdisc and re-asserts it while the Pod runs, so it survives the interface being recreated. Changing it is always applied live.",
+							Description: "Netem is the link impairment of the packets this side of the link sends -- the same impairment containerlab's endpoint `netem` key declares. On a cross-Pod Link the peer Pod's connectivity sidecar programs it as the root qdisc of its sidecar leg, which these packets cross on their way to the peer, so it applies whatever the device does with its own interface. On a Link within one Pod, and on a host Link, the connectivity sidecar owning this endpoint programs it as the endpoint interface's root qdisc. The sidecar re-asserts it while the Pod runs, so it survives the interface being recreated. Changing it is always applied live.",
 							Ref: ref(
 								"github.com/clabernetes/clabernetes/apis/v1alpha1.LinkNetemSpec",
 							),
@@ -1537,7 +1537,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkNetemSpec(
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "LinkNetemSpec is the link impairment of one Link endpoint in containerlab's vocabulary. Each set field adds its impairment to the packets the endpoint's interface sends; an impairment without any set field leaves the interface unimpaired.",
+				Description: "LinkNetemSpec is the link impairment of one Link endpoint in containerlab's vocabulary. Each set field adds its impairment to the packets the endpoint sends; an impairment without any set field leaves the endpoint unimpaired.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"delay": {

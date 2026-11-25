@@ -19,9 +19,12 @@ clabernetes runtime.
 - The Topology compiler maps containerlab's endpoint `netem` and the brief link `netem` list
   onto the compiled Links, and reports invalid impairments as located diagnostics.
 - The node controller carries the impairment through the device plan input and plan.
-- The connectivity sidecar programs the impairment as the endpoint interface's root qdisc,
-  re-asserts it every pass so it survives interface recreation, and removes only its own
-  impairment when a Link stops declaring one.
+- The connectivity sidecar programs the impairment as a root qdisc on an interface c9s owns
+  wherever one carries the endpoint's packets: for a cross-Pod wire, the receiving Pod's
+  sidecar leg, so a device that sends around its own interface's qdisc (such as SR-SIM) is
+  still impaired; for links within a Pod and host links, the endpoint interface. It re-asserts
+  the qdisc every pass so it survives interface recreation, and removes only its own impairment
+  when a Link stops declaring one.
 - An impairment-only change is a Live connectivity transition whatever link-apply mode the
   device kind declares, so changing an impairment never restarts or recreates a device.
 
@@ -41,8 +44,11 @@ None.
 - API: `LinkEndpointSpec.netem` and the new `LinkNetemSpec` type, with regenerated deepcopy,
   CRDs, and OpenAPI. The field is optional; existing Links are unchanged.
 - `compiler/`: link netem parsing, validation, and rendering.
-- `controllers/node/planinput.go` and `internal/deviceplan`: `Netem` on interface inputs and
-  plans, validated by the codec. Plans without impairments serialize exactly as before.
-- `internal/directruntime`: impairment-only transitions stay Live, and a new `EnsureNetem`
-  link operation converges qdiscs through netlink in the namespace the interface lives in.
+- `controllers/node/planinput.go` and `internal/deviceplan`: `Netem` (a local endpoint's own
+  impairment) and `PeerNetem` (a wire endpoint's peer impairment) on interface inputs and plans,
+  validated by the codec together with where each may appear. Plans without impairments
+  serialize exactly as before.
+- `internal/directruntime`: impairment-only transitions stay Live, and new `EnsureNetem` and
+  `EnsureFabricNetem` link operations converge qdiscs through netlink on the endpoint interface
+  and on the wire's sidecar leg.
 - Docs: Link concepts and the containerlab differences page.

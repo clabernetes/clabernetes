@@ -26,8 +26,8 @@ func (o netlinkOperations) EnsureNetem(
 	interfaceName string,
 	netem *clabernetesinternaldeviceplan.Netem,
 ) error {
-	// Fabric and host endpoints move their device leg into the isolated device namespace;
-	// every other endpoint stays in the Pod namespace the sidecar runs in.
+	// Host endpoints move their device leg into the isolated device namespace; every other
+	// local endpoint stays in the Pod namespace the sidecar runs in.
 	handle := &netlink.Handle{}
 
 	if o.deviceNetns != nil {
@@ -42,6 +42,16 @@ func (o netlinkOperations) EnsureNetem(
 	}
 
 	return ensureNetem(handle, interfaceName, netem)
+}
+
+// EnsureFabricNetem impairs the packets a wire's remote endpoint sends on the local sidecar leg,
+// where the wire writes them through the kernel on their way to the device. The leg always stays
+// in the Pod namespace, never moves into the device namespace, and is never adopted by a device.
+func (netlinkOperations) EnsureFabricNetem(
+	interfaceID string,
+	netem *clabernetesinternaldeviceplan.Netem,
+) error {
+	return ensureNetem(&netlink.Handle{}, fabricSidecarLegName(interfaceID), netem)
 }
 
 func ensureNetem(

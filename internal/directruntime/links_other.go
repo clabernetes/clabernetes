@@ -79,3 +79,10 @@ func (unsupportedLinkOperations) SweepTransportState(string, []string) error {
 func (unsupportedLinkOperations) EnsureNetem(string, *clabernetesinternaldeviceplan.Netem) error {
 	return fmt.Errorf("link impairments require Linux")
 }
+
+func (unsupportedLinkOperations) EnsureFabricNetem(
+	string,
+	*clabernetesinternaldeviceplan.Netem,
+) error {
+	return fmt.Errorf("link impairments require Linux")
+}

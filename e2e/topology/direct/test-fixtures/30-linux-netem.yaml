@@ -45,3 +45,13 @@ spec:
     name: direct-linux
   exec:
     - ip address add 192.168.1.1/31 dev eth1
+---
+apiVersion: c9s.run/v1alpha1
+kind: Node
+metadata:
+  name: lin3
+spec:
+  kind: linux
+  image: ghcr.io/srl-labs/network-multitool
+  profileRef:
+    name: direct-linux

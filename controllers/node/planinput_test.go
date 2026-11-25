@@ -272,9 +272,12 @@ func TestCompilePlanInputCarriesEndpointNetem(t *testing.T) {
 	link := planInputTestLink(
 		"impaired", "uid-link", primary, "eth1", remote, "eth1", 1,
 	)
-	link.Spec.EndpointA.Netem = &clabernetesapisv1alpha1.LinkNetemSpec{
+	impairment := &clabernetesapisv1alpha1.LinkNetemSpec{
 		Delay: "50ms", Jitter: "5ms", Loss: 1, Rate: 10000, Corruption: 0.5,
 	}
+	// The remote endpoint's impairment lands on the local wire endpoint, whose sidecar leg the
+	// wire delivers the remote packets through.
+	link.Spec.EndpointB.Netem = impairment
 	request := PlanInputCompileRequest{
 		Primary: primary, GroupMembers: []string{primary.GetName()},
 		NodesByName: map[string]*clabernetesapisv1alpha1.Node{
@@ -295,31 +298,81 @@ func TestCompilePlanInputCarriesEndpointNetem(t *testing.T) {
 		Delay: 50 * time.Millisecond, Jitter: 5 * time.Millisecond,
 		Loss: 1, Rate: 10000, Corruption: 0.5,
 	}
-	if len(input.Interfaces) != 1 || !reflect.DeepEqual(input.Interfaces[0].Netem, expected) {
-		t.Fatalf("compiled interfaces = %+v, want netem %+v", input.Interfaces, expected)
+	if len(input.Interfaces) != 1 || input.Interfaces[0].Netem != nil ||
+		!reflect.DeepEqual(input.Interfaces[0].PeerNetem, expected) {
+		t.Fatalf("compiled interfaces = %+v, want peer netem %+v", input.Interfaces, expected)
 	}
 
-	// An impairment without any set field leaves the endpoint unimpaired.
-	link.Spec.EndpointA.Netem = &clabernetesapisv1alpha1.LinkNetemSpec{}
+	// The local endpoint's own impairment is the remote sidecar's to program.
+	link.Spec.EndpointA.Netem, link.Spec.EndpointB.Netem = impairment, nil
 	request.Links = []clabernetesapisv1alpha1.Link{link}
 
 	if input, err = CompilePlanInput(request); err != nil {
 		t.Fatal(err)
 	}
 
-	if input.Interfaces[0].Netem != nil {
-		t.Fatalf("empty impairment compiled to %+v", input.Interfaces[0].Netem)
+	if input.Interfaces[0].Netem != nil || input.Interfaces[0].PeerNetem != nil {
+		t.Fatalf("own wire impairment compiled onto the local endpoint: %+v", input.Interfaces[0])
 	}
 
-	// Admission validates the durations, so one that does not parse is rejected as input.
-	link.Spec.EndpointA.Netem = &clabernetesapisv1alpha1.LinkNetemSpec{Delay: "fast"}
+	// An impairment without any set field leaves the endpoint unimpaired.
+	link.Spec.EndpointA.Netem = nil
+	link.Spec.EndpointB.Netem = &clabernetesapisv1alpha1.LinkNetemSpec{}
+	request.Links = []clabernetesapisv1alpha1.Link{link}
+
+	if input, err = CompilePlanInput(request); err != nil {
+		t.Fatal(err)
+	}
+
+	if input.Interfaces[0].PeerNetem != nil {
+		t.Fatalf("empty impairment compiled to %+v", input.Interfaces[0].PeerNetem)
+	}
+
+	// Admission validates the durations, so one that does not parse is rejected as input, at
+	// the endpoint that declares it.
+	link.Spec.EndpointB.Netem = &clabernetesapisv1alpha1.LinkNetemSpec{Delay: "fast"}
 	request.Links = []clabernetesapisv1alpha1.Link{link}
 
 	_, err = CompilePlanInput(request)
 
 	var planningErr *clabernetesinternaldeviceplan.Error
 	if !errors.As(err, &planningErr) ||
-		planningErr.Field != "links.impaired.spec.endpointA.netem.delay" {
+		planningErr.Field != "links.impaired.spec.endpointB.netem.delay" {
 		t.Fatalf("CompilePlanInput() error = %#v, want an invalid delay", err)
+	}
+}
+
+// TestCompilePlanInputImpairsLocalEndpointInterface proves that an endpoint without a sidecar leg
+// keeps its own impairment, programmed on its own interface.
+func TestCompilePlanInputImpairsLocalEndpointInterface(t *testing.T) {
+	t.Parallel()
+
+	primary := planInputTestNode("primary", "uid-primary", "new-package-kind", "example/primary:1")
+	loopback := planInputTestLink("loop", "uid-loop", primary, "eth2", primary, "eth3", 0)
+	loopback.Spec.EndpointA.Netem = &clabernetesapisv1alpha1.LinkNetemSpec{Delay: "50ms"}
+
+	input, err := CompilePlanInput(PlanInputCompileRequest{
+		Primary: primary, GroupMembers: []string{primary.GetName()},
+		NodesByName:   map[string]*clabernetesapisv1alpha1.Node{primary.GetName(): primary},
+		Links:         []clabernetesapisv1alpha1.Link{loopback},
+		Compatibility: planInputTestCompatibility(),
+		Images: []clabernetesinternaldeviceplan.ImageInput{
+			planInputTestImage(primary, primary.Spec.Image),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := &clabernetesinternaldeviceplan.Netem{Delay: 50 * time.Millisecond}
+	if len(input.Interfaces) != 2 ||
+		!reflect.DeepEqual(input.Interfaces[0].Netem, expected) ||
+		input.Interfaces[0].PeerNetem != nil ||
+		input.Interfaces[1].Netem != nil || input.Interfaces[1].PeerNetem != nil {
+		t.Fatalf(
+			"loopback interfaces = %+v, want netem %+v on endpoint A",
+			input.Interfaces,
+			expected,
+		)
 	}
 }

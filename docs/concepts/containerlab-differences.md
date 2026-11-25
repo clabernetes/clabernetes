@@ -68,7 +68,9 @@ diagnostic. Nothing is silently dropped.
   namespace handle; the pair dies with the Pod, leaving no worker residue.
 - **Link impairments are declarative and live.** An endpoint's `netem` (`delay`, `jitter`,
   `loss`, `rate`, `corruption`) compiles onto the Link and the connectivity sidecar programs it,
-  re-asserting it while the Pod runs; a changed impairment is applied without a restart. Unlike
+  re-asserting it while the Pod runs; a changed impairment is applied without a restart. On a
+  cross-Pod Link it sits on the receiving sidecar's wire leg rather than on the sending device's
+  interface, so it also impairs devices such as SR-SIM without a `veth-stitch` link. Unlike
   containerlab, which programs the delay in 64 bits, c9s caps the delay at `4m` because its
   netlink library programs it in 32-bit kernel ticks. A host endpoint cannot be impaired;
   impair the node endpoint instead.

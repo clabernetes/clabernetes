@@ -196,19 +196,18 @@ func compileAcceptedInterfaces(
 			if connectivity == connectivityWire {
 				peerTransport = FabricServiceName(endpoints[peerSide].NodeName)
 			}
-			ipv4, ipv6, netem, err := acceptedEndpointConfig(link, endpoints[side], side)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, clabernetesinternaldeviceplan.InterfaceInput{
+			intf := clabernetesinternaldeviceplan.InterfaceInput{
 				ID:     fmt.Sprintf("%s/%c", link.GetUID(), 'a'+rune(side)),
 				NodeID: memberIDs[member.GetName()], Name: endpoints[side].InterfaceName,
 				LinkID: string(link.GetUID()), LinkName: link.GetName(), PeerNodeID: peerNodeID,
 				PeerInterface: endpoints[peerSide].InterfaceName,
 				PeerTransport: peerTransport, Connectivity: connectivity,
 				WireID: link.Status.WireID, MTU: link.Spec.MTU,
-				IPv4: ipv4, IPv6: ipv6, Netem: netem,
-			})
+			}
+			if err := setAcceptedEndpointConfig(&intf, link, endpoints, side); err != nil {
+				return nil, err
+			}
+			result = append(result, intf)
 		}
 	}
 	slices.SortFunc(result, func(left, right clabernetesinternaldeviceplan.InterfaceInput) int {
@@ -246,26 +245,49 @@ func normalizeAcceptedEndpointAddresses(
 	return ipv4, ipv6, nil
 }
 
-// acceptedEndpointConfig resolves the addresses and the impairment one Link endpoint declares.
-func acceptedEndpointConfig(
+// setAcceptedEndpointConfig resolves the addresses of one accepted Link endpoint and places the
+// Link's impairments onto it. An impairment applies to the packets its endpoint sends, and is
+// programmed where every one of them crosses the kernel through an interface c9s owns, so no
+// device can bypass it: a wire endpoint takes its peer's impairment onto its own sidecar leg,
+// where the wire delivers the peer's packets; a local endpoint has no such hop and impairs its
+// own interface.
+func setAcceptedEndpointConfig(
+	intf *clabernetesinternaldeviceplan.InterfaceInput,
 	link *clabernetesapisv1alpha1.Link,
-	endpoint clabernetesapisv1alpha1.LinkEndpointSpec,
+	endpoints [2]clabernetesapisv1alpha1.LinkEndpointSpec,
 	side int,
-) (string, string, *clabernetesinternaldeviceplan.Netem, error) {
-	ipv4, ipv6, err := normalizeAcceptedEndpointAddresses(link, endpoint, side)
+) error {
+	ipv4, ipv6, err := normalizeAcceptedEndpointAddresses(link, endpoints[side], side)
 	if err != nil {
-		return "", "", nil, err
+		return err
+	}
+
+	intf.IPv4, intf.IPv6 = ipv4, ipv6
+
+	netemSide := side
+	if intf.Connectivity == connectivityWire {
+		netemSide = 1 - side
 	}
 
 	netem, err := endpointNetem(
-		fmt.Sprintf("links.%s.spec.endpoint%s.netem", link.GetName(), [2]string{"A", "B"}[side]),
-		endpoint.Netem,
+		fmt.Sprintf(
+			"links.%s.spec.endpoint%s.netem",
+			link.GetName(),
+			[2]string{"A", "B"}[netemSide],
+		),
+		endpoints[netemSide].Netem,
 	)
 	if err != nil {
-		return "", "", nil, err
+		return err
 	}
 
-	return ipv4, ipv6, netem, nil
+	if intf.Connectivity == connectivityWire {
+		intf.PeerNetem = netem
+	} else {
+		intf.Netem = netem
+	}
+
+	return nil
 }
 
 // endpointNetem resolves the Link API impairment of one endpoint into its plan form. Admission

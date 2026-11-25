@@ -174,7 +174,14 @@ type InterfaceInput struct {
 	Connectivity  string `json:"connectivity"`
 	WireID        int    `json:"wireID,omitempty"`
 	MTU           int    `json:"mtu,omitempty"`
-	Netem         *Netem `json:"netem,omitempty"`
+	// Netem is the impairment of the packets this endpoint sends, programmed on the endpoint
+	// interface itself. Only local endpoints (same-pod, loopback, host) carry it: a wire
+	// endpoint's impairment travels to the peer as that peer's PeerNetem.
+	Netem *Netem `json:"netem,omitempty"`
+	// PeerNetem is the impairment of the packets the remote endpoint of a wire sends to this
+	// endpoint, programmed on this endpoint's sidecar-owned wire leg on their way in. Only wire
+	// endpoints carry it.
+	PeerNetem *Netem `json:"peerNetem,omitempty"`
 	// IPv4 is the optional canonical IPv4 CIDR prefix supplied to the imported endpoint.
 	IPv4 string `json:"ipv4,omitempty"`
 	// IPv6 is the optional canonical IPv6 CIDR prefix supplied to the imported endpoint.
@@ -190,8 +197,10 @@ const (
 	MaxNetemRate   = math.MaxUint64 / 1000
 )
 
-// Netem is the link impairment the connectivity sidecar programs on one Link endpoint interface,
-// for the packets the interface sends. Durations are nanoseconds, loss and corruption are
+// Netem is the link impairment of the packets one Link endpoint sends, as the connectivity
+// sidecar programs it: on a local endpoint's own interface, or for a wire on the receiving
+// endpoint's sidecar-owned leg, which every packet of the wire crosses through the kernel
+// whatever the sending device does. Durations are nanoseconds, loss and corruption are
 // percentages, and the rate is in kbit/s, matching the Link API the controller resolved it from.
 type Netem struct {
 	Delay      time.Duration `json:"delay,omitempty"`
@@ -693,7 +702,12 @@ type InterfacePlan struct {
 	Connectivity     string `json:"connectivity"`
 	WireID           int    `json:"wireID,omitempty"`
 	MTU              int    `json:"mtu,omitempty"`
-	Netem            *Netem `json:"netem,omitempty"`
+	// Netem is the impairment programmed on this local endpoint's interface (see
+	// InterfaceInput.Netem).
+	Netem *Netem `json:"netem,omitempty"`
+	// PeerNetem is the impairment programmed on this wire endpoint's sidecar leg (see
+	// InterfaceInput.PeerNetem).
+	PeerNetem *Netem `json:"peerNetem,omitempty"`
 	// IPv4 is the optional canonical IPv4 CIDR prefix supplied to the imported endpoint.
 	IPv4 string `json:"ipv4,omitempty"`
 	// IPv6 is the optional canonical IPv6 CIDR prefix supplied to the imported endpoint.

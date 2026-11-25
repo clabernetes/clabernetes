@@ -37,6 +37,7 @@ type fakeLinkOperations struct {
 	pairSignal          chan struct{}
 	ensurePairError     error
 	netems              []string
+	fabricNetems        []string
 }
 
 func (f *fakeLinkOperations) EnsureNetem(
@@ -44,6 +45,15 @@ func (f *fakeLinkOperations) EnsureNetem(
 	netem *clabernetesinternaldeviceplan.Netem,
 ) error {
 	f.netems = append(f.netems, fmt.Sprintf("%s=%+v", interfaceName, netem))
+
+	return nil
+}
+
+func (f *fakeLinkOperations) EnsureFabricNetem(
+	interfaceID string,
+	netem *clabernetesinternaldeviceplan.Netem,
+) error {
+	f.fabricNetems = append(f.fabricNetems, fmt.Sprintf("%s=%+v", interfaceID, netem))
 
 	return nil
 }
@@ -2747,6 +2757,112 @@ func TestConnectivityHelperConvergesNetemFromLiveRevision(t *testing.T) {
 		!slices.Contains(operations.netems[2:], impaired) {
 		t.Fatalf(
 			"netem convergence = %#v, want both endpoints cold, then %s",
+			operations.netems,
+			impaired,
+		)
+	}
+}
+
+// impairWireEndpoint sets the impairment the remote endpoint of the wire sends with, in both the
+// input and the plan of the local wire endpoint, and keeps the plan bound to the changed input.
+func impairWireEndpoint(
+	t *testing.T,
+	input *clabernetesinternaldeviceplan.Input,
+	plan *clabernetesinternaldeviceplan.Plan,
+	netem *clabernetesinternaldeviceplan.Netem,
+) {
+	t.Helper()
+
+	input.Interfaces[0].PeerNetem = netem
+	plan.Interfaces[0].PeerNetem = netem
+
+	digest, err := input.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan.InputDigest = digest
+}
+
+// TestEvaluateConnectivityTransitionKeepsPeerNetemChangesLive proves that the impairment a wire's
+// remote endpoint sends with is reprogrammed live on the receiving Node.
+func TestEvaluateConnectivityTransitionKeepsPeerNetemChangesLive(t *testing.T) {
+	t.Parallel()
+
+	baseInput, basePlan := connectivityTestInputAndPlan(t)
+	setWireLink(t, &baseInput, &basePlan, "peer-node-uid", "peer-wire", 73, 1450)
+
+	desiredInput, desiredPlan := connectivityTestInputAndPlan(t)
+	setWireLink(t, &desiredInput, &desiredPlan, "peer-node-uid", "peer-wire", 73, 1450)
+
+	for index := range basePlan.Interfaces {
+		basePlan.Interfaces[index].LinkApplyMode = clabernetesinternaldeviceplan.LinkApplyRecreate
+		desiredPlan.Interfaces[index].LinkApplyMode = clabernetesinternaldeviceplan.LinkApplyRecreate
+	}
+
+	impairWireEndpoint(
+		t,
+		&desiredInput,
+		&desiredPlan,
+		&clabernetesinternaldeviceplan.Netem{Delay: 100 * time.Millisecond},
+	)
+
+	transition, err := clabernetesinternaldirectruntime.EvaluateConnectivityTransition(
+		baseInput,
+		basePlan,
+		desiredInput,
+		desiredPlan,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !transition.Changed ||
+		transition.RequiredMode != clabernetesinternaldeviceplan.LinkApplyLive ||
+		!reflect.DeepEqual(transition.AffectedNodeIDs, []string{"node-a"}) {
+		t.Fatalf("peer netem transition = %#v, want a live change of node-a", transition)
+	}
+}
+
+// TestConnectivityImpairsWirePeerOnSidecarLeg proves that a wire endpoint takes its peer's
+// impairment onto the sidecar-owned leg the wire delivers the peer's packets through, and never
+// onto the device interface, which a device can bypass, rename, or move.
+func TestConnectivityImpairsWirePeerOnSidecarLeg(t *testing.T) {
+	t.Parallel()
+
+	input, plan := connectivityTestInputAndPlan(t)
+	setWireLink(t, &input, &plan, "peer-node-uid", "peer-wire", 73, 1450)
+
+	netem := &clabernetesinternaldeviceplan.Netem{Delay: 100 * time.Millisecond, Loss: 1}
+	impairWireEndpoint(t, &input, &plan, netem)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	operations := &fakeLinkOperations{}
+	if err := clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
+		ctx,
+		input,
+		plan,
+		clabernetesinternaldirectruntime.ConnectivityOptions{
+			StateDirectory:   t.TempDir(),
+			PodNamespace:     "lab",
+			PodName:          "router-pod",
+			PodUID:           "pod-uid-a",
+			PodAddress:       "10.244.0.12",
+			FilterOperations: &fakeTransportFilterOperations{},
+		},
+		operations,
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	impaired := fmt.Sprintf("link-a/a=%+v", netem)
+	if !slices.Contains(operations.fabricNetems, impaired) || len(operations.netems) != 0 {
+		t.Fatalf(
+			"wire netem = %#v on legs and %#v on device interfaces, want %s on the leg only",
+			operations.fabricNetems,
 			operations.netems,
 			impaired,
 		)
