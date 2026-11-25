@@ -1,4 +1,7 @@
 .release-runtime-diagram {
+  /* One color per Link endpoint: its packets, and the impairment its netem entry declares. */
+  --runtime-endpoint-a: var(--c9s-magenta);
+  --runtime-endpoint-b: #0e7490;
   margin-block: 1.5rem;
   overflow: hidden;
   border: 1px solid var(--color-fd-border);
@@ -30,6 +33,8 @@
 .release-runtime-diagram button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .release-runtime-diagram .runtime-scroll { overflow-x: auto; }
 .release-runtime-diagram .runtime-scroll > svg { width: 100%; min-width: 720px; font: 16px sans-serif; }
+/* The netem drawing is narrower, so it fits the docs column at 1024-1280px viewports unscrolled. */
+.release-runtime-diagram .runtime-scroll > svg.runtime-netem { min-width: 640px; }
 .release-runtime-diagram text { fill: currentColor; }
 .release-runtime-diagram .runtime-title { font-weight: 600; }
 .release-runtime-diagram .runtime-muted { fill: var(--color-fd-muted-foreground); font-size: 14px; }
@@ -38,6 +43,24 @@
 .release-runtime-diagram .runtime-arrow,
 .release-runtime-diagram .runtime-line { fill: none; stroke: currentColor; stroke-width: 1.5; }
 .release-runtime-diagram .runtime-management { stroke-dasharray: 7 5; }
+.dark .release-runtime-diagram { --runtime-endpoint-a: #f43f8d; --runtime-endpoint-b: var(--c9s-cyan); }
+.release-runtime-diagram .runtime-endpoint-a { --runtime-lane: var(--runtime-endpoint-a); }
+.release-runtime-diagram .runtime-endpoint-b { --runtime-lane: var(--runtime-endpoint-b); }
+.release-runtime-diagram .runtime-mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: 15px; }
+.release-runtime-diagram .runtime-tube { fill: var(--color-fd-background); stroke: var(--color-fd-border); }
+.release-runtime-diagram .runtime-node-card { stroke: var(--runtime-lane); stroke-width: 1.5; }
+.release-runtime-diagram .runtime-lane { fill: none; stroke: var(--runtime-lane); stroke-width: 3; stroke-linejoin: round; }
+.release-runtime-diagram .runtime-lane-text { fill: var(--runtime-lane); font-weight: 600; }
+.release-runtime-diagram .runtime-lane-fill { fill: var(--runtime-lane); }
+.release-runtime-diagram .runtime-qdisc { fill: var(--runtime-lane); stroke: var(--color-fd-background); stroke-width: 2; }
+.release-runtime-diagram .runtime-qdisc-halo { fill: color-mix(in oklab, var(--runtime-lane) 24%, transparent); }
+.release-runtime-diagram .runtime-qdisc-key { --runtime-lane: var(--color-fd-muted-foreground); }
+.release-runtime-diagram .runtime-leader { fill: none; stroke: var(--runtime-lane); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.release-runtime-diagram .runtime-callout {
+  fill: color-mix(in oklab, var(--runtime-lane) 8%, var(--color-fd-background));
+  stroke: var(--runtime-lane);
+  stroke-width: 1.5;
+}
 .release-runtime-diagram figcaption {
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--color-fd-border);

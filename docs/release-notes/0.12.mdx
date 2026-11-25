@@ -1,0 +1,172 @@
+---
+title: "0.12"
+---
+import { ReleaseRuntimeDiagram } from '@/components/release-runtime-diagram';
+
+2026-11-25 · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.11.0...main)
+
+<ReleaseHero
+  from="0.11.0"
+  version="0.12.0"
+  tagline="imperfect by design"
+  highlight="imperfect"
+  facts={['live link impairments', 'kind and image resources', 'endpoint IP addresses', 'startup-config variables']}
+/>
+
+## Link impairments
+
+Links can now be deliberately impaired. Each endpoint accepts containerlab's `netem` vocabulary:
+`delay`, `jitter`, `loss`, `rate`, and `corruption`. The impairment applies to packets that the  
+endpoint's interface sends, so the two ends of a Link can be configured with impairments independently:
+
+```yaml
+links:
+  - endpoints: ["srl1:e1-1", "srl2:e1-1"]
+    netem:
+      - delay: 50ms
+        jitter: 5ms
+        loss: 0.5
+      - rate: 10000
+```
+
+Structured `veth` endpoints accept the same fields directly under `netem`, as do `endpointA` and
+`endpointB` on a directly authored [`Link`](/docs/concepts/nodes-and-links#link). Rates are in
+kbit/s, while loss and corruption are percentages.
+
+The qdics rules applied (as usual) in the egress direction of the endpoint they have been applied to.
+However, in c9s the enforcement point is the clabwire link of the remote endpoint, as shown on the diagram below:
+
+<ReleaseRuntimeDiagram kind="netem" />
+
+Recabling moves the impairment with the cable, and a rate limit queues and drops at the receiving  
+end of the wire. Links within one Pod and host Links instead carry the qdisc on the endpoint's own  
+interface.
+
+The sidecar re-asserts the impairment while the Pod runs, including after interface recreation.
+Adding, changing, or removing only an impairment is always a live operation: neither device
+restarts, regardless of the kinds' link-apply modes. c9s marks and removes only its own qdisc,
+leaving one installed by the device or user alone.
+
+Jitter requires a positive delay, and a host endpoint cannot carry an impairment; impair the Node
+endpoint instead. Delay is capped at `4m` because the current netlink integration encodes it in
+32-bit kernel ticks. A longer delay fails validation rather than overflowing into a different one.
+
+Done in [#395](https://github.com/clabernetes/clabernetes/pull/395) and
+[#396](https://github.com/clabernetes/clabernetes/pull/396)
+
+## Resource defaults by kind and image
+
+The single installation-wide resource default was a poor fit for both lightweight containers and
+VM-backed NOS images. The global `Config` now has `resourcesByKind` and `resourcesByImage` alongside
+`resourcesDefault`:
+
+```yaml
+spec:
+  deployment:
+    resourcesDefault:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    resourcesByKind:
+      nokia_srlinux:
+        requests:
+          cpu: "2"
+          memory: 2Gi
+      nokia_srsim:
+        requests:
+          cpu: "1"
+          memory: 4Gi
+    resourcesByImage:
+      '^registry\.example/nokia/srlinux:26\..*$':
+        requests:
+          cpu: "4"
+          memory: 8Gi
+```
+
+For every logical Node's primary application container, c9s selects one whole resource block in
+this order: explicit or Topology-generated NodeProfile, unique image match, exact kind match, then
+the generic default. The blocks are not deep-merged across those layers. An explicitly empty block
+suppresses lower-priority policy, while secondary and internal containers keep the requirements
+from their device plans.
+
+Kind names match exactly and case-sensitively, including independent aliases such as `srl` and
+`nokia_srlinux`. Image keys are RE2 expressions matched against the complete source image reference,
+including repository and tag. Invalid expressions and images matching more than one expression fail
+reconciliation before the Deployment is changed.
+
+Fresh installations ship request-only recommendations for 97 supported kind and alias names, with
+no c9s-selected CPU or memory limits. Upgrades do not silently adopt them: under the normal Config
+merge behavior, an unset `resourcesByKind` or `resourcesByImage` map stays unset. Copy the desired
+entries from the chart values to opt in, and check worker capacity first. Once a map is enabled,
+future merges add absent shipped keys without replacing existing entries.
+
+See [Resource management](/docs/guides/resource-management#global-resources-config-crd) for the
+complete precedence rules, shipped recommendations, and upgrade behavior.
+
+Done in [#389](https://github.com/clabernetes/clabernetes/pull/389)
+
+## Link endpoint addresses
+
+Containerlab's IPv4 and IPv6 addresses on Link endpoints now work in c9s. Brief links use the
+link-level arrays, with entries corresponding to the endpoint order:
+
+```yaml
+links:
+  - endpoints: ["srl1:e1-1", "srl2:e1-1"]
+    ipv4: ["192.0.2.0/31", "192.0.2.1/31"]
+    ipv6: ["2001:db8::/127", "2001:db8::1/127"]
+```
+
+Structured `veth` endpoints accept `ipv4` and `ipv6` directly, and directly authored Links expose
+the same fields on each endpoint. Each non-host endpoint can carry one prefix per family. Host bits
+are preserved, and point-to-point or full-length prefixes such as `/31`, `/32`, `/127`, and `/128`
+are valid.
+
+Addresses are passed to the imported containerlab kind rather than assigned through a generic c9s
+netlink operation. The kind therefore decides how they become device configuration, just as it does
+on a containerlab host. Adding, changing, or removing an address on a realized Node recreates that
+Node's device Pod so the cold configuration is consumed; an unchanged peer is not independently
+recreated. Persistent device state keeps its normal precedence, so use the existing
+`enforce-startup-config` or device-state reset controls when saved state must be replaced.
+
+See [Topology Link endpoint addresses](/docs/concepts/topology#link-endpoint-addresses) and
+[Nodes and Links](/docs/concepts/nodes-and-links#link) for both syntaxes and the lifecycle details.
+
+Done in [#391](https://github.com/clabernetes/clabernetes/pull/391)
+
+## Startup-config variables
+
+`config.vars` is no longer rejected during planning. Nested values are available to containerlab's
+Go templates in `startup-config`:
+
+```yaml
+srl1:
+  kind: nokia_srlinux
+  image: ghcr.io/nokia/srlinux
+  config:
+    vars:
+      system:
+        location: lab-amsterdam
+  startup-config: |
+    set / system information location {{ index (index .Config.Vars "system") "location" }}
+    set / network-instance default
+```
+
+The imported startup renderer handles both generated configuration files and CLI-format
+configuration applied after boot. Variable strings remain opaque values during payload path
+rewriting, even when they happen to look like a mounted file path.
+
+This is startup-template support, not a standalone configuration engine: variables without a
+`startup-config` consumer do not independently configure a Node. `env-files`, `runtime`, `stages`,
+and `credentials` remain unsupported.
+
+Done in [#393](https://github.com/clabernetes/clabernetes/pull/393)
+
+## Miscellaneous
+
+- The global Config watcher reconnects and relists after a closed watch stream, so configuration
+changes continue to reconcile Nodes after an API watch interruption.
+[#382](https://github.com/clabernetes/clabernetes/pull/382)
+- The embedded Kubernetes modules moved to 0.37.2 as part of the containerlab 0.83 update described
+in the [0.11 notes](/docs/release-notes/0.11#containerlab-083).
+[#388](https://github.com/clabernetes/clabernetes/pull/388)

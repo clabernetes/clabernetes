@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-labelledby="clab-rounded-b-monochrome-container-light-title">
+<title id="clab-rounded-b-monochrome-container-light-title">Container — Rounded hex</title>
+<g id="clab-rounded-b-monochrome-container-light-frame"><path d="M29 6.6Q32 4.9 35 6.6L53 17Q56 18.7 56 22.2V41.8Q56 45.3 53 47L35 57.4Q32 59.1 29 57.4L11 47Q8 45.3 8 41.8V22.2Q8 18.7 11 17Z" fill="none" stroke="#001135" stroke-width="2.4" stroke-linejoin="round"/></g><g id="clab-rounded-b-monochrome-container-light-symbol"><g fill="none" stroke="#001135" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 21H21V43H24M40 21H43V43H40"/>
+ <g fill="#001135" stroke="none">
+  <rect x="27" y="25" width="4" height="5" rx="0.8"/>
+  <rect x="34" y="25" width="4" height="5" rx="0.8"/>
+  <rect x="27" y="34" width="4" height="5" rx="0.8"/>
+  <rect x="34" y="34" width="4" height="5" rx="0.8"/>
+ </g></g></g>
+</svg>
