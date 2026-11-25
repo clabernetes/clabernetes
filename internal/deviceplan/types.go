@@ -1,6 +1,10 @@
 package deviceplan
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"math"
+	"time"
+)
 
 // SchemaVersion identifies both normalized planning inputs and device plans.
 //
@@ -170,10 +174,31 @@ type InterfaceInput struct {
 	Connectivity  string `json:"connectivity"`
 	WireID        int    `json:"wireID,omitempty"`
 	MTU           int    `json:"mtu,omitempty"`
+	Netem         *Netem `json:"netem,omitempty"`
 	// IPv4 is the optional canonical IPv4 CIDR prefix supplied to the imported endpoint.
 	IPv4 string `json:"ipv4,omitempty"`
 	// IPv6 is the optional canonical IPv6 CIDR prefix supplied to the imported endpoint.
 	IPv6 string `json:"ipv6,omitempty"`
+}
+
+// Bounds of a Netem, the same the Link API validates. The delay is programmed in 32-bit kernel
+// ticks, which overflow after about 4.5 minutes; the kernel caps the jitter at 2^31-1 ns; and the
+// rate in kbit/s must convert to bytes/s within 64 bits.
+const (
+	MaxNetemDelay  = 4 * time.Minute
+	MaxNetemJitter = math.MaxInt32 * time.Nanosecond
+	MaxNetemRate   = math.MaxUint64 / 1000
+)
+
+// Netem is the link impairment the connectivity sidecar programs on one Link endpoint interface,
+// for the packets the interface sends. Durations are nanoseconds, loss and corruption are
+// percentages, and the rate is in kbit/s, matching the Link API the controller resolved it from.
+type Netem struct {
+	Delay      time.Duration `json:"delay,omitempty"`
+	Jitter     time.Duration `json:"jitter,omitempty"`
+	Loss       float64       `json:"loss,omitempty"`
+	Rate       int64         `json:"rate,omitempty"`
+	Corruption float64       `json:"corruption,omitempty"`
 }
 
 // Plan is a normalized runtime-neutral description rendered by c9s into Kubernetes resources.
@@ -668,6 +693,7 @@ type InterfacePlan struct {
 	Connectivity     string `json:"connectivity"`
 	WireID           int    `json:"wireID,omitempty"`
 	MTU              int    `json:"mtu,omitempty"`
+	Netem            *Netem `json:"netem,omitempty"`
 	// IPv4 is the optional canonical IPv4 CIDR prefix supplied to the imported endpoint.
 	IPv4 string `json:"ipv4,omitempty"`
 	// IPv6 is the optional canonical IPv6 CIDR prefix supplied to the imported endpoint.

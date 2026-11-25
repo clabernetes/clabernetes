@@ -115,6 +115,29 @@ each device Pod's connectivity sidecar watches only the Links terminating on its
 realizes each cross-Pod wire on the sidecar-to-sidecar fabric wire, addressed by the Link's
 allocated wire id.
 
+An endpoint can declare a link impairment, the same `netem` containerlab's topology takes. It
+applies to the packets that endpoint's interface sends:
+
+```yaml
+spec:
+  endpointA:
+    nodeName: srl1
+    interfaceName: e1-1
+    netem:
+      delay: 50ms
+      jitter: 5ms
+      loss: 0.5
+  endpointB:
+    nodeName: multitool
+    interfaceName: eth1
+    netem:
+      rate: 10000
+```
+
+The connectivity sidecar programs the impairment as the interface's root qdisc and re-asserts it
+while the Pod runs, so it survives the interface being recreated. Changing or removing it is
+applied live, without restarting the device, whatever link-apply mode its kind declares.
+
 ## Why direct resources?
 
 Each Node grows only with its own configuration and each Link remains one wire. This removes the

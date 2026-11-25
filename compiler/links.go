@@ -6,8 +6,11 @@ package compiler
 
 import (
 	"fmt"
+	"math"
 	"strings"
+	"time"
 
+	clabernetesapisv1alpha1 "github.com/clabernetes/clabernetes/apis/v1alpha1"
 	clabernetesutilcontainerlab "github.com/clabernetes/clabernetes/util/containerlab"
 	yamlv3 "gopkg.in/yaml.v3"
 )
@@ -16,6 +19,17 @@ const (
 	linkAddressIPv4Field   = "ipv4"
 	linkAddressIPv6Field   = "ipv6"
 	invalidLinkAddressCode = "invalid-link-address"
+)
+
+// Bounds of a link impairment, the same the Link API enforces: the connectivity sidecar programs
+// the delay in 32-bit kernel ticks, the kernel caps the jitter at 2^31-1 ns, and the rate in
+// kbit/s must convert to bytes/s within 64 bits.
+const (
+	invalidLinkNetemCode = "invalid-link-netem"
+
+	maxNetemDelay  = 4 * time.Minute
+	maxNetemJitter = math.MaxInt32 * time.Nanosecond
+	maxNetemRate   = math.MaxUint64 / 1000
 )
 
 // linkDefinition represents a link definition in the topology file. It accepts both
@@ -35,10 +49,29 @@ type linkConfig struct {
 	MTU       int               `yaml:"mtu,omitempty"`
 	IPv4      []string          `yaml:"ipv4,omitempty"`
 	IPv6      []string          `yaml:"ipv6,omitempty"`
+	// Netem is the brief link form of the endpoint impairments, in the order of the endpoints.
+	Netem []*netemDefinition `yaml:"netem,omitempty"`
+}
+
+// netemDefinition is the link impairment of one endpoint in containerlab's topology vocabulary.
+type netemDefinition struct {
+	Delay      string  `yaml:"delay,omitempty"`
+	Jitter     string  `yaml:"jitter,omitempty"`
+	Loss       float64 `yaml:"loss,omitempty"`
+	Rate       uint64  `yaml:"rate,omitempty"`
+	Corruption float64 `yaml:"corruption,omitempty"`
 }
 
 // linkEndpoints stores the complete per-endpoint vocabulary the c9s Link API can represent.
-type linkEndpoints []Endpoint
+type linkEndpoints []linkEndpoint
+
+// linkEndpoint is one endpoint with the impairment a structured endpoint declares, which the
+// compiler validates and resolves into the Endpoint's Netem.
+type linkEndpoint struct {
+	Endpoint
+
+	netem *netemDefinition
+}
 
 func (e *linkEndpoints) UnmarshalYAML(value *yamlv3.Node) error {
 	if value.Kind != yamlv3.SequenceNode {
@@ -55,13 +88,14 @@ func (e *linkEndpoints) UnmarshalYAML(value *yamlv3.Node) error {
 				return err
 			}
 
-			endpoints = append(endpoints, endpoint)
+			endpoints = append(endpoints, linkEndpoint{Endpoint: endpoint})
 		case yamlv3.MappingNode:
 			endpoint := struct {
-				Node      string `yaml:"node"`
-				Interface string `yaml:"interface"`
-				IPv4      string `yaml:"ipv4,omitempty"`
-				IPv6      string `yaml:"ipv6,omitempty"`
+				Node      string           `yaml:"node"`
+				Interface string           `yaml:"interface"`
+				IPv4      string           `yaml:"ipv4,omitempty"`
+				IPv6      string           `yaml:"ipv6,omitempty"`
+				Netem     *netemDefinition `yaml:"netem"`
 			}{}
 
 			err := endpointNode.Decode(&endpoint)
@@ -88,7 +122,7 @@ func (e *linkEndpoints) UnmarshalYAML(value *yamlv3.Node) error {
 			canonical.IPv4 = endpoint.IPv4
 			canonical.IPv6 = endpoint.IPv6
 
-			endpoints = append(endpoints, canonical)
+			endpoints = append(endpoints, linkEndpoint{Endpoint: canonical, netem: endpoint.Netem})
 		case yamlv3.DocumentNode, yamlv3.SequenceNode, yamlv3.AliasNode:
 			return fmt.Errorf(
 				"%w: link endpoint must be a string or node/interface mapping",
@@ -132,6 +166,12 @@ func validateStructuredLinkEndpoint(value *yamlv3.Node) error {
 		field := value.Content[index+1]
 
 		switch key.Value {
+		case "netem":
+			if err := validateStructuredLinkNetem(field); err != nil {
+				return err
+			}
+
+			continue
 		case "node", "interface", linkAddressIPv4Field, linkAddressIPv6Field:
 		default:
 			return fmt.Errorf(
@@ -153,8 +193,33 @@ func validateStructuredLinkEndpoint(value *yamlv3.Node) error {
 	return nil
 }
 
+func validateStructuredLinkNetem(value *yamlv3.Node) error {
+	if value.Kind == yamlv3.AliasNode {
+		value = value.Alias
+	}
+
+	if value.Kind != yamlv3.MappingNode {
+		return nil
+	}
+
+	for index := 0; index+1 < len(value.Content); index += 2 {
+		key := value.Content[index].Value
+		switch key {
+		case "delay", "jitter", "loss", "rate", "corruption":
+		default:
+			return fmt.Errorf(
+				"%w: structured link endpoint netem field %q is not supported by clabernetes",
+				errParse,
+				key,
+			)
+		}
+	}
+
+	return nil
+}
+
 // compileContainerlabLinks converts the containerlab links section into compiled wires.
-func compileContainerlabLinks(
+func compileContainerlabLinks( //nolint:gocyclo
 	fileTopology *fileTopology,
 	diagnostics *compileDiagnostics,
 ) ([]CompiledLink, error) {
@@ -195,6 +260,8 @@ func compileContainerlabLinks(
 		}
 
 		invalidEndpoint := applyLinkAddressArrays(link, linkPath, diagnostics)
+
+		netem, invalidNetem := compileLinkNetem(link, linkPath, diagnostics)
 
 		for endpointIndex := range link.Endpoints {
 			nodeName := link.Endpoints[endpointIndex].NodeName
@@ -244,13 +311,19 @@ func compileContainerlabLinks(
 			invalidEndpoint = true
 		}
 
-		if invalidEndpoint {
+		if invalidEndpoint || invalidNetem {
 			continue
 		}
 
+		endpointA := link.Endpoints[0].Endpoint
+		endpointA.Netem = netem[0]
+
+		endpointB := link.Endpoints[1].Endpoint
+		endpointB.Netem = netem[1]
+
 		links = append(links, CompiledLink{
-			EndpointA: link.Endpoints[0],
-			EndpointB: link.Endpoints[1],
+			EndpointA: endpointA,
+			EndpointB: endpointB,
 			MTU:       link.MTU,
 		})
 	}
@@ -357,6 +430,141 @@ func applyLinkAddressArrays(
 	}
 
 	return invalid
+}
+
+// compileLinkNetem resolves the impairment of each endpoint, from the endpoint itself or from
+// the brief link's netem list, into the Link API form. It reports a diagnostic and true for an
+// impairment the Link API would reject, so the whole topology fails with a precise path rather
+// than one rejected Link.
+func compileLinkNetem(
+	link *linkDefinition,
+	linkPath string,
+	diagnostics *compileDiagnostics,
+) ([2]*clabernetesapisv1alpha1.LinkNetemSpec, bool) {
+	resolved := [2]*clabernetesapisv1alpha1.LinkNetemSpec{}
+
+	if len(link.Netem) > linkEndpointElementCount {
+		diagnostics.add(Diagnostic{
+			Code:    invalidLinkNetemCode,
+			Path:    linkPath + ".netem",
+			Message: "the number of netem entries exceeds the number of endpoints",
+		})
+
+		return resolved, true
+	}
+
+	invalid := false
+
+	for side := range resolved {
+		definition := link.Endpoints[side].netem
+		path := fmt.Sprintf("%s.endpoints[%d].netem", linkPath, side)
+
+		if side < len(link.Netem) && link.Netem[side] != nil {
+			if definition != nil {
+				diagnostics.add(Diagnostic{
+					Code:    invalidLinkNetemCode,
+					Path:    path,
+					Message: "the endpoint and the link's netem list both set this impairment",
+				})
+
+				invalid = true
+
+				continue
+			}
+
+			definition = link.Netem[side]
+			path = fmt.Sprintf("%s.netem[%d]", linkPath, side)
+		}
+
+		if definition == nil {
+			continue
+		}
+
+		if link.Endpoints[side].NodeName == LinkHostNodeName {
+			diagnostics.add(Diagnostic{
+				Code:    invalidLinkNetemCode,
+				Path:    path,
+				Message: "a host endpoint cannot be impaired, impair the node endpoint instead",
+			})
+
+			invalid = true
+
+			continue
+		}
+
+		netem, message := compileNetem(definition)
+		if message != "" {
+			diagnostics.add(Diagnostic{Code: invalidLinkNetemCode, Path: path, Message: message})
+
+			invalid = true
+
+			continue
+		}
+
+		resolved[side] = netem
+	}
+
+	return resolved, invalid
+}
+
+// compileNetem validates one impairment with the bounds the Link API enforces and returns it in
+// the API form, or the reason it is invalid. An impairment without any set field is nil.
+func compileNetem(
+	definition *netemDefinition,
+) (*clabernetesapisv1alpha1.LinkNetemSpec, string) {
+	durations := map[string]time.Duration{}
+
+	for _, field := range []struct {
+		name    string
+		value   string
+		maximum time.Duration
+	}{
+		{name: "delay", value: definition.Delay, maximum: maxNetemDelay},
+		{name: "jitter", value: definition.Jitter, maximum: maxNetemJitter},
+	} {
+		if field.value == "" {
+			continue
+		}
+
+		duration, err := time.ParseDuration(field.value)
+		if err != nil || duration < 0 {
+			return nil, fmt.Sprintf(
+				"netem %s %q is not a duration, e.g. 100ms",
+				field.name,
+				field.value,
+			)
+		}
+
+		if duration > field.maximum {
+			return nil, fmt.Sprintf("netem %s must be at most %s", field.name, field.maximum)
+		}
+
+		durations[field.name] = duration
+	}
+
+	switch {
+	case definition.Jitter != "" && durations["delay"] == 0:
+		return nil, "netem jitter cannot be set without setting delay"
+	// written this way, NaN is out of range too
+	case !(definition.Loss >= 0 && definition.Loss <= 100):
+		return nil, "netem loss must be in the range between 0 and 100"
+	case !(definition.Corruption >= 0 && definition.Corruption <= 100):
+		return nil, "netem corruption must be in the range between 0 and 100"
+	case definition.Rate > maxNetemRate:
+		return nil, fmt.Sprintf("netem rate must be at most %d kbit/s", uint64(maxNetemRate))
+	}
+
+	if *definition == (netemDefinition{}) {
+		return nil, ""
+	}
+
+	return &clabernetesapisv1alpha1.LinkNetemSpec{
+		Delay:      definition.Delay,
+		Jitter:     definition.Jitter,
+		Loss:       definition.Loss,
+		Rate:       int64(definition.Rate),
+		Corruption: definition.Corruption,
+	}, ""
 }
 
 func unsupportedContainerlabLinkTypeDiagnostic(linkType, linkPath string) Diagnostic {

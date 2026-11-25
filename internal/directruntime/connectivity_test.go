@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,16 @@ type fakeLinkOperations struct {
 	podTransport        string
 	pairSignal          chan struct{}
 	ensurePairError     error
+	netems              []string
+}
+
+func (f *fakeLinkOperations) EnsureNetem(
+	interfaceName string,
+	netem *clabernetesinternaldeviceplan.Netem,
+) error {
+	f.netems = append(f.netems, fmt.Sprintf("%s=%+v", interfaceName, netem))
+
+	return nil
 }
 
 func (f *fakeLinkOperations) DisableTxChecksumOffload(interfaceName string) error {
@@ -2493,5 +2504,251 @@ func TestInterposedManagementFailsClosed(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestEvaluateConnectivityTransitionKeepsNetemChangesLive proves that changing only an endpoint's
+// impairment is a live change whatever the Link declares: the sidecar reprograms the qdisc on
+// the running interface, so neither the device nor its Pod has to restart for it.
+func TestEvaluateConnectivityTransitionKeepsNetemChangesLive(t *testing.T) {
+	t.Parallel()
+
+	netem := &clabernetesinternaldeviceplan.Netem{Delay: 50 * time.Millisecond, Loss: 1}
+
+	for _, mode := range []clabernetesinternaldeviceplan.LinkApplyMode{
+		clabernetesinternaldeviceplan.LinkApplyLive,
+		clabernetesinternaldeviceplan.LinkApplyRestart,
+		clabernetesinternaldeviceplan.LinkApplyRecreate,
+	} {
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+
+			baseInput, basePlan := connectivityTestInputAndPlan(t)
+			setLoopbackLink(t, &baseInput, &basePlan, 1500)
+
+			desiredInput, desiredPlan := connectivityTestInputAndPlan(t)
+			setLoopbackLink(t, &desiredInput, &desiredPlan, 1500)
+
+			for index := range basePlan.Interfaces {
+				basePlan.Interfaces[index].LinkApplyMode = mode
+				desiredPlan.Interfaces[index].LinkApplyMode = mode
+			}
+
+			impairLoopbackEndpoint(t, &desiredInput, &desiredPlan, netem)
+
+			transition, err := clabernetesinternaldirectruntime.EvaluateConnectivityTransition(
+				baseInput,
+				basePlan,
+				desiredInput,
+				desiredPlan,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !transition.Changed ||
+				transition.RequiredMode != clabernetesinternaldeviceplan.LinkApplyLive ||
+				!reflect.DeepEqual(transition.AffectedNodeIDs, []string{"node-a"}) {
+				t.Fatalf("netem-only transition = %#v, want a live change of node-a", transition)
+			}
+
+			revision, err := clabernetesinternaldirectruntime.NewConnectivityRevision(
+				baseInput,
+				basePlan,
+				desiredInput,
+				desiredPlan,
+			)
+			if err != nil {
+				t.Fatalf("a netem-only change must project as a live revision: %v", err)
+			}
+
+			_, applied, err := clabernetesinternaldirectruntime.ApplyConnectivityRevision(
+				baseInput,
+				basePlan,
+				revision,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !reflect.DeepEqual(applied.Interfaces[0].Netem, netem) {
+				t.Fatalf(
+					"applied revision netem = %+v, want %+v",
+					applied.Interfaces[0].Netem,
+					netem,
+				)
+			}
+
+			// An impairment does not hide a real endpoint change: an MTU change on the same
+			// Link still takes the mode the Link declares.
+			setLoopbackLink(t, &desiredInput, &desiredPlan, 9000)
+
+			for index := range desiredPlan.Interfaces {
+				desiredPlan.Interfaces[index].LinkApplyMode = mode
+			}
+
+			impairLoopbackEndpoint(t, &desiredInput, &desiredPlan, netem)
+
+			transition, err = clabernetesinternaldirectruntime.EvaluateConnectivityTransition(
+				baseInput,
+				basePlan,
+				desiredInput,
+				desiredPlan,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !transition.Changed || transition.RequiredMode != mode {
+				t.Fatalf("MTU and netem transition = %#v, want mode %s", transition, mode)
+			}
+		})
+	}
+}
+
+// impairLoopbackEndpoint sets an impairment on the first endpoint of the loopback Link, in both
+// the input and the plan, and keeps the plan bound to the changed input.
+func impairLoopbackEndpoint(
+	t *testing.T,
+	input *clabernetesinternaldeviceplan.Input,
+	plan *clabernetesinternaldeviceplan.Plan,
+	netem *clabernetesinternaldeviceplan.Netem,
+) {
+	t.Helper()
+
+	input.Interfaces[0].Netem = netem
+
+	for index := range plan.Interfaces {
+		if plan.Interfaces[index].ID == input.Interfaces[0].ID {
+			plan.Interfaces[index].Netem = netem
+		}
+	}
+
+	digest, err := input.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan.InputDigest = digest
+}
+
+// TestConnectivityHelperConvergesNetemFromLiveRevision proves the sidecar's impairment lifecycle:
+// the cold pass visits every endpoint, so a restarted sidecar can remove impairments the plan
+// dropped, and a live revision that only changes an impairment reaches the running interface.
+func TestConnectivityHelperConvergesNetemFromLiveRevision(t *testing.T) {
+	t.Parallel()
+
+	baseInput, basePlan := connectivityTestInputAndPlan(t)
+	setLoopbackLink(t, &baseInput, &basePlan, 1500)
+
+	desiredInput, desiredPlan := connectivityTestInputAndPlan(t)
+	setLoopbackLink(t, &desiredInput, &desiredPlan, 1500)
+
+	netem := &clabernetesinternaldeviceplan.Netem{Delay: 50 * time.Millisecond}
+	impairLoopbackEndpoint(t, &desiredInput, &desiredPlan, netem)
+
+	desired, err := clabernetesinternaldirectruntime.NewConnectivityRevision(
+		baseInput,
+		basePlan,
+		desiredInput,
+		desiredPlan,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	desiredRaw, err := desired.CanonicalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	initial, err := clabernetesinternaldirectruntime.NewConnectivityRevision(
+		baseInput,
+		basePlan,
+		baseInput,
+		basePlan,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	initialRaw, err := initial.CanonicalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	revisionPath := filepath.Join(root, "revision.json")
+	writeConnectivityRevisionFile(t, revisionPath, initialRaw)
+
+	state := filepath.Join(root, "state")
+	operations := &fakeLinkOperations{}
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- clabernetesinternaldirectruntime.RunConnectivityWithLifecycleOperations(
+			ctx,
+			baseInput,
+			basePlan,
+			clabernetesinternaldirectruntime.ConnectivityOptions{
+				StateDirectory:           state,
+				PodUID:                   "pod-uid-a",
+				ConnectivityRevisionPath: revisionPath,
+				RevisionPollInterval:     5 * time.Millisecond,
+			},
+			operations,
+			nil,
+		)
+	}()
+
+	t.Cleanup(cancel)
+
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+
+	for clabernetesinternaldirectruntime.ConnectivityReady(basePlan, state) != nil {
+		select {
+		case runErr := <-errCh:
+			t.Fatalf("connectivity helper exited before cold readiness: %v", runErr)
+		case <-deadline.C:
+			t.Fatal("connectivity helper did not publish cold readiness")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+
+	writeConnectivityRevisionFile(t, revisionPath, desiredRaw)
+
+	for clabernetesinternaldirectruntime.ConnectivityReadyWithRevision(
+		basePlan,
+		state,
+		revisionPath,
+	) != nil {
+		select {
+		case runErr := <-errCh:
+			t.Fatalf("connectivity helper exited before revision readiness: %v", runErr)
+		case <-deadline.C:
+			t.Fatal("connectivity helper did not publish revision readiness")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+
+	cancel()
+
+	if runErr := <-errCh; runErr != nil {
+		t.Fatal(runErr)
+	}
+
+	// The sidecar programs the interface name the plan realized, not the requested one.
+	impaired := fmt.Sprintf("package-a=%+v", netem)
+	if len(operations.netems) < 3 ||
+		!strings.HasSuffix(operations.netems[0], "=<nil>") ||
+		!strings.HasSuffix(operations.netems[1], "=<nil>") ||
+		!slices.Contains(operations.netems[2:], impaired) {
+		t.Fatalf(
+			"netem convergence = %#v, want both endpoints cold, then %s",
+			operations.netems,
+			impaired,
+		)
 	}
 }

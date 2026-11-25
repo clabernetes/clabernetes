@@ -507,6 +507,10 @@ func validateInput(input Input) error {
 			return planningError(ErrorInvalidInput, field, "interface input is incomplete", nil)
 		}
 
+		if !validNetem(intf.Netem) {
+			return planningError(ErrorInvalidInput, field+".netem", "netem is invalid", nil)
+		}
+
 		if interfaces[intf.ID] {
 			return planningError(ErrorInvalidInput, field+".id", "interface ID is duplicated", nil)
 		}
@@ -870,6 +874,10 @@ func validatePlan(plan Plan) error {
 			return planningError(ErrorInvalidInput, field, "interface plan is incomplete", nil)
 		}
 
+		if !validNetem(intf.Netem) {
+			return planningError(ErrorInvalidInput, field+".netem", "netem is invalid", nil)
+		}
+
 		if _, exists := nodes[intf.NodeID]; !exists {
 			return planningError(ErrorInvariant, field+".nodeID", "references an unknown Node", nil)
 		}
@@ -1197,6 +1205,22 @@ func validLinkApplyMode(mode LinkApplyMode) bool {
 		[]LinkApplyMode{LinkApplyLive, LinkApplyRestart, LinkApplyRecreate},
 		mode,
 	)
+}
+
+// validNetem accepts the impairments the Link API admits: the delay fits the sidecar's 32-bit
+// kernel ticks, the jitter needs a delay and stays below the kernel's cap, and the comparisons
+// are written so that NaN percentages are out of range too.
+func validNetem(netem *Netem) bool {
+	if netem == nil {
+		return true
+	}
+
+	return netem.Delay >= 0 && netem.Delay <= MaxNetemDelay &&
+		netem.Jitter >= 0 && netem.Jitter <= MaxNetemJitter &&
+		(netem.Jitter == 0 || netem.Delay > 0) &&
+		netem.Loss >= 0 && netem.Loss <= 100 &&
+		netem.Rate >= 0 && netem.Rate <= MaxNetemRate &&
+		netem.Corruption >= 0 && netem.Corruption <= 100
 }
 
 func validDigest(value string) bool {
