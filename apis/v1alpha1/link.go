@@ -67,16 +67,20 @@ type LinkEndpointSpec struct {
 	// +optional
 	IPv6 string `json:"ipv6,omitempty"`
 	// Netem is the link impairment of the packets this side of the link sends -- the same
-	// impairment containerlab's endpoint `netem` key declares. The connectivity sidecar owning
-	// this endpoint programs it as the interface's root qdisc and re-asserts it while the Pod
-	// runs, so it survives the interface being recreated. Changing it is always applied live.
+	// impairment containerlab's endpoint `netem` key declares. On a cross-Pod Link the peer
+	// Pod's connectivity sidecar programs it as the root qdisc of its sidecar leg, which these
+	// packets cross on their way to the peer, so it applies whatever the device does with its own
+	// interface. On a Link within one Pod, and on a host Link, the connectivity sidecar owning
+	// this endpoint programs it as the endpoint interface's root qdisc. The sidecar re-asserts it
+	// while the Pod runs, so it survives the interface being recreated. Changing it is always
+	// applied live.
 	// +optional
 	Netem *LinkNetemSpec `json:"netem,omitempty"`
 }
 
 // LinkNetemSpec is the link impairment of one Link endpoint in containerlab's vocabulary. Each
-// set field adds its impairment to the packets the endpoint's interface sends; an impairment
-// without any set field leaves the interface unimpaired.
+// set field adds its impairment to the packets the endpoint sends; an impairment without any set
+// field leaves the endpoint unimpaired.
 // +kubebuilder:validation:XValidation:rule="!has(self.jitter) || (has(self.delay) && duration(self.delay) > duration('0s'))",message="jitter cannot be set without setting delay"
 type LinkNetemSpec struct {
 	// Delay is the time packets are delayed by, as a Go duration -- i.e. 50ms. The connectivity
