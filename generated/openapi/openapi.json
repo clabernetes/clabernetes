@@ -963,7 +963,7 @@
                                                 ]
                                             },
                                             "jitter": {
-                                                "description": "Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the\nkernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.",
+                                                "description": "Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a positive\ndelay, and the kernel caps it at 2.147483647s, so a longer jitter is rejected rather than\nsilently capped.",
                                                 "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
                                                 "type": "string",
                                                 "x-kubernetes-validations": [
@@ -996,7 +996,7 @@
                                         "x-kubernetes-validations": [
                                             {
                                                 "message": "jitter cannot be set without setting delay",
-                                                "rule": "!has(self.jitter) || has(self.delay)"
+                                                "rule": "!has(self.jitter) || (has(self.delay) && duration(self.delay) > duration('0s'))"
                                             }
                                         ]
                                     },
@@ -1055,7 +1055,7 @@
                                                 ]
                                             },
                                             "jitter": {
-                                                "description": "Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the\nkernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.",
+                                                "description": "Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a positive\ndelay, and the kernel caps it at 2.147483647s, so a longer jitter is rejected rather than\nsilently capped.",
                                                 "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|ms|s|m|h))+$",
                                                 "type": "string",
                                                 "x-kubernetes-validations": [
@@ -1088,7 +1088,7 @@
                                         "x-kubernetes-validations": [
                                             {
                                                 "message": "jitter cannot be set without setting delay",
-                                                "rule": "!has(self.jitter) || has(self.delay)"
+                                                "rule": "!has(self.jitter) || (has(self.delay) && duration(self.delay) > duration('0s'))"
                                             }
                                         ]
                                     },

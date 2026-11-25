@@ -119,8 +119,9 @@ spec:
                           rule: duration(self) <= duration('4m')
                       jitter:
                         description: |-
-                          Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the
-                          kernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.
+                          Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a positive
+                          delay, and the kernel caps it at 2.147483647s, so a longer jitter is rejected rather than
+                          silently capped.
                         pattern: ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$
                         type: string
                         x-kubernetes-validations:
@@ -146,7 +147,8 @@ spec:
                     type: object
                     x-kubernetes-validations:
                     - message: jitter cannot be set without setting delay
-                      rule: '!has(self.jitter) || has(self.delay)'
+                      rule: '!has(self.jitter) || (has(self.delay) && duration(self.delay)
+                        > duration(''0s''))'
                   nodeName:
                     description: |-
                       NodeName is the name of the Node object (and therefore containerlab node) this side of the
@@ -205,8 +207,9 @@ spec:
                           rule: duration(self) <= duration('4m')
                       jitter:
                         description: |-
-                          Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the
-                          kernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.
+                          Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a positive
+                          delay, and the kernel caps it at 2.147483647s, so a longer jitter is rejected rather than
+                          silently capped.
                         pattern: ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$
                         type: string
                         x-kubernetes-validations:
@@ -232,7 +235,8 @@ spec:
                     type: object
                     x-kubernetes-validations:
                     - message: jitter cannot be set without setting delay
-                      rule: '!has(self.jitter) || has(self.delay)'
+                      rule: '!has(self.jitter) || (has(self.delay) && duration(self.delay)
+                        > duration(''0s''))'
                   nodeName:
                     description: |-
                       NodeName is the name of the Node object (and therefore containerlab node) this side of the

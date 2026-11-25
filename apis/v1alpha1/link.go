@@ -77,7 +77,7 @@ type LinkEndpointSpec struct {
 // LinkNetemSpec is the link impairment of one Link endpoint in containerlab's vocabulary. Each
 // set field adds its impairment to the packets the endpoint's interface sends; an impairment
 // without any set field leaves the interface unimpaired.
-// +kubebuilder:validation:XValidation:rule="!has(self.jitter) || has(self.delay)",message="jitter cannot be set without setting delay"
+// +kubebuilder:validation:XValidation:rule="!has(self.jitter) || (has(self.delay) && duration(self.delay) > duration('0s'))",message="jitter cannot be set without setting delay"
 type LinkNetemSpec struct {
 	// Delay is the time packets are delayed by, as a Go duration -- i.e. 50ms. The connectivity
 	// sidecar programs the qdisc in 32-bit kernel ticks, which caps the delay at 4m.
@@ -85,8 +85,9 @@ type LinkNetemSpec struct {
 	// +kubebuilder:validation:XValidation:rule="duration(self) <= duration('4m')",message="delay must be at most 4m"
 	// +optional
 	Delay string `json:"delay,omitempty"`
-	// Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the
-	// kernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.
+	// Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a positive
+	// delay, and the kernel caps it at 2.147483647s, so a longer jitter is rejected rather than
+	// silently capped.
 	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$`
 	// +kubebuilder:validation:XValidation:rule="duration(self) <= duration('2147483647ns')",message="jitter must be at most 2.147483647s"
 	// +optional

@@ -167,6 +167,10 @@ func validateStructuredLinkEndpoint(value *yamlv3.Node) error {
 
 		switch key.Value {
 		case "netem":
+			if err := validateStructuredLinkNetem(field); err != nil {
+				return err
+			}
+
 			continue
 		case "node", "interface", linkAddressIPv4Field, linkAddressIPv6Field:
 		default:
@@ -182,6 +186,31 @@ func validateStructuredLinkEndpoint(value *yamlv3.Node) error {
 				"%w: structured link endpoint field %q must be a string",
 				errParse,
 				key.Value,
+			)
+		}
+	}
+
+	return nil
+}
+
+func validateStructuredLinkNetem(value *yamlv3.Node) error {
+	if value.Kind == yamlv3.AliasNode {
+		value = value.Alias
+	}
+
+	if value.Kind != yamlv3.MappingNode {
+		return nil
+	}
+
+	for index := 0; index+1 < len(value.Content); index += 2 {
+		key := value.Content[index].Value
+		switch key {
+		case "delay", "jitter", "loss", "rate", "corruption":
+		default:
+			return fmt.Errorf(
+				"%w: structured link endpoint netem field %q is not supported by clabernetes",
+				errParse,
+				key,
 			)
 		}
 	}
@@ -514,7 +543,7 @@ func compileNetem(
 	}
 
 	switch {
-	case durations["jitter"] != 0 && durations["delay"] == 0:
+	case definition.Jitter != "" && durations["delay"] == 0:
 		return nil, "netem jitter cannot be set without setting delay"
 	// written this way, NaN is out of range too
 	case !(definition.Loss >= 0 && definition.Loss <= 100):

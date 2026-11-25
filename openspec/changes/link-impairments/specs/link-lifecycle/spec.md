@@ -4,7 +4,7 @@
 
 A Link endpoint SHALL accept an optional impairment in containerlab's `netem` vocabulary:
 delay, jitter, loss, rate, and corruption, applying to the packets that endpoint's interface
-sends. Admission MUST reject jitter without a delay, a delay above 4m, jitter above
+sends. Admission MUST reject jitter without a positive delay, a delay above 4m, jitter above
 2.147483647s, loss or corruption outside 0 to 100, a rate above 18446744073709551 kbit/s, and an
 impairment on the reserved `host` endpoint. The Topology compiler SHALL map containerlab's
 endpoint `netem` and the brief link `netem` list onto the compiled Link endpoints and SHALL
@@ -17,7 +17,7 @@ report an impairment admission would reject as a located diagnostic.
 
 #### Scenario: Reject an impairment the dataplane cannot program
 
-- **WHEN** a Link or topology declares jitter without a delay, a delay above 4m, or an impairment on a `host` endpoint
+- **WHEN** a Link or topology declares jitter without a positive delay, a delay above 4m, or an impairment on a `host` endpoint
 - **THEN** admission or compilation rejects it with a message naming the field
 
 ### Requirement: Impairment changes are applied live

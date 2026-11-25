@@ -1549,7 +1549,7 @@ func schema_clabernetes_clabernetes_apis_v1alpha1_LinkNetemSpec(
 					},
 					"jitter": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a delay, and the kernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.",
+							Description: "Jitter is the delay variation, as a Go duration -- i.e. 5ms. It needs a positive delay, and the kernel caps it at 2.147483647s, so a longer jitter is rejected rather than silently capped.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

@@ -97,16 +97,30 @@ func TestDirectLinkNetem(t *testing.T) {
 	waitForDeviceCommand(t, namespace, device, qdisc, "qdisc noqueue 0: root")
 
 	// Admission rejects an impairment the dataplane cannot program.
-	invalid := exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
-		t.Context(),
-		"kubectl", "patch", "link.c9s.run", "lin1-eth1-lin2-eth1", "--namespace", namespace,
-		"--type", "merge", "-p", `{"spec":{"endpointA":{"netem":{"jitter":"5ms"}}}}`,
-	)
+	for _, test := range []struct {
+		name    string
+		payload string
+	}{
+		{
+			name:    "jitter without delay",
+			payload: `{"spec":{"endpointA":{"netem":{"jitter":"5ms"}}}}`,
+		},
+		{
+			name:    "jitter with zero delay",
+			payload: `{"spec":{"endpointA":{"netem":{"delay":"0s","jitter":"5ms"}}}}`,
+		},
+	} {
+		invalid := exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
+			t.Context(),
+			"kubectl", "patch", "link.c9s.run", "lin1-eth1-lin2-eth1", "--namespace", namespace,
+			"--type", "merge", "-p", test.payload,
+		)
 
-	output, err := invalid.CombinedOutput()
-	if err == nil ||
-		!strings.Contains(string(output), "jitter cannot be set without setting delay") {
-		t.Fatalf("jitter without delay was not rejected: %v\n%s", err, output)
+		output, err := invalid.CombinedOutput()
+		if err == nil ||
+			!strings.Contains(string(output), "jitter cannot be set without setting delay") {
+			t.Fatalf("%s was not rejected: %v\n%s", test.name, err, output)
+		}
 	}
 }
 

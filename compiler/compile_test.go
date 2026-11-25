@@ -1700,6 +1700,20 @@ func TestCompileContainerlabRejectsInvalidLinkNetem(t *testing.T) {
 			path: "topology.links[0].netem[0]",
 		},
 		{
+			name: "jitter with zero delay",
+			links: `
+    - endpoints: ["r1:eth1", "r2:eth1"]
+      netem: [{delay: 0s, jitter: 5ms}]`,
+			path: "topology.links[0].netem[0]",
+		},
+		{
+			name: "zero jitter without delay",
+			links: `
+    - endpoints: ["r1:eth1", "r2:eth1"]
+      netem: [{jitter: 0s}]`,
+			path: "topology.links[0].netem[0]",
+		},
+		{
 			name: "delay longer than the sidecar can program",
 			links: `
     - endpoints: ["r1:eth1", "r2:eth1"]
@@ -1775,5 +1789,37 @@ topology:
 				t.Fatalf("unexpected diagnostics: %+v", unsupported.Diagnostics)
 			}
 		})
+	}
+}
+
+func TestCompileContainerlabRejectsUnknownStructuredLinkNetemField(t *testing.T) {
+	_, err := compileDefinition(t, `
+name: unknown-structured-netem-field
+topology:
+  nodes:
+    r1:
+      kind: linux
+      image: alpine:latest
+    r2:
+      kind: linux
+      image: alpine:latest
+  links:
+    - type: veth
+      endpoints:
+        - node: r1
+          interface: eth1
+          netem: {deley: 50ms}
+        - node: r2
+          interface: eth1
+`)
+	if err == nil {
+		t.Fatal("expected an unknown structured netem field to fail compilation")
+	}
+
+	if !strings.Contains(
+		err.Error(),
+		`structured link endpoint netem field "deley" is not supported by clabernetes`,
+	) {
+		t.Fatalf("expected the unknown netem field in the error, got: %s", err)
 	}
 }
