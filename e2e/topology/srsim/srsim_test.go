@@ -104,6 +104,11 @@ func TestSRSimBootsAndReachesLinux(t *testing.T) {
 	waitForNodeReady(t, namespace, "sros")
 
 	waitForDatapath(t, namespace)
+
+	// SR-SIM sends around the qdisc of its own interface, so its endpoint's impairment is
+	// programmed by l1's connectivity sidecar on the wire leg that delivers SR-SIM's packets to
+	// l1. The 100ms delay therefore shows up in every round trip from l1.
+	waitForImpairedDatapath(t, namespace)
 }
 
 func applyTopology(t *testing.T, namespace, srsimImage string) {
@@ -159,6 +164,8 @@ spec:
                 interface: eth1
               - node: sros
                 interface: 1/1/c23/4
+                netem:
+                  delay: 100ms
 `, srsimRegistrySecret, srsimImage)
 
 	cmd := exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
@@ -295,6 +302,45 @@ func waitForNodeReady(t *testing.T, namespace, nodeName string) {
 func waitForDatapath(t *testing.T, namespace string) {
 	t.Helper()
 
+	waitForL1Command(
+		t,
+		namespace,
+		"SR-SIM datapath",
+		[]string{"ping", "-c", "2", "-W", "3", "198.51.100.2"},
+		func(_ []byte, err error) bool { return err == nil },
+	)
+}
+
+// waitForImpairedDatapath waits until every round trip to SR-SIM takes at least 90ms, the
+// declared SR-SIM endpoint delay less a margin. busybox awk needs the comparison in parentheses.
+func waitForImpairedDatapath(t *testing.T, namespace string) {
+	t.Helper()
+
+	waitForL1Command(
+		t,
+		namespace,
+		"SR-SIM endpoint impairment",
+		[]string{
+			"sh", "-c",
+			"ping -c 3 -W 3 198.51.100.2 | " +
+				"awk -F' = ' '/min/ {split($2, rtt, \"/\"); print (rtt[1] >= 90)}'",
+		},
+		func(output []byte, err error) bool {
+			return err == nil && strings.TrimSpace(string(output)) == "1"
+		},
+	)
+}
+
+// waitForL1Command runs command in the l1 device container until done accepts its result.
+func waitForL1Command(
+	t *testing.T,
+	namespace string,
+	description string,
+	command []string,
+	done func([]byte, error) bool,
+) {
+	t.Helper()
+
 	deadline := time.NewTimer(datapathWait)
 	defer deadline.Stop()
 
@@ -304,23 +350,22 @@ func waitForDatapath(t *testing.T, namespace string) {
 		cmd := exec.CommandContext( //nolint:gosec // kubectl arguments are test-controlled.
 			t.Context(),
 			"kubectl",
-			"exec",
-			"--namespace",
-			namespace,
-			"deployment/l1",
-			"-c",
-			deviceContainerName(t, namespace, "l1"),
-			"--",
-			"ping",
-			"-c",
-			"2",
-			"-W",
-			"3",
-			"198.51.100.2",
+			append(
+				[]string{
+					"exec",
+					"--namespace",
+					namespace,
+					"deployment/l1",
+					"-c",
+					deviceContainerName(t, namespace, "l1"),
+					"--",
+				},
+				command...,
+			)...,
 		)
 
 		output, err := cmd.CombinedOutput()
-		if err == nil {
+		if done(output, err) {
 			return
 		}
 
@@ -328,10 +373,11 @@ func waitForDatapath(t *testing.T, namespace string) {
 
 		select {
 		case <-t.Context().Done():
-			t.Fatalf("SR-SIM datapath check canceled: %s", strings.TrimSpace(string(lastOutput)))
+			t.Fatalf("%s check canceled: %s", description, strings.TrimSpace(string(lastOutput)))
 		case <-deadline.C:
 			t.Fatalf(
-				"timed out waiting for SR-SIM datapath: %s",
+				"timed out waiting for %s: %s",
+				description,
 				strings.TrimSpace(string(lastOutput)),
 			)
 		case <-time.After(datapathPollPeriod):

@@ -99,11 +99,16 @@ type LinkOperations interface {
 	// SweepTransportState removes sidecar-owned transport links whose owners are no longer
 	// desired, tolerating already-absent state.
 	SweepTransportState(ownerPrefix string, keepOwners []string) error
-	// EnsureNetem converges one endpoint interface to its declared netem impairment, in the
-	// namespace the interface lives in: it replaces the root qdisc with the impairment, or
+	// EnsureNetem converges one local endpoint interface to its declared netem impairment, in
+	// the namespace the interface lives in: it replaces the root qdisc with the impairment, or
 	// removes the sidecar's own impairment when none is declared. An interface that is not
 	// realized yet is left for a later pass.
 	EnsureNetem(interfaceName string, netem *clabernetesinternaldeviceplan.Netem) error
+	// EnsureFabricNetem converges the sidecar leg of one wire endpoint to the impairment of the
+	// packets the remote endpoint sends, which the wire delivers through that leg; it otherwise
+	// behaves like EnsureNetem. The leg is sidecar-owned, so no device can bypass, rename, or
+	// move what is programmed on it.
+	EnsureFabricNetem(interfaceID string, netem *clabernetesinternaldeviceplan.Netem) error
 }
 
 // VethInterface is the ownership inventory needed to reconcile one Pod network namespace. The
@@ -557,8 +562,8 @@ func evaluateNormalizedConnectivityTransition(
 	transition.Changed = true
 	affectedNodeIDs := map[string]bool{}
 
-	// The sidecar reprograms an impairment on the running interface, so an endpoint whose only
-	// change is its netem affects its Node without raising the mode the Link declares.
+	// The sidecar reprograms an impairment on the running interface or wire leg, so an endpoint
+	// whose only change is its netem affects its Node without raising the mode the Link declares.
 	for _, intf := range desiredPlan.Interfaces {
 		if impairedInterfaces[intf.ID] {
 			affectedNodeIDs[intf.NodeID] = true
@@ -685,9 +690,13 @@ func changedConnectivityInterfaces(
 		}
 
 		netemChanged := !reflect.DeepEqual(baseIntf.Netem, desiredIntf.Netem) ||
-			!reflect.DeepEqual(baseIntfInput.Netem, desiredIntfInput.Netem)
+			!reflect.DeepEqual(baseIntf.PeerNetem, desiredIntf.PeerNetem) ||
+			!reflect.DeepEqual(baseIntfInput.Netem, desiredIntfInput.Netem) ||
+			!reflect.DeepEqual(baseIntfInput.PeerNetem, desiredIntfInput.PeerNetem)
 		baseIntf.Netem, desiredIntf.Netem = nil, nil
+		baseIntf.PeerNetem, desiredIntf.PeerNetem = nil, nil
 		baseIntfInput.Netem, desiredIntfInput.Netem = nil, nil
+		baseIntfInput.PeerNetem, desiredIntfInput.PeerNetem = nil, nil
 
 		switch {
 		case !reflect.DeepEqual(baseIntfInput, desiredIntfInput) ||
@@ -1997,20 +2006,35 @@ func applyProjectedConnectivityRevision(
 	return desiredDigest, ready, nil
 }
 
-// reconcileLinkImpairments converges the endpoint interfaces to their declared netem
-// impairments. With all set it also visits the endpoints without one, removing the sidecar's
-// impairment from those that stopped declaring it.
+// reconcileLinkImpairments converges the endpoints to their planned netem impairments: a wire
+// endpoint's sidecar leg to its peer's impairment, a local endpoint's interface to its own. With
+// all set it also visits the endpoints without one, removing the sidecar's impairment from those
+// that stopped declaring it.
 func reconcileLinkImpairments(
 	plan clabernetesinternaldeviceplan.Plan,
 	operations LinkOperations,
 	all bool,
 ) error {
 	for _, intf := range plan.Interfaces {
-		if intf.Netem == nil && !all {
+		wire := intf.Connectivity == clabernetesinternaldeviceplan.ConnectivityWire
+
+		netem := intf.Netem
+		if wire {
+			netem = intf.PeerNetem
+		}
+
+		if netem == nil && !all {
 			continue
 		}
 
-		if err := operations.EnsureNetem(intf.Name, intf.Netem); err != nil {
+		var err error
+		if wire {
+			err = operations.EnsureFabricNetem(intf.ID, netem)
+		} else {
+			err = operations.EnsureNetem(intf.Name, netem)
+		}
+
+		if err != nil {
 			return fmt.Errorf("converging the netem impairment of Link %q: %w", intf.LinkID, err)
 		}
 	}

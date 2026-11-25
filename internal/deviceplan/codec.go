@@ -507,8 +507,9 @@ func validateInput(input Input) error {
 			return planningError(ErrorInvalidInput, field, "interface input is incomplete", nil)
 		}
 
-		if !validNetem(intf.Netem) {
-			return planningError(ErrorInvalidInput, field+".netem", "netem is invalid", nil)
+		err := validateInterfaceNetem(field, intf.Connectivity, intf.Netem, intf.PeerNetem)
+		if err != nil {
+			return err
 		}
 
 		if interfaces[intf.ID] {
@@ -874,8 +875,9 @@ func validatePlan(plan Plan) error {
 			return planningError(ErrorInvalidInput, field, "interface plan is incomplete", nil)
 		}
 
-		if !validNetem(intf.Netem) {
-			return planningError(ErrorInvalidInput, field+".netem", "netem is invalid", nil)
+		err := validateInterfaceNetem(field, intf.Connectivity, intf.Netem, intf.PeerNetem)
+		if err != nil {
+			return err
 		}
 
 		if _, exists := nodes[intf.NodeID]; !exists {
@@ -1205,6 +1207,23 @@ func validLinkApplyMode(mode LinkApplyMode) bool {
 		[]LinkApplyMode{LinkApplyLive, LinkApplyRestart, LinkApplyRecreate},
 		mode,
 	)
+}
+
+// validateInterfaceNetem checks both impairments of one endpoint and where they may be
+// programmed: a wire endpoint takes its peer's impairment onto its sidecar leg, and only a local
+// endpoint impairs its own interface.
+func validateInterfaceNetem(field, connectivity string, netem, peerNetem *Netem) error {
+	wire := connectivity == ConnectivityWire
+
+	if !validNetem(netem) || (wire && netem != nil) {
+		return planningError(ErrorInvalidInput, field+".netem", "netem is invalid", nil)
+	}
+
+	if !validNetem(peerNetem) || (!wire && peerNetem != nil) {
+		return planningError(ErrorInvalidInput, field+".peerNetem", "peer netem is invalid", nil)
+	}
+
+	return nil
 }
 
 // validNetem accepts the impairments the Link API admits: the delay fits the sidecar's 32-bit

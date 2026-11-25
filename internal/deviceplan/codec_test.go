@@ -797,3 +797,55 @@ func TestInputNetemIsValidatedAndPreserved(t *testing.T) {
 		})
 	}
 }
+
+func TestInterfaceNetemPlacementIsValidated(t *testing.T) {
+	t.Parallel()
+
+	impairment := &clabernetesinternaldeviceplan.Netem{Delay: 50 * time.Millisecond}
+
+	tests := []struct {
+		name  string
+		edit  func(*clabernetesinternaldeviceplan.InterfaceInput)
+		field string
+	}{
+		{
+			name: "peer impairment on a local endpoint",
+			edit: func(intf *clabernetesinternaldeviceplan.InterfaceInput) {
+				intf.PeerNetem = impairment
+			},
+			field: "interfaces[0].peerNetem",
+		},
+		{
+			name: "own impairment on a wire endpoint",
+			edit: func(intf *clabernetesinternaldeviceplan.InterfaceInput) {
+				intf.Connectivity = clabernetesinternaldeviceplan.ConnectivityWire
+				intf.Netem = impairment
+			},
+			field: "interfaces[0].netem",
+		},
+		{
+			name: "invalid peer impairment on a wire endpoint",
+			edit: func(intf *clabernetesinternaldeviceplan.InterfaceInput) {
+				intf.Connectivity = clabernetesinternaldeviceplan.ConnectivityWire
+				intf.PeerNetem = &clabernetesinternaldeviceplan.Netem{Loss: 101}
+			},
+			field: "interfaces[0].peerNetem",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			input := validInput()
+			tt.edit(&input.Interfaces[0])
+
+			_, err := clabernetesinternaldeviceplan.NormalizeInput(input)
+
+			var planningErr *clabernetesinternaldeviceplan.Error
+			if !errors.As(err, &planningErr) || planningErr.Field != tt.field {
+				t.Fatalf("NormalizeInput() error = %v, want an error at %s", err, tt.field)
+			}
+		})
+	}
+}

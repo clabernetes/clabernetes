@@ -29,4 +29,4 @@ mask any other endpoint change, which keeps its existing classification.
 #### Scenario: Change the impairment of a running Link
 
 - **WHEN** a user edits the `netem` of an endpoint whose kind declares Restart or Recreate for Link changes
-- **THEN** the sidecar reprograms the interface without restarting the device or recreating its Pod
+- **THEN** the sidecar that programs the impairment reprograms it without restarting either device or recreating its Pod

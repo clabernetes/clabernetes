@@ -1394,6 +1394,7 @@ func appendInterfacePlans(
 			IPv4:             intf.Input.IPv4,
 			IPv6:             intf.Input.IPv6,
 			Netem:            intf.Input.Netem,
+			PeerNetem:        intf.Input.PeerNetem,
 			LinkApplyMode:    node.LinkApplyMode,
 			RequiredAtStart:  true,
 		})

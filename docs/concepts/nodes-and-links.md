@@ -134,9 +134,18 @@ spec:
       rate: 10000
 ```
 
-The connectivity sidecar programs the impairment as the interface's root qdisc and re-asserts it
-while the Pod runs, so it survives the interface being recreated. Changing or removing it is
-applied live, without restarting the device, whatever link-apply mode its kind declares.
+On a cross-Pod Link, the peer Pod's connectivity sidecar programs the impairment as the root
+qdisc of its own sidecar leg, which the wire delivers the endpoint's packets through. Every
+packet crosses that leg through the kernel, so the impairment applies whatever the sending device
+does with its own interface, including devices such as SR-SIM that send around their interface's
+qdisc. A rate limit therefore queues and drops at the receiving end of the wire, like a slow link
+in the middle of the path. Links within one Pod, and host Links, have no sidecar leg: the
+endpoint's own interface carries the impairment there, so a device that bypasses its interface's
+qdisc is not impaired on them.
+
+The sidecar re-asserts the impairment while the Pod runs, so it survives the interface being
+recreated. Changing or removing it is applied live, without restarting either device, whatever
+link-apply mode their kinds declare.
 
 ## Why direct resources?
 
