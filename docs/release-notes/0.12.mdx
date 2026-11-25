@@ -1,6 +1,7 @@
 ---
 title: "0.12"
 ---
+import { ReleaseRuntimeDiagram } from '@/components/release-runtime-diagram';
 
 2026-11-25 · [Full Changelog](https://github.com/clabernetes/clabernetes/compare/v0.11.0...main)
 
@@ -14,9 +15,9 @@ title: "0.12"
 
 ## Link impairments
 
-Links can now be deliberately imperfect. Each endpoint accepts containerlab's `netem` vocabulary:
-`delay`, `jitter`, `loss`, `rate`, and `corruption`. The impairment applies to packets that the
-endpoint's interface sends, so the two ends of a Link can be shaped independently:
+Links can now be deliberately impaired. Each endpoint accepts containerlab's `netem` vocabulary:
+`delay`, `jitter`, `loss`, `rate`, and `corruption`. The impairment applies to packets that the  
+endpoint's interface sends, so the two ends of a Link can be configured with impairments independently:
 
 ```yaml
 links:
@@ -32,12 +33,14 @@ Structured `veth` endpoints accept the same fields directly under `netem`, as do
 `endpointB` on a directly authored [`Link`](/docs/concepts/nodes-and-links#link). Rates are in
 kbit/s, while loss and corruption are percentages.
 
-On a cross-Pod Link, the peer Pod's connectivity sidecar programs the impairment on its own
-sidecar-owned wire leg. Every packet from the sending endpoint crosses that leg through the kernel,
-so the impairment also works for devices such as SR-SIM that bypass their own interface's qdisc.
-Recabling moves the impairment with the cable, and a rate limit queues and drops at the receiving
-end of the wire. Links within one Pod and host Links instead carry the qdisc on the endpoint's own
-interface; a device that bypasses that qdisc is not impaired on those Link types.
+The qdics rules applied (as usual) in the egress direction of the endpoint they have been applied to.
+However, in c9s the enforcement point is the clabwire link of the remote endpoint, as shown on the diagram below:
+
+<ReleaseRuntimeDiagram kind="netem" />
+
+Recabling moves the impairment with the cable, and a rate limit queues and drops at the receiving  
+end of the wire. Links within one Pod and host Links instead carry the qdisc on the endpoint's own  
+interface.
 
 The sidecar re-asserts the impairment while the Pod runs, including after interface recreation.
 Adding, changing, or removing only an impairment is always a live operation: neither device
@@ -159,34 +162,11 @@ and `credentials` remain unsupported.
 
 Done in [#393](https://github.com/clabernetes/clabernetes/pull/393)
 
-## Plan-owned device content
-
-Generated device files now travel with the accepted plan instead of being regenerated inside every
-device Pod. Planners return the file bytes and extended attributes over a private Kubernetes exec
-stream; the controller verifies and persists them as immutable, Node-owned artifact objects. The
-preparation init container stages exactly those bytes after checking their path, mode, ownership,
-extended attributes, and digest. It no longer evaluates imported generation code, needs registry
-access, or creates an entropy session, so the content running in the Pod cannot diverge from the
-content the controller accepted.
-
-Live post-deploy, readiness, save, and endpoint hooks still use imported containerlab behavior when
-they depend on device observations. They reconstruct the necessary state in scratch storage,
-verify that its container runtime IDs match the accepted plan, and rebind paths before touching the
-live runtime. Reconstruction cannot replace staged artifacts or device-saved files, and generated
-private keys no longer pass through planner Pod logs.
-
-Generated content is limited to 512 KiB per artifact and 4 MiB per plan. Artifacts currently use
-Secrets, with separate ownership and sharing per Node: for example, 200 Nodes with three distinct
-artifacts each add 600 artifact Secrets. Superseded objects are collected, but the API, watch/cache,
-and etcd cost of large labs still needs to be considered.
-
-Done in [#382](https://github.com/clabernetes/clabernetes/pull/382)
-
 ## Miscellaneous
 
 - The global Config watcher reconnects and relists after a closed watch stream, so configuration
-  changes continue to reconcile Nodes after an API watch interruption.
-  [#382](https://github.com/clabernetes/clabernetes/pull/382)
+changes continue to reconcile Nodes after an API watch interruption.
+[#382](https://github.com/clabernetes/clabernetes/pull/382)
 - The embedded Kubernetes modules moved to 0.37.2 as part of the containerlab 0.83 update described
-  in the [0.11 notes](/docs/release-notes/0.11#containerlab-083).
-  [#388](https://github.com/clabernetes/clabernetes/pull/388)
+in the [0.11 notes](/docs/release-notes/0.11#containerlab-083).
+[#388](https://github.com/clabernetes/clabernetes/pull/388)
